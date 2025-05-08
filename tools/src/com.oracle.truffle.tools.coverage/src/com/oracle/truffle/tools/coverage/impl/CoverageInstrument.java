@@ -136,7 +136,6 @@ public class CoverageInstrument extends TruffleInstrument {
         try {
             if (absoluteOutputPath != null) {
                 final File file = new File(absoluteOutputPath);
-                new PrintStream(env.out()).println("Printing output to " + file.getAbsolutePath());
                 return new PrintStream(new FileOutputStream(file));
             } else {
                 return new PrintStream(env.out());
@@ -144,6 +143,11 @@ public class CoverageInstrument extends TruffleInstrument {
         } catch (FileNotFoundException e) {
             throw new AbstractTruffleException() {
                 static final long serialVersionUID = -1;
+
+		@Override
+		public Throwable getCause() {
+		    return e;
+		}
 
                 @Override
                 public String getMessage() {
