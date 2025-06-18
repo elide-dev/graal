@@ -2027,7 +2027,15 @@ public class NativeImage {
     protected static Function<BuildConfiguration, NativeImage> defaultNativeImageProvider = NativeImage::new;
 
     public static void main(String[] args) {
-        performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
+	buildImage(args, true);
+    }
+
+    public static int buildImage(String[] args, boolean exit) {
+	int exitCode = performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
+	if (exit) {
+	    System.exit(exitCode);
+	}
+	return exitCode;
     }
 
     public static List<String> translateAPIOptions(List<String> arguments) {
@@ -2043,7 +2051,7 @@ public class NativeImage {
         return translatedOptions;
     }
 
-    protected static void performBuild(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
+    protected static int performBuild(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
         try {
             build(config, nativeImageProvider);
         } catch (NativeImageError e) {
@@ -2059,9 +2067,9 @@ public class NativeImage {
             if (config.getBuildArgs().contains("--verbose")) {
                 e.printStackTrace();
             }
-            System.exit(e.exitCode);
+	    return e.exitCode;
         }
-        System.exit(ExitStatus.OK.getValue());
+	return ExitStatus.OK.getValue();
     }
 
     private static void build(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
