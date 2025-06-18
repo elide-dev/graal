@@ -2017,10 +2017,31 @@ public class NativeImage {
     protected static Function<BuildConfiguration, NativeImage> defaultNativeImageProvider = NativeImage::new;
 
     public static void main(String[] args) {
-        performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
+	buildImage(args, true);
     }
 
-    protected static void performBuild(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
+    public static int buildImage(String[] args, boolean exit) {
+	int exitCode = performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
+	if (exit) {
+	    System.exit(exitCode);
+	}
+	return exitCode;
+    }
+
+    public static List<String> translateAPIOptions(List<String> arguments) {
+        var handler = new APIOptionHandler(defaultNativeImageProvider.apply(new BuildConfiguration(arguments)));
+        var argumentQueue = new ArgumentQueue(OptionOrigin.originDriver);
+        handler.nativeImage.config.args.forEach(argumentQueue::add);
+        List<String> translatedOptions = new ArrayList<>();
+        while (!argumentQueue.isEmpty()) {
+            String translatedOption = handler.translateOption(argumentQueue);
+            String originalOption = argumentQueue.poll();
+            translatedOptions.add(translatedOption != null ? translatedOption : originalOption);
+        }
+        return translatedOptions;
+    }
+
+    protected static int performBuild(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
         try {
             build(config, nativeImageProvider);
         } catch (NativeImageError e) {
@@ -2036,9 +2057,9 @@ public class NativeImage {
             if (config.getBuildArgs().contains("--verbose")) {
                 e.printStackTrace(System.out);
             }
-            System.exit(e.exitCode);
+	    return e.exitCode;
         }
-        System.exit(ExitStatus.OK.getValue());
+	return ExitStatus.OK.getValue();
     }
 
     private static void build(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
