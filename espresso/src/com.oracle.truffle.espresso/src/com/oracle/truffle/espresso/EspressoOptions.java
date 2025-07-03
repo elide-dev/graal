@@ -23,6 +23,7 @@
 package com.oracle.truffle.espresso;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 
+import com.oracle.truffle.espresso.runtime.EspressoHostSourceLoader;
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.options.OptionCategory;
 import org.graalvm.options.OptionKey;
@@ -658,6 +660,19 @@ public final class EspressoOptions {
                         }
                     });
 
+    private static final OptionType<EspressoHostSourceLoader> SRC_LOADER_OPTION_TYPE =
+            new OptionType<>("HostSourceLoader", s -> {
+                try {
+                    return Class.forName(s).asSubclass(EspressoHostSourceLoader.class).getDeclaredConstructor().newInstance();
+                } catch (ClassNotFoundException exc) {
+                    throw new IllegalArgumentException("Host source loader class not found: '" + s + "'");
+                } catch (NoSuchMethodException exc) {
+                    throw new IllegalArgumentException("Host source loader must have a no-arg constructor: '" + s + "'");
+                } catch (IllegalArgumentException | InstantiationException | InvocationTargetException | IllegalAccessException exc) {
+                    throw new IllegalArgumentException("Host source loader class not instantiable: '" + s + "'");
+                }
+            });
+
     @Option(help = "Selects the jimage reader.", //
                     category = OptionCategory.EXPERT, stability = OptionStability.EXPERIMENTAL) //
     public static final OptionKey<JImageMode> JImage = new OptionKey<>(JImageMode.JAVA, JIMAGE_MODE_OPTION_TYPE);
@@ -673,6 +688,12 @@ public final class EspressoOptions {
                     stability = OptionStability.EXPERIMENTAL, //
                     usageSyntax = "false|true") //
     public static final OptionKey<Boolean> WhiteBoxAPI = new OptionKey<>(false);
+
+    @Option(help = "Sets a host source loader, by fully-qualified class name (within the host context).", //
+            category = OptionCategory.EXPERT, stability = OptionStability.EXPERIMENTAL) //
+    public static final OptionKey<EspressoHostSourceLoader> HostSourceLoader = new OptionKey<>(
+            null,
+            SRC_LOADER_OPTION_TYPE);
 
     public enum GuestFieldOffsetStrategyEnum {
         safety,
