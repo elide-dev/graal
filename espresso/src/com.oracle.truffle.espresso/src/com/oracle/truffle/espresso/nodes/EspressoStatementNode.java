@@ -42,8 +42,14 @@ public final class EspressoStatementNode extends EspressoBaseStatementNode imple
     @Override
     public SourceSection getSourceSection() {
         Source s = getBytecodeNode().getSource();
-        // when there is a line number table we also have a source
+
+        // `s` should not be null
         assert s != null;
+
+        if (!s.hasCharacters() && !s.hasBytes()) {
+            // sources are unavailable for this node
+            return s.createUnavailableSection();
+        }
         return s.createSection(lineNumber);
     }
 

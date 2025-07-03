@@ -339,6 +339,12 @@ public final class EspressoContext {
     public Source findOrCreateSource(ObjectKlass klass) {
         String sourceFile = klass.getSourceFile();
         if (sourceFile == null) {
+            // give host context a chance to look up source via some other means
+            var hostSourceLoader = getEspressoEnv().getHostSourceLoader();
+            if (hostSourceLoader != null) {
+                // (may return null, just as caller can)
+                return hostSourceLoader.getSourceForGuestClass(klass);
+            }
             return null;
         }
         if (!sourceFile.contains("/") && !sourceFile.contains("\\")) {
