@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.runtime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.graalvm.options.OptionMap;
@@ -104,6 +105,7 @@ public final class EspressoEnv {
     public final boolean RegexSubstitutions;
     public final EspressoOptions.JImageMode JImageMode;
     private final PolyglotTypeMappings polyglotTypeMappings;
+    private final EspressoHostSourceLoader hostSourceLoader;
     private final boolean enableGenericTypeHints;
     private final HashMap<String, EspressoForeignProxyGenerator.GeneratedProxyBytes> proxyCache;
 
@@ -189,6 +191,8 @@ public final class EspressoEnv {
         } else {
             this.classHierarchyOracle = new NoOpClassHierarchyOracle();
         }
+        var hostSourceLoader = env.getOptions().get(EspressoOptions.HostSourceLoader);
+        this.hostSourceLoader = Objects.requireNonNullElseGet(hostSourceLoader, EspressoHostSourceLoader.DefaultHostSourceLoader::new);
     }
 
     public TruffleLanguage.Env env() {
@@ -233,6 +237,10 @@ public final class EspressoEnv {
 
     public PolyglotTypeMappings getPolyglotTypeMappings() {
         return polyglotTypeMappings;
+    }
+
+    public EspressoHostSourceLoader getHostSourceLoader() {
+        return hostSourceLoader;
     }
 
     public boolean isGenericTypeHintsEnabled() {
