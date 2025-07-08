@@ -122,7 +122,6 @@ abstract class HostToGuestRootNode extends RootNode {
             Object receiver = getReceiverType().cast(arguments[1]);
             Object result;
             result = executeImpl(languageContext, receiver, arguments);
-            assert !(result instanceof TruffleObject);
             return result;
         } catch (Throwable e) {
             throw handleException(languageContext, e, true, RuntimeException.class);
