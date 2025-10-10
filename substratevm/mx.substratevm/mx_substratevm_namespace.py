@@ -42,7 +42,7 @@ include_statement = re.compile(r"^\s*#\s*include[ \t]+(.+?)\s*$")
 ignore_files = {"copy_x86.hpp", "copy_aarch64.hpp", "copy_windows_x86.hpp"}
 ignore_includes = {"CPU_HEADER(copy)", "OS_HEADER(osThread)"}
 
-files_with_cpp_guard = {"sharedGCStructs.h", "g1GCStructs.h"}
+files_with_cpp_guard = {"sharedGCStructs.h", "shenandoahGCStructs.h", "g1GCStructs.h"}
 
 SVM_NAMESPACE = "svm_namespace"
 

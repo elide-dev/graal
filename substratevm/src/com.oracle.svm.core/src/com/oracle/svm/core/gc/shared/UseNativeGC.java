@@ -39,6 +39,6 @@ public class UseNativeGC implements BooleanSupplier {
     }
 
     public static boolean get() {
-        return SubstrateOptions.useG1GC();
+        return SubstrateOptions.useG1GC() || SubstrateOptions.useShenandoahGC();
     }
 }

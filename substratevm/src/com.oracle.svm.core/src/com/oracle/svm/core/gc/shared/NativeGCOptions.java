@@ -275,8 +275,8 @@ public class NativeGCOptions {
 
         if (!Platform.includedIn(LINUX_AMD64.class) && !Platform.includedIn(LINUX_AARCH64.class) && !Platform.includedIn(DARWIN_AARCH64.class) && !Platform.includedIn(WINDOWS_AMD64.class)) {
             throw RuntimeOptionValidation.abort("The option '" + optionKey.getName() + "' can only be used on Linux/amd64, Linux/aarch64, macOS/aarch64, or Windows/amd64.");
-        } else if (!SubstrateOptions.useG1GC()) {
-            throw RuntimeOptionValidation.abort("The option '" + optionKey.getName() + "' can only be used with the G1 ('--gc=G1') garbage collector.");
+        } else if (!SubstrateOptions.useG1GC() && !SubstrateOptions.useShenandoahGC()) {
+            throw RuntimeOptionValidation.abort("The option '" + optionKey.getName() + "' can only be used with the G1 ('--gc=G1') or the Shenandoah ('--gc=shenandoah')  garbage collector.");
         }
     }
 
