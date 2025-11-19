@@ -40,10 +40,10 @@ import jdk.vm.ci.code.CodeUtil;
  * an array of values (i.e., one value per debug-level).
  */
 public class ShenandoahConstants {
-    private static final int TLAB_TOP_OFFSET = 104;
-    private static final int TLAB_END_OFFSET = 120;
+    private static final int TLAB_TOP_OFFSET = 384;
+    private static final int TLAB_END_OFFSET = 400;
     private static final byte DIRTY_CARD_VALUE = 0;
-    private static final int[] JAVA_THREAD_SIZE = {280, 312, 312};
+    private static final int[] JAVA_THREAD_SIZE = {560, 592, 592}; // product, fastdebug, debug
 
     @Fold
     public static int tlabTopOffset() {
