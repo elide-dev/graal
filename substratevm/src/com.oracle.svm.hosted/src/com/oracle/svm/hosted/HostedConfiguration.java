@@ -32,6 +32,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.oracle.svm.core.c.libc.CosmoLibC;
+import com.oracle.svm.core.c.libc.LibCBase;
+import com.oracle.svm.hosted.c.libc.HostedLibCBase;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 
@@ -366,7 +369,7 @@ public class HostedConfiguration {
         return new ObjectFileFactory() {
             @Override
             public ObjectFile newObjectFile(int pageSize, Path tempDir, BigBang bb) {
-                return ObjectFile.getNativeObjectFile(pageSize);
+                return ObjectFile.getNativeObjectFile(pageSize, !LibCBase.targetLibCIs(CosmoLibC.class));
             }
         };
     }

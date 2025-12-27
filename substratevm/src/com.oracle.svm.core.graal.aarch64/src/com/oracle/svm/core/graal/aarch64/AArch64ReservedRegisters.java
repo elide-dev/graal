@@ -34,7 +34,7 @@ import jdk.vm.ci.code.Register;
 
 public final class AArch64ReservedRegisters extends ReservedRegisters {
 
-    public static final Register THREAD_REGISTER = AArch64.r28;
+    public static final Register THREAD_REGISTER = AArch64.r25;
     public static final Register HEAP_BASE_REGISTER = AArch64.r27;
     public static final Register CODE_BASE_REGISTER_CANDIDATE = AArch64.r26;
 
