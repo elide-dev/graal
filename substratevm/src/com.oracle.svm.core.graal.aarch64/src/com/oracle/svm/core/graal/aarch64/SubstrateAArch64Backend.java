@@ -27,6 +27,7 @@ package com.oracle.svm.core.graal.aarch64;
 import static com.oracle.svm.core.graal.aarch64.SubstrateAArch64RegisterConfig.fp;
 import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_DECD_RSP;
 import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_END;
+import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_START;
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 import static com.oracle.svm.core.util.VMError.unsupportedFeature;
 import static jdk.graal.compiler.core.common.GraalOptions.ZapStackOnMethodEntry;
@@ -41,6 +42,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
+import jdk.graal.compiler.asm.amd64.AMD64MacroAssembler;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.FrameAccess;
@@ -925,8 +927,8 @@ public class SubstrateAArch64Backend extends SubstrateBackend implements LIRGene
             final int totalFrameSize = frameMap.totalFrameSize();
             assert frameSize + 2 * crb.target.arch.getWordSize() == totalFrameSize : "totalFramesize should be frameSize + 2 words";
             AArch64MacroAssembler masm = (AArch64MacroAssembler) crb.asm;
-
             crb.blockComment("[method prologue]");
+
             makeFrame(crb, masm, totalFrameSize, frameSize);
             crb.recordMark(PROLOGUE_DECD_RSP);
 
@@ -1499,11 +1501,32 @@ public class SubstrateAArch64Backend extends SubstrateBackend implements LIRGene
         return new SubstrateCompiledCode(compilationResult);
     }
 
+    private void wrapEmitLIR(CompilationResultBuilder crb) {
+        int nopsBeforeLabel = SubstrateOptions.nopsBeforeFunctionEntry();
+        AArch64MacroAssembler masm = (AArch64MacroAssembler) crb.asm;
+        if (nopsBeforeLabel > 0) {
+            int p0 = masm.position();
+            for (int i = 0; i < nopsBeforeLabel; i++) {
+                masm.nop();
+            }
+            int p1 = masm.position();
+            int nopSize = (p1 - p0) / nopsBeforeLabel;
+            byte[] nopBytes = masm.copy(p0, p0 + nopSize);
+            crb.compilationResult.setNopCode(nopBytes, nopSize);
+        }
+        crb.recordMark(PROLOGUE_START);
+        int nopsAfterLabel = SubstrateOptions.nopsAfterFunctionEntry();
+        for (int i = 0; i < nopsAfterLabel; i++) {
+            masm.nop();
+        }
+        crb.emitLIR();
+    }
+
     @Override
     public void emitCode(CompilationResultBuilder crb, ResolvedJavaMethod installedCodeOwner, EntryPointDecorator entryPointDecorator) {
         try {
             crb.buildLabelOffsets();
-            crb.emitLIR();
+            wrapEmitLIR(crb);
             finalizeCode(crb);
         } catch (BranchTargetOutOfBoundsException e) {
             // A branch estimation was wrong, now retry with conservative label ranges, this
@@ -1511,7 +1534,7 @@ public class SubstrateAArch64Backend extends SubstrateBackend implements LIRGene
             resetForEmittingCode(crb);
             crb.resetForEmittingCode();
             crb.setConservativeLabelRanges();
-            crb.emitLIR();
+            wrapEmitLIR(crb);
             finalizeCode(crb);
         }
     }

@@ -28,6 +28,7 @@ import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PR
 import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_END;
 import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_PUSH_RBP;
 import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_SET_FRAME_POINTER;
+import static com.oracle.svm.core.graal.code.SubstrateBackend.SubstrateMarkId.PROLOGUE_START;
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 import static com.oracle.svm.core.util.VMError.unsupportedFeature;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
@@ -1231,7 +1232,6 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
         @Override
         public void enter(CompilationResultBuilder crb) {
             AMD64MacroAssembler asm = (AMD64MacroAssembler) crb.asm;
-
             makeFrame(crb, asm);
             crb.recordMark(PROLOGUE_DECD_RSP);
 
@@ -1880,6 +1880,7 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
         } else {
             patchConsumerFactory = PatchConsumerFactory.NativePatchConsumerFactory.factory();
         }
+
         masm.setCodePatchingAnnotationConsumer(patchConsumerFactory.newConsumer(compilationResult));
         SharedMethod method = ((SubstrateLIRGenerationResult) lirGenResult).getMethod();
         Deoptimizer.StubType stubType = method.getDeoptStubType();
@@ -1930,9 +1931,30 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
         return new SubstrateCompiledCode(compilationResult);
     }
 
+    private void wrapEmitLIR(CompilationResultBuilder crb) {
+        int nopsBeforeLabel = SubstrateOptions.nopsBeforeFunctionEntry();
+        AMD64MacroAssembler masm = (AMD64MacroAssembler) crb.asm;
+        if (nopsBeforeLabel > 0) {
+            int p0 = masm.position();
+            for (int i = 0; i < nopsBeforeLabel; i++) {
+                masm.nop();
+            }
+            int p1 = masm.position();
+            int nopSize = (p1 - p0) / nopsBeforeLabel;
+            byte[] nopBytes = masm.copy(p0, p0 + nopSize);
+            crb.compilationResult.setNopCode(nopBytes, nopSize);
+        }
+        crb.recordMark(PROLOGUE_START);
+        int nopsAfterLabel = SubstrateOptions.nopsAfterFunctionEntry();
+        for (int i = 0; i < nopsAfterLabel; i++) {
+            masm.nop();
+        }
+        crb.emitLIR();
+    }
+
     @Override
     public void emitCode(CompilationResultBuilder crb, ResolvedJavaMethod installedCodeOwner, EntryPointDecorator entryPointDecorator) {
-        crb.emitLIR();
+        wrapEmitLIR(crb);
         if (GraalOptions.OptimizeLongJumps.getValue(crb.getOptions())) {
             optimizeLongJumps(crb);
         }
@@ -1990,7 +2012,7 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
         // Triggers a reset of the assembler during which replaceable jumps are identified.
         resetForEmittingCode(crb);
         try {
-            crb.emitLIR();
+            wrapEmitLIR(crb);
         } catch (BranchTargetOutOfBoundsException e) {
             /*
              * Alignments have invalidated the assumptions regarding short jumps. Trigger fail-safe
@@ -1999,7 +2021,7 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
             AMD64MacroAssembler masm = (AMD64MacroAssembler) crb.asm;
             masm.disableOptimizeLongJumpsAfterException();
             crb.resetForEmittingCode();
-            crb.emitLIR();
+            wrapEmitLIR(crb);
         }
     }
 
