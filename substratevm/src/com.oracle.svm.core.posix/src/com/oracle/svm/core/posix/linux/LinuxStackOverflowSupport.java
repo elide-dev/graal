@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.linux;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.WordPointer;
@@ -35,7 +36,7 @@ import com.oracle.svm.core.posix.PosixUtils;
 import com.oracle.svm.core.posix.headers.Pthread;
 import com.oracle.svm.core.stack.StackOverflowCheck;
 
-@AutomaticallyRegisteredImageSingleton(StackOverflowCheck.PlatformSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = StackOverflowCheck.PlatformSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 final class LinuxStackOverflowSupport implements StackOverflowCheck.PlatformSupport {
     @Override
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

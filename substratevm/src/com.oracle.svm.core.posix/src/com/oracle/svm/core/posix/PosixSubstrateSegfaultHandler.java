@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CEntryPoint.Publish;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
@@ -47,7 +48,7 @@ import com.oracle.svm.core.posix.headers.Signal.siginfo_t;
 import com.oracle.svm.core.posix.headers.Signal.ucontext_t;
 import com.oracle.svm.core.util.VMError;
 
-@AutomaticallyRegisteredImageSingleton({SubstrateSegfaultHandler.class, PosixSubstrateSegfaultHandler.class})
+@AutomaticallyRegisteredImageSingleton(value = {SubstrateSegfaultHandler.class, PosixSubstrateSegfaultHandler.class}, onlyWith = NotCosmoLibCSupplier.class)
 class PosixSubstrateSegfaultHandler extends SubstrateSegfaultHandler {
     static final CEntryPointLiteral<AdvancedSignalDispatcher> SIGNAL_HANDLER = CEntryPointLiteral.create(PosixSubstrateSegfaultHandler.class,
                     "dispatch", int.class, siginfo_t.class, ucontext_t.class);

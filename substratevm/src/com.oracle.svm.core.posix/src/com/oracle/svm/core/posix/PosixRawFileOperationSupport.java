@@ -26,8 +26,10 @@ package com.oracle.svm.core.posix;
 
 import java.io.File;
 import java.nio.ByteOrder;
+import java.util.function.BooleanSupplier;
 
 import com.oracle.svm.core.jdk.SystemPropertiesSupport;
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -204,6 +206,8 @@ public class PosixRawFileOperationSupport extends AbstractRawFileOperationSuppor
 class PosixRawFileOperationFeature implements InternalFeature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         ByteOrder nativeByteOrder = ByteOrder.nativeOrder();
         assert nativeByteOrder == ByteOrder.LITTLE_ENDIAN || nativeByteOrder == ByteOrder.BIG_ENDIAN;
 

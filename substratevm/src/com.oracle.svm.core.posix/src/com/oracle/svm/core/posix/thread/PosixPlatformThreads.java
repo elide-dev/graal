@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.thread;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -74,7 +75,7 @@ import com.oracle.svm.core.util.VMError;
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
 import jdk.internal.misc.Unsafe;
 
-@AutomaticallyRegisteredImageSingleton(PlatformThreads.class)
+@AutomaticallyRegisteredImageSingleton(value = PlatformThreads.class, onlyWith = NotCosmoLibCSupplier.class)
 public final class PosixPlatformThreads extends PlatformThreads {
 
     @SuppressFBWarnings(value = "BC", justification = "Cast for @TargetClass")
@@ -289,7 +290,7 @@ public final class PosixPlatformThreads extends PlatformThreads {
     }
 }
 
-@TargetClass(Thread.class)
+@TargetClass(value = Thread.class, onlyWith = NotCosmoLibCSupplier.class)
 final class Target_java_lang_Thread {
     @Inject //
     @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
@@ -442,7 +443,7 @@ final class PosixParker extends Parker {
     }
 }
 
-@AutomaticallyRegisteredImageSingleton(ParkerFactory.class)
+@AutomaticallyRegisteredImageSingleton(value = ParkerFactory.class, onlyWith = NotCosmoLibCSupplier.class)
 class PosixParkerFactory implements Parker.ParkerFactory {
     @Override
     public Parker acquire() {

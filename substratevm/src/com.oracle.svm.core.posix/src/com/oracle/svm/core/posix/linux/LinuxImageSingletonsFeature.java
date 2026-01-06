@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.linux;
 
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.c.libc.BionicLibC;
@@ -33,10 +34,15 @@ import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.headers.LibCSupport;
 import com.oracle.svm.core.os.ImageHeapProvider;
 
+import java.util.function.BooleanSupplier;
+
 @AutomaticallyRegisteredFeature
 class LinuxImageSingletonsFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
+
         if (LibCBase.singleton() instanceof BionicLibC) {
             ImageSingletons.add(LibCSupport.class, new BionicLibCSupport());
         } else {

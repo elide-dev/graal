@@ -26,6 +26,7 @@ package com.oracle.svm.core.posix.linux;
 
 import java.util.EnumSet;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.impl.ProcessPropertiesSupport;
 
 import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
@@ -33,7 +34,7 @@ import com.oracle.svm.core.layeredimagesingleton.InitialLayerOnlyImageSingleton;
 import com.oracle.svm.core.layeredimagesingleton.LayeredImageSingletonBuilderFlags;
 import com.oracle.svm.core.posix.PosixProcessPropertiesSupport;
 
-@AutomaticallyRegisteredImageSingleton(ProcessPropertiesSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = ProcessPropertiesSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 public class LinuxProcessPropertiesSupport extends PosixProcessPropertiesSupport implements InitialLayerOnlyImageSingleton {
 
     @Override

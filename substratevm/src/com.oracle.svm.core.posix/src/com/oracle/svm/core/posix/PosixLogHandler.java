@@ -26,8 +26,11 @@ package com.oracle.svm.core.posix;
 
 import java.io.FileDescriptor;
 import java.util.EnumSet;
+import java.util.function.BooleanSupplier;
 
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.LogHandler;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.UnsignedWord;
@@ -45,6 +48,8 @@ import com.oracle.svm.core.thread.VMThreads;
 class PosixLogHandlerFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         if (ImageLayerBuildingSupport.firstImageBuild()) {
             Log.finalizeDefaultLogHandler(new PosixLogHandler());
         }

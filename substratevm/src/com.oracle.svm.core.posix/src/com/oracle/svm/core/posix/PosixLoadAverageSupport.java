@@ -25,11 +25,12 @@
 package com.oracle.svm.core.posix;
 
 import com.oracle.svm.core.jdk.LoadAverageSupport;
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import com.oracle.svm.core.posix.headers.Stdlib;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.handles.PrimitiveArrayView;
 
-@AutomaticallyRegisteredImageSingleton(LoadAverageSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = LoadAverageSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 class PosixLoadAverageSupport implements LoadAverageSupport {
     @Override
     public int getLoadAverage(double[] loadavg, int nelems) {

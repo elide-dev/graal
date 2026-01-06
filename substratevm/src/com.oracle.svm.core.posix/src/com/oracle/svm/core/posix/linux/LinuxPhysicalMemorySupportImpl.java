@@ -30,7 +30,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.word.UnsignedWord;
 
@@ -123,6 +125,8 @@ public class LinuxPhysicalMemorySupportImpl implements PhysicalMemorySupport {
 class LinuxPhysicalMemorySupportFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         if (ImageLayerBuildingSupport.firstImageBuild() && !ImageSingletons.contains(PhysicalMemorySupport.class)) {
             ImageSingletons.add(PhysicalMemorySupport.class, new LinuxPhysicalMemorySupportImpl());
         }

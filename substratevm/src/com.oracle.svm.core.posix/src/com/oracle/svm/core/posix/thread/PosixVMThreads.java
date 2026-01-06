@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.thread;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -52,7 +53,7 @@ import com.oracle.svm.core.util.VMError;
 
 import jdk.graal.compiler.word.Word;
 
-@AutomaticallyRegisteredImageSingleton(VMThreads.class)
+@AutomaticallyRegisteredImageSingleton(value = VMThreads.class, onlyWith = NotCosmoLibCSupplier.class)
 public final class PosixVMThreads extends VMThreads {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -129,7 +130,7 @@ public final class PosixVMThreads extends VMThreads {
         LibC.exit(code);
     }
 
-    @AutomaticallyRegisteredImageSingleton(ThreadLookup.class)
+    @AutomaticallyRegisteredImageSingleton(value = ThreadLookup.class, onlyWith = NotCosmoLibCSupplier.class)
     public static class PosixThreadLookup extends ThreadLookup {
         @Override
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

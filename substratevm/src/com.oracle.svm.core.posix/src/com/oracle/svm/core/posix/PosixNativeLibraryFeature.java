@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.posix;
 
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -51,15 +53,21 @@ import com.oracle.svm.core.posix.headers.Resource;
 import com.oracle.svm.core.posix.headers.Time;
 import com.oracle.svm.core.posix.headers.darwin.DarwinSyslimits;
 
+import java.util.function.BooleanSupplier;
+
 @AutomaticallyRegisteredFeature
 class PosixNativeLibraryFeature implements InternalFeature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         PosixNativeLibrarySupport.initialize();
     }
 
     @Override
     public void duringSetup(DuringSetupAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         NativeLibrarySupport.singleton().preregisterUninitializedBuiltinLibrary("extnet");
     }
 }
@@ -235,7 +243,7 @@ final class PosixNativeLibrarySupport extends JNIPlatformNativeLibrarySupport {
     }
 }
 
-@TargetClass(className = "java.io.UnixFileSystem")
+@TargetClass(className = "java.io.UnixFileSystem", onlyWith = NotCosmoLibCSupplier.class)
 final class Target_java_io_UnixFileSystem_JNI {
     @Alias
     static native void initIDs();

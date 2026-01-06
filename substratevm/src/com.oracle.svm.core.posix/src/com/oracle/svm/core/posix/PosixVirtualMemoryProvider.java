@@ -39,6 +39,7 @@ import static com.oracle.svm.core.posix.headers.Mman.NoTransitions.mprotect;
 import static com.oracle.svm.core.posix.headers.Mman.NoTransitions.munmap;
 import static jdk.graal.compiler.word.Word.nullPointer;
 
+import com.oracle.svm.core.posix.cosmo.CosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -58,10 +59,14 @@ import com.oracle.svm.core.posix.headers.Unistd;
 import com.oracle.svm.core.util.PointerUtils;
 import com.oracle.svm.core.util.UnsignedUtils;
 
+import java.util.function.BooleanSupplier;
+
 @AutomaticallyRegisteredFeature
 class PosixVirtualMemoryProviderFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
+        BooleanSupplier x = new CosmoLibCSupplier();
+        if(x.getAsBoolean()) return;
         if (!ImageSingletons.contains(VirtualMemoryProvider.class)) {
             ImageSingletons.add(VirtualMemoryProvider.class, new PosixVirtualMemoryProvider());
         }

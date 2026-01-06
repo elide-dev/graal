@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.linux;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -37,7 +38,7 @@ import com.oracle.svm.core.locks.VMSemaphore;
 import com.oracle.svm.core.posix.headers.Semaphore;
 import com.oracle.svm.core.posix.pthread.PthreadVMLockSupport;
 
-@AutomaticallyRegisteredImageSingleton(VMLockSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = VMLockSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 final class LinuxVMLockSupport extends PthreadVMLockSupport {
 
     @Override
