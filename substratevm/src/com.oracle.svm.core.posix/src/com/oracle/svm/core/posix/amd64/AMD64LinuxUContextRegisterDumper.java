@@ -26,6 +26,7 @@ package com.oracle.svm.core.posix.amd64;
 
 import static com.oracle.svm.core.RegisterDumper.dumpReg;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -44,7 +45,7 @@ import com.oracle.svm.core.util.VMError;
 
 import jdk.vm.ci.amd64.AMD64;
 
-@AutomaticallyRegisteredImageSingleton(RegisterDumper.class)
+@AutomaticallyRegisteredImageSingleton(value = RegisterDumper.class, onlyWith = NotCosmoLibCSupplier.class)
 @Platforms(Platform.LINUX_AMD64.class)
 class AMD64LinuxUContextRegisterDumper implements UContextRegisterDumper {
     AMD64LinuxUContextRegisterDumper() {
