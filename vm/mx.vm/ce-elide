@@ -1,0 +1,8 @@
+# Same as the ce env, except more dynamic imports and no NATIVE_IMAGES list
+# disabled:
+# graalpython
+DYNAMIC_IMPORTS=/compiler,/graal-js,/regex,/sdk,/substratevm,/sulong,/tools,/truffle,/wasm,/espresso
+COMPONENTS=cmp,gvm,lg,ni,nic,nil,sdkni,svm,svmjdwp,svmt,svmsl,tflc,tflsm,cov,dap,ins,insight,insightheap,icu4j,nfi,nfi-libffi
+NATIVE_IMAGES=lib:jvmcicompiler,lib:native-image-agent,lib:native-image-diagnostics-agent,native-image
+NON_REBUILDABLE_IMAGES=lib:jvmcicompiler
+
