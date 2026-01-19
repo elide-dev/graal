@@ -75,7 +75,7 @@ public class ShenandoahLibrary {
                     Word classesAssumedReachableForCodeUnloading, boolean perfDataSupport, boolean useStringInlining, boolean closedTypeWorld,
                     boolean useInterfaceHashing, int interfaceHashingMaxId, int dynamicHubHashingInterfaceMask, int dynamicHubHashingShiftOffset,
                     Word offsets, int offsetsLength,
-                    CFunctionPointer collectForAllocationOp, CFunctionPointer collectFullOp,
+                    CFunctionPointer collectForAllocationOp, CFunctionPointer collectFullOp, CFunctionPointer collectDegeneratedOp,
                     CFunctionPointer waitForVMOperationExecutionStatus, CFunctionPointer updateVMOperationExecutionStatus, CFunctionPointer isVMOperationFinished,
                     CFunctionPointer fetchThreadStackFrames, CFunctionPointer freeThreadStackFrames,
                     CFunctionPointer fetchContinuationStackFrames, CFunctionPointer freeContinuationStackFrames,

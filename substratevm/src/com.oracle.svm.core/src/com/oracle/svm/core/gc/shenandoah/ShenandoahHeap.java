@@ -185,6 +185,7 @@ public final class ShenandoahHeap extends Heap {
         int offsetsLength = accessedFieldOffsets.length;
         CFunctionPointer collectForAllocationOp = getFunctionPointer(vmOperations.funcCollectForAllocation);
         CFunctionPointer collectFullOp = getFunctionPointer(vmOperations.funcCollectFull);
+        CFunctionPointer collectDegeneratedOp = getFunctionPointer(vmOperations.funcCollectDegenerated);
         CFunctionPointer waitForVMOperationExecutionStatus = getFunctionPointer(vmOperationSupport.funcWaitForVMOperationExecutionStatus);
         CFunctionPointer updateVMOperationExecutionStatus = getFunctionPointer(vmOperationSupport.funcUpdateVMOperationExecutionStatus);
         CFunctionPointer isVMOperationFinished = getFunctionPointer(vmOperationSupport.funcIsVMOperationFinished);
@@ -207,7 +208,7 @@ public final class ShenandoahHeap extends Heap {
                         classesAssumedReachableForCodeUnloading, perfDataSupport, useStringInlining, closedTypeWorldHubLayout,
                         useInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingInterfaceMask, dynamicHubHashingShiftOffset,
                         offsets, offsetsLength,
-                        collectForAllocationOp, collectFullOp,
+                        collectForAllocationOp, collectFullOp, collectDegeneratedOp,
                         waitForVMOperationExecutionStatus, updateVMOperationExecutionStatus, isVMOperationFinished,
                         fetchThreadStackFrames, freeThreadStackFrames,
                         fetchContinuationStackFrames, freeContinuationStackFrames,

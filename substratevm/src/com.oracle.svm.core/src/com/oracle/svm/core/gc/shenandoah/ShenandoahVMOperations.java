@@ -51,9 +51,11 @@ import com.oracle.svm.core.heap.VMOperationInfos;
 public class ShenandoahVMOperations {
     private static final ShenandoahVMOperation OP_COLLECT_FOR_ALLOCATION = new ShenandoahVMOperation(VMOperationInfos.get(ShenandoahVMOperation.class, "Collect for allocation", SAFEPOINT), true);
     private static final ShenandoahVMOperation OP_COLLECT_FULL = new ShenandoahVMOperation(VMOperationInfos.get(ShenandoahVMOperation.class, "Collect full", SAFEPOINT), true);
+    private static final ShenandoahVMOperation OP_COLLECT_DEGENERATED = new ShenandoahVMOperation(VMOperationInfos.get(ShenandoahVMOperation.class, "Degenerated full", SAFEPOINT), true);
 
     public final CEntryPointLiteral<CFunctionPointer> funcCollectForAllocation;
     public final CEntryPointLiteral<CFunctionPointer> funcCollectFull;
+    public final CEntryPointLiteral<CFunctionPointer> funcCollectDegenerated;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public ShenandoahVMOperations() {
@@ -61,6 +63,8 @@ public class ShenandoahVMOperations {
                         Isolate.class, IsolateThread.class, NativeGCVMOperationData.class, NativeGCVMOperationWrapperData.class);
         funcCollectFull = CEntryPointLiteral.create(ShenandoahVMOperations.class, "collectFull",
                         Isolate.class, IsolateThread.class, NativeGCVMOperationData.class, NativeGCVMOperationWrapperData.class);
+        funcCollectDegenerated = CEntryPointLiteral.create(ShenandoahVMOperations.class, "collectDegenerated",
+                Isolate.class, IsolateThread.class, NativeGCVMOperationData.class, NativeGCVMOperationWrapperData.class);
     }
 
     @Uninterruptible(reason = "Can be called from an unattached thread.")
@@ -77,6 +81,14 @@ public class ShenandoahVMOperations {
     public static void collectFull(@SuppressWarnings("unused") Isolate isolate, @SuppressWarnings("unused") IsolateThread isolateThread, NativeGCVMOperationData data,
                     NativeGCVMOperationWrapperData wrapperData) {
         enqueue(OP_COLLECT_FULL, data, wrapperData);
+    }
+
+    @Uninterruptible(reason = "Can be called from an unattached thread.")
+    @CEntryPoint(include = UseShenandoahGC.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = InitializeReservedRegistersForPossiblyUnattachedThread.class, epilogue = NoEpilogue.class)
+    public static void collectDegenerated(@SuppressWarnings("unused") Isolate isolate, @SuppressWarnings("unused") IsolateThread isolateThread, NativeGCVMOperationData data,
+                                   NativeGCVMOperationWrapperData wrapperData) {
+        enqueue(OP_COLLECT_DEGENERATED, data, wrapperData);
     }
 
     private static class ShenandoahVMOperation extends NativeGCVMOperation {

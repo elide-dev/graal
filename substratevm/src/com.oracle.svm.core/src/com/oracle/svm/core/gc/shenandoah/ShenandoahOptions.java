@@ -26,11 +26,13 @@ package com.oracle.svm.core.gc.shenandoah;
 
 import static com.oracle.svm.core.gc.shared.NativeGCOptions.K;
 import static com.oracle.svm.core.gc.shared.NativeGCOptions.M;
+import static com.oracle.svm.core.option.RuntimeOptionKey.RuntimeOptionKeyFlag.IsolateCreationOnly;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
+import com.oracle.svm.core.option.RuntimeOptionKey;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 
 import com.oracle.svm.core.SubstrateGCOptions;
@@ -70,6 +72,23 @@ public class ShenandoahOptions {
 
     @Option(help = "Size of the Shenandoah heap regions in bytes. " + SUPPORTED_REGION_SIZES + ".", type = OptionType.User)//
     public static final HostedOptionKey<Integer> ShenandoahRegionSize = new ShenandoahHostedOptionKey<>(1 * M, ShenandoahOptions::validateRegionSize);
+
+    @Option(help = "Enable normal processing of flags relating to field diagnostics.", type = OptionType.Debug)//
+    public static final RuntimeOptionKey<Boolean> UnlockDiagnosticVMOptions = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
+
+    private static final String SUPPORTED_GC_MODES = "satb, passive, generational";
+
+    @Option(help = "GC mode to use. Possible values are: [" + SUPPORTED_GC_MODES + "].", type = OptionType.User)//
+    public static final RuntimeOptionKey<String> ShenandoahGCMode = new ShenandoahRuntimeOptionKey<>("satb", IsolateCreationOnly);
+
+    @Option(help = "Enable internal verification. Catch many GC bugs but also stalls the collector which might hide other bugs", type = OptionType.Debug)//
+    public static final RuntimeOptionKey<Boolean> ShenandoahVerify = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
+
+    @Option(help = "Verification level, higher levels check more, taking more time. An integer between 0 and 4 (default 4).", type = OptionType.Debug)//
+    public static final RuntimeOptionKey<Integer> ShenandoahVerifyLevel = new ShenandoahRuntimeOptionKey<>(4, IsolateCreationOnly);
+
+    @Option(help = "Enable Degenerated GC as the graceful degradation step. Disabling this option leads to degradation to Full GC instead.", type = OptionType.Debug)//
+    public static final RuntimeOptionKey<Boolean> ShenandoahDegeneratedGC = new ShenandoahRuntimeOptionKey<>(true, IsolateCreationOnly);
 
     /* Encoded option values. */
     public static final CGlobalData<CCharPointer> HOSTED_ARGUMENTS = CGlobalDataFactory.createBytes(new HostedArgumentsSupplier(getOptionFields()));

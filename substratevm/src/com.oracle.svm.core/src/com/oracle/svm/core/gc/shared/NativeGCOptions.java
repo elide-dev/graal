@@ -327,7 +327,11 @@ public class NativeGCOptions {
                         Object value = key.getValue(new OptionValues(map));
                         if (key.shouldPassToNativeGC() && value != null) {
                             buffer.putString(key.getName());
-                            buffer.putPrimitive(value);
+                            if (value instanceof String stringValue) {
+                                buffer.putString(stringValue);
+                            } else {
+                                buffer.putPrimitive(value);
+                            }
                         }
                     }
                 } catch (IllegalArgumentException | IllegalAccessException e) {
@@ -359,7 +363,12 @@ public class NativeGCOptions {
                         RuntimeOptionKey<?> key = (RuntimeOptionKey<?>) field.get(null);
                         if (key.hasBeenSet(optionValues)) {
                             buffer.putString(key.getName());
-                            buffer.putPrimitive(key.getValue(optionValues));
+                            Object val = key.getValue(optionValues);
+                            if (val instanceof String strVal) {
+                                buffer.putString(strVal);
+                            } else {
+                                buffer.putPrimitive(val);
+                            }
                         }
                     }
                 } catch (IllegalArgumentException | IllegalAccessException e) {

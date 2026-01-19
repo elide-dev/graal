@@ -30,6 +30,7 @@ import static com.oracle.svm.guest.staging.option.RuntimeOptionKey.RuntimeOption
 import static com.oracle.svm.guest.staging.option.RuntimeOptionValidators.NON_NEGATIVE;
 import static com.oracle.svm.shared.option.HostedOptionKey.HostedOptionKeyFlag.DoNotPassToNativeGC;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 import org.graalvm.collections.EconomicMap;
@@ -116,6 +117,15 @@ public class SubstrateGCOptions {
 
     @Option(help = "Print more information about the heap before and after each collection.", type = OptionType.Expert)//
     public static final RuntimeOptionKey<Boolean> VerboseGC = new NotifyGCRuntimeOptionKey<>(false);
+
+    @Option(help = "The log level for the VerboseGC option. Corresponds to the HotSpot Unified Logging log levels, i.e. one " +
+                    "of ['off', 'trace', 'debug', 'info', 'warning', 'error'] (defaults to 'info').", type = OptionType.Expert)//
+    public static final RuntimeOptionKey<String> VerboseGCLevel = new NotifyGCRuntimeOptionKey<>("info", null, key -> {
+        List<String> logLevels = List.of("off", "trace", "debug", "info", "warning", "error");
+        if (!logLevels.contains(key.getValue())) {
+            throw RuntimeOptionValidation.invalidOptionValue(key, key.getValue(), "Invalid value, use one of " + logLevels);
+        }
+    });
 
     @Option(help = "Verify the heap before and after each collection.", type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> VerifyHeap = new HostedOptionKey<>(false);
