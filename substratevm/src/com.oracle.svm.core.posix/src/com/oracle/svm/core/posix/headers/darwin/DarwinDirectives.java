@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.posix.headers.darwin;
 
+import com.oracle.svm.core.c.libc.CosmoLibC;
+import com.oracle.svm.core.c.libc.LibCBase;
 import org.graalvm.nativeimage.Platform;
 
 import com.oracle.svm.core.posix.headers.PosixDirectives;
@@ -31,6 +33,9 @@ import com.oracle.svm.core.posix.headers.PosixDirectives;
 public class DarwinDirectives extends PosixDirectives {
     @Override
     public boolean isInConfiguration() {
+        if (LibCBase.targetLibCIs(CosmoLibC.class)) {
+            return false;
+        }
         return Platform.includedIn(Platform.DARWIN.class);
     }
 }

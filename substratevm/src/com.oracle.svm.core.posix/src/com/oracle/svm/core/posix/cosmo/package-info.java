@@ -23,7 +23,7 @@
  * questions.
  */
 
-@Platforms({Platform.LINUX.class})
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 package com.oracle.svm.core.posix.cosmo;
 
 import org.graalvm.nativeimage.Platform;

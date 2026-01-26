@@ -83,6 +83,9 @@ public abstract class CCompilerInvoker {
     }
 
     public static CCompilerInvoker create(Path tempDirectory) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            return new CosmoCCompilerInvoker(tempDirectory);
+        }
         OS hostOS = OS.getCurrent();
         switch (hostOS) {
             case LINUX:
@@ -111,6 +114,50 @@ public abstract class CCompilerInvoker {
         err.getMessages().forEach(messages::add);
         messages.add("To prevent native-toolchain checking provide command-line option " + SubstrateOptionsParser.commandArgument(SubstrateOptions.CheckToolchain, "-"));
         return UserError.abort(messages);
+    }
+
+    @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class)
+    private static class CosmoCCompilerInvoker extends CCompilerInvoker {
+
+        CosmoCCompilerInvoker(Path tempDirectory) {
+            super(tempDirectory);
+        }
+
+        @Override
+        protected String getDefaultCompiler() {
+            return HostedLibCBase.singleton().getTargetCompiler();
+        }
+
+        @Override
+        protected CompilerInfo createCompilerInfo(Path compilerPath, Scanner scanner) {
+            try {
+                String[] triplet = guessTargetTriplet(scanner);
+                while (scanner.findInLine("gcc version ") == null) {
+                    scanner.nextLine();
+                }
+                scanner.useDelimiter("[. ]");
+                int major = scanner.nextInt();
+                int minor0 = scanner.nextInt();
+                int minor1 = scanner.nextInt();
+                return new CompilerInfo(compilerPath, triplet[1], "GNU project C and C++ compiler", "gcc", major, minor0, minor1, triplet[0]);
+            } catch (NoSuchElementException e) {
+                return null;
+            }
+        }
+
+        @Override
+        protected void verify() {
+            Class<? extends Architecture> substrateTargetArch = ImageSingletons.lookup(SubstrateTargetDescription.class).arch.getClass();
+            Class<? extends Architecture> guessed = guessArchitecture(compilerInfo.targetArch);
+            if (guessed == null) {
+                UserError.abort("cosmocc toolchain (%s) has no matching native-image target architecture.", compilerInfo.targetArch);
+            }
+            if (guessed != substrateTargetArch) {
+                UserError.abort("cosmocc toolchain (%s) implies native-image target architecture %s but configured native-image target architecture is %s.",
+                        compilerInfo.targetArch, guessed, substrateTargetArch);
+            }
+        }
+
     }
 
     @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = Disallowed.class)
