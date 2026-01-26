@@ -24,8 +24,7 @@
  */
 package com.oracle.svm.core.posix.cosmo.headers;
 
-import com.oracle.svm.core.c.libc.CosmoLibC;
-import com.oracle.svm.core.c.libc.LibCBase;
+import com.oracle.svm.core.SubstrateOptions;
 import org.graalvm.nativeimage.c.CContext;
 
 import java.util.ArrayList;
@@ -59,7 +58,7 @@ public class CosmoDirectives implements CContext.Directives {
 
     @Override
     public boolean isInConfiguration() {
-        return LibCBase.targetLibCIs(CosmoLibC.class);
+        return SubstrateOptions.UseLibC.getValue().equals("cosmo");
     }
 
     @Override
