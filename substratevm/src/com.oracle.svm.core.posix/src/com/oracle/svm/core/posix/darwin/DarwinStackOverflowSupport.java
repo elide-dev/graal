@@ -32,6 +32,7 @@ import static com.oracle.svm.core.posix.headers.darwin.DarwinVirtualMemory.mach_
 import static com.oracle.svm.core.posix.headers.darwin.DarwinVirtualMemory.mach_vm_region;
 import static com.oracle.svm.core.posix.headers.darwin.DarwinVirtualMemory.vm_region_basic_info_data_64_t;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.WordPointer;
@@ -50,7 +51,7 @@ import com.oracle.svm.core.util.VMError;
 import org.graalvm.word.impl.Word;
 
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, other = Disallowed.class)
-@AutomaticallyRegisteredImageSingleton(StackOverflowCheck.PlatformSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = StackOverflowCheck.PlatformSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 final class DarwinStackOverflowSupport implements StackOverflowCheck.PlatformSupport {
     @Override
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

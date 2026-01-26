@@ -27,6 +27,7 @@ package com.oracle.svm.core.posix.darwin;
 
 import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
@@ -42,7 +43,7 @@ import com.oracle.svm.core.traits.BuiltinTraits.Disallowed;
 import com.oracle.svm.core.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.core.traits.SingletonTraits;
 
-@AutomaticallyRegisteredImageSingleton(VMLockSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = VMLockSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, other = Disallowed.class)
 final class DarwinVMLockSupport extends PthreadVMLockSupport {
 

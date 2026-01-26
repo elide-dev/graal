@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.darwin;
 
+import com.oracle.svm.core.SubstrateOptions;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.function.CLibrary;
@@ -143,6 +144,9 @@ public class DarwinSystemPropertiesSupport extends PosixSystemPropertiesSupport 
 class DarwinSystemPropertiesFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess access) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            return;
+        }
         ImageSingletons.add(RuntimeSystemPropertiesSupport.class, new DarwinSystemPropertiesSupport());
         ImageSingletons.add(SystemPropertiesSupport.class, (SystemPropertiesSupport) ImageSingletons.lookup(RuntimeSystemPropertiesSupport.class));
     }

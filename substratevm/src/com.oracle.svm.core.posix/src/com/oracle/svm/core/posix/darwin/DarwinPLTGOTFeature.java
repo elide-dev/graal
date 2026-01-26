@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.darwin;
 
+import com.oracle.svm.core.SubstrateOptions;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 
@@ -37,6 +38,9 @@ public class DarwinPLTGOTFeature implements InternalFeature {
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            return false;
+        }
         return Platform.includedIn(Platform.DARWIN.class) && PLTGOTOptions.EnablePLTGOT.getValue();
     }
 

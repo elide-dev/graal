@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.darwin;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
@@ -37,7 +38,7 @@ import com.oracle.svm.core.posix.headers.darwin.DarwinDyld;
 import com.oracle.svm.core.util.VMError;
 import org.graalvm.word.impl.Word;
 
-@AutomaticallyRegisteredImageSingleton(ProcessPropertiesSupport.class)
+@AutomaticallyRegisteredImageSingleton(value = ProcessPropertiesSupport.class, onlyWith = NotCosmoLibCSupplier.class)
 public class DarwinProcessPropertiesSupport extends PosixProcessPropertiesSupport {
 
     @Override

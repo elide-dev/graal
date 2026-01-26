@@ -30,6 +30,7 @@ import static com.oracle.svm.core.posix.headers.darwin.DarwinTime.NoTransitions.
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -64,7 +65,7 @@ final class Target_java_lang_System_Darwin {
 }
 
 /** Additional static-like fields for {@link Target_java_lang_System_Darwin}. */
-@AutomaticallyRegisteredImageSingleton
+@AutomaticallyRegisteredImageSingleton(onlyWith = NotCosmoLibCSupplier.class)
 final class DarwinTimeUtil {
     private static final Unsafe U = Unsafe.getUnsafe();
     private static final long INITIALIZED_OFFSET = U.objectFieldOffset(DarwinTimeUtil.class, "initialized");

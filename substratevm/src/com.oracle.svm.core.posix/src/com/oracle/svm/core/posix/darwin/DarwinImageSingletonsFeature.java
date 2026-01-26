@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.darwin;
 
+import com.oracle.svm.core.SubstrateOptions;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
@@ -40,6 +41,9 @@ import com.oracle.svm.core.traits.SingletonTraits;
 class DarwinImageSingletonsFeature implements InternalFeature {
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            return false;
+        }
         return ImageLayerBuildingSupport.firstImageBuild();
     }
 

@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.darwin;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.WordPointer;
@@ -44,7 +45,7 @@ import com.oracle.svm.core.util.VMError;
 import org.graalvm.word.impl.Word;
 
 @SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = Disallowed.class)
-@AutomaticallyRegisteredImageSingleton(PhysicalMemorySupport.class)
+@AutomaticallyRegisteredImageSingleton(value = PhysicalMemorySupport.class, onlyWith = NotCosmoLibCSupplier.class)
 class DarwinPhysicalMemorySupportImpl implements PhysicalMemorySupport {
 
     @Override
