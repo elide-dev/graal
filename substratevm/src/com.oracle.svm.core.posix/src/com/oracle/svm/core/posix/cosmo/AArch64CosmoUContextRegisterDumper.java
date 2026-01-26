@@ -42,7 +42,7 @@ import org.graalvm.word.PointerBase;
 import static com.oracle.svm.core.RegisterDumper.dumpReg;
 
 @AutomaticallyRegisteredImageSingleton(value = RegisterDumper.class, onlyWith = CosmoLibCSupplier.class)
-@Platforms(Platform.LINUX_AARCH64_BASE.class)
+@Platforms(Platform.AARCH64.class)
 class AArch64CosmoUContextRegisterDumper implements UContextRegisterDumper {
     AArch64CosmoUContextRegisterDumper() {
         VMError.guarantee(AArch64.r27.equals(AArch64ReservedRegisters.HEAP_BASE_REGISTER));

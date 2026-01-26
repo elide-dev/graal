@@ -81,7 +81,6 @@ public class Unistd {
     public static native int _SC_GETPW_R_SIZE_MAX();
 
     @CConstant
-    @Platforms(Platform.LINUX.class)
     public static native int _SC_PHYS_PAGES();
 
 

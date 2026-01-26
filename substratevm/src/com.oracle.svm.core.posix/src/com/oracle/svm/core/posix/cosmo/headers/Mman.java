@@ -93,15 +93,5 @@ public class Mman {
 
         @CFunction(transition = Transition.NO_TRANSITION)
         public static native int mprotect(PointerBase addr, UnsignedWord len, int prot);
-
-        @CFunction(transition = Transition.NO_TRANSITION)
-        @Platforms(Platform.LINUX.class)
-        @CLibrary("rt")
-        public static native int shm_open(@CConst CCharPointer name, int oflag, int mode);
-
-        @CFunction(transition = Transition.NO_TRANSITION)
-        @Platforms(Platform.LINUX.class)
-        @CLibrary("rt")
-        public static native int shm_unlink(@CConst CCharPointer name);
     }
 }

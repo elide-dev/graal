@@ -119,7 +119,6 @@ public class Signal {
         VoidPointer si_addr();
     }
 
-    @Platforms({Platform.LINUX.class})
     @CPointerTo(nameOfCType = "long long int")
     public interface GregsPointer extends PointerBase {
         long read(int index);
@@ -128,11 +127,11 @@ public class Signal {
     @CStruct
     public interface ucontext_t extends RegisterDumper.Context {
         @CFieldAddress("uc_mcontext")
-        @Platforms({Platform.LINUX_AMD64_BASE.class})
+        @Platforms({Platform.AMD64.class})
         mcontext_linux_x86_64_t uc_mcontext_linux_x86_64();
 
         @CFieldAddress("uc_mcontext")
-        @Platforms({Platform.LINUX_AARCH64_BASE.class})
+        @Platforms({Platform.AARCH64.class})
         mcontext_linux_aarch64_t uc_mcontext_linux_aarch64();
     }
 
@@ -242,7 +241,7 @@ public class Signal {
      * https://github.com/torvalds/linux/blob/9e1ff307c779ce1f0f810c7ecce3d95bbae40896/arch/arm64/include/uapi/asm/sigcontext.h#L28
      */
     @CStruct(value = "mcontext_t")
-    @Platforms({Platform.LINUX_AARCH64_BASE.class})
+    @Platforms({Platform.AARCH64.class})
     public interface mcontext_linux_aarch64_t extends PointerBase {
         @CField
         long fault_address();
@@ -261,7 +260,7 @@ public class Signal {
     }
 
     @CStruct(value = "mcontext_t")
-    @Platforms({Platform.LINUX_AMD64_BASE.class})
+    @Platforms({Platform.AMD64.class})
     public interface mcontext_linux_x86_64_t extends PointerBase {
         @CField
         long r8();
