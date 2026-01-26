@@ -132,7 +132,7 @@ public final class CosmoSubstrateSigprofHandler extends SubstrateSigprofHandler 
         }
     }
 
-    @Platforms(Platform.HOSTED_ONLY.class)
+
     public CosmoSubstrateSigprofHandler() {
     }
 

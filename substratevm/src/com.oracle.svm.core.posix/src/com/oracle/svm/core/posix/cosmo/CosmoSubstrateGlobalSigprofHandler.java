@@ -42,7 +42,7 @@ import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CO
  */
 public final class CosmoSubstrateGlobalSigprofHandler extends PosixSubstrateSigprofHandler {
 
-    @Platforms(Platform.HOSTED_ONLY.class)
+
     public CosmoSubstrateGlobalSigprofHandler() {
     }
 

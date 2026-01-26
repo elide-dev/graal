@@ -54,13 +54,9 @@ import com.oracle.svm.core.util.VMError;
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
 import org.graalvm.word.impl.Word;
 import jdk.internal.misc.Unsafe;
-import org.graalvm.nativeimage.Platform.HOSTED_ONLY;
-import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.struct.SizeOf;
-import org.graalvm.nativeimage.c.type.CTypeConversion;
-import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
 import org.graalvm.nativeimage.c.type.VoidPointer;
 import org.graalvm.nativeimage.c.type.WordPointer;
 import org.graalvm.word.Pointer;
@@ -76,7 +72,6 @@ public final class CosmoPlatformThreads extends PlatformThreads {
         return Target_java_lang_Thread.class.cast(thread);
     }
 
-    @Platforms(HOSTED_ONLY.class)
     CosmoPlatformThreads() {
     }
 

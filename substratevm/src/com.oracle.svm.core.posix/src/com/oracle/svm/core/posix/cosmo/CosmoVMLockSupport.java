@@ -53,13 +53,11 @@ import static com.oracle.svm.core.heap.RestrictHeapAccess.Access.NO_ALLOCATION;
 abstract class PthreadVMLockSupport extends VMLockSupport {
 
     @Override
-    @Platforms(Platform.HOSTED_ONLY.class)
     protected VMMutex replaceVMMutex(VMMutex source) {
         return new PthreadVMMutex(source.getName());
     }
 
     @Override
-    @Platforms(Platform.HOSTED_ONLY.class)
     protected VMCondition replaceVMCondition(VMCondition source) {
         return new PthreadVMCondition((PthreadVMMutex) mutexReplacer.apply(source.getMutex()), source.getConditionName());
     }
@@ -90,7 +88,6 @@ final class PthreadVMMutex extends VMMutex {
 
     private final CIsolateData<Pthread.pthread_mutex_t> structPointer;
 
-    @Platforms(Platform.HOSTED_ONLY.class)
     PthreadVMMutex(String name) {
         super(name);
         structPointer = CIsolateDataFactory.createStruct("pthreadMutex_" + name, Pthread.pthread_mutex_t.class);
@@ -272,7 +269,6 @@ final class PthreadVMCondition extends VMCondition {
 final class CosmoVMLockSupport extends PthreadVMLockSupport {
 
     @Override
-    @Platforms(Platform.HOSTED_ONLY.class)
     protected VMSemaphore replaceSemaphore(VMSemaphore source) {
         return new CosmoVMSemaphore(source.getName());
     }
@@ -281,7 +277,7 @@ final class CosmoVMLockSupport extends PthreadVMLockSupport {
 final class CosmoVMSemaphore extends VMSemaphore {
     private final CIsolateData<Semaphore.sem_t> structPointer;
 
-    @Platforms(Platform.HOSTED_ONLY.class)
+
     CosmoVMSemaphore(String name) {
         super(name);
         structPointer = CIsolateDataFactory.createStruct("linuxSemaphore_" + name, Semaphore.sem_t.class);

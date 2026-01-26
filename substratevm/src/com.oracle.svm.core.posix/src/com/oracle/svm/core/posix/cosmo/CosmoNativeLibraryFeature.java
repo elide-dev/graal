@@ -69,7 +69,6 @@ class CosmoNativeLibraryFeature implements InternalFeature {
 
 final class CosmoNativeLibrarySupport extends JNIPlatformNativeLibrarySupport {
 
-    @Platforms(Platform.HOSTED_ONLY.class)
     private CosmoNativeLibrarySupport() {
     }
 

@@ -162,7 +162,7 @@ public final class CosmoStat {
         return result;
     }
 
-    @Platforms(Platform.HOSTED_ONLY.class)
+
     private CosmoStat() {
     }
 

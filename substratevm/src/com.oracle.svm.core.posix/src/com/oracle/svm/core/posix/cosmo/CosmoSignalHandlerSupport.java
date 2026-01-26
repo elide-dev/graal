@@ -104,7 +104,6 @@ public final class CosmoSignalHandlerSupport implements SignalHandlerSupport {
     private DispatcherThread dispatcherThread;
     private boolean initialized;
 
-    @Platforms(Platform.HOSTED_ONLY.class)
     public CosmoSignalHandlerSupport() {
     }
 
@@ -113,7 +112,6 @@ public final class CosmoSignalHandlerSupport implements SignalHandlerSupport {
         return ImageSingletons.lookup(CosmoSignalHandlerSupport.class);
     }
 
-    @Platforms(Platform.HOSTED_ONLY.class)
     @SuppressWarnings("hiding")
     void setData(Map<String, Integer> signalNameToSignalNum, boolean[] supportedSignals) {
         assert this.signalNameToSignalNum == null && this.supportedSignals == null;

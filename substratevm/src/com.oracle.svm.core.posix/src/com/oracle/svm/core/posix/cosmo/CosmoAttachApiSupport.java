@@ -55,7 +55,6 @@ public class CosmoAttachApiSupport implements AttachApiSupport {
     private String cachedSocketFilePath;
     private int listener;
 
-    @Platforms(Platform.HOSTED_ONLY.class)
     public CosmoAttachApiSupport() {
         state = State.Uninitialized;
         listener = -1;

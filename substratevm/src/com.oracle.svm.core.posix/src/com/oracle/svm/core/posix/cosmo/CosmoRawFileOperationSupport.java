@@ -49,7 +49,7 @@ import java.nio.ByteOrder;
 import java.util.function.BooleanSupplier;
 
 public class CosmoRawFileOperationSupport extends AbstractRawFileOperationSupport {
-    @Platforms(Platform.HOSTED_ONLY.class)
+
     public CosmoRawFileOperationSupport(boolean useNativeByteOrder) {
         super(useNativeByteOrder);
     }
