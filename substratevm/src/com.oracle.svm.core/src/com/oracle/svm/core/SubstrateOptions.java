@@ -131,23 +131,6 @@ public class SubstrateOptions {
     @Option(help = "Build shared library")//
     public static final HostedOptionKey<Boolean> SharedLibrary = new HostedOptionKey<>(false);
 
-    @APIOption(name = "static")//
-    @Option(help = "Build statically linked executable (requires static libc and zlib)")//
-    public static final HostedOptionKey<Boolean> StaticExecutable = new HostedOptionKey<>(false, key -> {
-        if (!key.getValue()) {
-            return;
-        }
-
-        if (!Platform.includedIn(Platform.LINUX.class) && !LibCBase.targetLibCIs(CosmoLibC.class)) {
-            throw UserError.invalidOptionValue(key, key.getValue(),
-                            "Building static executable images is currently only supported on Linux or with cosmo libc. Remove the '--static' option or build on a Linux machine");
-        }
-        if (!LibCBase.targetLibCIs(MuslLibC.class) && !LibCBase.targetLibCIs(CosmoLibC.class)) {
-            throw UserError.invalidOptionValue(key, key.getValue(),
-                            "Building static executable images is only supported with musl or cosmo libc. Remove the '--static' option or add the '--libc=musl' or '--libc=cosmo'option.");
-        }
-    });
-
     @APIOption(name = "libc")//
     @Option(help = "Selects the libc implementation to use. Available implementations: glibc, musl, bionic, cosmo")//
     public static final HostedOptionKey<String> UseLibC = new HostedOptionKey<>(null) {
@@ -195,6 +178,27 @@ public class SubstrateOptions {
 
         }
     };
+
+    @APIOption(name = "static")//
+    @Option(help = "Build statically linked executable (requires static libc and zlib)")//
+    public static final HostedOptionKey<Boolean> StaticExecutable = new HostedOptionKey<>(false, key -> {
+        if (!key.getValue()) {
+            return;
+        }
+
+        if (UseLibC.getValue().equals("cosmo")) {
+            return;
+        }
+
+        if (!Platform.includedIn(Platform.LINUX.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(),
+                    "Building static executable images is currently only supported on Linux or with cosmo libc. Remove the '--static' option or build on a Linux machine");
+        }
+        if (!LibCBase.targetLibCIs(MuslLibC.class) && !LibCBase.targetLibCIs(CosmoLibC.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(),
+                    "Building static executable images is only supported with musl or cosmo libc. Remove the '--static' option or add the '--libc=musl' or '--libc=cosmo'option.");
+        }
+    });
 
     @APIOption(name = "static-nolibc")//
     @Option(help = "Build statically linked executable with libc dynamically linked", type = Expert, stability = OptionStability.EXPERIMENTAL)//
