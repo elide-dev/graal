@@ -30,6 +30,7 @@ import static com.oracle.svm.core.posix.headers.darwin.DarwinTime.NoTransitions.
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -48,7 +49,7 @@ import com.oracle.svm.util.JVMCIReflectionUtil;
 
 import jdk.internal.misc.Unsafe;
 
-@TargetClass(java.lang.System.class)
+@TargetClass(value = java.lang.System.class, onlyWith = NotCosmoLibCSupplier.class)
 final class Target_java_lang_System_Darwin {
 
     @Substitute
@@ -140,6 +141,9 @@ final class Target_java_util_prefs_FileSystemPreferences {
 final class IsJavaUtilPrefsPresent implements BooleanSupplier {
     @Override
     public boolean getAsBoolean() {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            return false;
+        }
         var prefsMod = JVMCIReflectionUtil.bootModuleLayer().findModule("java.prefs");
         return prefsMod.isPresent();
     }
@@ -149,7 +153,7 @@ final class IsJavaUtilPrefsPresent implements BooleanSupplier {
  * Not used in native image and has linker errors with XCode 13. Can be removed in the future when
  * XCode 14 becomes omnipresent.
  */
-@TargetClass(className = "sun.util.locale.provider.HostLocaleProviderAdapterImpl")
+@TargetClass(className = "sun.util.locale.provider.HostLocaleProviderAdapterImpl", onlyWith = NotCosmoLibCSupplier.class)
 final class Target_sun_util_locale_provider_HostLocaleProviderAdapterImpl {
     @Delete
     private static native String getDefaultLocale(int cat);
