@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.oracle.objectfile.elf.ELFObjectFile;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -389,7 +390,10 @@ public class HostedConfiguration {
     private static final class DefaultObjectFileFactory implements ObjectFileFactory {
         @Override
         public ObjectFile newObjectFile(int pageSize, Path tempDir, BigBang bb) {
-            return ObjectFile.getNativeObjectFile(pageSize, !LibCBase.targetLibCIs(CosmoLibC.class));
+            if (LibCBase.targetLibCIs(CosmoLibC.class)) {
+                return new ELFObjectFile(pageSize, true);
+            }
+            return ObjectFile.getNativeObjectFile(pageSize, false);
         }
     }
 }
