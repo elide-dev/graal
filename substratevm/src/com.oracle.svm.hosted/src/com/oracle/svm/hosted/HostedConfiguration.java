@@ -390,7 +390,7 @@ public class HostedConfiguration {
     private static final class DefaultObjectFileFactory implements ObjectFileFactory {
         @Override
         public ObjectFile newObjectFile(int pageSize, Path tempDir, BigBang bb) {
-            if (LibCBase.targetLibCIs(CosmoLibC.class)) {
+            if (LibCBase.singleton() instanceof CosmoLibC) {
                 return new ELFObjectFile(pageSize, true);
             }
             return ObjectFile.getNativeObjectFile(pageSize, false);
