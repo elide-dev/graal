@@ -26,6 +26,7 @@ package com.oracle.svm.core.posix.aarch64;
 
 import static com.oracle.svm.core.RegisterDumper.dumpReg;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.PointerBase;
@@ -46,7 +47,7 @@ import com.oracle.svm.core.util.VMError;
 import jdk.vm.ci.aarch64.AArch64;
 import org.graalvm.word.impl.Word;
 
-@AutomaticallyRegisteredImageSingleton(RegisterDumper.class)
+@AutomaticallyRegisteredImageSingleton(value = RegisterDumper.class, onlyWith = NotCosmoLibCSupplier.class)
 @Platforms(Platform.DARWIN_AARCH64.class)
 @SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = SingleLayer.class, other = Disallowed.class)
 class AArch64DarwinUContextRegisterDumper implements UContextRegisterDumper {

@@ -26,6 +26,7 @@ package com.oracle.svm.core.posix;
 
 import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
+import com.oracle.svm.core.posix.cosmo.NotCosmoLibCSupplier;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
@@ -40,7 +41,7 @@ import com.oracle.svm.core.traits.SingletonLayeredInstallationKind.InitialLayerO
 import com.oracle.svm.core.traits.SingletonTraits;
 import com.oracle.svm.core.util.VMError;
 
-@AutomaticallyRegisteredImageSingleton(value = StdErrWriter.class)
+@AutomaticallyRegisteredImageSingleton(value = StdErrWriter.class, onlyWith = NotCosmoLibCSupplier.class)
 @SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class)
 class PosixStdErrWriter implements StdErrWriter {
     private static final int STDERR_FD = 2;
