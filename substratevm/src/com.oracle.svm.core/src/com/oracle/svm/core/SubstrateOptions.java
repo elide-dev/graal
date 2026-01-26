@@ -138,9 +138,9 @@ public class SubstrateOptions {
             return;
         }
 
-        if (!Platform.includedIn(Platform.LINUX.class)) {
+        if (!Platform.includedIn(Platform.LINUX.class) && !LibCBase.targetLibCIs(CosmoLibC.class)) {
             throw UserError.invalidOptionValue(key, key.getValue(),
-                            "Building static executable images is currently only supported on Linux. Remove the '--static' option or build on a Linux machine");
+                            "Building static executable images is currently only supported on Linux or with cosmo libc. Remove the '--static' option or build on a Linux machine");
         }
         if (!LibCBase.targetLibCIs(MuslLibC.class) && !LibCBase.targetLibCIs(CosmoLibC.class)) {
             throw UserError.invalidOptionValue(key, key.getValue(),
