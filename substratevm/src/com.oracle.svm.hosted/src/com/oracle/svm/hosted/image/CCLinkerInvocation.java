@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.oracle.svm.hosted.c.libc.HostedCosmoLibC;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 
@@ -316,11 +317,8 @@ public abstract class CCLinkerInvocation implements LinkerInvocation {
                 VMError.shouldNotReachHere(e);
             }
 
-            additionalPreOptions.addAll(HostedLibCBase.singleton().getAdditionalLinkerOptions(imageKind));
-
-            if (SubstrateOptions.DeleteLocalSymbols.getValue() && !SubstrateOptions.StripDebugInfo.getValue()) {
-                additionalPreOptions.add("-Wl,-x");
-            }
+            HostedCosmoLibC tmp = new HostedCosmoLibC();
+            additionalPreOptions.addAll(tmp.getAdditionalLinkerOptions(imageKind));
         }
 
         @Override
