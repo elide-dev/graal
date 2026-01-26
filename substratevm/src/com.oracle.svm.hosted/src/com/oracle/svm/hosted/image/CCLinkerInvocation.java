@@ -251,6 +251,143 @@ public abstract class CCLinkerInvocation implements LinkerInvocation {
                         .collect(Collectors.toList());
     }
 
+    private static class CosmoCCLinkerInvocation extends CCLinkerInvocation {
+
+        private final boolean dynamicLibC = SubstrateOptions.StaticExecutableWithDynamicLibC.getValue();
+        private final boolean staticLibCpp = SubstrateOptions.StaticLibStdCpp.getValue();
+        private final boolean customStaticLibs = dynamicLibC || staticLibCpp;
+
+        CosmoCCLinkerInvocation(AbstractImage.NativeImageKind imageKind, NativeLibraries nativeLibs, List<ObjectFile.Symbol> symbols) {
+            super(imageKind, nativeLibs, symbols);
+            additionalPreOptions.add("-z");
+            additionalPreOptions.add("noexecstack");
+
+            // The linker should fail if DT_TEXTREL is needed, otherwise the image won't work on
+            // SELinux. If SpawnIsolates are disabled, this won't work as dynamic relocations
+            // are needed for heap access.
+            additionalPreOptions.add("-z");
+            additionalPreOptions.add(SpawnIsolates.getValue() ? "text" : "notext");
+
+            /*
+             * Make the linker aware of the page size used for aligning the native image object file
+             * sections. This makes sure that the resulting object file is always properly aligned,
+             * otherwise it would cause an error in ld-linux (glibc older than 2.35) if a specific
+             * linker version is involved (e.g. GNU binutils ld 2.38).
+             *
+             * In older glibc versions this is caused by a stricter page alignment check. Page
+             * alignment is checked against the alignment that comes from the linker instead of the
+             * system page size. This allows technically incorrect ELF object files to run on newer
+             * versions.
+             */
+            additionalPreOptions.add("-z");
+            additionalPreOptions.add("common-page-size=" + SubstrateOptions.getPageSize());
+
+            if (SubstrateOptions.RemoveUnusedSymbols.getValue()) {
+                /* Perform garbage collection of unused input sections. */
+                additionalPreOptions.add("-Wl,--gc-sections");
+            }
+
+            if (imageKind.isImageLayer) {
+                /*
+                 * We do not want interposition to affect the resolution of symbols we define and
+                 * reference within this library.
+                 */
+                additionalPreOptions.add("-Wl,-Bsymbolic");
+            }
+
+            /* Use --version-script to control the visibility of image symbols. */
+            try {
+                StringBuilder exportedSymbols = new StringBuilder();
+                exportedSymbols.append("{\n");
+                /* Only exported symbols are global ... */
+                Set<String> globalSymbols = Stream.concat(getImageSymbols(true).stream(), JNIRegistrationSupport.getShimLibrarySymbols()).collect(Collectors.toSet());
+                if (!globalSymbols.isEmpty()) {
+                    exportedSymbols.append("global:\n");
+                    globalSymbols.forEach(symbol -> exportedSymbols.append('\"').append(symbol).append("\";\n"));
+                }
+                /* ... everything else is local. */
+                exportedSymbols.append("local: *;\n");
+                exportedSymbols.append("};");
+
+                Path exportedSymbolsPath = nativeLibs.tempDirectory.resolve("exported_symbols.list");
+                Files.write(exportedSymbolsPath, Collections.singleton(exportedSymbols.toString()));
+                additionalPreOptions.add("-Wl,--version-script," + exportedSymbolsPath.toAbsolutePath());
+            } catch (IOException e) {
+                VMError.shouldNotReachHere(e);
+            }
+
+            additionalPreOptions.addAll(HostedLibCBase.singleton().getAdditionalLinkerOptions(imageKind));
+
+            if (SubstrateOptions.DeleteLocalSymbols.getValue() && !SubstrateOptions.StripDebugInfo.getValue()) {
+                additionalPreOptions.add("-Wl,-x");
+            }
+        }
+
+        @Override
+        String getSymbolName(ObjectFile.Symbol symbol) {
+            return symbol.getName();
+        }
+
+        @Override
+        protected void setOutputKind(List<String> cmd) {
+            switch (imageKind) {
+                case EXECUTABLE:
+                case STATIC_EXECUTABLE:
+                    if (!customStaticLibs) {
+                        cmd.add("-static");
+                    }
+                    break;
+                default:
+                    VMError.shouldNotReachHereUnexpectedInput(imageKind); // ExcludeFromJacocoGeneratedReport
+            }
+        }
+
+        private static final Set<String> LIB_C_NAMES = Set.of("pthread", "dl", "rt", "m");
+
+        @Override
+        protected List<String> getLibrariesCommand() {
+            List<String> cmd = new ArrayList<>();
+            String pushState = "-Wl,--push-state";
+            String popState = "-Wl,--pop-state";
+            if (customStaticLibs) {
+                cmd.add(pushState);
+            }
+            String previousLayerLib = null;
+            for (String lib : libs) {
+                String linkingMode = null;
+                if (ImageLayerBuildingSupport.buildingExtensionLayer() && HostedDynamicLayerInfo.singleton().isImageLayerLib(lib)) {
+                    VMError.guarantee(!lib.isEmpty());
+                    VMError.guarantee(previousLayerLib == null, "We currently only support one previous layer."); // GR-58631
+                    previousLayerLib = lib;
+                } else if (dynamicLibC) {
+                    linkingMode = LIB_C_NAMES.contains(lib) ? "dynamic" : "static";
+                } else if (staticLibCpp) {
+                    linkingMode = lib.equals("stdc++") ? "static" : "dynamic";
+                }
+                if (linkingMode != null) {
+                    cmd.add("-Wl,-B" + linkingMode);
+                }
+                cmd.add("-l" + lib);
+            }
+            if (customStaticLibs) {
+                cmd.add(popState);
+            }
+
+            if (previousLayerLib != null) {
+                cmd.add(pushState);
+                cmd.add("-Wl,-Bdynamic");
+                cmd.add("-l" + previousLayerLib);
+                cmd.add(popState);
+            }
+
+            // Make sure libgcc gets statically linked
+            if (customStaticLibs) {
+                cmd.add("-static-libgcc");
+            }
+            return cmd;
+        }
+    }
+
     private static class BinutilsCCLinkerInvocation extends CCLinkerInvocation {
 
         private final boolean dynamicLibC = SubstrateOptions.StaticExecutableWithDynamicLibC.getValue();
@@ -604,17 +741,21 @@ public abstract class CCLinkerInvocation implements LinkerInvocation {
                     Path outputDirectory, Path tempDirectory, String imageName, List<ObjectFile.Symbol> symbols) {
         CCLinkerInvocation inv;
 
-        switch (ObjectFile.getNativeFormat()) {
-            case MACH_O:
-                inv = new DarwinCCLinkerInvocation(imageKind, nativeLibs, symbols);
-                break;
-            case PECOFF:
-                inv = new WindowsCCLinkerInvocation(imageKind, nativeLibs, symbols, imageName);
-                break;
-            case ELF:
-            default:
-                inv = new BinutilsCCLinkerInvocation(imageKind, nativeLibs, symbols);
-                break;
+        if(SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
+            inv = new CosmoCCLinkerInvocation(imageKind, nativeLibs, symbols);
+        } else {
+            switch (ObjectFile.getNativeFormat()) {
+                case MACH_O:
+                    inv = new DarwinCCLinkerInvocation(imageKind, nativeLibs, symbols);
+                    break;
+                case PECOFF:
+                    inv = new WindowsCCLinkerInvocation(imageKind, nativeLibs, symbols, imageName);
+                    break;
+                case ELF:
+                default:
+                    inv = new BinutilsCCLinkerInvocation(imageKind, nativeLibs, symbols);
+                    break;
+            }
         }
 
         Path outputFile = outputDirectory.resolve(imageKind.getOutputFilename(imageName));
