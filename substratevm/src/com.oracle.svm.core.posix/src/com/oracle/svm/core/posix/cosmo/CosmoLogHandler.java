@@ -25,6 +25,7 @@
 package com.oracle.svm.core.posix.cosmo;
 
 import com.oracle.svm.core.SubstrateDiagnostics;
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.libc.CosmoLibC;
 import com.oracle.svm.core.c.libc.LibCBase;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
@@ -47,7 +48,7 @@ import java.util.EnumSet;
 class CosmoLogHandlerFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
-        if (ImageLayerBuildingSupport.firstImageBuild() && LibCBase.singleton() instanceof CosmoLibC) {
+        if (ImageLayerBuildingSupport.firstImageBuild() && SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
             Log.finalizeDefaultLogHandler(new CosmoLogHandler());
         }
     }

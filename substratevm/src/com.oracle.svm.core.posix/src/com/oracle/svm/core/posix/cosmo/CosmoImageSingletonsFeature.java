@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.cosmo;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.libc.CosmoLibC;
 import com.oracle.svm.core.c.libc.LibCBase;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
@@ -36,7 +37,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 class CosmoImageSingletonsFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess access) {
-        if (LibCBase.singleton() instanceof CosmoLibC) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
             ImageSingletons.add(LibCSupport.class, new CosmoLibCSupport());
             if (!ImageSingletons.contains(ImageHeapProvider.class)) {
                 ImageSingletons.add(ImageHeapProvider.class, new CosmoSimpleImageHeapProvider());

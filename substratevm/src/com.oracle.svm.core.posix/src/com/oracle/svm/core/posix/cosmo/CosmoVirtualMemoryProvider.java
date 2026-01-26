@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.cosmo;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.CGlobalData;
 import com.oracle.svm.core.c.CGlobalDataFactory;
@@ -61,7 +62,7 @@ import static org.graalvm.word.impl.Word.nullPointer;
 class CosmoVirtualMemoryProviderFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
-        if (LibCBase.singleton() instanceof CosmoLibC) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
             if (!ImageSingletons.contains(VirtualMemoryProvider.class)) {
                 ImageSingletons.add(VirtualMemoryProvider.class, new CosmoVirtualMemoryProvider());
             }

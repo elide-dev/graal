@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.linux;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.libc.CosmoLibC;
 import com.oracle.svm.core.c.libc.LibCBase;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -112,7 +113,7 @@ class LinuxSystemPropertiesFeature implements InternalFeature {
 
     @Override
     public void duringSetup(DuringSetupAccess access) {
-        if (LibCBase.singleton() instanceof CosmoLibC) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
             return;
         }
         LinuxSystemPropertiesSupport singleton = new LinuxSystemPropertiesSupport();

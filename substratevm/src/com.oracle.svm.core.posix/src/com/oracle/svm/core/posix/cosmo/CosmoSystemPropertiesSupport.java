@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.posix.cosmo;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.libc.CosmoLibC;
 import com.oracle.svm.core.c.libc.LibCBase;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
@@ -123,7 +124,7 @@ class CosmoSystemPropertiesFeature implements InternalFeature {
 
     @Override
     public void duringSetup(DuringSetupAccess access) {
-        if (LibCBase.singleton() instanceof CosmoLibC) {
+        if (SubstrateOptions.UseLibC.getValue().equals("cosmo")) {
             ImageSingletons.add(RuntimeSystemPropertiesSupport.class, new CosmoSystemPropertiesSupport());
             /* GR-42971 - Remove once SystemPropertiesSupport.class ImageSingletons use is gone. */
             ImageSingletons.add(SystemPropertiesSupport.class, (SystemPropertiesSupport) ImageSingletons.lookup(RuntimeSystemPropertiesSupport.class));
