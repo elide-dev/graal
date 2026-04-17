@@ -1148,6 +1148,20 @@ public abstract class ObjectFile {
         public Section(String name, int alignment, int elementIndex) {
             super(name, alignment, elementIndex);
         }
+
+        /**
+         * Provides a hint to the object-file writer about the platform-specific segment this section
+         * should live in. Only honoured by formats that have named segments distinct from sections
+         * (currently just Mach-O). Other formats ignore the hint.
+         *
+         * @param segmentName platform-specific segment name (e.g. {@code "__TEXT"},
+         *            {@code "__DATA_CONST"}, {@code "__DATA"}), or {@code null} to let the object
+         *            file pick the default
+         */
+        @SuppressWarnings("unused")
+        public void setDestinationSegmentHint(String segmentName) {
+            /* No-op by default. Mach-O overrides. */
+        }
     }
 
     /**

@@ -151,6 +151,25 @@ public abstract class NativeImage extends AbstractImage {
     private Section roDataSection;
     private Section rwDataSection;
     private Section heapSection;
+    /**
+     * When {@link SubstrateOptions#MachOSplitImageHeap} is enabled, the image heap is emitted as
+     * two Mach-O sub-sections instead of the single {@code __svm_heap} section:
+     * <ul>
+     * <li>{@link #heapSectionReadOnly} holds the read-only partitions (regular + relocatable) and
+     * is hinted into {@code __DATA_CONST}, so dyld flips it to read-only after applying chained
+     * fixups. Pages in this region stay file-backed and shareable across processes.
+     * <li>{@link #heapSectionWritable} holds the writable partitions (patched + regular + huge +
+     * read-only huge) and stays in {@code __DATA}.
+     * </ul>
+     * Contiguity between the two sub-sections is assumed: {@code __DATA_CONST} is laid out
+     * immediately before {@code __DATA} by ld64, so the two sections form a single VM range on
+     * arm64 macOS. When the flag is off, both fields are {@code null} and {@link #heapSection} is
+     * used as before.
+     */
+    private Section heapSectionReadOnly;
+    private Section heapSectionWritable;
+    /** Byte size of {@link #heapSectionReadOnly}; meaningful only when {@link #heapSectionReadOnly} is non-null. */
+    private long heapReadOnlyByteSize;
 
     public NativeImage(NativeImageKind k, HostedUniverse universe, HostedMetaAccess metaAccess, NativeLibraries nativeLibs, NativeImageHeap heap, NativeImageCodeCache codeCache,
                     List<HostedMethod> entryPoints, ClassLoader imageClassLoader) {
@@ -498,9 +517,15 @@ public abstract class NativeImage extends AbstractImage {
             long paddedImageHeapSize = padImageHeap ? NumUtil.roundUp(imageHeapSize, alignment) : imageHeapSize;
             RelocatableBuffer heapSectionBuffer = new RelocatableBuffer(paddedImageHeapSize, objectFile.getByteOrder());
             ProgbitsSectionImpl heapSectionImpl = new BasicProgbitsSectionImpl(heapSectionBuffer.getBackingArray());
-            // Note: On isolate startup the read only part of the heap will be set up as such.
-            heapSection = objectFile.newProgbitsSection(SectionName.SVM_HEAP.getFormatDependentName(objectFile.getFormat()), alignment, true, false, heapSectionImpl);
-            objectFile.createDefinedSymbol(heapSection.getName(), heapSection, 0, 0, false, false);
+
+            boolean splitHeapSections = shouldSplitHeapSections();
+            if (splitHeapSections) {
+                /* The two sub-sections are emitted after writeHeap populates the shared buffer. */
+            } else {
+                // Note: On isolate startup the read only part of the heap will be set up as such.
+                heapSection = objectFile.newProgbitsSection(SectionName.SVM_HEAP.getFormatDependentName(objectFile.getFormat()), alignment, true, false, heapSectionImpl);
+                objectFile.createDefinedSymbol(heapSection.getName(), heapSection, 0, 0, false, false);
+            }
 
             long sectionOffsetOfARelocatablePointer = writer.writeHeap(debug, heapSectionBuffer);
             if (!ImageLayerBuildingSupport.buildingImageLayer() && SpawnIsolates.getValue()) {
@@ -524,20 +549,24 @@ public abstract class NativeImage extends AbstractImage {
             }
             assert ImageLayerBuildingSupport.buildingSharedLayer() || heapLayout.getWritablePatchedSize() == 0 : "The writable patched section is used only in shared layers";
 
-            defineDataSymbol(Isolates.IMAGE_HEAP_BEGIN_SYMBOL_NAME, heapSection, 0);
-            defineDataSymbol(Isolates.IMAGE_HEAP_END_SYMBOL_NAME, heapSection, imageHeapSize);
-            defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getReadOnlyRelocatableOffset() - heapLayout.getStartOffset());
-            defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_END_SYMBOL_NAME, heapSection,
-                            heapLayout.getReadOnlyRelocatableOffset() + heapLayout.getReadOnlyRelocatableSize() - heapLayout.getStartOffset());
-            if (!ImageLayerBuildingSupport.buildingImageLayer()) {
-                /* Layered native-image builds do not use this symbol. */
-                defineDataSymbol(Isolates.IMAGE_HEAP_A_RELOCATABLE_POINTER_SYMBOL_NAME, heapSection, sectionOffsetOfARelocatablePointer);
+            if (splitHeapSections) {
+                splitHeapSectionsAndDefineSymbols(heapSectionBuffer, paddedImageHeapSize, alignment, sectionOffsetOfARelocatablePointer);
+            } else {
+                defineDataSymbol(Isolates.IMAGE_HEAP_BEGIN_SYMBOL_NAME, heapSection, 0);
+                defineDataSymbol(Isolates.IMAGE_HEAP_END_SYMBOL_NAME, heapSection, imageHeapSize);
+                defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getReadOnlyRelocatableOffset() - heapLayout.getStartOffset());
+                defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_END_SYMBOL_NAME, heapSection,
+                                heapLayout.getReadOnlyRelocatableOffset() + heapLayout.getReadOnlyRelocatableSize() - heapLayout.getStartOffset());
+                if (!ImageLayerBuildingSupport.buildingImageLayer()) {
+                    /* Layered native-image builds do not use this symbol. */
+                    defineDataSymbol(Isolates.IMAGE_HEAP_A_RELOCATABLE_POINTER_SYMBOL_NAME, heapSection, sectionOffsetOfARelocatablePointer);
+                }
+                defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() - heapLayout.getStartOffset());
+                defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_END_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() + heapLayout.getWritableSize() - heapLayout.getStartOffset());
+                defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritablePatchedOffset() - heapLayout.getStartOffset());
+                defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_END_SYMBOL_NAME, heapSection,
+                                heapLayout.getWritablePatchedOffset() + heapLayout.getWritablePatchedSize() - heapLayout.getStartOffset());
             }
-            defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() - heapLayout.getStartOffset());
-            defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_END_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() + heapLayout.getWritableSize() - heapLayout.getStartOffset());
-            defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritablePatchedOffset() - heapLayout.getStartOffset());
-            defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_END_SYMBOL_NAME, heapSection,
-                            heapLayout.getWritablePatchedOffset() + heapLayout.getWritablePatchedSize() - heapLayout.getStartOffset());
 
             if (ImageLayerBuildingSupport.buildingExtensionLayer()) {
                 HostedDynamicLayerInfo.singleton().defineSymbolsForPriorLayerMethods(objectFile);
@@ -550,7 +579,11 @@ public abstract class NativeImage extends AbstractImage {
             markRelocationSitesFromBuffer(textBuffer, textImpl);
             markRelocationSitesFromBuffer(roDataBuffer, roDataImpl);
             markRelocationSitesFromBuffer(rwDataBuffer, rwDataImpl);
-            markRelocationSitesFromBuffer(heapSectionBuffer, heapSectionImpl);
+            if (splitHeapSections) {
+                markHeapRelocationSitesSplit(heapSectionBuffer);
+            } else {
+                markRelocationSitesFromBuffer(heapSectionBuffer, heapSectionImpl);
+            }
 
             // We print the heap statistics after the heap was successfully written because this
             // could modify objects that will be part of the image heap.
@@ -590,6 +623,146 @@ public abstract class NativeImage extends AbstractImage {
             deduplicated.add(info);
         }
         return deduplicated.size() != heap.getObjectCount();
+    }
+
+    /**
+     * @return {@code true} when the image heap should be emitted as two Mach-O sub-sections
+     *         ({@code __svm_heap_ro} in {@code __DATA_CONST}, {@code __svm_heap_rw} in
+     *         {@code __DATA}) instead of a single {@code __svm_heap} section in {@code __DATA}.
+     */
+    private boolean shouldSplitHeapSections() {
+        if (!SubstrateOptions.MachOSplitImageHeap.getValue()) {
+            return false;
+        }
+        if (objectFile.getFormat() != ObjectFile.Format.MACH_O) {
+            return false;
+        }
+        UserError.guarantee(!ImageLayerBuildingSupport.buildingImageLayer(),
+                        "%s is not currently supported for layered images.",
+                        SubstrateOptions.MachOSplitImageHeap.getName());
+        UserError.guarantee(heapLayout.getWritablePatchedSize() == 0,
+                        "%s requires the writable-patched partition to be empty (it is only used by layered images).",
+                        SubstrateOptions.MachOSplitImageHeap.getName());
+        return true;
+    }
+
+    /**
+     * Emit {@code __svm_heap_ro} and {@code __svm_heap_rw} sub-sections from the single heap
+     * buffer, carrying over the same relocation addend semantics as the unsplit path. Contiguity
+     * between the two sub-sections relies on ld64 laying out {@code __DATA_CONST} immediately
+     * before {@code __DATA} with no padding between them, which holds for arm64 macOS when both
+     * sub-sections are page-size aligned.
+     */
+    private void splitHeapSectionsAndDefineSymbols(RelocatableBuffer heapSectionBuffer, long paddedImageHeapSize, int alignment, long sectionOffsetOfARelocatablePointer) {
+        long writableBufferOffset = heapLayout.getWritableOffset() - heapLayout.getStartOffset();
+        UserError.guarantee(writableBufferOffset % alignment == 0,
+                        "The boundary between the read-only and writable image heap must be page-aligned; got %d.", writableBufferOffset);
+        UserError.guarantee(writableBufferOffset >= 0 && writableBufferOffset <= paddedImageHeapSize,
+                        "Writable boundary %d is out of range [0, %d].", writableBufferOffset, paddedImageHeapSize);
+
+        byte[] allBytes = heapSectionBuffer.getBackingArray();
+        int roBytesLen = NumUtil.safeToInt(writableBufferOffset);
+        int rwBytesLen = NumUtil.safeToInt(paddedImageHeapSize - writableBufferOffset);
+
+        byte[] roBytes = Arrays.copyOfRange(allBytes, 0, roBytesLen);
+        byte[] rwBytes = Arrays.copyOfRange(allBytes, roBytesLen, roBytesLen + rwBytesLen);
+
+        ProgbitsSectionImpl roImpl = new BasicProgbitsSectionImpl(roBytes);
+        ProgbitsSectionImpl rwImpl = new BasicProgbitsSectionImpl(rwBytes);
+
+        String roName = SectionName.SVM_HEAP_RO.getFormatDependentName(objectFile.getFormat());
+        String rwName = SectionName.SVM_HEAP_RW.getFormatDependentName(objectFile.getFormat());
+
+        /*
+         * Both sub-sections go into __DATA_CONST. Placing the writable sub-section in __DATA
+         * causes ld64 to put __la_symbol_ptr / __objc_selrefs / __data at the start of __DATA,
+         * which pushes __svm_heap_rw ~32 KB past the end of __svm_heap_ro and breaks the GC chunk
+         * walker (chunk headers assume the two sub-sections are contiguous). Keeping both in
+         * __DATA_CONST makes them adjacent within a single segment.
+         *
+         * __DATA_CONST has maxprot=rw but initprot=r after dyld processes chained fixups. The
+         * runtime's protectSingleIsolateImageHeap re-raises the writable sub-range back to r/w via
+         * mprotect, which succeeds because maxprot allows it.
+         */
+        heapSectionReadOnly = objectFile.newProgbitsSection(roName, alignment, false, false, roImpl);
+        heapSectionReadOnly.setDestinationSegmentHint("__DATA_CONST");
+        heapSectionWritable = objectFile.newProgbitsSection(rwName, alignment, true, false, rwImpl);
+        heapSectionWritable.setDestinationSegmentHint("__DATA_CONST");
+
+        objectFile.createDefinedSymbol(heapSectionReadOnly.getName(), heapSectionReadOnly, 0, 0, false, false);
+        objectFile.createDefinedSymbol(heapSectionWritable.getName(), heapSectionWritable, 0, 0, false, false);
+
+        heapReadOnlyByteSize = roBytesLen;
+
+        /*
+         * Symbols. Offsets are in buffer coordinates (layout offset minus startOffset). The
+         * read-only sub-section covers [0, roBytesLen); the writable sub-section covers
+         * [roBytesLen, paddedImageHeapSize). We relate each IMAGE_HEAP_* symbol to whichever
+         * sub-section contains it.
+         */
+        defineDataSymbol(Isolates.IMAGE_HEAP_BEGIN_SYMBOL_NAME, heapSectionReadOnly, 0);
+        defineDataSymbol(Isolates.IMAGE_HEAP_END_SYMBOL_NAME, heapSectionWritable, rwBytesLen);
+        long roRelocBegin = heapLayout.getReadOnlyRelocatableOffset() - heapLayout.getStartOffset();
+        long roRelocEnd = roRelocBegin + heapLayout.getReadOnlyRelocatableSize();
+        defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_BEGIN_SYMBOL_NAME, heapSectionReadOnly, roRelocBegin);
+        defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_END_SYMBOL_NAME, heapSectionReadOnly, roRelocEnd);
+        if (!ImageLayerBuildingSupport.buildingImageLayer()) {
+            /*
+             * The "a relocatable pointer" offset falls inside the read-only relocatable partition,
+             * which is in the read-only sub-section.
+             */
+            defineDataSymbol(Isolates.IMAGE_HEAP_A_RELOCATABLE_POINTER_SYMBOL_NAME, heapSectionReadOnly, sectionOffsetOfARelocatablePointer);
+        }
+        defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_BEGIN_SYMBOL_NAME, heapSectionWritable, 0);
+        defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_END_SYMBOL_NAME, heapSectionWritable, heapLayout.getWritableSize());
+        /*
+         * Writable-patched is only populated in layered builds; shouldSplitHeapSections guarantees
+         * writablePatchedSize == 0 here, so both symbols collapse to the start of the writable
+         * sub-section. They still have to exist so that consumers that look them up see a well
+         * defined, same-sub-section address pair.
+         */
+        defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_BEGIN_SYMBOL_NAME, heapSectionWritable, 0);
+        defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_END_SYMBOL_NAME, heapSectionWritable, 0);
+    }
+
+    /**
+     * Walk relocations in the heap buffer and apply each one to the correct sub-section. Sites in
+     * the first {@link #heapReadOnlyByteSize} bytes go to {@link #heapSectionReadOnly}; the rest go
+     * to {@link #heapSectionWritable}. Heap-reference targets are routed through
+     * {@link #markHeapReferenceRelocationSite} which also selects the correct target sub-section.
+     */
+    private void markHeapRelocationSitesSplit(RelocatableBuffer heapBuffer) {
+        ProgbitsSectionImpl roImpl = (ProgbitsSectionImpl) heapSectionReadOnly.getImpl();
+        ProgbitsSectionImpl rwImpl = (ProgbitsSectionImpl) heapSectionWritable.getImpl();
+        int roSize = NumUtil.safeToInt(heapReadOnlyByteSize);
+
+        for (Map.Entry<Integer, RelocatableBuffer.Info> entry : heapBuffer.getSortedRelocations()) {
+            int bufferOffset = entry.getKey();
+            RelocatableBuffer.Info info = entry.getValue();
+
+            ProgbitsSectionImpl siteImpl;
+            int siteOffset;
+            if (bufferOffset < roSize) {
+                siteImpl = roImpl;
+                siteOffset = bufferOffset;
+            } else {
+                siteImpl = rwImpl;
+                siteOffset = bufferOffset - roSize;
+            }
+
+            assert ConfigurationValues.getTarget().arch instanceof AArch64 || checkEmbeddedOffset(siteImpl, siteOffset, info);
+
+            if (info.getTargetObject() instanceof CFunctionPointer) {
+                markFunctionRelocationSite(siteImpl, siteOffset, info);
+            } else if (info.getTargetObject() instanceof CGlobalDataBasePointer) {
+                assert info.getAddend() == 0 : "addressing from base not intended";
+                siteImpl.markRelocationSite(siteOffset, info.getRelocationKind(), rwDataSection.getName(), RWDATA_CGLOBALS_PARTITION_OFFSET);
+            } else {
+                final JavaConstant targetConstant = (JavaConstant) info.getTargetObject();
+                final ObjectInfo targetObjectInfo = heap.getConstantInfo(targetConstant);
+                markHeapReferenceRelocationSite(siteImpl, siteOffset, info, targetObjectInfo);
+            }
+        }
     }
 
     public void markRelocationSitesFromBuffer(RelocatableBuffer buffer, ProgbitsSectionImpl sectionImpl) {
@@ -696,8 +869,28 @@ public abstract class NativeImage extends AbstractImage {
     /** Mark a relocation site for the location of an image heap object. */
     private void markHeapReferenceRelocationSite(ProgbitsSectionImpl sectionImpl, int offset, RelocatableBuffer.Info info, ObjectInfo targetObjectInfo) {
         assert ConfigurationValues.getTarget().arch instanceof AArch64 || info.getRelocationSize() == 4 || info.getRelocationSize() == 8 : "AMD64 Data relocation size should be 4 or 8 bytes.";
-        String targetSectionName = heapSection.getName();
-        long relocationAddend = targetObjectInfo.getOffset() + info.getAddend();
+        String targetSectionName;
+        long relocationAddend;
+        if (heapSectionReadOnly != null) {
+            /*
+             * Split heap: pick the sub-section that the target object lives in. Objects with
+             * layout offset below writableOffset are in __svm_heap_ro; the rest are in
+             * __svm_heap_rw. Addends are expressed relative to the chosen sub-section so that the
+             * linker resolves each reference to the same final VM address as in the single-section
+             * path (which relies on the two sub-sections being contiguous in VM).
+             */
+            long targetLayoutOffset = targetObjectInfo.getOffset();
+            if (targetLayoutOffset < heapLayout.getWritableOffset()) {
+                targetSectionName = heapSectionReadOnly.getName();
+                relocationAddend = targetLayoutOffset + info.getAddend();
+            } else {
+                targetSectionName = heapSectionWritable.getName();
+                relocationAddend = targetLayoutOffset + info.getAddend() - heapReadOnlyByteSize;
+            }
+        } else {
+            targetSectionName = heapSection.getName();
+            relocationAddend = targetObjectInfo.getOffset() + info.getAddend();
+        }
         sectionImpl.markRelocationSite(offset, info.getRelocationKind(), targetSectionName, relocationAddend);
     }
 

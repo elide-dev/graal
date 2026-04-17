@@ -34,6 +34,7 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.hosted.RuntimeJNIAccess;
 import org.graalvm.nativeimage.impl.InternalPlatform;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.jdk.JNIRegistrationUtil;
@@ -120,23 +121,39 @@ class JNIRegistrationJava extends JNIRegistrationUtil implements InternalFeature
             PlatformNativeLibrarySupport.singleton().addBuiltinPkgNativePrefix("sun_security_provider_NativeSeedGenerator");
         }
         if (isDarwin()) {
-            List<Method> darwinMethods = Arrays.asList(
-                            method(a, "apple.security.KeychainStore", "_scanKeychain", String.class), // JDK-8320362
-                            method(a, "apple.security.KeychainStore", "_releaseKeychainItemRef", long.class),
-                            method(a, "apple.security.KeychainStore", "_addItemToKeychain", String.class, boolean.class, byte[].class, char[].class),
-                            method(a, "apple.security.KeychainStore", "_removeItemFromKeychain", long.class),
-                            method(a, "apple.security.KeychainStore", "_getEncodedKeyData", long.class, char[].class));
             /*
-             * JNI method implementations depending on CoreService are present in the following jdk
-             * classes sun.nio.fs.MacOXFileSystemProvider (9+), sun.net.spi.DefaultProxySelector
-             * (9+)
+             * The KeychainStore JNI bindings are what force the JDK's libosxsecurity to be linked,
+             * which in turn pulls in -framework Security. Apps that don't need the macOS keychain
+             * or system-root trust store (e.g. apps with their own TLS stack) can disable this to
+             * avoid the framework.
              */
-            ArrayList<Method> methods = new ArrayList<>(darwinMethods);
-            methods.addAll(Arrays.asList(method(a, "sun.nio.fs.MacOSXFileSystemProvider", "getFileTypeDetector"),
-                            method(a, "sun.net.spi.DefaultProxySelector", "getSystemProxies", String.class, String.class),
-                            method(a, "sun.net.spi.DefaultProxySelector", "init")));
+            ArrayList<Method> methods = new ArrayList<>();
+            if (SubstrateOptions.IncludeDarwinAppleSecurityProvider.getValue()) {
+                methods.addAll(Arrays.asList(
+                                method(a, "apple.security.KeychainStore", "_scanKeychain", String.class), // JDK-8320362
+                                method(a, "apple.security.KeychainStore", "_releaseKeychainItemRef", long.class),
+                                method(a, "apple.security.KeychainStore", "_addItemToKeychain", String.class, boolean.class, byte[].class, char[].class),
+                                method(a, "apple.security.KeychainStore", "_removeItemFromKeychain", long.class),
+                                method(a, "apple.security.KeychainStore", "_getEncodedKeyData", long.class, char[].class)));
+            }
+            /*
+             * sun.nio.fs.MacOSXFileSystemProvider.getFileTypeDetector uses LaunchServices via
+             * CoreServices. It is always registered because the macOS NIO file system is core.
+             */
+            methods.add(method(a, "sun.nio.fs.MacOSXFileSystemProvider", "getFileTypeDetector"));
+            /*
+             * sun.net.spi.DefaultProxySelector's native entry points pull -framework
+             * SystemConfiguration. Apps that manage their own proxy discovery can disable this.
+             */
+            if (SubstrateOptions.IncludeDarwinSystemProxyDetection.getValue()) {
+                methods.addAll(Arrays.asList(
+                                method(a, "sun.net.spi.DefaultProxySelector", "getSystemProxies", String.class, String.class),
+                                method(a, "sun.net.spi.DefaultProxySelector", "init")));
+            }
 
-            a.registerReachabilityHandler(CORESERVICES_LINKER, methods.toArray(new Object[]{}));
+            if (SubstrateOptions.IncludeDarwinCoreServices.getValue() && !methods.isEmpty()) {
+                a.registerReachabilityHandler(CORESERVICES_LINKER, methods.toArray(new Object[]{}));
+            }
         }
 
         a.registerReachabilityHandler(JNIRegistrationJava::registerProcessHandleImplInfoInitIDs, method(a, "java.lang.ProcessHandleImpl$Info", "initIDs"));

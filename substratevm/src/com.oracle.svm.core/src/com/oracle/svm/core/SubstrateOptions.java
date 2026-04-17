@@ -1511,6 +1511,47 @@ public class SubstrateOptions {
         }
     });
 
+    @Option(help = "Emit the image heap as two Mach-O sub-sections (__svm_heap_ro and __svm_heap_rw) placed into __DATA_CONST. " +
+                    "dyld flips __DATA_CONST to read-only after applying chained fixups, so the read-only partitions of the image heap stay truly read-only; " +
+                    "the runtime mprotects the writable sub-range back to read/write at isolate startup. Darwin only. Experimental.", //
+                    type = Expert, stability = OptionStability.EXPERIMENTAL) //
+    public static final HostedOptionKey<Boolean> MachOSplitImageHeap = new HostedOptionKey<>(false, key -> {
+        if (key.hasBeenSet() && !Platform.includedIn(Platform.DARWIN.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(), "Splitting the image heap into multiple Mach-O sections is only supported on Darwin.");
+        }
+    });
+
+    @Option(help = "Include JDK's Apple security provider (apple.security.AppleProvider) and register its KeychainStore JNI bindings. " +
+                    "Disabling drops the JDK's dependency on libosxsecurity and therefore on the Security framework, which shaves load time for apps that don't use " +
+                    "the macOS keychain or system-root trust store (e.g. apps that do their own TLS via a Rust or BoringSSL stack). Darwin only. Experimental.", //
+                    type = Expert, stability = OptionStability.EXPERIMENTAL) //
+    public static final HostedOptionKey<Boolean> IncludeDarwinAppleSecurityProvider = new HostedOptionKey<>(true, key -> {
+        if (key.hasBeenSet() && !Platform.includedIn(Platform.DARWIN.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(), "IncludeDarwinAppleSecurityProvider is only meaningful on Darwin.");
+        }
+    });
+
+    @Option(help = "Register sun.net.spi.DefaultProxySelector's native getSystemProxies/init entry points on Darwin. " +
+                    "Disabling drops the JDK's dependency on SystemConfiguration (proxy auto-detection). Set to false if your app uses its own proxy discovery or " +
+                    "doesn't use system proxies. Darwin only. Experimental.", //
+                    type = Expert, stability = OptionStability.EXPERIMENTAL) //
+    public static final HostedOptionKey<Boolean> IncludeDarwinSystemProxyDetection = new HostedOptionKey<>(true, key -> {
+        if (key.hasBeenSet() && !Platform.includedIn(Platform.DARWIN.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(), "IncludeDarwinSystemProxyDetection is only meaningful on Darwin.");
+        }
+    });
+
+    @Option(help = "Link the final Darwin image against -framework CoreServices. " +
+                    "This is triggered by reachability of sun.nio.fs.MacOSXFileSystemProvider, sun.net.spi.DefaultProxySelector, and apple.security.KeychainStore. " +
+                    "Disabling skips the framework regardless of reachability. Only safe when the app does not use FSEvents, LaunchServices, or macOS proxy/keychain " +
+                    "integrations. Darwin only. Experimental.", //
+                    type = Expert, stability = OptionStability.EXPERIMENTAL) //
+    public static final HostedOptionKey<Boolean> IncludeDarwinCoreServices = new HostedOptionKey<>(true, key -> {
+        if (key.hasBeenSet() && !Platform.includedIn(Platform.DARWIN.class)) {
+            throw UserError.invalidOptionValue(key, key.getValue(), "IncludeDarwinCoreServices is only meaningful on Darwin.");
+        }
+    });
+
     @Option(help = """
                     Specify the fully qualified name of a class that implements org.graalvm.nativeimage.libgraal.LibGraalLoader.
 
