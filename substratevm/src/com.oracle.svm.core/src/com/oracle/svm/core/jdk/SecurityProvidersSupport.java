@@ -39,6 +39,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.util.ImageHeapMap;
 import com.oracle.svm.core.util.VMError;
 
@@ -156,6 +157,15 @@ public final class SecurityProvidersSupport {
             case "SunEC" ->
                 isSecurityProviderRequested("SunEC", "sun.security.ec.SunEC") ? allocateSunECProvider() : null;
             case "Apple", "apple.security.AppleProvider" -> {
+                if (!SubstrateOptions.IncludeDarwinAppleSecurityProvider.getValue()) {
+                    /*
+                     * Caller opted out of the Apple provider at build time. Returning null keeps
+                     * apple.security.AppleProvider (and its KeychainStore-ROOT KeyStore) out of
+                     * reachability analysis, which in turn lets the JDK's libosxsecurity skip
+                     * linkage and drops -framework Security from the final image.
+                     */
+                    yield null;
+                }
                 try {
                     Class<?> c = Class.forName("apple.security.AppleProvider");
                     if (Provider.class.isAssignableFrom(c)) {

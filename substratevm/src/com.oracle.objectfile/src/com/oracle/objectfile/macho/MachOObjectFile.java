@@ -1623,6 +1623,13 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
+        public void setDestinationSegmentHint(String segmentName) {
+            if (segmentName != null) {
+                setDestinationSegmentName(segmentName);
+            }
+        }
+
+        @Override
         public MachOObjectFile getOwner() {
             return (MachOObjectFile) super.getOwner();
         }

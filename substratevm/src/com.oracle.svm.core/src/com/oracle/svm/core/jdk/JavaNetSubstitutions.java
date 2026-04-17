@@ -114,6 +114,15 @@ final class DefaultProxySelectorSystemProxiesAccessor {
 
     /** Avoids calling init() more than once per process, which can leak resources with isolates. */
     static boolean ensureInitialized() {
+        /*
+         * When the build opted out of native system-proxy detection, short-circuit before we can
+         * reach init(). Graal constant-folds HostedOptionKey lookups, so the call to init() below
+         * becomes unreachable and the whole JDK-side native proxy-detection path (which on Darwin
+         * pulls -framework SystemConfiguration via libnet) drops out of the image.
+         */
+        if (!SubstrateOptions.IncludeDarwinSystemProxyDetection.getValue()) {
+            return false;
+        }
         Boolean b = NetProperties.getBoolean("java.net.useSystemProxies");
         if (b != null && b) {
             // NOTE: System.loadLibrary("net") has already been called early on
