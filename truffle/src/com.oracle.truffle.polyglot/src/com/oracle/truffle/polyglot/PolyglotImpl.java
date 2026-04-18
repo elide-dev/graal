@@ -330,7 +330,7 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
             }
 
             impl = (PolyglotEngineImpl) EngineAccessor.RUNTIME.tryLoadCachedEngine(engineOptions, loggerProvider);
-            if (impl == null && boundEngine && !hostLanguageOnly && !EngineAccessor.RUNTIME.isStoreEnabled(engineOptions)) {
+            if (impl == null && !hostLanguageOnly && !EngineAccessor.RUNTIME.isStoreEnabled(engineOptions)) {
                 impl = preInitializedEngineRef.getAndSet(null);
             }
 
