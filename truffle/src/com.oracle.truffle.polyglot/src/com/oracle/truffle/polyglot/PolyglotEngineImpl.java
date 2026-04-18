@@ -1645,14 +1645,17 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         synchronized (this.lock) {
             inEnginePreInitialization = true;
             try {
+                boolean usedSharing = false;
                 if (isSharingEnabled(null)) {
                     for (PolyglotSharingLayer layer : sharedLayers) {
                         if (!layer.isClaimed()) {
                             continue;
                         }
                         layer.preInitialize();
+                        usedSharing = true;
                     }
-                } else {
+                }
+                if (!usedSharing) {
                     final String oldOption = engineOptionValues.get(PolyglotEngineOptions.PreinitializeContexts);
                     final String newOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME);
                     final String optionValue;
@@ -2177,7 +2180,6 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         PolyglotContextImpl context = null;
         final boolean sharing = isSharingEnabled(config);
         if (sharing) {
-            assert preInitializedContext.get() == null : "sharing enabled with preinitialized regular context. sharing requires context preinit per layer.";
             synchronized (this.lock) {
                 for (PolyglotSharingLayer sharedLayer : sharedLayers) {
                     context = sharedLayer.loadPreinitializedContext(config);
@@ -2185,6 +2187,12 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
                         break;
                     }
                 }
+            }
+            // The pre-init engine may have been created as bound (non-sharing) and later
+            // patched to shared. In that case the pre-init context is stored in the
+            // AtomicReference, not in a sharing layer.
+            if (context == null) {
+                context = preInitializedContext.getAndSet(null);
             }
         } else {
             context = preInitializedContext.getAndSet(null);
