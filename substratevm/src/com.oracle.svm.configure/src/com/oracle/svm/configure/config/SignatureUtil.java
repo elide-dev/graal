@@ -29,6 +29,10 @@ import java.util.List;
 
 import org.graalvm.nativeimage.hosted.Feature;
 
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.PartiallyLayerAware;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.ModuleSupport;
 
 import jdk.vm.ci.meta.JavaKind;
@@ -119,6 +123,7 @@ public class SignatureUtil {
     }
 }
 
+@SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = PartiallyLayerAware.class)
 class SignatureUtilFeature implements Feature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
