@@ -1812,17 +1812,27 @@ public class NativeImage {
 
         Process p = null;
         try {
-            if (!useBundle()) {
+            boolean redirectOutput = redirectBuilderOutput() && !useBundle();
+            if (redirectOutput) {
+                pb.redirectErrorStream(true);
+            } else if (!useBundle()) {
                 pb.inheritIO();
             }
             p = pb.start();
+            imageBuilderPid = p.pid();
             if (useBundle()) {
                 ProcessOutputTransformer.attach(p.getInputStream(), bundleSupport::cleanupBuilderOutput, System.out);
                 // Checkstyle: allow System.err (stderr support)
                 ProcessOutputTransformer.attach(p.getErrorStream(), bundleSupport::cleanupBuilderOutput, System.err);
                 // Checkstyle: disallow System.err
+            } else if (redirectOutput) {
+                try (java.io.BufferedReader builderOutput = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                    String outputLine;
+                    while ((outputLine = builderOutput.readLine()) != null) {
+                        handleBuilderOutput(outputLine);
+                    }
+                }
             }
-            imageBuilderPid = p.pid();
             return p.waitFor();
         } catch (IOException | InterruptedException e) {
             throw showError(e.getMessage());
@@ -2026,6 +2036,25 @@ public class NativeImage {
 	    System.exit(exitCode);
 	}
 	return exitCode;
+    }
+
+    /** Build a {@link BuildConfiguration} from raw driver arguments, for embedding callers. */
+    public static BuildConfiguration buildConfiguration(List<String> args) {
+        return new BuildConfiguration(args);
+    }
+
+    /**
+     * Whether to capture the image builder subprocess output and route it through
+     * {@link #handleBuilderOutput(String)} instead of inheriting the parent's stdio. Embedding
+     * subclasses override this to stream build output programmatically. Defaults to {@code false}.
+     */
+    protected boolean redirectBuilderOutput() {
+        return false;
+    }
+
+    /** Receives a line of image builder subprocess output when {@link #redirectBuilderOutput()} is enabled. */
+    protected void handleBuilderOutput(String line) {
+        showMessage(line);
     }
 
     public static List<String> translateAPIOptions(List<String> arguments) {
