@@ -79,6 +79,7 @@ import com.oracle.svm.core.graal.lir.VerificationMarkerOp;
 import com.oracle.svm.core.graal.meta.KnownOffsets;
 import com.oracle.svm.core.graal.meta.SharedConstantReflectionProvider;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
+import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.graal.meta.SubstrateRegisterConfig;
 import com.oracle.svm.core.graal.nodes.CGlobalDataLoadAddressNode;
 import com.oracle.svm.core.graal.nodes.ComputedIndirectCallTargetNode;
@@ -1111,7 +1112,8 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
                 return null;
             }
             // Assume the SVM ForeignCallSignature are identical to the Graal ones.
-            return gen.getForeignCalls().lookupForeignCall(foreignCallDescriptor);
+            SubstrateForeignCallsProvider foreignCalls = (SubstrateForeignCallsProvider) gen.getForeignCalls();
+            return foreignCalls.lookupForeignCallWithCPUFeatures(foreignCallDescriptor, ((AArch64) gen.target().arch).getFeatures());
         }
     }
 
