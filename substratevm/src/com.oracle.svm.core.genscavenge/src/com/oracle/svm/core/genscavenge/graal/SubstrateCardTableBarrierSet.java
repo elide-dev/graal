@@ -28,6 +28,7 @@ import org.graalvm.word.UnsignedWord;
 
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.hub.LayoutEncoding;
+import com.oracle.svm.core.hub.DynamicHubProvider;
 import com.oracle.svm.core.meta.SharedType;
 
 import jdk.graal.compiler.core.common.NumUtil;
@@ -106,7 +107,7 @@ public class SubstrateCardTableBarrierSet extends CardTableBarrierSet {
         IntegerStamp lengthStamp = (IntegerStamp) length.stamp(NodeView.DEFAULT);
         GraalError.guarantee(lengthStamp.getBits() == Integer.SIZE, "unexpected length %s", lengthStamp);
         int lengthBound = NumUtil.safeToInt(lengthStamp.upperBound());
-        UnsignedWord sizeBound = LayoutEncoding.getArrayAllocationSize(((SharedType) baseType).getHub().getLayoutEncoding(), lengthBound);
+        UnsignedWord sizeBound = LayoutEncoding.getArrayAllocationSize(DynamicHubProvider.getHub((SharedType) baseType).getLayoutEncoding(), lengthBound);
         return !GenScavengeAllocationSupport.arrayAllocatedInAlignedChunk(sizeBound);
     }
 }

@@ -60,6 +60,7 @@ import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.heap.Pod;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
+import com.oracle.svm.core.hub.DynamicHubProvider;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
@@ -876,7 +877,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                     throw VMError.shouldNotReachHereUnexpectedInput(node);
                 }
 
-                DynamicHub hub = ensureMarkedAsInstantiated(type.getHub());
+                DynamicHub hub = ensureMarkedAsInstantiated(DynamicHubProvider.getHub(type));
                 long size = LayoutEncoding.getPureInstanceAllocationSize(hub.getLayoutEncoding()).rawValue();
                 Arguments args;
 
@@ -911,7 +912,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
 
                 SharedType instanceClass = (SharedType) node.instanceClass();
                 ValueNode length = node.length();
-                DynamicHub hub = instanceClass.getHub();
+                DynamicHub hub = DynamicHubProvider.getHub(instanceClass);
                 int layoutEncoding = hub.getLayoutEncoding();
                 int arrayBaseOffset = LayoutEncoding.getArrayBaseOffsetAsInt(layoutEncoding);
                 int log2ElementSize = LayoutEncoding.getArrayIndexShift(layoutEncoding);
@@ -962,7 +963,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                     throw VMError.shouldNotReachHereUnexpectedInput(node);
                 }
 
-                DynamicHub hub = ensureMarkedAsInstantiated(type.getHub());
+                DynamicHub hub = ensureMarkedAsInstantiated(DynamicHubProvider.getHub(type));
                 int layoutEncoding = hub.getLayoutEncoding();
                 int arrayBaseOffset = getArrayBaseOffset(layoutEncoding);
                 int log2ElementSize = LayoutEncoding.getArrayIndexShift(layoutEncoding);
@@ -1009,7 +1010,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                 }
 
                 SharedType type = (SharedType) node.type();
-                ConstantNode hubConstant = ConstantNode.forConstant(snippetReflection.forObject(type.getHub()), tool.getMetaAccess(), graph);
+                ConstantNode hubConstant = ConstantNode.forConstant(snippetReflection.forObject(DynamicHubProvider.getHub(type)), tool.getMetaAccess(), graph);
 
                 Arguments args = new Arguments(newmultiarray, graph, tool.getLoweringStage());
                 args.add("hub", hubConstant);
@@ -1036,7 +1037,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                 }
 
                 SharedType type = (SharedType) node.type();
-                ConstantNode hubConstant = ConstantNode.forConstant(snippetReflection.forObject(type.getHub()), tool.getMetaAccess(), graph);
+                ConstantNode hubConstant = ConstantNode.forConstant(snippetReflection.forObject(DynamicHubProvider.getHub(type)), tool.getMetaAccess(), graph);
 
                 Arguments args = new Arguments(newmultiarray, graph, tool.getLoweringStage());
                 args.add("hub", hubConstant);
