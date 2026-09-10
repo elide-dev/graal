@@ -29,6 +29,7 @@ import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.impl.InternalPlatform;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.ParsingReason;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
@@ -57,6 +58,7 @@ import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugin.Receiver;
 import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugin.RequiredInvocationPlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugins.Registration;
 import jdk.graal.compiler.phases.util.Providers;
+import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
@@ -192,16 +194,50 @@ public class VMThreadFeature implements InternalFeature {
     private boolean handleGet(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, boolean isVolatile) {
         VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get(true));
 
-        LoadVMThreadLocalNode node = new LoadVMThreadLocalNode(b.getMetaAccess(), threadLocalInfo, threadNode, BarrierType.NONE, isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN);
+        LoadVMThreadLocalNode node = new LoadVMThreadLocalNode(b.getMetaAccess(), threadLocalInfo, threadNode, threadLocalObjectReadBarrierType(threadLocalInfo),
+                        isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN);
         b.addPush(targetMethod.getSignature().getReturnKind(), node);
 
         return true;
     }
 
+    /**
+     * Reads of object VM thread-locals (e.g. {@code PlatformThreads.currentThread}) need the same
+     * read barrier as any other object read when the garbage collector relies on load barriers.
+     * With Shenandoah, eliding the load-reference barrier here lets a mutator obtain the from-space
+     * copy of an object during concurrent evacuation; writes through such a base (e.g. the lazy
+     * initialization of {@code Thread.threadData} or its {@code Parker}) are then lost to the
+     * to-space copy, which breaks the to-space invariant (observed as threads whose
+     * {@code LockSupport.unpark} signals a different parker copy than the one they parked on).
+     * The other collectors use no read barriers, so this remains NONE for them.
+     */
+    private static BarrierType threadLocalObjectReadBarrierType(VMThreadLocalInfo threadLocalInfo) {
+        if (threadLocalInfo.storageKind == JavaKind.Object && SubstrateOptions.useShenandoahGC()) {
+            return BarrierType.READ;
+        }
+        return BarrierType.NONE;
+    }
+
+    /**
+     * Writes of object VM thread-locals need the same write barriers as ordinary object writes
+     * when the garbage collector uses them. With Shenandoah's SATB marking, overwriting a
+     * thread-local reference without the pre-write barrier can hide the previous value from the
+     * concurrent mark: if the thread-local held the only remaining path to an object, that object
+     * is missed, collected, and its memory recycled while stale references still exist. The other
+     * collectors need no barriers on thread-local writes, so this remains NONE for them.
+     */
+    private static BarrierType threadLocalObjectWriteBarrierType(VMThreadLocalInfo threadLocalInfo) {
+        if (threadLocalInfo.storageKind == JavaKind.Object && SubstrateOptions.useShenandoahGC()) {
+            return BarrierType.FIELD;
+        }
+        return BarrierType.NONE;
+    }
+
     private boolean handleSet(GraphBuilderContext b, Receiver receiver, ValueNode threadNode, ValueNode valueNode, boolean isVolatile) {
         VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get(true));
 
-        StoreVMThreadLocalNode store = b.add(new StoreVMThreadLocalNode(threadLocalInfo, threadNode, valueNode, BarrierType.NONE, isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN));
+        StoreVMThreadLocalNode store = b.add(new StoreVMThreadLocalNode(threadLocalInfo, threadNode, valueNode, threadLocalObjectWriteBarrierType(threadLocalInfo),
+                        isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN));
         assert store.stateAfter() != null : store + " has no state after with graph builder context " + b;
         return true;
     }

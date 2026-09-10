@@ -131,8 +131,15 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
 
     @Override
     public void emitCardBarrier(LIRGeneratorTool lirTool, Value address) {
-        /* Card barriers are only needed for generational Shenandoah, which is not yet supported. */
-        throw GraalError.shouldNotReachHere("card barriers are not used on SubstrateVM Shenandoah");
+        /*
+         * Card-marking (post-write) barrier of generational mode. Only emitted when the image was
+         * built with -H:+ShenandoahGenerational (see SubstrateShenandoahBarrierSet); it skips itself
+         * at run time in the modes that keep no remembered set.
+         */
+        AMD64AddressValue addr = ((AMD64LIRGenerator) lirTool).asAddressValue(address);
+        AllocatableValue tmp = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));
+        AllocatableValue tmp2 = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));
+        lirTool.append(new AMD64SubstrateShenandoahCardBarrierOp(addr, tmp, tmp2));
     }
 
     @Override

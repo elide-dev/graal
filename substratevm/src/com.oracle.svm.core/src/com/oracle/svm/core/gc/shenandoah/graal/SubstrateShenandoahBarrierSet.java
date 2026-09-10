@@ -26,6 +26,7 @@ package com.oracle.svm.core.gc.shenandoah.graal;
 
 import org.graalvm.word.LocationIdentity;
 
+import com.oracle.svm.core.gc.shenandoah.ShenandoahOptions;
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.graal.nodes.SubstrateCompressionNode;
 import com.oracle.svm.core.heap.ReferenceAccess;
@@ -60,10 +61,14 @@ public class SubstrateShenandoahBarrierSet extends ShenandoahBarrierSet {
         super(objectArrayType, referentField);
         this.oopEncoding = ReferenceAccess.singleton().getCompressEncoding();
         /*
-         * Card-marking barriers are only required for generational Shenandoah, which is not yet
-         * supported on SubstrateVM. Concurrent (SATB) and passive modes do not need them.
+         * Card-marking barriers are only required for generational Shenandoah. Whether they are
+         * emitted must be decided at image build time (barrier insertion happens during AOT
+         * compilation) while the GC mode is chosen at run time, so they are emitted whenever the
+         * image is built with generational support enabled. In the non-generational modes the
+         * emitted barrier is skipped at run time via the per-thread card-table base (see
+         * AMD64SubstrateShenandoahCardBarrierOp).
          */
-        this.useCardBarrier = false;
+        this.useCardBarrier = ShenandoahOptions.useGenerational();
     }
 
     /**

@@ -112,6 +112,12 @@ import jdk.vm.ci.meta.JavaKind;
 
 public final class ShenandoahHeap extends Heap {
     public static final FastThreadLocalBytes<Word> javaThreadTL = FastThreadLocalFactory.createBytes(ShenandoahConstants::javaThreadSize, "ShenandoahHeap.javaThread");
+    /**
+     * Base of the Shenandoah card table as reported by the library at startup. The compiled
+     * card-marking barrier does NOT read this; it reads the C++-owned per-thread pointer
+     * (ShenandoahThreadLocalData::_card_table, see {@link ShenandoahConstants#cardTableAddressOffset})
+     * which also tracks card-table swaps.
+     */
     private static final FastThreadLocalWord<Word> cardTableAddressTL = FastThreadLocalFactory.createWord("ShenandoahHeap.cardTableAddress").setMaxOffset(FastThreadLocal.FIRST_CACHE_LINE);
     /**
      * Base of the Shenandoah collection-set fast-test map (biased by {@code heap_base >> region_shift}
@@ -207,6 +213,7 @@ public final class ShenandoahHeap extends Heap {
         CFunctionPointer waitForVMOperationExecutionStatus = getFunctionPointer(vmOperationSupport.funcWaitForVMOperationExecutionStatus);
         CFunctionPointer updateVMOperationExecutionStatus = getFunctionPointer(vmOperationSupport.funcUpdateVMOperationExecutionStatus);
         CFunctionPointer isVMOperationFinished = getFunctionPointer(vmOperationSupport.funcIsVMOperationFinished);
+        CFunctionPointer yieldToQueuedVMOperations = getFunctionPointer(vmOperationSupport.funcYieldToQueuedVMOperations);
         CFunctionPointer fetchThreadStackFrames = getFunctionPointer(stackWalker.funcFetchThreadStackFrames);
         CFunctionPointer freeThreadStackFrames = getFunctionPointer(stackWalker.funcFreeThreadStackFrames);
         CFunctionPointer fetchContinuationStackFrames = getFunctionPointer(stackWalker.funcFetchContinuationStackFrames);
@@ -229,7 +236,7 @@ public final class ShenandoahHeap extends Heap {
                         useInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingInterfaceMask, dynamicHubHashingShiftOffset,
                         offsets, offsetsLength,
                         collectForAllocationOp, collectFullOp, collectDegeneratedOp, initMarkOp, finalMarkOp, initUpdateRefsOp, finalUpdateRefsOp, finalRootsOp, handshakeFallbackOp,
-                        waitForVMOperationExecutionStatus, updateVMOperationExecutionStatus, isVMOperationFinished,
+                        waitForVMOperationExecutionStatus, updateVMOperationExecutionStatus, isVMOperationFinished, yieldToQueuedVMOperations,
                         fetchThreadStackFrames, freeThreadStackFrames,
                         fetchContinuationStackFrames, freeContinuationStackFrames,
                         fetchCodeInfos, freeCodeInfos, cleanRuntimeCodeCache,
@@ -456,6 +463,7 @@ public final class ShenandoahHeap extends Heap {
         VMError.guarantee(ShenandoahConstants.tlabEndOffset() == state.tlabEndOffset(), "Failed while validating the Shenandoah state: tlabEndOffset");
         VMError.guarantee(ShenandoahConstants.dirtyCardValue() == state.dirtyCardValue(), "Failed while validating the Shenandoah state: dirtyCardValue");
         VMError.guarantee(ShenandoahConstants.cardTableShift() == state.cardTableShift(), "Failed while validating the Shenandoah state: cardTableShift");
+        VMError.guarantee(ShenandoahConstants.cardTableOffsetRel() == state.cardTableOffset(), "Failed while validating the Shenandoah state: cardTableOffset");
         VMError.guarantee(ShenandoahConstants.logOfHeapRegionGrainBytes() == state.logOfHeapRegionGrainBytes(), "Failed while validating the Shenandoah state: logOfHeapRegionGrainBytes");
         VMError.guarantee(ShenandoahConstants.javaThreadSize() == state.javaThreadSize(), "Failed while validating the Shenandoah state: javaThreadSize");
         VMError.guarantee(ShenandoahConstants.satbIndexOffsetRel() == state.satbIndexOffset(), "Failed while validating the Shenandoah state: satbIndexOffset");

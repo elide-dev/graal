@@ -459,6 +459,25 @@ public final class JavaStackWalker {
         return doWalkThread(walk, thread, visitor, data);
     }
 
+    /**
+     * Walks the stack of the current thread starting at the last Java frame anchor instead of the
+     * caller of this method. This is meant for code that is reached via a call from C code back
+     * into Java (e.g. a GC implemented in a native library calling back to walk thread stacks):
+     * the Java frames of the call-back itself (everything deeper than the last frame anchor) are
+     * skipped. That is essential when the collected frame information outlives this walk, because
+     * those deeper frames continue to change while the C code executes, so capturing them would
+     * produce stale frame descriptors (whose later use reads and writes reused stack memory).
+     */
+    @Uninterruptible(reason = "Prevent deoptimization of stack frames while in this method.")
+    public static boolean walkCurrentThreadFromFrameAnchor(ParameterizedStackFrameVisitor visitor, Object data) {
+        IsolateThread thread = CurrentIsolate.getCurrentThread();
+        JavaFrameAnchor anchor = JavaFrameAnchors.getFrameAnchor();
+        VMError.guarantee(anchor.isNonNull(), "walkCurrentThreadFromFrameAnchor requires a frame anchor");
+        JavaStackWalk walk = StackValue.get(sizeOfJavaStackWalk());
+        initWalk0(walk, anchor.getLastJavaSP(), Word.nullPointer(), anchor.getLastJavaIP(), anchor.getPreviousAnchor());
+        return doWalk(walk, thread, visitor, data);
+    }
+
     @Uninterruptible(reason = "Prevent deoptimization of stack frames while in this method.")
     public static boolean walkThread(IsolateThread thread, StackFrameVisitor visitor) {
         return walkThread(thread, visitor, null);

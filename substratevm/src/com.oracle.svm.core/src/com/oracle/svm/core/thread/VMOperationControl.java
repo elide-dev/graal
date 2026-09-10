@@ -302,6 +302,27 @@ public final class VMOperationControl {
         }
     }
 
+    /**
+     * Executes VM operations that other threads have queued for the dedicated VM operation thread
+     * while that thread is itself executing a VM operation. The dedicated VM operation thread
+     * holds the main queue mutex for the whole execution of an operation, so no other thread can
+     * even enqueue while an operation runs. If the current operation must wait for something that
+     * itself needs a VM operation to make progress, that is a deadlock. The prime example is a GC
+     * implemented in a native library: an allocation inside a VM operation may require a
+     * stop-the-world collection, which is a VM operation that only this very thread can execute.
+     * This method opens a bounded window in which other threads can enqueue (the mutex is released
+     * while waiting on the queue condition) and then executes everything that was enqueued.
+     *
+     * @return true if at least one queued operation was executed.
+     */
+    public static boolean yieldToQueuedVMOperations(long waitNanos) {
+        VMOperationControl control = get();
+        if (!isDedicatedVMOperationThread() || !control.mainQueues.mutex.isOwner()) {
+            return false;
+        }
+        return control.mainQueues.yieldExecuteAndReacquire(waitNanos);
+    }
+
     public static boolean isOkayToBlock() {
         /*-
          * No Java synchronization must be performed within a VMOperation. Otherwise, one of the
@@ -445,6 +466,20 @@ public final class VMOperationControl {
              * reacts on the notification of thread A.
              */
             executeAllQueuedVMOperations();
+        }
+
+        /** See {@link VMOperationControl#yieldToQueuedVMOperations}. Caller must own the mutex. */
+        boolean yieldExecuteAndReacquire(long waitNanos) {
+            assert mutex.isOwner();
+            if (isEmpty()) {
+                /* Releases the mutex while blocked, which lets other threads enqueue. */
+                operationQueued.block(waitNanos);
+            }
+            if (isEmpty()) {
+                return false;
+            }
+            executeAllQueuedVMOperations();
+            return true;
         }
 
         @NeverInline("Must not have escape analysis move an allocation into this method")

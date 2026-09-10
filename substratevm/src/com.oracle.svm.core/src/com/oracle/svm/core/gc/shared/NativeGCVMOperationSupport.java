@@ -133,6 +133,7 @@ public class NativeGCVMOperationSupport {
     public final CEntryPointLiteral<CFunctionPointer> funcUpdateVMOperationExecutionStatus;
     public final CEntryPointLiteral<CFunctionPointer> funcWaitForVMOperationExecutionStatus;
     public final CEntryPointLiteral<CFunctionPointer> funcIsVMOperationFinished;
+    public final CEntryPointLiteral<CFunctionPointer> funcYieldToQueuedVMOperations;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public NativeGCVMOperationSupport() {
@@ -142,6 +143,8 @@ public class NativeGCVMOperationSupport {
                         Isolate.class, IsolateThread.class, NativeGCVMOperationWrapperData.class, int.class);
         funcIsVMOperationFinished = CEntryPointLiteral.create(NativeGCVMOperationSupport.class, "isVMOperationFinished",
                         Isolate.class, IsolateThread.class, NativeGCVMOperationWrapperData.class);
+        funcYieldToQueuedVMOperations = CEntryPointLiteral.create(NativeGCVMOperationSupport.class, "yieldToQueuedVMOperations",
+                        Isolate.class, IsolateThread.class, long.class);
     }
 
     @Uninterruptible(reason = "Can be called from an unattached thread.")
@@ -165,6 +168,31 @@ public class NativeGCVMOperationSupport {
     @CEntryPointOptions(prologue = InitializeReservedRegistersForPossiblyUnattachedThread.class, epilogue = NoEpilogue.class)
     public static boolean isVMOperationFinished(@SuppressWarnings("unused") Isolate isolate, @SuppressWarnings("unused") IsolateThread isolateThread, NativeGCVMOperationWrapperData data) {
         return data.getFinished();
+    }
+
+    /**
+     * Lets the dedicated VM operation thread, while it is inside a VM operation that calls into
+     * the native GC, execute VM operations that other threads queued in the meantime. Needed when
+     * the current operation blocks on a resource (heap memory) that only another, queued VM
+     * operation (a stop-the-world collection handed over by the GC control thread) can provide.
+     * See {@link VMOperationControl#yieldToQueuedVMOperations}.
+     */
+    @Uninterruptible(reason = "Can be called from an unattached thread.")
+    @CEntryPoint(include = UseNativeGC.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = InitializeReservedRegistersForPossiblyUnattachedThread.class, epilogue = NoEpilogue.class)
+    public static boolean yieldToQueuedVMOperations(@SuppressWarnings("unused") Isolate isolate, @SuppressWarnings("unused") IsolateThread isolateThread, long waitNanos) {
+        if (!VMOperationControl.isDedicatedVMOperationThread()) {
+            return false;
+        }
+        ThreadStatusTransition.fromVMToJava(false);
+        boolean executed = yieldToQueuedVMOperations0(waitNanos);
+        ThreadStatusTransition.fromJavaToVM();
+        return executed;
+    }
+
+    @Uninterruptible(reason = "Bridge between uninterruptible and interruptible code.", calleeMustBe = false)
+    private static boolean yieldToQueuedVMOperations0(long waitNanos) {
+        return VMOperationControl.yieldToQueuedVMOperations(waitNanos);
     }
 
     @Uninterruptible(reason = "Can be called from an unattached thread.")

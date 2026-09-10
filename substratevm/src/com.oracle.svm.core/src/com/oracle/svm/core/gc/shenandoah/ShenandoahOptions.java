@@ -73,6 +73,24 @@ public class ShenandoahOptions {
     @Option(help = "Size of the Shenandoah heap regions in bytes. " + SUPPORTED_REGION_SIZES + ".", type = OptionType.User)//
     public static final HostedOptionKey<Integer> ShenandoahRegionSize = new ShenandoahHostedOptionKey<>(1 * M, ShenandoahOptions::validateRegionSize);
 
+    /**
+     * Generational Shenandoah needs a remembered set, which is maintained by card-marking
+     * (post-write) barriers in compiled code. Whether those barriers are emitted is an
+     * image-build-time decision, while {@code -XX:ShenandoahGCMode} is a runtime option, so
+     * generational mode must be enabled when building the image. Images built without it reject
+     * {@code -XX:ShenandoahGCMode=generational} at startup (see ShenandoahHeap::initialize_mode()
+     * in the GC library, which receives this option's value as a hosted argument), and images
+     * built with it pay the card-barrier cost in the other modes as well.
+     */
+    @Option(help = "Support -XX:ShenandoahGCMode=generational at run time. This emits card-marking " +
+                    "barriers into the image, which are also executed (as a no-op check) in the other GC modes.", type = OptionType.Expert)//
+    public static final HostedOptionKey<Boolean> ShenandoahGenerational = new ShenandoahHostedOptionKey<>(false, true);
+
+    @Fold
+    public static boolean useGenerational() {
+        return ShenandoahGenerational.getValue();
+    }
+
     @Option(help = "Enable normal processing of flags relating to field diagnostics.", type = OptionType.Debug)//
     public static final RuntimeOptionKey<Boolean> UnlockDiagnosticVMOptions = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
 

@@ -77,6 +77,7 @@ public class ShenandoahLibrary {
                     Word offsets, int offsetsLength,
                     CFunctionPointer collectForAllocationOp, CFunctionPointer collectFullOp, CFunctionPointer collectDegeneratedOp, CFunctionPointer initMarkOp, CFunctionPointer finalMarkOp, CFunctionPointer initUpdateRefsOp, CFunctionPointer finalUpdateRefsOp, CFunctionPointer finalRootsOp, CFunctionPointer handshakeFallbackOp,
                     CFunctionPointer waitForVMOperationExecutionStatus, CFunctionPointer updateVMOperationExecutionStatus, CFunctionPointer isVMOperationFinished,
+                    CFunctionPointer yieldToQueuedVMOperations,
                     CFunctionPointer fetchThreadStackFrames, CFunctionPointer freeThreadStackFrames,
                     CFunctionPointer fetchContinuationStackFrames, CFunctionPointer freeContinuationStackFrames,
                     CFunctionPointer fetchCodeInfos, CFunctionPointer freeCodeInfos, CFunctionPointer cleanRuntimeCodeCache,

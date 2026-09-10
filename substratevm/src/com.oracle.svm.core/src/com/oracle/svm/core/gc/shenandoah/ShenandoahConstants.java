@@ -163,6 +163,28 @@ public class ShenandoahConstants {
         return VMThreadLocalOffsetProvider.getOffset(ShenandoahHeap.csetMapAddressTL);
     }
 
+    /*
+     * Offset of the C++ ShenandoahThreadLocalData::_card_table pointer relative to the gc_state byte.
+     * The C++ side owns this field (ShenandoahBarrierSet::on_thread_attach, and card-table swaps), and
+     * it is null unless the current GC mode keeps a remembered set - which is how the inlined
+     * card-marking barrier of generational mode skips itself in satb/passive mode. Validated at
+     * startup against ShenandoahInitState.cardTableOffset().
+     */
+    private static final int CARD_TABLE_OFFSET_REL = 32;
+
+    @Fold
+    public static int cardTableOffsetRel() {
+        return CARD_TABLE_OFFSET_REL;
+    }
+
+    /**
+     * Offset (from the current {@code IsolateThread}) of the per-thread (biased) card-table base used
+     * by the inlined card-marking barrier of generational mode.
+     */
+    public static int cardTableAddressOffset() {
+        return gcStateOffset() + CARD_TABLE_OFFSET_REL;
+    }
+
     /** SATB {@code _index}/{@code _buf} offsets relative to gc_state (for startup validation). */
     @Fold
     public static int satbIndexOffsetRel() {

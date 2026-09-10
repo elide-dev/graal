@@ -67,6 +67,9 @@ public class ShenandoahStructs {
         @CField("card_table_shift")
         int cardTableShift();
 
+        @CField("card_table_offset")
+        int cardTableOffset();
+
         @CField("log_of_heap_region_grain_bytes")
         int logOfHeapRegionGrainBytes();
 

@@ -64,7 +64,6 @@ import com.oracle.svm.core.heap.StoredContinuationAccess.ContinuationStackFrameV
 import com.oracle.svm.core.heap.StoredContinuationAccess.ContinuationStackFrameVisitorData;
 import com.oracle.svm.core.memory.NullableNativeMemory;
 import com.oracle.svm.core.nmt.NmtCategory;
-import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.ParameterizedStackFrameVisitor;
 import com.oracle.svm.core.thread.ContinuationSupport;
@@ -171,9 +170,20 @@ public final class NativeGCStackWalker {
         VMOperation.guaranteeInProgressAtSafepoint("Doing a stack walk for every thread is only possible when we are at a safepoint.");
         collector.startWalking();
 
-        /* Walk the current thread. */
+        /*
+         * Walk the current thread. This code runs when the native GC calls back into Java (via
+         * ShenandoahLibrary.fetchThreadStackFrames and friends) while the current thread is
+         * executing GC code deep inside the native library. The walk must start at the last Java
+         * frame anchor (the transition into the native GC) and not at the caller of this method:
+         * the Java frames of this call-back itself are still running and keep changing while the
+         * GC executes, so capturing them would hand stale frame descriptors to the GC. When the GC
+         * later walks such a stale descriptor to update object references, it reads and WRITES
+         * stack memory that this thread has long reused for other frames, which corrupts local
+         * variables and spilled values of the GC-executing thread (observed as lost updates and
+         * crashes under -H:AdditionalHeaderBytes with the Shenandoah GC).
+         */
         collector.newThread();
-        JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), collector, null);
+        JavaStackWalker.walkCurrentThreadFromFrameAnchor(collector, null);
         collector.finishThread();
 
         /* Walk all other threads. */

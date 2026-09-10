@@ -135,6 +135,14 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
         masm.movq(resReg, objReg);
 
         if (!notNull) {
+            // Null comes in two encodings here: a reference loaded in compressed form decompresses
+            // null to the heap base (lea heapBase(compressed*shift)), while a value-passed reference
+            // uses plain 0 (the same dual encoding as in AMD64SubstrateShenandoahSATBBarrierOp). The
+            // heap-base check is not just cosmetic: a decompressed null that falls through to the
+            // collection-set fast test indexes the biased map below region 0 (the image heap starts
+            // above the heap base), reading outside the map allocation, which segfaults when the map
+            // happens to sit at the start of an mmap'd area.
+            masm.cmpqAndJcc(resReg, ReservedRegisters.singleton().getHeapBaseRegister(), ConditionFlag.Equal, done, false);
             masm.testAndJcc(OperandSize.QWORD, resReg, resReg, ConditionFlag.Zero, done, false);
         }
 
