@@ -2728,6 +2728,7 @@ lib_jvm_preserved_packages = [
     'jdk.internal.logger',
     'jdk.internal.misc',
     'jdk.internal.util',
+    'jdk.jfr',
     'org.ietf.jgss',
     'sun.invoke.util',
     'sun.nio.cs.ext',
