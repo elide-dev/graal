@@ -57,10 +57,10 @@ import jdk.vm.ci.meta.AllocatableValue;
  *
  * SubstrateVM specifics:
  * <ul>
- * <li>Whether this barrier is emitted at all is an image-build-time decision
- * ({@code -H:+ShenandoahGenerational}), because the GC mode is only chosen at run time. In an image
- * built with generational support that then runs in satb or passive mode there is no remembered set;
- * the per-thread card-table base is zero in that case and the barrier skips itself.</li>
+ * <li>This barrier is only emitted in images built with {@code -H:ShenandoahGCMode=generational}
+ * (the GC mode is fixed at image build time, see SubstrateShenandoahBarrierSet). The per-thread
+ * card-table base can still be zero very early during thread attach, before the C++ side has
+ * published it; the barrier skips itself in that case.</li>
  * <li>The thread register can be zero in very early isolate-creation code, which is skipped too.</li>
  * </ul>
  */
@@ -97,8 +97,8 @@ public class AMD64SubstrateShenandoahCardBarrierOp extends AMD64LIRInstruction {
         masm.testq(thread, thread);
         masm.jcc(ConditionFlag.Zero, done);
 
-        // The (biased) card-table base is zero unless the current GC mode maintains a remembered set.
-        // This is how satb/passive mode skip this barrier in a generational-capable image.
+        // The (biased) card-table base can be zero very early during thread attach, before the
+        // C++ side has published it; skip the barrier in that case.
         masm.movq(rbase, new AMD64Address(thread, ShenandoahConstants.cardTableAddressOffset()));
         masm.testqAndJcc(rbase, rbase, ConditionFlag.Zero, done, false);
 

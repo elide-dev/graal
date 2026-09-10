@@ -166,9 +166,9 @@ public class ShenandoahConstants {
     /*
      * Offset of the C++ ShenandoahThreadLocalData::_card_table pointer relative to the gc_state byte.
      * The C++ side owns this field (ShenandoahBarrierSet::on_thread_attach, and card-table swaps), and
-     * it is null unless the current GC mode keeps a remembered set - which is how the inlined
-     * card-marking barrier of generational mode skips itself in satb/passive mode. Validated at
-     * startup against ShenandoahInitState.cardTableOffset().
+     * it is null unless the current GC mode keeps a remembered set (only generational mode does,
+     * and only generational images contain the inlined card-marking barrier that reads it).
+     * Validated at startup against ShenandoahInitState.cardTableOffset().
      */
     private static final int CARD_TABLE_OFFSET_REL = 32;
 

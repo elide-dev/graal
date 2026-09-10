@@ -133,8 +133,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
     public void emitCardBarrier(LIRGeneratorTool lirTool, Value address) {
         /*
          * Card-marking (post-write) barrier of generational mode. Only emitted when the image was
-         * built with -H:+ShenandoahGenerational (see SubstrateShenandoahBarrierSet); it skips itself
-         * at run time in the modes that keep no remembered set.
+         * built with -H:ShenandoahGCMode=generational (see SubstrateShenandoahBarrierSet).
          */
         AMD64AddressValue addr = ((AMD64LIRGenerator) lirTool).asAddressValue(address);
         AllocatableValue tmp = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));

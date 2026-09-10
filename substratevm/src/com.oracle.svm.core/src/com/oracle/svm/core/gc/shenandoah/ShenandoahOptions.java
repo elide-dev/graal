@@ -73,31 +73,36 @@ public class ShenandoahOptions {
     @Option(help = "Size of the Shenandoah heap regions in bytes. " + SUPPORTED_REGION_SIZES + ".", type = OptionType.User)//
     public static final HostedOptionKey<Integer> ShenandoahRegionSize = new ShenandoahHostedOptionKey<>(1 * M, ShenandoahOptions::validateRegionSize);
 
-    /**
-     * Generational Shenandoah needs a remembered set, which is maintained by card-marking
-     * (post-write) barriers in compiled code. Whether those barriers are emitted is an
-     * image-build-time decision, while {@code -XX:ShenandoahGCMode} is a runtime option, so
-     * generational mode must be enabled when building the image. Images built without it reject
-     * {@code -XX:ShenandoahGCMode=generational} at startup (see ShenandoahHeap::initialize_mode()
-     * in the GC library, which receives this option's value as a hosted argument), and images
-     * built with it pay the card-barrier cost in the other modes as well.
-     */
-    @Option(help = "Support -XX:ShenandoahGCMode=generational at run time. This emits card-marking " +
-                    "barriers into the image, which are also executed (as a no-op check) in the other GC modes.", type = OptionType.Expert)//
-    public static final HostedOptionKey<Boolean> ShenandoahGenerational = new ShenandoahHostedOptionKey<>(false, true);
-
-    @Fold
-    public static boolean useGenerational() {
-        return ShenandoahGenerational.getValue();
-    }
-
     @Option(help = "Enable normal processing of flags relating to field diagnostics.", type = OptionType.Debug)//
     public static final RuntimeOptionKey<Boolean> UnlockDiagnosticVMOptions = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
 
     private static final String SUPPORTED_GC_MODES = "satb, passive, generational";
 
-    @Option(help = "GC mode to use. Possible values are: [" + SUPPORTED_GC_MODES + "].", type = OptionType.User)//
-    public static final RuntimeOptionKey<String> ShenandoahGCMode = new ShenandoahRuntimeOptionKey<>("satb", IsolateCreationOnly);
+    /**
+     * The GC mode is a build-time decision because it determines which barriers are emitted into
+     * compiled code: passive needs no barriers at all, satb needs load-reference/SATB/CAS barriers,
+     * and generational additionally needs card-marking (post-write) barriers for its remembered
+     * set. Fixing the mode at image build time means every mode only pays for the barriers it
+     * actually needs (see SubstrateShenandoahBarrierSet). The value is passed to the GC library as
+     * a hosted argument and consumed by ShenandoahHeap::initialize_mode().
+     */
+    @Option(help = "GC mode to use. The mode is fixed at image build time. Possible values are: [" + SUPPORTED_GC_MODES + "].", type = OptionType.User)//
+    public static final HostedOptionKey<String> ShenandoahGCMode = new ShenandoahHostedOptionKey<>("satb", ShenandoahOptions::validateGCMode);
+
+    @Fold
+    public static String getGCMode() {
+        return ShenandoahGCMode.getValue();
+    }
+
+    @Fold
+    public static boolean isGenerational() {
+        return "generational".equals(getGCMode());
+    }
+
+    @Fold
+    public static boolean isPassive() {
+        return "passive".equals(getGCMode());
+    }
 
     @Option(help = "Enable internal verification. Catch many GC bugs but also stalls the collector which might hide other bugs", type = OptionType.Debug)//
     public static final RuntimeOptionKey<Boolean> ShenandoahVerify = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
@@ -120,6 +125,13 @@ public class ShenandoahOptions {
     private static void validateShenandoahOption(SubstrateOptionKey<?> optionKey) {
         if (optionKey.hasBeenSet() && !SubstrateOptions.useShenandoahGC()) {
             throw UserError.abort("The option '%s' can only be used together with the Shenandoah garbage collector ('--gc=shenandoah').", optionKey.getName());
+        }
+    }
+
+    private static void validateGCMode(HostedOptionKey<String> optionKey) {
+        String value = optionKey.getValue();
+        if (!"satb".equals(value) && !"passive".equals(value) && !"generational".equals(value)) {
+            throw UserError.invalidOptionValue(ShenandoahGCMode, value, "Supported values are: " + SUPPORTED_GC_MODES);
         }
     }
 

@@ -61,14 +61,17 @@ public class SubstrateShenandoahBarrierSet extends ShenandoahBarrierSet {
         super(objectArrayType, referentField);
         this.oopEncoding = ReferenceAccess.singleton().getCompressEncoding();
         /*
-         * Card-marking barriers are only required for generational Shenandoah. Whether they are
-         * emitted must be decided at image build time (barrier insertion happens during AOT
-         * compilation) while the GC mode is chosen at run time, so they are emitted whenever the
-         * image is built with generational support enabled. In the non-generational modes the
-         * emitted barrier is skipped at run time via the per-thread card-table base (see
-         * AMD64SubstrateShenandoahCardBarrierOp).
+         * The GC mode is fixed at image build time (-H:ShenandoahGCMode), so each mode only pays
+         * for the barriers it needs: passive (stop-the-world collections only) needs no barriers
+         * at all, satb needs load-reference/SATB/CAS barriers for its concurrent phases, and
+         * generational additionally needs the card-marking (post-write) barrier that maintains
+         * the remembered set.
          */
-        this.useCardBarrier = ShenandoahOptions.useGenerational();
+        boolean passive = ShenandoahOptions.isPassive();
+        this.useLoadRefBarrier = !passive;
+        this.useSATBBarrier = !passive;
+        this.useCASBarrier = !passive;
+        this.useCardBarrier = ShenandoahOptions.isGenerational();
     }
 
     /**
