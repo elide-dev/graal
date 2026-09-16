@@ -177,7 +177,14 @@ public final class VMOperationControl {
         if (!useDedicatedVMOperationThread()) {
             return false;
         }
-        return thread == get().dedicatedVMOperationThread.getIsolateThread();
+        /*
+         * Native GC library threads like the Shenandoah control thread which are not Java threads
+         * and therefore pass a null IsolateThread can call this method early before the dedicated
+         * VM thread has finished attaching. In such cases we must guard against the case where
+         * the VM thread's isolate thread is still null to avoid executing a VM operation directly
+         * on the calling native thread.
+         */
+        return thread.isNonNull() && thread == get().dedicatedVMOperationThread.getIsolateThread();
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
