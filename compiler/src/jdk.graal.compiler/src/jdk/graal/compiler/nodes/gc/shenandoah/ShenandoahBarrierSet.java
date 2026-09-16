@@ -34,6 +34,7 @@ import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.graph.Graph;
 import jdk.graal.compiler.graph.Node;
+import jdk.graal.compiler.nodeinfo.InputType;
 import jdk.graal.compiler.nodes.FieldLocationIdentity;
 import jdk.graal.compiler.nodes.GraphState;
 import jdk.graal.compiler.nodes.NamedLocationIdentity;
@@ -240,7 +241,15 @@ public class ShenandoahBarrierSet extends BarrierSet {
         ShenandoahLoadRefBarrierNode lrb = graph.add(new ShenandoahLoadRefBarrierNode(uncompressed, address, barrierType, narrow));
         ValueNode compValue = maybeCompressReference(lrb, narrow);
         ValueNode newUsage = uncompressed != node ? uncompressed : lrb;
-        node.replaceAtUsages(compValue, usage -> usage != newUsage);
+        /*
+         * Only redirect data (value) usages to the barriered value. The barriered node can be a
+         * memory-killing access (e.g. an atomic getAndSet / compare-and-swap on an object field,
+         * or an ordered oop read) that other nodes reference through the memory graph via an
+         * InputType.Memory edge. Those memory edges must keep pointing at the access node itself
+         * because rewriting them to the (non-MemoryKill) load-reference/compression value corrupts
+         * the memory graph.
+         */
+        node.replaceAtUsages(compValue, usage -> usage != newUsage, InputType.Value);
     }
 
     private void addReadNodeBarriers(FixedAccessNode node) {
