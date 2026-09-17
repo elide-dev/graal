@@ -327,9 +327,9 @@ public class ShenandoahBarrierSet extends BarrierSet {
 
                 ValueNode base = read.getAddress().getBase();
                 if (!base.stamp(NodeView.DEFAULT).isObjectStamp()) {
-                    GraalError.guarantee(read.getBarrierType() == BarrierType.NONE, "no barrier for non-heap read: %s", read);
+                    GraalError.guarantee(isValidNonHeapReadBarrier(read.getBarrierType()), "no barrier for non-heap read: %s", read);
                 } else {
-                    GraalError.guarantee(read.getBarrierType() == BarrierType.FIELD, "missing barriers for heap read: %s", read);
+                    GraalError.guarantee(isValidHeapReadBarrier(read.getBarrierType()), "missing barriers for heap read: %s", read);
                 }
             } else if (node instanceof AddressableMemoryAccess access) {
                 if (access.getBarrierType() != BarrierType.NONE) {
@@ -337,6 +337,26 @@ public class ShenandoahBarrierSet extends BarrierSet {
                 }
             }
         }
+    }
+
+    /**
+     * Whether {@code barrierType} is a valid barrier for an object read whose address is <em>not</em>
+     * based on an object (for example a read from raw/native memory). The default (HotSpot) barrier
+     * set never emits such reads with a barrier, so only {@link BarrierType#NONE} is allowed.
+     * Subclasses may widen this (see {@code SubstrateShenandoahBarrierSet}).
+     */
+    protected boolean isValidNonHeapReadBarrier(BarrierType barrierType) {
+        return barrierType == BarrierType.NONE;
+    }
+
+    /**
+     * Whether {@code barrierType} is a valid barrier for an object read whose address is based on an
+     * object (i.e. a read from the Java heap). The default (HotSpot) barrier set emits
+     * {@link BarrierType#FIELD} for these. Subclasses may widen this (see
+     * {@code SubstrateShenandoahBarrierSet}).
+     */
+    protected boolean isValidHeapReadBarrier(BarrierType barrierType) {
+        return barrierType == BarrierType.FIELD;
     }
 
     protected BarrierType barrierForLocation(BarrierType currentBarrier, LocationIdentity location, JavaKind storageKind) {

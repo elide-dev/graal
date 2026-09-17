@@ -123,4 +123,55 @@ public class SubstrateShenandoahBarrierSet extends ShenandoahBarrierSet {
         }
         return value;
     }
+
+    /**
+     * SubstrateVM emits a plain load-reference ({@link BarrierType#READ}) barrier for object reads
+     * that the HotSpot barrier set would either leave barrier-free or tag as {@link
+     * BarrierType#FIELD}:
+     * <ul>
+     * <li>Object-typed VM thread locals live inside the (non-heap) {@code IsolateThread} but hold a
+     * reference to a movable heap object, so their read carries a READ barrier even though the
+     * address is not object-based.</li>
+     * <li>Generic snippet reads (e.g. the arraycopy and clone snippets) access array elements
+     * through {@code ANY_LOCATION} with a READ barrier rather than the array/FIELD barrier the
+     * verifier expects for a heap read.</li>
+     * </ul>
+     * For a read, READ and FIELD are equivalent - both insert the load-reference barrier (the
+     * FIELD/READ distinction only affects the card barrier on writes) - so accepting READ here does
+     * not mask a missing read barrier. {@link BarrierType#NONE} is additionally accepted for heap
+     * reads that provably load a non-moving reference (most notably a {@code DynamicHub}/
+     * {@code java.lang.Class} read), for which SubstrateVM emits no barrier. Note that these hooks
+     * only govern reads whose location is not a field or object-array location; ordinary field
+     * reads are still checked exactly against {@link #fieldReadBarrierType} via
+     * {@code barrierForLocation}.
+     */
+    @Override
+    protected boolean isValidNonHeapReadBarrier(BarrierType barrierType) {
+        return isNoneOrLoadReferenceBarrier(barrierType);
+    }
+
+    @Override
+    protected boolean isValidHeapReadBarrier(BarrierType barrierType) {
+        return isNoneOrLoadReferenceBarrier(barrierType);
+    }
+
+    /**
+     * An object read is well-formed for SubstrateVM if it carries either no barrier (SubstrateVM
+     * elides the barrier for reads that provably load a non-moving reference, e.g. a
+     * {@code DynamicHub}) or one of the barrier types that {@code addReadNodeBarriers} turns into a
+     * load-reference barrier. This is only consulted for reads whose location is neither a field
+     * nor the object-array location; those are still checked exactly via {@code barrierForLocation}.
+     */
+    private static boolean isNoneOrLoadReferenceBarrier(BarrierType barrierType) {
+        switch (barrierType) {
+            case NONE:
+            case READ:
+            case FIELD:
+            case ARRAY:
+            case UNKNOWN:
+                return true;
+            default:
+                return false;
+        }
+    }
 }
