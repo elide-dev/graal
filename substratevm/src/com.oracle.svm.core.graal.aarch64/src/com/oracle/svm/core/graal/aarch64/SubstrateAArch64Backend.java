@@ -1814,29 +1814,29 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
     }
 
     static class SubstrateAArch64FrameMap extends AArch64FrameMap {
-        private StackSlot interpreterJNIUpcallData;
-        private StackSlot interpreterFFMUpcallData;
+        private StackSlot interpreterData;
+        private StackSlot interpreterLeaveData;
 
         SubstrateAArch64FrameMap(CodeCacheProvider codeCache, RegisterConfig registerConfig, ReferenceMapBuilderFactory referenceMapFactory) {
             super(codeCache, registerConfig, referenceMapFactory);
         }
 
-        void allocateInterpreterJNIUpcallData() {
-            assert interpreterJNIUpcallData == null;
-            interpreterJNIUpcallData = allocateStackMemory(AArch64InterpreterStubs.sizeOfInterpreterData(), getTarget().wordSize);
+        void allocateInterpreterData() {
+            assert interpreterData == null;
+            interpreterData = allocateStackMemory(AArch64InterpreterStubs.sizeOfInterpreterData(), getTarget().wordSize);
         }
 
-        StackSlot getInterpreterJNIUpcallData() {
-            return interpreterJNIUpcallData;
+        StackSlot getInterpreterData() {
+            return interpreterData;
         }
 
-        void allocateInterpreterFFMUpcallData() {
-            assert interpreterFFMUpcallData == null;
-            interpreterFFMUpcallData = allocateStackMemory(AArch64InterpreterStubs.sizeOfInterpreterData(), getTarget().wordSize);
+        void allocateInterpreterLeaveData() {
+            assert interpreterLeaveData == null;
+            interpreterLeaveData = allocateStackMemory(2 * getTarget().wordSize, getTarget().wordSize);
         }
 
-        StackSlot getInterpreterFFMUpcallData() {
-            return interpreterFFMUpcallData;
+        StackSlot getInterpreterLeaveData() {
+            return interpreterLeaveData;
         }
     }
 
@@ -2150,19 +2150,19 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
             InterpreterJNIUpcallStubGuestValue jniAnnotation = InterpreterJNIUpcallStubGuestValue.get(method);
             if (jniAnnotation != null && jniAnnotation.callVariant() == CallVariant.VARARGS && !Platform.includedIn(Platform.DARWIN.class)) {
                 assert InterpreterSupport.isEnabled();
-                ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterJNIUpcallData();
+                ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterData();
             }
             if (stubType == Deoptimizer.StubType.InterpreterFFMUpcallStub) {
                 assert InterpreterSupport.isEnabled();
-                ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterFFMUpcallData();
+                ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterData();
             }
         }
         if (stubType == Deoptimizer.StubType.InterpreterEnterStub) {
             assert InterpreterSupport.isEnabled();
-            frameMap.reserveOutgoing(AArch64InterpreterStubs.additionalFrameSizeEnterStub());
+            ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterData();
         } else if (stubType == Deoptimizer.StubType.InterpreterLeaveStub || stubType == Deoptimizer.StubType.InterpreterNativeDowncallStub) {
             assert InterpreterSupport.isEnabled();
-            frameMap.reserveOutgoing(AArch64InterpreterStubs.additionalFrameSizeLeaveStub());
+            ((SubstrateAArch64FrameMap) frameMap).allocateInterpreterLeaveData();
         }
         return lirGenerationResult;
     }
