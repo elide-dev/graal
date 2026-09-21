@@ -2,6 +2,9 @@
 
 This changelog summarizes major changes to GraalVM Native Image.
 
+## GraalVM 25.5 (Internal Version 25.5.5)
+* (GR-79366) Add auxiliary images: a mechanism for persisting runtime-allocated objects and runtime-compiled code, and loading them in later executions of the same native image.
+
 ## GraalVM 25.4 (Internal Version 25.4.4)
 * JDWP support (`-H:+JDWP`) and other features that route calls through the PLT/GOT can now be combined with runtime compilation, for example, for Truffle languages.
 * (Elide fork) Added `-H:+VMContinuationsWithRuntimeCompilation`: continuation-backed virtual threads in images with runtime compilation (for example, Truffle JIT). Requires the serial GC and lazy deoptimization. Frames of code invalidated while a virtual thread is parked are deoptimized when it resumes; stacks with eagerly deoptimized frames pin instead of yielding. See [Virtual Threads with Runtime Compilation](../docs/reference-manual/native-image/VirtualThreadsWithRuntimeCompilation.md).
