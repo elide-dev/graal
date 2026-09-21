@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -52,6 +52,7 @@ import jdk.graal.compiler.phases.common.RemoveOpaqueValuePhase;
 import jdk.graal.compiler.phases.common.TransplantGraphsPhase;
 import jdk.graal.compiler.phases.common.WriteBarrierAdditionPhase;
 import jdk.graal.compiler.phases.schedule.PartialRedundancySchedulePhase;
+import jdk.graal.compiler.phases.common.writesinking.WriteSinkingPhase;
 import jdk.graal.compiler.phases.schedule.SchedulePhase;
 import jdk.graal.compiler.phases.schedule.SchedulePhase.SchedulingStrategy;
 import jdk.graal.compiler.phases.tiers.LowTierContext;
@@ -68,6 +69,8 @@ public class LowTier extends BaseTier<LowTierContext> {
         public static final OptionKey<Boolean> BreakChainedPhis = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "", type = OptionType.Debug)
         public static final OptionKey<Boolean> ProfileCompiledMethods = new OptionKey<>(false);
+        @Option(help = "Enable write sinking.", type = OptionType.Expert)
+        public static final OptionKey<Boolean> OptWriteSinking = new OptionKey<>(true);
         // @formatter:on
 
     }
@@ -103,6 +106,10 @@ public class LowTier extends BaseTier<LowTierContext> {
         } else {
             appendPhase(new FixReadsPhase(true,
                             new SchedulePhase(GraalOptions.StressTestEarlyReads.getValue(options) ? SchedulingStrategy.EARLIEST : SchedulingStrategy.LATEST_OUT_OF_LOOPS_IMPLICIT_NULL_CHECKS)));
+        }
+
+        if (Options.OptWriteSinking.getValue(options)) {
+            appendPhase(new WriteSinkingPhase(canonicalizerWithoutGVN));
         }
 
         if (GraalOptions.OptReadElimination.getValue(options)) {
