@@ -167,7 +167,12 @@ public class ContinuationSupport {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
             VMError.guarantee(!JavaFrames.isEntryPoint(frame), "Entry point frames are not supported");
             VMError.guarantee(!JavaFrames.isUnknownFrame(frame), "Stack walk must not encounter unknown frame");
-            VMError.guarantee(!Deoptimizer.checkIsDeoptimized(frame), "Deoptimized frames are not supported");
+            /*
+             * Frames pending lazy deoptimization are position independent (the original return address
+             * is in the frame's own reserved slot), so they can be frozen and thawed. Eagerly
+             * deoptimized frames cannot: freezing pins instead (see scanFramesForYield).
+             */
+            VMError.guarantee(Deoptimizer.checkEagerDeoptimized(frame) == null, "Eagerly deoptimized frames are not supported in continuations");
 
             Pointer callerSP = JavaFrames.getCallerSP(frame);
 

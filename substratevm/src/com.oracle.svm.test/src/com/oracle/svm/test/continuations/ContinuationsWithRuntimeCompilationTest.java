@@ -30,11 +30,13 @@ import static org.junit.Assert.assertTrue;
 import java.lang.ref.Reference;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
+import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.CodePointer;
@@ -51,6 +53,7 @@ import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
+import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
 import com.oracle.svm.graal.SubstrateGraalUtils;
@@ -319,5 +322,25 @@ public class ContinuationsWithRuntimeCompilationTest {
     @Uninterruptible(reason = "Test helper: looks up an IP in the code cache.")
     static boolean isInRuntimeCodeCache(CodePointer ip) {
         return CodeInfoTable.lookupCodeInfo(ip).isNonNull();
+    }
+
+    @Test
+    public void frameLazilyDeoptimizedBeforeYieldSurvivesFreezeGCAndThaw() throws Exception {
+        AtomicBoolean pendingAtYield = new AtomicBoolean();
+        Hooks.beforeYield = () -> {
+            compiled().invalidate(); // VM operation: lazily patches the mounted JIT caller frame
+            pendingAtYield.set(isPendingLazyDeopt(findRuntimeCompiledFrameSP()));
+        };
+        VirtualRun run = startOnVirtualThread(compiled(), 4);
+        awaitParked(run);
+        assertTrue("JIT frame must be pending lazy deopt when frozen", pendingAtYield.get());
+
+        System.gc(); // walks the frozen, lazily-pending frame
+        resumeAndJoinSuccessfully(run);
+        assertEquals(expected(4), run.result.get());
+    }
+
+    static boolean isPendingLazyDeopt(Pointer sp) {
+        return Deoptimizer.checkLazyDeoptimized(CurrentIsolate.getCurrentThread(), sp);
     }
 }
