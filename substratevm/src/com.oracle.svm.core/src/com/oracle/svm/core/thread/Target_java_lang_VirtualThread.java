@@ -46,6 +46,10 @@ import com.oracle.svm.guest.staging.core.thread.ThreadStatus;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.ReflectionUtil;
+import com.oracle.svm.shared.util.SubstrateUtil;
+
+import jdk.internal.vm.Continuation;
+import jdk.internal.vm.ContinuationScope;
 
 @TargetClass(className = "java.lang.VirtualThread")
 public final class Target_java_lang_VirtualThread {
@@ -194,7 +198,12 @@ public final class Target_java_lang_VirtualThread {
     @Substitute
     @SuppressWarnings({"static-method", "unused"})
     private void notifyJvmtiUnmount(boolean hide) {
-        // unimplemented (GR-45392)
+        // JVMTI unimplemented (GR-45392).
+        // JDK 25 VirtualThread.unmount() calls this with hide == false after switching back to the
+        // carrier (yieldContinuation, the only caller with hide == true, is substituted above).
+        if (!hide && VirtualThreadMountListener.isRegistered()) {
+            VirtualThreadMountListener.singleton().afterUnmount(asThread(this));
+        }
     }
 
     @Substitute
@@ -266,6 +275,22 @@ public final class Target_java_lang_VirtualThread {
         }
 
         carrier.setCurrentThread(asThread(this));
+
+        if (VirtualThreadMountListener.isRegistered()) {
+            VirtualThreadMountListener.singleton().afterMount(asThread(this));
+        }
+    }
+
+    @Substitute
+    private boolean yieldContinuation() {
+        /*
+         * JDK: notifyJvmtiUnmount(true); try { return Continuation.yield(VTHREAD_SCOPE); } finally
+         * { notifyJvmtiMount(false); } -- both JVMTI notifications are no-ops on Native Image.
+         */
+        if (VirtualThreadMountListener.isRegistered()) {
+            VirtualThreadMountListener.singleton().beforeYield(asThread(this));
+        }
+        return Continuation.yield(SubstrateUtil.cast(VTHREAD_SCOPE, ContinuationScope.class));
     }
 
     @Alias
