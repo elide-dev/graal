@@ -55,6 +55,10 @@ public final class ContinuationInternals {
         cont.stored = instance;
     }
 
+    public static void setCodeTethers(Target_jdk_internal_vm_Continuation cont, Object[] tethers) {
+        cont.codeTethers = tethers;
+    }
+
     @NeverInline("Needs a frame to return to when yielding.")
     static void enterSpecial0(Target_jdk_internal_vm_Continuation c, boolean isContinue) {
         // Note that Java-to-Java calls use only caller-saved registers, so we don't need to save
