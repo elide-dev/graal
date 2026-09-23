@@ -35,8 +35,10 @@ import com.oracle.svm.core.SubstrateControlFlowIntegrity;
 import com.oracle.svm.core.SubstrateControlFlowIntegrityFeature;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.deopt.DeoptimizationSupport;
+import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.gc.shared.UseNativeGC;
 import com.oracle.svm.core.heap.StoredContinuation;
 import com.oracle.svm.core.heap.StoredContinuationAccess;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
@@ -74,6 +76,18 @@ public class ContinuationsFeature implements InternalFeature {
         ImageSingletons.add(ContinuationsFeature.class, this);
     }
 
+    private static boolean runtimeCompilationCompatible() {
+        if (!SubstrateOptions.VMContinuationsWithRuntimeCompilation.getValue()) {
+            return false;
+        }
+        boolean lazyDeopt = Deoptimizer.Options.LazyDeoptimization.getValue();
+        boolean nativeGC = UseNativeGC.get();
+        UserError.guarantee(lazyDeopt && !nativeGC,
+                        "Option %s requires lazy deoptimization (-H:+LazyDeoptimization) and the serial GC (not --gc=G1).",
+                        SubstrateOptions.VMContinuationsWithRuntimeCompilation.getName());
+        return true;
+    }
+
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         VMError.guarantee(supported == null);
@@ -86,7 +100,8 @@ public class ContinuationsFeature implements InternalFeature {
                     throw UserError.abort("Continuation support has been explicitly enabled with option %s but is not available in the host VM", SubstrateOptions.VMContinuations.getName());
                 }
             }
-            supported = hostSupport && !DeoptimizationSupport.enabled() && !SubstrateOptions.useLLVMBackend() && SubstrateControlFlowIntegrity.singleton().continuationsSupported();
+            boolean deoptCompatible = !DeoptimizationSupport.enabled() || runtimeCompilationCompatible();
+            supported = hostSupport && deoptCompatible && !SubstrateOptions.useLLVMBackend() && SubstrateControlFlowIntegrity.singleton().continuationsSupported();
             UserError.guarantee(supported || !SubstrateOptions.VMContinuations.hasBeenSet(),
                             "Continuation support has been explicitly enabled with option %s but is not available " +
                                             "because of the runtime compilation, LLVM backend, or control flow integrity features.",

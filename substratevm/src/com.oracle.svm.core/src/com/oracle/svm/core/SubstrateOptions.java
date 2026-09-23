@@ -1872,6 +1872,10 @@ public class SubstrateOptions {
                     "If disabled, virtual threads can be started but each of them is backed by a platform thread.") //
     public static final HostedOptionKey<Boolean> VMContinuations = new HostedOptionKey<>(true);
 
+    @Option(type = Expert, help = "Allow continuations (and therefore virtual threads backed by continuations) when runtime compilation and deoptimization are enabled. " +
+                    "Requires lazy deoptimization and the serial GC.")//
+    public static final HostedOptionKey<Boolean> VMContinuationsWithRuntimeCompilation = new HostedOptionKey<>(false);
+
     @Option(help = "Maximum random offset in bytes applied to entry points of runtime-installed methods, to make them less predictable. " +
                     "The effective padding is rounded up to architecture-specific alignment.", type = Expert) //
     public static final RuntimeOptionKey<Integer> MaxRuntimeCodeOffset = new RuntimeOptionKey<>(0, optionKey -> {
