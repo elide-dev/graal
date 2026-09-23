@@ -343,4 +343,44 @@ public class ContinuationsWithRuntimeCompilationTest {
     static boolean isPendingLazyDeopt(Pointer sp) {
         return Deoptimizer.checkLazyDeoptimized(CurrentIsolate.getCurrentThread(), sp);
     }
+
+    @Test
+    public void codeInvalidatedWhileParkedIsDeoptimizedOnResume() throws Exception {
+        AtomicBoolean pendingAfterResume = new AtomicBoolean();
+        Hooks.afterResume = () -> pendingAfterResume.set(isPendingLazyDeopt(findRuntimeCompiledFrameSP()));
+        VirtualRun run = startOnVirtualThread(compiled(), 2);
+        awaitParked(run);
+        compiled().invalidate(); // the frame is parked in the heap: deoptimizeInRange cannot see it
+
+        resumeAndJoinSuccessfully(run);
+        assertTrue("resumed JIT frame of invalidated code must be pending lazy deopt", pendingAfterResume.get());
+        assertEquals(expected(2), run.result.get());
+    }
+
+    @Test
+    public void validCodeIsNotDeoptimizedOnResume() throws Exception {
+        AtomicBoolean pendingAfterResume = new AtomicBoolean(true);
+        Hooks.afterResume = () -> pendingAfterResume.set(isPendingLazyDeopt(findRuntimeCompiledFrameSP()));
+        VirtualRun run = startOnVirtualThread(compiled(), 2);
+        awaitParked(run);
+        resumeAndJoinSuccessfully(run);
+        assertTrue("no invalidation happened, frame must not be deoptimized", !pendingAfterResume.get());
+        assertEquals(expected(2), run.result.get());
+    }
+
+    static final class MarkerException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
+    @Test
+    public void exceptionUnwindsThroughDeoptPendingResumedFrame() throws Exception {
+        Hooks.afterResume = () -> {
+            throw new MarkerException();
+        };
+        VirtualRun run = startOnVirtualThread(compiled(), 2);
+        awaitParked(run);
+        compiled().invalidate();
+        Throwable failure = resumeAndJoin(run);
+        assertTrue("expected MarkerException, got " + failure, failure instanceof MarkerException);
+    }
 }

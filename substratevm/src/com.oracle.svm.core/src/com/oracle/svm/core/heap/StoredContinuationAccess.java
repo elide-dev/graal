@@ -44,6 +44,7 @@ import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
+import com.oracle.svm.core.code.CodeInvalidationEpoch;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
 import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
@@ -152,8 +153,9 @@ public final class StoredContinuationAccess {
 
         int framesSize = UnsignedUtils.safeToInt(baseSp.subtract(sp));
         StoredContinuation instance = allocate(framesSize);
-        fillUninterruptibly(instance, ip, sp, framesSize);
+        long epoch = fillUninterruptibly(instance, ip, sp, framesSize);
         ContinuationInternals.setStoredContinuation(c, instance);
+        ContinuationInternals.setFrozenCodeInvalidationEpoch(c, epoch);
         ContinuationInternals.setCodeTethers(c, tethers);
         return ContinuationSupport.FREEZE_OK;
     }
@@ -186,11 +188,13 @@ public final class StoredContinuationAccess {
     }
 
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance and copying frames.")
-    private static void fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size) {
+    private static long fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size) {
         UnmanagedMemoryUtil.copyWordsForward(sp, getFramesStart(stored), Word.unsigned(size));
         setIP(stored, ip);
         setOriginalCarrierSP(stored, sp);
         afterFill(stored);
+        /* Read inside the uninterruptible copy: no invalidation can happen in between. */
+        return CodeInvalidationEpoch.get();
     }
 
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance.")
