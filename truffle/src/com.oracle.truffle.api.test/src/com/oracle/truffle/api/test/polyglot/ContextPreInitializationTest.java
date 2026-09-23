@@ -2152,6 +2152,26 @@ public class ContextPreInitializationTest {
     }
 
     @Test
+    public void testUsePreInitializedContextOptionDisabledKeepsPreInitializedEngine() throws Exception {
+        setPatchable(FIRST);
+        doContextPreinitialize(FIRST);
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        CountingContext firstLangCtx = findContext(FIRST, contexts);
+        assertNotNull(firstLangCtx);
+        try (Context ctx = Context.newBuilder().allowExperimentalOptions(true).option("engine.UsePreInitializedContext", "false").build()) {
+            assertEquals("test", ctx.eval(Source.create(FIRST, "test")).asString());
+            assertEquals(0, firstLangCtx.patchContextCount);
+        }
+        try (Context ctx = Context.create()) {
+            assertEquals("test", ctx.eval(Source.create(FIRST, "test")).asString());
+            assertEquals(1, firstLangCtx.createContextCount);
+            assertEquals(1, firstLangCtx.initializeContextCount);
+            assertEquals(1, firstLangCtx.patchContextCount);
+        }
+    }
+
+    @Test
     public void testThreadLocalActions() throws Exception {
         BaseLanguage.registerAction(ContextPreInitializationTestFirstLanguage.class, ActionKind.ON_EXECUTE, (env) -> {
             env.submitThreadLocal(new Thread[]{Thread.currentThread()}, new ThreadLocalAction(false, false) {

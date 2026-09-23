@@ -367,7 +367,12 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
             }
 
             impl = (PolyglotEngineImpl) EngineAccessor.RUNTIME.tryLoadCachedEngine(engineOptions, loggerProvider);
-            if (impl == null && !hostLanguageOnly && !EngineAccessor.RUNTIME.isStoreEnabled(engineOptions)) {
+            /*
+             * An engine that refuses the pre-initialized context must leave the pre-initialized
+             * engine, which owns that context, for one that can use it.
+             */
+            if (impl == null && !hostLanguageOnly && !EngineAccessor.RUNTIME.isStoreEnabled(engineOptions) &&
+                            engineOptions.get(PolyglotEngineOptions.UsePreInitializedContext)) {
                 impl = preInitializedEngineRef.getAndSet(null);
             }
 
