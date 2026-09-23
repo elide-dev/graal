@@ -26,7 +26,9 @@ package com.oracle.svm.core.heap;
 
 import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
+import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.c.struct.RawStructure;
@@ -44,6 +46,8 @@ import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
+import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
+import com.oracle.svm.core.deopt.DeoptimizationSupport;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.graal.nodes.NewStoredContinuationNode;
@@ -136,11 +140,49 @@ public final class StoredContinuationAccess {
     public static int allocateToYield(Target_jdk_internal_vm_Continuation c, Pointer baseSp, Pointer sp, CodePointer ip) {
         assert baseSp.isNonNull() && sp.isNonNull() && ip.isNonNull();
 
+        Object[] tethers = null;
+        if (DeoptimizationSupport.enabled()) {
+            int runtimeFrames = scanFramesForYield(baseSp, sp, ip, null);
+            if (runtimeFrames > 0) {
+                tethers = new Object[runtimeFrames];
+                int filled = scanFramesForYield(baseSp, sp, ip, tethers);
+                VMError.guarantee(filled == runtimeFrames, "frames changed between scans");
+            }
+        }
+
         int framesSize = UnsignedUtils.safeToInt(baseSp.subtract(sp));
         StoredContinuation instance = allocate(framesSize);
         fillUninterruptibly(instance, ip, sp, framesSize);
         ContinuationInternals.setStoredContinuation(c, instance);
+        ContinuationInternals.setCodeTethers(c, tethers);
         return ContinuationSupport.FREEZE_OK;
+    }
+
+    /**
+     * Walks the frames of the current thread in {@code [sp, baseSp)} that are about to be frozen.
+     * Returns the number of runtime-compiled frames. If {@code tethersOrNull} is non-null, stores
+     * the tether of each runtime-compiled frame's code into it, so that the yielded continuation
+     * keeps that code alive (frames in the heap are not seen by GCImpl.walkStack).
+     */
+    @Uninterruptible(reason = "Walks the current thread's stack and reads CodeInfo tethers.")
+    static int scanFramesForYield(Pointer baseSp, Pointer sp, CodePointer ip, Object[] tethersOrNull) {
+        IsolateThread thread = CurrentIsolate.getCurrentThread();
+        JavaStackWalk walk = StackValue.get(JavaStackWalker.sizeOfJavaStackWalk());
+        JavaStackWalker.initialize(walk, thread, sp, baseSp, ip, Word.nullPointer());
+        int count = 0;
+        while (JavaStackWalker.advance(walk, thread)) {
+            JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
+            UntetheredCodeInfo untethered = frame.getIPCodeInfo();
+            if (untethered.isNonNull() && !UntetheredCodeInfoAccess.isAOTImageCode(untethered)) {
+                if (tethersOrNull != null) {
+                    Object tether = CodeInfoAccess.acquireTether(untethered);
+                    tethersOrNull[count] = tether;
+                    CodeInfoAccess.releaseTether(untethered, tether);
+                }
+                count++;
+            }
+        }
+        return count;
     }
 
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance and copying frames.")

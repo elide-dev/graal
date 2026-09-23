@@ -27,6 +27,7 @@ package com.oracle.svm.test.continuations;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.ref.Reference;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,6 +49,7 @@ import org.junit.Test;
 import com.oracle.svm.core.c.InvokeJavaFunctionPointer;
 import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
+import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
@@ -57,6 +59,7 @@ import com.oracle.svm.graal.meta.SubstrateMethod;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.shared.NeverInline;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.ModuleSupport;
 import com.oracle.svm.test.NativeImageBuildArgs;
 
@@ -279,5 +282,42 @@ public class ContinuationsWithRuntimeCompilationTest {
 
         resumeAndJoinSuccessfully(run);
         assertEquals(expected(5), run.result.get());
+    }
+
+    @Test
+    public void invalidatedCodeSurvivesGCWhileParked() throws Exception {
+        VirtualRun run = startOnVirtualThread(compiled(), 7);
+        awaitParked(run);
+
+        compiled().invalidate(); // lazy deopt: code becomes STATE_NON_ENTRANT; the parked frame is in the heap, not patched
+        for (int i = 0; i < 3; i++) {
+            System.gc(); // walks the StoredContinuation; must still find the JIT frame's CodeInfo
+        }
+
+        resumeAndJoinSuccessfully(run);
+        assertEquals(expected(7), run.result.get());
+    }
+
+    @Test
+    public void codeTethersAreReleasedAfterResume() throws Exception {
+        AtomicLong jitIp = new AtomicLong();
+        Hooks.beforeYield = () -> jitIp.set(findRuntimeCompiledFrameIP().rawValue());
+        VirtualRun run = startOnVirtualThread(compiled(), 1);
+        awaitParked(run);
+        resumeAndJoinSuccessfully(run);
+        assertTrue(jitIp.get() != 0);
+
+        compiled().invalidate();
+        for (int i = 0; i < 5; i++) {
+            System.gc();
+        }
+        // The terminated virtual thread (and its Continuation) is still reachable through run.
+        assertTrue("invalidated code must be freed once no parked stack references it", !isInRuntimeCodeCache(WordFactory.pointer(jitIp.get())));
+        Reference.reachabilityFence(run);
+    }
+
+    @Uninterruptible(reason = "Test helper: looks up an IP in the code cache.")
+    static boolean isInRuntimeCodeCache(CodePointer ip) {
+        return CodeInfoTable.lookupCodeInfo(ip).isNonNull();
     }
 }

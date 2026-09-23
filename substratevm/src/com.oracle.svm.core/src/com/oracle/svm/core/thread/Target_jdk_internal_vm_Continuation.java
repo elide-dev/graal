@@ -77,6 +77,13 @@ public final class Target_jdk_internal_vm_Continuation {
     @Inject //
     int overflowCheckState;
 
+    /**
+     * While yielded: the {@link com.oracle.svm.core.code.CodeInfoTether}s of all runtime-compiled
+     * frames in {@link #stored}, so that the GC keeps that code alive. {@code null} otherwise.
+     */
+    @Inject //
+    Object[] codeTethers;
+
     @Substitute
     boolean isEmpty() {
         return stored == null;
@@ -163,7 +170,12 @@ public final class Target_jdk_internal_vm_Continuation {
         if (pinnedReason != 0) {
             return pinnedReason;
         }
-        return ContinuationInternals.doYield0(cont);
+        int result = ContinuationInternals.doYield0(cont);
+        if (result == ContinuationSupport.FREEZE_OK) {
+            /* Resumed: the frames are back on a thread stack, where GCImpl.walkStack keeps their code alive. */
+            cont.codeTethers = null;
+        }
+        return result;
     }
 
     @Alias
