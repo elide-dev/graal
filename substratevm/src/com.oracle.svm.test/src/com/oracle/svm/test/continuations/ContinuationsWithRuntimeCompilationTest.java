@@ -28,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.ref.Reference;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -399,5 +400,18 @@ public class ContinuationsWithRuntimeCompilationTest {
         System.gc(); // if the stack had been frozen, walking the DeoptimizedFrame in the heap would fail
         resumeAndJoinSuccessfully(run);
         assertEquals(expected(3), run.result.get());
+    }
+
+    @Test
+    public void stackTraceOfParkedVirtualThreadIncludesRuntimeCompiledFrame() throws Exception {
+        VirtualRun run = startOnVirtualThread(compiled(), 1);
+        awaitParked(run);
+        StackTraceElement[] trace = run.thread.getStackTrace();
+        resumeAndJoinSuccessfully(run);
+        boolean found = false;
+        for (StackTraceElement e : trace) {
+            found |= e.getClassName().endsWith("JitSubject") && e.getMethodName().equals("compute");
+        }
+        assertTrue(Arrays.toString(trace), found);
     }
 }
