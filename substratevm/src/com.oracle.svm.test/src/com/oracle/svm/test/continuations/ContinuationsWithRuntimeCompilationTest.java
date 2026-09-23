@@ -383,4 +383,21 @@ public class ContinuationsWithRuntimeCompilationTest {
         Throwable failure = resumeAndJoin(run);
         assertTrue("expected MarkerException, got " + failure, failure instanceof MarkerException);
     }
+
+    @Test
+    public void eagerlyDeoptimizedFrameOnStackPinsInsteadOfFreezing() throws Exception {
+        AtomicBoolean eagerAtYield = new AtomicBoolean();
+        Hooks.beforeYield = () -> {
+            Pointer jitSp = findRuntimeCompiledFrameSP();
+            Deoptimizer.deoptimizeFrameEagerly(jitSp, false, null);
+            eagerAtYield.set(Deoptimizer.checkEagerDeoptimized(CurrentIsolate.getCurrentThread(), jitSp) != null);
+        };
+        VirtualRun run = startOnVirtualThread(compiled(), 3);
+        awaitParked(run);
+        assertTrue("JIT frame must be eagerly deoptimized when the virtual thread parks", eagerAtYield.get());
+
+        System.gc(); // if the stack had been frozen, walking the DeoptimizedFrame in the heap would fail
+        resumeAndJoinSuccessfully(run);
+        assertEquals(expected(3), run.result.get());
+    }
 }
