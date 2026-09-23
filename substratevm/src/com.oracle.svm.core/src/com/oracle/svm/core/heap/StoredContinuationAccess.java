@@ -144,6 +144,10 @@ public final class StoredContinuationAccess {
         Object[] tethers = null;
         if (DeoptimizationSupport.enabled()) {
             int runtimeFrames = scanFramesForYield(baseSp, sp, ip, null);
+            if (runtimeFrames < 0) {
+                /* A DeoptimizedFrame holds absolute stack addresses and the carrier's IsolateThread. */
+                return ContinuationSupport.FREEZE_PINNED_NATIVE;
+            }
             if (runtimeFrames > 0) {
                 tethers = new Object[runtimeFrames];
                 int filled = scanFramesForYield(baseSp, sp, ip, tethers);
@@ -162,7 +166,8 @@ public final class StoredContinuationAccess {
 
     /**
      * Walks the frames of the current thread in {@code [sp, baseSp)} that are about to be frozen.
-     * Returns the number of runtime-compiled frames. If {@code tethersOrNull} is non-null, stores
+     * Returns the number of runtime-compiled frames, or -1 if an eagerly deoptimized frame is
+     * present (such a stack must not be frozen). If {@code tethersOrNull} is non-null, stores
      * the tether of each runtime-compiled frame's code into it, so that the yielded continuation
      * keeps that code alive (frames in the heap are not seen by GCImpl.walkStack).
      */
@@ -174,6 +179,9 @@ public final class StoredContinuationAccess {
         int count = 0;
         while (JavaStackWalker.advance(walk, thread)) {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
+            if (Deoptimizer.checkEagerDeoptimized(frame) != null) {
+                return -1;
+            }
             UntetheredCodeInfo untethered = frame.getIPCodeInfo();
             if (untethered.isNonNull() && !UntetheredCodeInfoAccess.isAOTImageCode(untethered)) {
                 if (tethersOrNull != null) {
