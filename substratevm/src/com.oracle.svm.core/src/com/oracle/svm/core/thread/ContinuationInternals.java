@@ -59,6 +59,10 @@ public final class ContinuationInternals {
         cont.codeTethers = tethers;
     }
 
+    public static void setFrozenCodeInvalidationEpoch(Target_jdk_internal_vm_Continuation cont, long epoch) {
+        cont.frozenCodeInvalidationEpoch = epoch;
+    }
+
     @NeverInline("Needs a frame to return to when yielding.")
     static void enterSpecial0(Target_jdk_internal_vm_Continuation c, boolean isContinue) {
         // Note that Java-to-Java calls use only caller-saved registers, so we don't need to save

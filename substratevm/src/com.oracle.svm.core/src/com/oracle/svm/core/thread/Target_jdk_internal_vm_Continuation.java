@@ -34,6 +34,9 @@ import com.oracle.svm.core.annotate.Delete;
 import com.oracle.svm.core.annotate.Inject;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.code.CodeInvalidationEpoch;
+import com.oracle.svm.core.deopt.DeoptimizationSupport;
+import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.heap.StoredContinuation;
 import com.oracle.svm.core.snippets.ImplicitExceptions;
 import com.oracle.svm.core.stack.JavaFrameAnchor;
@@ -83,6 +86,13 @@ public final class Target_jdk_internal_vm_Continuation {
      */
     @Inject //
     Object[] codeTethers;
+
+    /**
+     * While yielded: {@link com.oracle.svm.core.code.CodeInvalidationEpoch} at the time the frames
+     * were copied.
+     */
+    @Inject //
+    long frozenCodeInvalidationEpoch;
 
     @Substitute
     boolean isEmpty() {
@@ -174,6 +184,13 @@ public final class Target_jdk_internal_vm_Continuation {
         if (result == ContinuationSupport.FREEZE_OK) {
             /* Resumed: the frames are back on a thread stack, where GCImpl.walkStack keeps their code alive. */
             cont.codeTethers = null;
+            if (DeoptimizationSupport.enabled() && cont.frozenCodeInvalidationEpoch != CodeInvalidationEpoch.get()) {
+                /*
+                 * Code was invalidated while our frames were in the heap, where deoptimizeInRange
+                 * cannot see them. This runs before control returns into any frame above doYield.
+                 */
+                Deoptimizer.deoptimizeInvalidatedFramesOfCurrentThread();
+            }
         }
         return result;
     }

@@ -282,6 +282,7 @@ public class RuntimeCodeCache {
     }
 
     private void prepareInvalidation(CodeInfo info) {
+        CodeInvalidationEpoch.increment();
         invalidateMethodCount.inc();
         assert verifyTable();
 
