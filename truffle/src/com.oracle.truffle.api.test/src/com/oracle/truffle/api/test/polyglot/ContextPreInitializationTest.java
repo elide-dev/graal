@@ -721,6 +721,22 @@ public class ContextPreInitializationTest {
     }
 
     @Test
+    public void testPreinitializeSourcesLanguageNotPreinitialized() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", FIRST + ":/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains(FIRST + ":/x"));
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("PreinitializeContexts"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+        }
+    }
+
+    @Test
     public void testDependentLanguagePreInitializationSuccessfulPatch() throws Exception {
         setPatchable(SECOND, FIRST, INTERNAL);
         ContextPreInitializationTestSecondLanguage.callDependentLanguageInCreate = true;
