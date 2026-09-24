@@ -2360,7 +2360,11 @@ final class EngineAccessor extends Accessor {
                 }
             }
             for (CallTarget target : engine.preinitializedCallTargets) {
-                roots.add(((RootCallTarget) target).getRootNode());
+                RootNode root = ((RootCallTarget) target).getRootNode();
+                PolyglotSharingLayer layer = (PolyglotSharingLayer) NODES.getSharingLayer(root);
+                if (layer != null && layer.isClaimed() && layer.getContextPolicy() == TruffleLanguage.ContextPolicy.SHARED) {
+                    roots.add(root);
+                }
             }
             return new ArrayList<>(roots);
         }

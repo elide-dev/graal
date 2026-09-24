@@ -43,13 +43,17 @@ public class BuildTimeSelectionTest {
         for (String p : List.of("PreinitializeCodeSharing", "PreinitializeSources", "AOTCompile", "AOTCompileFilter", "PreinitializeContexts")) {
             System.clearProperty("polyglot.image-build-time." + p);
         }
+        resetPreInitializedEngine();
+    }
+
+    private static void resetPreInitializedEngine() throws Exception {
         var resetMethod = Class.forName("org.graalvm.polyglot.Engine$ImplHolder").getDeclaredMethod("resetPreInitializedEngine");
         resetMethod.setAccessible(true);
         resetMethod.invoke(null);
     }
 
-    private static BuildTimeCompilationSupport.Selection preinit(String sources, String filter) throws Exception {
-        System.setProperty("polyglot.image-build-time.PreinitializeContexts", AOTTestLanguage.ID);
+    private static BuildTimeCompilationSupport.Selection preinit(String languageId, String sources, String filter) throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeContexts", languageId);
         System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
         System.setProperty("polyglot.image-build-time.PreinitializeSources", sources);
         System.setProperty("polyglot.image-build-time.AOTCompile", "true");
@@ -60,15 +64,23 @@ public class BuildTimeSelectionTest {
         return BuildTimeCompilationSupport.selectPreinitialized();
     }
 
-    private static String files(String... codes) throws Exception {
+    private static BuildTimeCompilationSupport.Selection preinit(String sources, String filter) throws Exception {
+        return preinit(AOTTestLanguage.ID, sources, filter);
+    }
+
+    private static String filesFor(String languageId, String... codes) throws Exception {
         StringBuilder sb = new StringBuilder();
         for (String code : codes) {
             Path f = Files.createTempFile("aot", ".txt");
             Files.writeString(f, code);
             f.toFile().deleteOnExit();
-            sb.append(sb.isEmpty() ? "" : ",").append(AOTTestLanguage.ID).append(':').append(f);
+            sb.append(sb.isEmpty() ? "" : ",").append(languageId).append(':').append(f);
         }
         return sb.toString();
+    }
+
+    private static String files(String... codes) throws Exception {
+        return filesFor(AOTTestLanguage.ID, codes);
     }
 
     @Test
@@ -84,5 +96,35 @@ public class BuildTimeSelectionTest {
         var selection = preinit(files("add:1", "add:2"), "add2");
         assertEquals(List.of("add2"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
         assertTrue(selection.rejected().contains(new BuildTimeCompilationSupport.Rejection("add1", "filtered")));
+    }
+
+    /**
+     * (a) A non-SHARED (EXCLUSIVE) language's roots must never be selected, even though its
+     * "add:N" source parses to a root that is perfectly willing to be AOT-prepared: the
+     * enumeration itself must exclude it, not merely fail to compile it.
+     */
+    @Test
+    public void exclusiveLanguageSelectsNothing() throws Exception {
+        var selection = preinit(AOTExclusiveTestLanguage.ID, filesFor(AOTExclusiveTestLanguage.ID, "add:1"), "");
+        assertEquals(List.of(), selection.selected());
+        assertEquals(List.of(), selection.rejected());
+    }
+
+    /**
+     * (b) Pins the SHARED-layer-only enumeration by contrasting the same "add:1" source between
+     * the SHARED test language (selected) and its EXCLUSIVE counterpart (not even enumerated).
+     * The compiler test module cannot reach {@code PolyglotSharingLayer} directly, so this
+     * indirect comparison is the enumeration pin: only the SHARED variant's root is ever visible
+     * to {@code selectPreinitialized()}.
+     */
+    @Test
+    public void onlySharedLayerRootsAreEnumerated() throws Exception {
+        var sharedSelection = preinit(AOTTestLanguage.ID, filesFor(AOTTestLanguage.ID, "add:1"), "");
+        assertEquals(List.of("add1"), sharedSelection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
+
+        resetPreInitializedEngine();
+        var exclusiveSelection = preinit(AOTExclusiveTestLanguage.ID, filesFor(AOTExclusiveTestLanguage.ID, "add:1"), "");
+        assertEquals(List.of(), exclusiveSelection.selected());
+        assertEquals(List.of(), exclusiveSelection.rejected());
     }
 }

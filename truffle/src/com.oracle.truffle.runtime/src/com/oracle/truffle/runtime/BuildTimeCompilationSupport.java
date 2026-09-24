@@ -111,16 +111,20 @@ public final class BuildTimeCompilationSupport {
     }
 
     private static Pattern globToPattern(String glob) {
-        if (glob.isEmpty()) {
+        if (glob.isBlank()) {
             return null;
         }
         StringBuilder regex = new StringBuilder();
-        for (char c : glob.toCharArray()) {
-            switch (c) {
-                case '*' -> regex.append(".*");
-                case '?' -> regex.append('.');
-                case ',' -> regex.append('|');
-                default -> regex.append(Pattern.quote(String.valueOf(c)));
+        for (String part : glob.split(",")) {
+            if (!regex.isEmpty()) {
+                regex.append('|');
+            }
+            for (char c : part.strip().toCharArray()) {
+                switch (c) {
+                    case '*' -> regex.append(".*");
+                    case '?' -> regex.append('.');
+                    default -> regex.append(Pattern.quote(String.valueOf(c)));
+                }
             }
         }
         return Pattern.compile(regex.toString());
