@@ -26,20 +26,36 @@ package com.oracle.svm.test.deopt;
 
 import org.junit.Assert;
 import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Test;
+
+import com.oracle.svm.test.NativeImageBuildArgs;
 
 import jdk.graal.compiler.api.directives.GraalDirectives;
 
 /**
  * Checks that a builder-compiled method registered as a deoptimization source can deoptimize in a
  * frame inlined into it, and that execution resumes in the deoptimization target of the inlined
- * method. Requires {@link DeoptSourceTestFeature}, which is passed on the command line because it
- * pulls runtime compilation (and with it deoptimization support) into the image:
- *
- * <pre>
- * mx native-unittest com.oracle.svm.test.deopt.DeoptSourceTest --build-args --features=com.oracle.svm.test.deopt.DeoptSourceTestFeature
- * </pre>
+ * method. Requires {@link DeoptSourceTestFeature}, which pulls runtime compilation (and with it
+ * deoptimization support) into the image. {@code mx native-unittest} therefore builds a dedicated
+ * image for this test (see {@link NativeImageBuildArgs}); it runs when the test is selected
+ * explicitly and in the {@code all_native_unittests} gate. On the JVM, the test is skipped.
  */
+@NativeImageBuildArgs({
+                "--features=com.oracle.svm.test.deopt.DeoptSourceTestFeature",
+                "--add-exports=org.graalvm.nativeimage.base/com.oracle.svm.common.meta=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.feature=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.graal.nodes=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.graal.hosted.runtimecompilation=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted.code=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+                "--add-exports=jdk.graal.compiler/jdk.graal.compiler.nodes=ALL-UNNAMED",
+                "--add-exports=jdk.graal.compiler/jdk.graal.compiler.nodes.graphbuilderconf=ALL-UNNAMED",
+                "--add-exports=jdk.graal.compiler/jdk.graal.compiler.phases.util=ALL-UNNAMED",
+                "--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta=ALL-UNNAMED",
+})
 public class DeoptSourceTest {
     static int deoptCount;
     static int helperEntries;
@@ -77,15 +93,56 @@ public class DeoptSourceTest {
         return a + GraalDirectives.opaque(1);
     }
 
-    @Test
-    public void deoptimizesInlinedFrameOfSource() {
+    /** Not inlined: the deopt source has no inlined frame for it. */
+    static void thrower(int x) {
+        if (x > 0) {
+            throw new IllegalStateException();
+        }
+    }
+
+    static int helperCatching(int x) {
+        int unusedInHandler = x + 7;
+        int usedOnlyInHandler = x * 3;
+        try {
+            thrower(unusedInHandler);
+        } catch (IllegalStateException e) {
+            /*
+             * No state split precedes the deopt point in the handler, so the deopt resumes with the
+             * exception-dispatch state of the invoke of thrower: it rethrows the exception in the
+             * deopt target of helperCatching, whose handler then runs.
+             */
+            deoptHere(); // deopt source: deoptimizes; deopt target: counts
+            resumedInDeoptTarget = isDeoptTarget();
+            return usedOnlyInHandler + 1;
+        }
+        return 0;
+    }
+
+    static int computeCatching(int x) {
+        int a = helperCatching(x); // inlined into the deopt source by the feature
+        return a + GraalDirectives.opaque(1);
+    }
+
+    @Before
+    public void reset() {
         Assume.assumeTrue("DeoptSourceTestFeature is not part of the image", isFeatureActive());
         deoptCount = 0;
         helperEntries = 0;
         resumedInDeoptTarget = false;
+    }
+
+    @Test
+    public void deoptimizesInlinedFrameOfSource() {
         Assert.assertEquals(2 * 20 + 1 + 1, compute(20));
         Assert.assertEquals("execution must have resumed in the deopt target of helper", 1, deoptCount);
         Assert.assertTrue("the rest of helper must have run in its deopt target", resumedInDeoptTarget);
         Assert.assertEquals("the deopt must resume inside helper, not re-execute it", 1, helperEntries);
+    }
+
+    @Test
+    public void deoptimizesInExceptionHandlerOfInlinedFrame() {
+        Assert.assertEquals(20 * 3 + 1 + 1, computeCatching(20));
+        Assert.assertEquals("execution must have resumed in the deopt target of helperCatching", 1, deoptCount);
+        Assert.assertTrue("the handler must have run in the deopt target", resumedInDeoptTarget);
     }
 }
