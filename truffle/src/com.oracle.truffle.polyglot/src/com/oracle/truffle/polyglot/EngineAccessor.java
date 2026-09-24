@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -2337,6 +2338,31 @@ final class EngineAccessor extends Accessor {
             for (CallTarget target : EngineAccessor.INSTRUMENT.getLoadedCallTargets(layer.engine.instrumentationHandler)) {
                 rootNodeUpdater.accept(((RootCallTarget) target).getRootNode());
             }
+        }
+
+        @Override
+        public List<RootNode> getPreinitializedSharedRoots() {
+            PolyglotEngineImpl engine = PolyglotImpl.getPreInitializedEngine();
+            if (engine == null) {
+                return List.of();
+            }
+            LinkedHashSet<RootNode> roots = new LinkedHashSet<>();
+            synchronized (engine.lock) {
+                for (PolyglotSharingLayer layer : engine.sharedLayers) {
+                    if (!layer.isClaimed() || layer.getContextPolicy() != TruffleLanguage.ContextPolicy.SHARED) {
+                        continue;
+                    }
+                    forEachLoadedRootNode(layer, root -> {
+                        if (layer.equals(NODES.getSharingLayer(root))) {
+                            roots.add(root);
+                        }
+                    });
+                }
+            }
+            for (CallTarget target : engine.preinitializedCallTargets) {
+                roots.add(((RootCallTarget) target).getRootNode());
+            }
+            return new ArrayList<>(roots);
         }
 
         @Override
