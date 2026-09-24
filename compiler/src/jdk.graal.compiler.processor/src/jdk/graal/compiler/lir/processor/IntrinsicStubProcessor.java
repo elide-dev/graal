@@ -348,7 +348,7 @@ public class IntrinsicStubProcessor extends AbstractProcessor {
                         imports.addAll(List.of(
                                         "com.oracle.svm.core.SubstrateTarget",
                                         "com.oracle.svm.shared.Uninterruptible",
-                                        "com.oracle.svm.core.snippets.SubstrateForeignCallTarget",
+                                        "com.oracle.svm.guest.staging.snippets.SubstrateForeignCallTarget",
                                         "com.oracle.svm.graal.RuntimeCPUFeatureRegion",
                                         "jdk.graal.compiler.api.replacements.Fold",
                                         "jdk.graal.compiler.debug.GraalError",
