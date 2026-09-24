@@ -348,11 +348,17 @@ public class AnalysisGraphBuilderPhase extends SharedGraphBuilderPhase {
             /*
              * It is beneficial to eagerly clear all non-live locals on the exception object before
              * entering the dispatch target. This helps us prune unneeded values from the graph,
-             * which can positively impact our analysis. Since deoptimization is not possible, then
-             * there is no risk in clearing the unneeded locals.
+             * which can positively impact our analysis. Unless the method is registered as
+             * deoptimizable, deoptimization is not possible, so there is no risk in clearing the
+             * unneeded locals.
+             *
+             * When this method is inlined during parsing, the graph's root method is checked too:
+             * the frames inlined into a deoptimizable method can deoptimize as well.
              */
             AnalysisMethod aMethod = (AnalysisMethod) method;
-            if (aMethod.isOriginalMethod() && !SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(aMethod)) {
+            SubstrateCompilationDirectives directives = SubstrateCompilationDirectives.singleton();
+            boolean rootDeoptimizable = graph.method() instanceof AnalysisMethod root && root != aMethod && directives.isRegisteredAsDeoptimizable(root);
+            if (aMethod.isOriginalMethod() && !directives.isRegisteredAsDeoptimizable(aMethod) && !rootDeoptimizable) {
                 BciBlockMapping.BciBlock dispatchBlock = getDispatchBlock(bci);
                 clearNonLiveLocals(dispatchState, dispatchBlock, true);
             }

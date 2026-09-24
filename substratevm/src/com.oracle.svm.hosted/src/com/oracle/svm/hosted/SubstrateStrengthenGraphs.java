@@ -136,7 +136,7 @@ public class SubstrateStrengthenGraphs extends StrengthenGraphs {
         boolean insertMessage = SubstrateUtil.assertionsEnabled() &&
                         !UninterruptibleAnnotationUtils.isUninterruptible(graph.method()) &&
                         !SubstrateCompilationDirectives.isRuntimeCompiledMethod(graph.method()) &&
-                        !SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(graph.method());
+                        !SubstrateCompilationDirectives.singleton().isRegisteredAsDeoptimizable(graph.method());
         if (insertMessage) {
             ConstantNode messageNode = ConstantNode.forConstant(providers.getConstantReflection().forString(message.get()), providers.getMetaAccess(), graph);
             ForeignCallNode foreignCallNode = graph.add(new ForeignCallNode(SnippetRuntime.UNSUPPORTED_FEATURE, messageNode));

@@ -437,6 +437,12 @@ public class DeoptimizationUtils {
      * frames, as a deoptimization entry of the {@link SubstrateCompilationDirectives#DEOPT_TARGET_METHOD}
      * variant of the frame's method. The entries are kept across
      * {@link SubstrateCompilationDirectives#resetDeoptEntries()}.
+     * <p>
+     * This does not link the {@code D} variants: it only upgrades the flows graphs of those that
+     * are already linked. They must be reachable independently, see the precondition of
+     * {@link SubstrateCompilationDirectives#registerDeoptSource}, which is checked after analysis.
+     * The check cannot be done here: while the analysis runs, a {@code D} variant may still be
+     * linked later (e.g., when the invoke or root that reaches it is processed).
      */
     public static void registerDeoptEntriesForDeoptSource(PointsToAnalysis bb, StructuredGraph graph, PointsToAnalysisMethod aMethod) {
         assert aMethod.isOriginalMethod();
@@ -444,7 +450,7 @@ public class DeoptimizationUtils {
         Iterable<ResolvedJavaMethod> recomputeMethods = DeoptimizationUtils.registerDeoptEntries(graph, true,
                         deoptEntryMethod -> {
                             AnalysisMethod target = ((PointsToAnalysisMethod) deoptEntryMethod).getOrCreateMethodVariant(DEOPT_TARGET_METHOD);
-                            SubstrateCompilationDirectives.singleton().recordDeoptSourceTarget(target);
+                            SubstrateCompilationDirectives.singleton().recordDeoptSourceTarget(target, aMethod);
                             return target;
                         });
 

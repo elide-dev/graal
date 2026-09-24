@@ -192,8 +192,11 @@ public class SubstrateCompilationDirectives {
      * are kept by {@link #resetDeoptEntries()}.
      */
     private final Set<AnalysisMethod> deoptSourceMethods = ConcurrentHashMap.newKeySet();
-    /** Deopt-target methods that received entries on behalf of a deopt source. */
-    private final Set<AnalysisMethod> deoptSourceTargets = ConcurrentHashMap.newKeySet();
+    /**
+     * Deopt-target methods that received entries on behalf of a deopt source, mapped to one of the
+     * deopt sources they received entries for (used for error reporting).
+     */
+    private final Map<AnalysisMethod, AnalysisMethod> deoptSourceTargets = new ConcurrentHashMap<>();
     private final Set<AnalysisMethod> deoptInliningExcludes = ConcurrentHashMap.newKeySet();
 
     public static SubstrateCompilationDirectives singleton() {
@@ -269,7 +272,19 @@ public class SubstrateCompilationDirectives {
      * Registers a builder-compiled method as a deoptimization source: every frame state in its
      * graph, including the states of inlined frames, becomes a deoptimization entry of the
      * {@link #DEOPT_TARGET_METHOD} variant of the frame's method. Must be called before analysis
-     * finishes.
+     * finishes, and requires runtime compilation support (the entries are registered when the
+     * analysis validates the source's graph).
+     * <p>
+     * Precondition: registering entries does not make a {@code D} variant reachable. The
+     * {@code D} variant of every frame in the source's graph must be reachable independently:
+     * <ul>
+     * <li>for inlined frames, e.g., because they come from {@link #RUNTIME_COMPILED_METHOD} graphs,
+     * whose {@code D} variants are linked by the runtime compilation analysis;</li>
+     * <li>for the source's own frame, the caller must root the source's {@code D} variant (a
+     * source that is only called from other image code gets a linked {@code D} stub from its
+     * callers).</li>
+     * </ul>
+     * The precondition is checked after analysis by {@link #resetDeoptEntries()}.
      */
     public void registerDeoptSource(AnalysisMethod method) {
         assert deoptInfoModifiable();
@@ -280,10 +295,19 @@ public class SubstrateCompilationDirectives {
         return deoptSourceMethods.contains(toAnalysisMethod(method));
     }
 
-    void recordDeoptSourceTarget(ResolvedJavaMethod deoptTarget) {
+    void recordDeoptSourceTarget(ResolvedJavaMethod deoptTarget, AnalysisMethod deoptSource) {
         assert deoptInfoModifiable();
         assert isDeoptTarget(deoptTarget) : deoptTarget;
-        deoptSourceTargets.add(toAnalysisMethod(deoptTarget));
+        deoptSourceTargets.putIfAbsent(toAnalysisMethod(deoptTarget), deoptSource);
+    }
+
+    /**
+     * Returns whether image code of the method can deoptimize, i.e., whether the method is
+     * registered for deoptimization testing or as a deoptimization source. Optimizations that rely
+     * on image code never deoptimizing must be disabled for such methods.
+     */
+    public boolean isRegisteredAsDeoptimizable(ResolvedJavaMethod method) {
+        return isRegisteredForDeoptTesting(method) || isRegisteredDeoptSource(method);
     }
 
     public boolean isRegisteredDeoptTarget(ResolvedJavaMethod method) {
@@ -339,12 +363,26 @@ public class SubstrateCompilationDirectives {
     }
 
     /**
+     * Checks the precondition of {@link #registerDeoptSource}: every deopt target that received
+     * entries on behalf of a deopt source must have been reached and parsed by the analysis.
+     * Otherwise, it would only fail later, when the compile queue finds no graph for it.
+     */
+    private void verifyDeoptSourceTargetsReachable() {
+        deoptSourceTargets.forEach((target, source) -> VMError.guarantee(target.isImplementationInvoked() && target.getAnalyzedGraph() != null,
+                        "The deoptimization target %s of a frame of %s in deoptimization source %s was not reached by the analysis. " +
+                                        "The deoptimization targets of all frames of a deoptimization source must be reachable independently of the source, see %s.registerDeoptSource.",
+                        target.format("%H.%n(%p)"), target.getMethodVariant(MethodVariant.ORIGINAL_METHOD).format("%H.%n(%p)"), source.format("%H.%n(%p)"),
+                        SubstrateCompilationDirectives.class.getSimpleName()));
+    }
+
+    /**
      * We record the deoptimization information twice: once during analysis and then again during
      * compilation. The information recorded during compilation will be strictly a subset of the
      * information recorded during analysis.
      */
     public void resetDeoptEntries() {
         assert !deoptInfoSealed;
+        verifyDeoptSourceTargetsReachable();
         // all methods which are registered for deopt testing cannot be cleared
         Map<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> newDeoptEntries = new ConcurrentHashMap<>();
         for (var deoptForTestingMethod : deoptForTestingMethods) {
@@ -354,7 +392,7 @@ public class SubstrateCompilationDirectives {
             newDeoptEntries.put(key, value);
         }
         // all deopt targets which received entries on behalf of a deopt source cannot be cleared
-        for (AnalysisMethod target : deoptSourceTargets) {
+        for (AnalysisMethod target : deoptSourceTargets.keySet()) {
             Map<Long, DeoptSourceFrameInfo> entries = deoptEntries.get(target);
             if (entries != null) {
                 newDeoptEntries.put(target, entries);

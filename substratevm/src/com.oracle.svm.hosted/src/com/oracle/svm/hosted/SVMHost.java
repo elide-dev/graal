@@ -1688,7 +1688,7 @@ public class SVMHost extends HostVM {
          * More work is needed to support it within deoptimization targets and runtime-compiled
          * methods.
          */
-        return method.isOriginalMethod() && !SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(method);
+        return method.isOriginalMethod() && !SubstrateCompilationDirectives.singleton().isRegisteredAsDeoptimizable(method);
     }
 
     public SimulateClassInitializerSupport createSimulateClassInitializerSupport(AnalysisMetaAccess aMetaAccess) {
