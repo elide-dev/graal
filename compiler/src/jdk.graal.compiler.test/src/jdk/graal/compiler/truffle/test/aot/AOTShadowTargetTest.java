@@ -46,8 +46,13 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
      * Creates a fresh context (left entered until the test ends) and parses {@code code} in it.
      */
     private OptimizedCallTarget parse(String code) {
-        Context context = setupContext(newContextBuilder().option("engine.BackgroundCompilation", "false").option("engine.MultiTier", "true") //
-                        .option("engine.FirstTierCompilationThreshold", "10").option("engine.AOTTierThreshold", "5"));
+        return parse(code, true);
+    }
+
+    private OptimizedCallTarget parse(String code, boolean multiTier) {
+        Context context = setupContext(newContextBuilder().option("engine.BackgroundCompilation", "false").option("engine.MultiTier", String.valueOf(multiTier)) //
+                        .option("engine.FirstTierCompilationThreshold", "10").option("engine.SingleTierCompilationThreshold", "10") //
+                        .option("engine.AOTTierThreshold", "5"));
         context.initialize(AOTTestLanguage.ID);
         return (OptimizedCallTarget) AOTTestLanguage.parseTarget(AOTTestLanguage.get(), code);
     }
@@ -83,5 +88,31 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertNotNull("threshold must unlink the live target's AOT code", unlinked.get());
         assertNull(live.getAOTCode());
         assertFalse("a shadow must never be compiled in the last tier", shadow.isValidLastTier());
+    }
+
+    @Test
+    public void interpretedShadowIsNeverCompiledByHotnessMultiTier() {
+        assertInterpretedShadowIsNeverCompiledByHotness(true);
+    }
+
+    @Test
+    public void interpretedShadowIsNeverCompiledByHotnessSingleTier() {
+        assertInterpretedShadowIsNeverCompiledByHotness(false);
+    }
+
+    /**
+     * Calls a shadow in the interpreter well past the interpreter compilation threshold, which with
+     * synchronous compilation would otherwise compile it (in the last tier without multi-tier).
+     */
+    private void assertInterpretedShadowIsNeverCompiledByHotness(boolean multiTier) {
+        OptimizedCallTarget live = parse("add:1", multiTier);
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        for (int i = 0; i < 100; i++) {
+            assertEquals(i + 1, shadow.call(i));
+        }
+        assertTrue("the shadow was called past the threshold", shadow.getCallCount() >= 100);
+        assertFalse("hotness must never submit a shadow for compilation", shadow.isSubmittedForCompilation());
+        assertFalse("hotness must never compile a shadow", shadow.isValid());
+        assertFalse(shadow.shouldCompile());
     }
 }

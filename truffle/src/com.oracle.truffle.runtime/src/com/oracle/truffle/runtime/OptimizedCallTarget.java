@@ -719,6 +719,10 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
                          * Compilation of OSR loop nodes is managed separately.
                          */
                         && !isOSR() //
+                        /*
+                         * AOT shadows are compiled only at image build time, never by hotness.
+                         */
+                        && !aotShadow //
                         && intCallCount >= engine.callThresholdInInterpreter //
                         && intLoopCallCount >= scaledThreshold(engine.callAndLoopThresholdInInterpreter); //
     }
