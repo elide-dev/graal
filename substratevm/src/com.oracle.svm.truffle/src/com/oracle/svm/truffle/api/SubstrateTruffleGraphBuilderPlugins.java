@@ -36,7 +36,7 @@ import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class SubstrateTruffleGraphBuilderPlugins {
-    static void registerInvocationPlugins(InvocationPlugins plugins, boolean canDelayIntrinsification, SubstrateKnownTruffleTypes types) {
+    public static void registerInvocationPlugins(InvocationPlugins plugins, boolean canDelayIntrinsification, SubstrateKnownTruffleTypes types) {
         registerCompilationFinalReferencePlugins(plugins, canDelayIntrinsification, types);
     }
 
