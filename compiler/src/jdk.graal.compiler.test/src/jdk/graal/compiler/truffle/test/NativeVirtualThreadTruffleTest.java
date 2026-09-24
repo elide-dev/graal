@@ -158,10 +158,19 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
             OptimizedCallTarget target = (OptimizedCallTarget) factory.apply(VTLang.LANGUAGE.get(null)).getCallTarget();
             target.call(warmupArgs);
             target.compile(true);
-            assertTrue("must be compiled", target.isValidLastTier());
+            awaitCompiled(target, true);
             return target;
         } finally {
             ctx.leave();
+        }
+    }
+
+    /** Waits for a (possibly background) compilation to be installed. */
+    static void awaitCompiled(OptimizedCallTarget target, boolean lastTier) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+        while (lastTier ? !target.isValidLastTier() : !target.isValid()) {
+            assertTrue("must be compiled", System.nanoTime() < deadline);
+            Thread.onSpinWait();
         }
     }
 
@@ -266,6 +275,167 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
             // Thrown directly out of CallTarget.call (no polyglot boundary), so this is Truffle's interrupt exception.
             assertTrue(String.valueOf(t), String.valueOf(t.getMessage()).contains("interrupted"));
         }
+        ctx.close();
+    }
+    /** Returns 1 while the assumption holds at the point of return, else 2. Parks in between. */
+    static final class ParkThenCheckRoot extends RootNode {
+        final com.oracle.truffle.api.Assumption assumption;
+
+        ParkThenCheckRoot(VTLang lang, com.oracle.truffle.api.Assumption assumption) {
+            super(lang);
+            this.assumption = assumption;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            parkOnce((Semaphore) frame.getArguments()[0], (CountDownLatch) frame.getArguments()[1]);
+            return assumption.isValid() ? 1 : 2;
+        }
+    }
+
+    @Test
+    public void assumptionInvalidatedWhileParkedDeoptimizesOnResume() throws Exception {
+        Context ctx = newContext();
+        com.oracle.truffle.api.Assumption assumption = com.oracle.truffle.api.Truffle.getRuntime().createAssumption("vt");
+        OptimizedCallTarget target = compiled(ctx, l -> new ParkThenCheckRoot(l, assumption), new Semaphore(Integer.MAX_VALUE), new CountDownLatch(0));
+        int n = 4 * Runtime.getRuntime().availableProcessors();
+        Semaphore gate = new Semaphore(0);
+        CountDownLatch parked = new CountDownLatch(n);
+        int[] results = new int[n];
+        Thread starter = Thread.ofPlatform().start(() -> {
+            try {
+                List<Throwable> f = runVirtualThreads(n, i -> {
+                    ctx.enter();
+                    try {
+                        results[i] = (Integer) target.call(gate, parked);
+                    } finally {
+                        ctx.leave();
+                    }
+                });
+                assertTrue(f.toString(), f.isEmpty());
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        });
+        parked.await();
+        assertTrue("still compiled while parked", target.isValid());
+        assumption.invalidate(); // compiled code folded isValid() == true; parked frames must deopt on resume
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+        }
+        gate.release(n);
+        starter.join();
+        for (int i = 0; i < n; i++) {
+            assertEquals("thread " + i, 2, results[i]);
+        }
+        ctx.close();
+    }
+
+    @Test
+    public void tierUpWhileParkedKeepsOldCodeRunnable() throws Exception {
+        Context ctx = newContext();
+        com.oracle.truffle.api.Assumption assumption = com.oracle.truffle.api.Truffle.getRuntime().createAssumption("never-invalidated");
+        ctx.enter();
+        OptimizedCallTarget target;
+        try {
+            target = (OptimizedCallTarget) new ParkThenCheckRoot(VTLang.LANGUAGE.get(null), assumption).getCallTarget();
+            target.call(new Semaphore(Integer.MAX_VALUE), new CountDownLatch(0));
+            target.compile(false); // tier 1
+            awaitCompiled(target, false);
+            assertTrue(target.isValid() && !target.isValidLastTier());
+        } finally {
+            ctx.leave();
+        }
+        Semaphore gate = new Semaphore(0);
+        CountDownLatch parked = new CountDownLatch(1);
+        int[] result = new int[1];
+        OptimizedCallTarget t = target;
+        Thread vt = Thread.ofVirtual().start(() -> {
+            ctx.enter();
+            try {
+                result[0] = (Integer) t.call(gate, parked);
+            } finally {
+                ctx.leave();
+            }
+        });
+        parked.await();
+        ctx.enter();
+        try {
+            target.compile(true); // installs last tier; tier-1 code becomes non-entrant but stays alive
+            awaitCompiled(target, true);
+        } finally {
+            ctx.leave();
+        }
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+        }
+        gate.release();
+        vt.join();
+        assertEquals(1, result[0]);
+        assertTrue(target.isValidLastTier());
+        ctx.close();
+    }
+
+    /** Yields (unmounting, usually migrating) inside compiled code, then reads an assumption. */
+    static final class YieldThenCheckRoot extends RootNode {
+        final com.oracle.truffle.api.Assumption assumption;
+
+        YieldThenCheckRoot(VTLang lang, com.oracle.truffle.api.Assumption assumption) {
+            super(lang);
+            this.assumption = assumption;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            yieldNow();
+            return assumption.isValid() ? 1 : 2;
+        }
+    }
+
+    @Test
+    public void invalidationStressWithManyVirtualThreads() throws Exception {
+        Context ctx = newContext();
+        com.oracle.truffle.api.Assumption assumption = com.oracle.truffle.api.Truffle.getRuntime().createAssumption("stress");
+        OptimizedCallTarget target = compiled(ctx, l -> new YieldThenCheckRoot(l, assumption));
+        java.util.concurrent.atomic.AtomicBoolean invalidated = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean();
+        // Churn: invalidate the target every millisecond (the next calls recompile it synchronously, per
+        // TestWithSynchronousCompiling thresholds) while thousands of virtual threads freeze and thaw in it.
+        // Halfway through, invalidate the assumption for good.
+        Thread churn = Thread.ofPlatform().start(() -> {
+            long half = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+            while (!stop.get()) {
+                target.invalidate("stress");
+                if (!invalidated.get() && System.nanoTime() > half) {
+                    assumption.invalidate();
+                    invalidated.set(true);
+                }
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+        });
+        long deadline = System.nanoTime() + Duration.ofSeconds(12).toNanos();
+        List<Throwable> failures = runVirtualThreads(2000, i -> {
+            ctx.enter();
+            try {
+                while (System.nanoTime() < deadline) {
+                    boolean invalidatedBeforeCall = invalidated.get();
+                    int r = (Integer) target.call();
+                    if (r != 1 && r != 2 || invalidatedBeforeCall && r != 2) {
+                        throw new AssertionError("stale result " + r + " (assumption invalidated before call: " + invalidatedBeforeCall + ")");
+                    }
+                }
+            } finally {
+                ctx.leave();
+            }
+        });
+        stop.set(true);
+        churn.join();
+        assertTrue("assumption must have been invalidated during the run", invalidated.get());
+        assertTrue(failures.size() + " failures, first: " + (failures.isEmpty() ? "" : failures.get(0)), failures.isEmpty());
         ctx.close();
     }
 }
