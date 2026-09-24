@@ -34,6 +34,7 @@ import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.PointsToAnalysisMethod;
 import com.oracle.svm.core.ParsingReason;
+import com.oracle.svm.core.deopt.ImageCodeInstalledCodeLookup;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.nodes.TestDeoptimizeNode;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
@@ -41,6 +42,7 @@ import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 
 import jdk.graal.compiler.nodes.ConstantNode;
+import jdk.graal.compiler.nodes.DeoptimizeNode;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderContext;
@@ -48,6 +50,8 @@ import jdk.graal.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugins.Registration;
 import jdk.graal.compiler.phases.util.Providers;
+import jdk.vm.ci.meta.DeoptimizationAction;
+import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
@@ -57,6 +61,12 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * its frames inlined before analysis. In that inlined copy {@link DeoptSourceTest#deoptHere()}
  * becomes a transfer to the interpreter; everywhere else, including the deopt target of
  * {@code helper}, it is an ordinary call that counts executions.
+ * <p>
+ * Likewise, {@link DeoptSourceTest#computeInvalidating} is a deoptimization source with
+ * {@link DeoptSourceTest#helper2} inlined, whose {@link DeoptSourceTest#invalidateHere()} becomes
+ * an invalidating deoptimization. Image code has no runtime installed code, so the feature
+ * registers a {@link DeoptSourceTestLookup} that resolves frames of the compiled code of
+ * {@code computeInvalidating} (and only those) to a test installed code.
  */
 public final class DeoptSourceTestFeature implements InternalFeature {
 
@@ -105,6 +115,17 @@ public final class DeoptSourceTestFeature implements InternalFeature {
                 return false; // keep the real call, e.g., in the deopt target of helper
             }
         });
+        r.register(new InvocationPlugin.RequiredInvocationPlugin("invalidateHere") {
+            @Override
+            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, InvocationPlugin.Receiver receiver) {
+                if (inDeoptSourceGraph(b)) {
+                    /* Only the copy of helper2 inlined into the deopt source deoptimizes. */
+                    b.add(new DeoptimizeNode(DeoptimizationAction.InvalidateReprofile, DeoptimizationReason.TransferToInterpreter));
+                    return true;
+                }
+                return false; // keep the real call, e.g., in the deopt target of helper2
+            }
+        });
         r.register(new InvocationPlugin.RequiredInvocationPlugin("isDeoptTarget") {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, InvocationPlugin.Receiver receiver) {
@@ -125,6 +146,10 @@ public final class DeoptSourceTestFeature implements InternalFeature {
     public void afterRegistration(AfterRegistrationAccess access) {
         /* Deopt target graphs are only accepted for classes initialized at build time. */
         RuntimeClassInitialization.initializeAtBuildTime(DeoptSourceTest.class);
+        /* The lookup and its installed code are image heap objects. */
+        RuntimeClassInitialization.initializeAtBuildTime(DeoptSourceTestLookup.class);
+        RuntimeClassInitialization.initializeAtBuildTime(DeoptSourceTestLookup.TestInstalledCode.class);
+        ImageCodeInstalledCodeLookup.register(new DeoptSourceTestLookup(new DeoptSourceTestLookup.TestInstalledCode()));
     }
 
     @Override
@@ -133,6 +158,7 @@ public final class DeoptSourceTestFeature implements InternalFeature {
         try {
             registerDeoptSource(access, "compute", "helper");
             registerDeoptSource(access, "computeCatching", "helperCatching");
+            registerDeoptSource(access, "computeInvalidating", "helper2");
         } catch (NoSuchMethodException e) {
             throw new AssertionError(e);
         }

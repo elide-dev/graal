@@ -31,6 +31,7 @@ import java.util.Map;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
+import com.oracle.svm.core.deopt.DeoptSourceMethods;
 import com.oracle.svm.core.deopt.DeoptimizationRuntime;
 import com.oracle.svm.core.deopt.DeoptimizationSupport;
 import com.oracle.svm.core.deopt.Deoptimizer;
@@ -117,19 +118,36 @@ public final class DeoptHostedSnippets extends SubstrateTemplates implements Sni
         // throw new RuntimeException("MemorySnippet.deoptSnippet: Illegal snippet parameter");
     }
 
+    /**
+     * Deoptimization in a {@linkplain DeoptSourceMethods deoptimization source}: such a method
+     * resumes in deoptimization targets, so the action and reason chosen by the compiler are kept.
+     * Speculations are never used by builder-compiled deoptimization sources.
+     */
+    @Snippet(allowMissingProbabilities = true)
+    protected static void deoptSourceSnippet(@ConstantParameter long actionAndReason) {
+        runtimeCall(DeoptimizationRuntime.DEOPTIMIZE, actionAndReason, null);
+        throw UnreachableNode.unreachable();
+    }
+
     @SuppressWarnings("unused")
     public static void registerLowerings(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
         new DeoptHostedSnippets(options, providers, lowerings);
     }
 
     private final SnippetInfo deopt;
+    private final SnippetInfo deoptSource;
 
     private DeoptHostedSnippets(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
         super(options, providers);
 
         this.deopt = snippet(providers, DeoptHostedSnippets.class, "deoptSnippet");
+        this.deoptSource = snippet(providers, DeoptHostedSnippets.class, "deoptSourceSnippet");
 
         lowerings.put(DeoptimizeNode.class, new DeoptimizeLowering());
+    }
+
+    private static boolean isDeoptSource(ResolvedJavaMethod method) {
+        return ImageSingletons.contains(DeoptSourceMethods.class) && ImageSingletons.lookup(DeoptSourceMethods.class).isDeoptSource(method);
     }
 
     private static boolean mustNotAllocate(ResolvedJavaMethod method) {
@@ -159,6 +177,17 @@ public final class DeoptHostedSnippets extends SubstrateTemplates implements Sni
         public void lower(DeoptimizeNode node, LoweringTool tool) {
             LoweringStage loweringStage = tool.getLoweringStage();
             if (loweringStage != LoweringTool.StandardLoweringStage.LOW_TIER) {
+                return;
+            }
+
+            StructuredGraph graph = node.graph();
+            if (isDeoptSource(graph.method())) {
+                /* Deopt sources resume in deopt targets: keep the compiler's action and reason. */
+                VMError.guarantee(DeoptimizationSupport.enabled(), "Deoptimization sources require the DeoptimizationFeature");
+                long actionAndReason = Deoptimizer.encodeDeoptActionAndReasonToLong(node.getAction(), node.getReason(), 0);
+                Arguments args = new Arguments(deoptSource, graph, loweringStage);
+                args.add("actionAndReason", actionAndReason);
+                template(tool, node, args).instantiate(tool.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
                 return;
             }
 
@@ -211,7 +240,6 @@ public final class DeoptHostedSnippets extends SubstrateTemplates implements Sni
                     throw shouldNotReachHere("Unexpected reason: " + node.getReason());
             }
 
-            StructuredGraph graph = node.graph();
             Arguments args = new Arguments(deopt, graph, loweringStage);
             args.add("reason", node.getReason());
             args.add("mustNotAllocate", mustNotAllocate(graph.method()));

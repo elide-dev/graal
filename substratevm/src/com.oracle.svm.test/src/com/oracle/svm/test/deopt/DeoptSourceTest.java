@@ -24,11 +24,15 @@
  */
 package com.oracle.svm.test.deopt;
 
+import org.graalvm.nativeimage.c.function.CodePointer;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.oracle.svm.core.deopt.ImageCodeInstalledCodeLookup;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.test.NativeImageBuildArgs;
 
 import jdk.graal.compiler.api.directives.GraalDirectives;
@@ -45,12 +49,17 @@ import jdk.graal.compiler.api.directives.GraalDirectives;
                 "--features=com.oracle.svm.test.deopt.DeoptSourceTestFeature",
                 "--add-exports=org.graalvm.nativeimage.base/com.oracle.svm.common.meta=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.code=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.deopt=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.feature=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.graal.nodes=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.graal.hosted.runtimecompilation=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted.code=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.core.graal=ALL-UNNAMED",
+                "--add-exports=org.graalvm.nativeimage.shared/com.oracle.svm.shared=ALL-UNNAMED",
                 "--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+                "--add-exports=jdk.graal.compiler/jdk.graal.compiler.core.common=ALL-UNNAMED",
                 "--add-exports=jdk.graal.compiler/jdk.graal.compiler.nodes=ALL-UNNAMED",
                 "--add-exports=jdk.graal.compiler/jdk.graal.compiler.nodes.graphbuilderconf=ALL-UNNAMED",
                 "--add-exports=jdk.graal.compiler/jdk.graal.compiler.phases.util=ALL-UNNAMED",
@@ -58,6 +67,7 @@ import jdk.graal.compiler.api.directives.GraalDirectives;
 })
 public class DeoptSourceTest {
     static int deoptCount;
+    static int invalidateCount;
     static int helperEntries;
     static boolean resumedInDeoptTarget;
 
@@ -67,6 +77,15 @@ public class DeoptSourceTest {
      */
     static void deoptHere() {
         deoptCount++;
+    }
+
+    /**
+     * In the copy of {@link #helper2} inlined into the deopt source {@link #computeInvalidating},
+     * this call is replaced by an invalidating deoptimization. Everywhere else it is an ordinary
+     * call.
+     */
+    static void invalidateHere() {
+        invalidateCount++;
     }
 
     /** Folded by the feature: {@code true} only when compiled as part of a deopt target. */
@@ -123,10 +142,24 @@ public class DeoptSourceTest {
         return a + GraalDirectives.opaque(1);
     }
 
+    static int helper2(int x) {
+        /* The store is a state split: the deoptimization resumes right after it. */
+        helperEntries++;
+        int y = x + 3;
+        invalidateHere(); // deopt source: DeoptimizeNode(InvalidateReprofile, TransferToInterpreter)
+        resumedInDeoptTarget = isDeoptTarget();
+        return y;
+    }
+
+    static int computeInvalidating(int x) {
+        return helper2(x) + GraalDirectives.opaque(0); // helper2 is inlined by the feature
+    }
+
     @Before
     public void reset() {
         Assume.assumeTrue("DeoptSourceTestFeature is not part of the image", isFeatureActive());
         deoptCount = 0;
+        invalidateCount = 0;
         helperEntries = 0;
         resumedInDeoptTarget = false;
     }
@@ -144,5 +177,27 @@ public class DeoptSourceTest {
         Assert.assertEquals(20 * 3 + 1 + 1, computeCatching(20));
         Assert.assertEquals("execution must have resumed in the deopt target of helperCatching", 1, deoptCount);
         Assert.assertTrue("the handler must have run in the deopt target", resumedInDeoptTarget);
+    }
+
+    @Test
+    public void invalidatingDeoptInDeoptSourceCallsLookup() {
+        DeoptSourceTestLookup.TestInstalledCode.invalidations = 0;
+        DeoptSourceTestLookup.TestInstalledCode.reprofiles = 0;
+        Assert.assertEquals(10, computeInvalidating(7));
+        Assert.assertEquals("execution must have resumed in the deopt target of helper2", 1, invalidateCount);
+        Assert.assertTrue("the rest of helper2 must have run in its deopt target", resumedInDeoptTarget);
+        Assert.assertEquals("the deopt must resume inside helper2, not re-execute it", 1, helperEntries);
+        Assert.assertEquals("image-code lookup must have resolved the frame and invalidated it", 1, DeoptSourceTestLookup.TestInstalledCode.invalidations);
+        Assert.assertEquals("the installed code must have been asked to reprofile", 1, DeoptSourceTestLookup.TestInstalledCode.reprofiles);
+    }
+
+    @NeverInline("The return address must be in the frame of the caller.")
+    static CodePointer callerIP() {
+        return KnownIntrinsics.readReturnAddress();
+    }
+
+    @Test
+    public void lookupIgnoresFramesOfOtherMethods() {
+        Assert.assertNull("the test lookup must only own frames of computeInvalidating", ImageCodeInstalledCodeLookup.lookupOrNull(callerIP()));
     }
 }
