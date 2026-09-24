@@ -135,6 +135,9 @@ public class ContinuationsFeature implements InternalFeature {
             access.registerAsAccessed(ipField);
             Field originalCarrierSPField = ReflectionUtil.lookupField(StoredContinuation.class, "originalCarrierSP");
             access.registerAsAccessed(originalCarrierSPField);
+            Field codeTethersField = ReflectionUtil.lookupField(StoredContinuation.class, "codeTethers");
+            /* Written only via raw (barrier-free) stores: the analysis must not assume it is always null. */
+            access.registerAsUnsafeAccessed(codeTethersField);
 
             access.registerReachabilityHandler(_ -> access.registerAsInHeap(StoredContinuation.class),
                             ReflectionUtil.lookupMethod(StoredContinuationAccess.class, "allocate", int.class));
@@ -149,6 +152,8 @@ public class ContinuationsFeature implements InternalFeature {
             Field ipField = ReflectionUtil.lookupField(StoredContinuation.class, "ip");
             long offset = access.objectFieldOffset(ipField);
             ContinuationSupport.singleton().setIPOffset(offset);
+            Field codeTethersField = ReflectionUtil.lookupField(StoredContinuation.class, "codeTethers");
+            ContinuationSupport.singleton().setCodeTethersOffset(access.objectFieldOffset(codeTethersField));
         }
     }
 

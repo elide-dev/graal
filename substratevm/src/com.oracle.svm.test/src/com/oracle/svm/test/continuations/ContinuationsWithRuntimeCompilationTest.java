@@ -55,8 +55,11 @@ import com.oracle.svm.core.c.InvokeJavaFunctionPointer;
 import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
+import com.oracle.svm.core.code.UntetheredCodeInfo;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
+import com.oracle.svm.core.heap.StoredContinuation;
+import com.oracle.svm.core.heap.StoredContinuationAccess;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
 import com.oracle.svm.core.thread.ContinuationInternals;
@@ -454,6 +457,39 @@ public class ContinuationsWithRuntimeCompilationTest {
         }
         assertTrue("invalidated code must be freed: a thawed StoredContinuation must not keep it alive", !isInRuntimeCodeCache(WordFactory.pointer(jitIp.get())));
         Reference.reachabilityFence(stored);
+    }
+
+    @Test
+    public void storedContinuationItselfTethersTheCodeOfItsFrames() throws Exception {
+        /*
+         * The GC can walk a garbage StoredContinuation (e.g., via a dirty card in the old generation)
+         * after a young collection freed its Continuation. So the StoredContinuation itself, not its
+         * Continuation, must keep the code of its runtime-compiled frames alive, until it is thawed.
+         */
+        AtomicLong jitIp = new AtomicLong();
+        AtomicReference<Object> continuation = new AtomicReference<>();
+        Hooks.beforeYield = () -> {
+            jitIp.set(findRuntimeCompiledFrameIP().rawValue());
+            continuation.set(continuationOf(Thread.currentThread()));
+        };
+        VirtualRun run = startOnVirtualThread(compiled(), 2);
+        awaitParked(run);
+        StoredContinuation stored = ContinuationInternals.getStoredContinuation(SubstrateUtil.cast(continuation.get(), Target_jdk_internal_vm_Continuation.class));
+        Object[] tethers = StoredContinuationAccess.getCodeTethers(stored);
+        assertTrue("the StoredContinuation must hold the tether of its runtime-compiled frame", tethers != null && tethers.length == 1);
+        assertTrue("the StoredContinuation must hold the tether of its runtime-compiled frame", tethers[0] == tetherOf(WordFactory.pointer(jitIp.get())));
+
+        resumeAndJoinSuccessfully(run);
+        assertEquals(expected(2), run.result.get());
+        assertTrue("a thawed StoredContinuation must release its tethers", StoredContinuationAccess.getCodeTethers(stored) == null);
+    }
+
+    @Uninterruptible(reason = "Test helper: reads the tether of the code at an IP.")
+    static Object tetherOf(CodePointer ip) {
+        UntetheredCodeInfo untethered = CodeInfoTable.lookupCodeInfo(ip);
+        Object tether = CodeInfoAccess.acquireTether(untethered);
+        CodeInfoAccess.releaseTether(untethered, tether);
+        return tether;
     }
 
     static Object continuationOf(Thread vthread) {

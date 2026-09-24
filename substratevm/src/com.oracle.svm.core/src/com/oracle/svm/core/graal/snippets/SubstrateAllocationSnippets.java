@@ -216,6 +216,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                     @ConstantParameter int arrayBaseOffset,
                     @ConstantParameter int log2ElementSize,
                     @ConstantParameter long ipOffset,
+                    @ConstantParameter long codeTethersOffset,
                     @ConstantParameter boolean emitMemoryBarrier,
                     @ConstantParameter AllocationProfilingData profilingData) {
         Word thread = getTLABInfo();
@@ -232,7 +233,8 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
         if (useTLAB && probability(FAST_PATH_PROBABILITY, shouldAllocateInTLAB(allocationSize, true)) && probability(FAST_PATH_PROBABILITY, newTop.belowOrEqual(end))) {
             writeTlabTop(thread, newTop);
             emitPrefetchAllocate(newTop, true);
-            result = formatStoredContinuation(encodeAsTLABObjectHeader(hub), allocationSize, length, top, emitMemoryBarrier, ipOffset, profilingData.snippetCounters);
+            result = formatStoredContinuation(encodeAsTLABObjectHeader(hub), allocationSize, length, top, emitMemoryBarrier, ipOffset, codeTethersOffset,
+                            profilingData.snippetCounters);
         } else {
             profilingData.snippetCounters.stub.inc();
             result = callSlowNewStoredContinuation(gcAllocationSupport().getNewStoredContinuationStub(), encodeAsTLABObjectHeader(hub), length);
@@ -456,9 +458,15 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
     }
 
     public Object formatStoredContinuation(Word objectHeader, UnsignedWord allocationSize, int arrayLength, Word memory, boolean emitMemoryBarrier, long ipOffset,
-                    AllocationSnippetCounters snippetCounters) {
+                    long codeTethersOffset, AllocationSnippetCounters snippetCounters) {
         Object result = formatArray(objectHeader, allocationSize, arrayLength, memory, FillContent.DO_NOT_FILL, false, false, false, false, snippetCounters);
         memory.writeWord(Word.unsigned(ipOffset), Word.nullPointer(), LocationIdentity.init());
+        /* The GC walks this reference field even before ip is set, so it must be null (all zero bits). */
+        if (ObjectLayout.singleton().getReferenceSize() == Integer.BYTES) {
+            memory.writeInt(Word.unsigned(codeTethersOffset), 0, LocationIdentity.init());
+        } else {
+            memory.writeLong(Word.unsigned(codeTethersOffset), 0L, LocationIdentity.init());
+        }
         emitMemoryBarrierIf(emitMemoryBarrier);
         return result;
     }
@@ -917,6 +925,7 @@ public class SubstrateAllocationSnippets extends AllocationSnippets {
                 args.add("arrayBaseOffset", arrayBaseOffset);
                 args.add("log2ElementSize", log2ElementSize);
                 args.add("ipOffset", ContinuationSupport.singleton().getIPOffset());
+                args.add("codeTethersOffset", ContinuationSupport.singleton().getCodeTethersOffset());
                 args.add("emitMemoryBarrier", node.emitMemoryBarrier());
                 args.add("profilingData", getProfilingData(node, instanceClass));
 

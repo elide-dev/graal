@@ -55,10 +55,6 @@ public final class ContinuationInternals {
         cont.stored = instance;
     }
 
-    public static void setCodeTethers(Target_jdk_internal_vm_Continuation cont, Object[] tethers) {
-        cont.codeTethers = tethers;
-    }
-
     public static void setFrozenCodeInvalidationEpoch(Target_jdk_internal_vm_Continuation cont, long epoch) {
         cont.frozenCodeInvalidationEpoch = epoch;
     }

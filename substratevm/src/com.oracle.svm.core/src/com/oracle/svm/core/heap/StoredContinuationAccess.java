@@ -157,10 +157,9 @@ public final class StoredContinuationAccess {
 
         int framesSize = UnsignedUtils.safeToInt(baseSp.subtract(sp));
         StoredContinuation instance = allocate(framesSize);
-        long epoch = fillUninterruptibly(instance, ip, sp, framesSize);
+        long epoch = fillUninterruptibly(instance, ip, sp, framesSize, tethers);
         ContinuationInternals.setStoredContinuation(c, instance);
         ContinuationInternals.setFrozenCodeInvalidationEpoch(c, epoch);
-        ContinuationInternals.setCodeTethers(c, tethers);
         return ContinuationSupport.FREEZE_OK;
     }
 
@@ -196,10 +195,16 @@ public final class StoredContinuationAccess {
     }
 
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance and copying frames.")
-    private static long fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size) {
+    private static long fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size, Object[] tethers) {
         UnmanagedMemoryUtil.copyWordsForward(sp, getFramesStart(stored), Word.unsigned(size));
         setIP(stored, ip);
         setOriginalCarrierSP(stored, sp);
+        /*
+         * The tethers belong to the StoredContinuation, not to its Continuation: the GC can walk a
+         * garbage StoredContinuation in the old generation (via a dirty card) after a young
+         * collection freed its Continuation, so the code must live exactly as long as this object.
+         */
+        setCodeTethers(stored, tethers);
         afterFill(stored);
         /* Read inside the uninterruptible copy: no invalidation can happen in between. */
         return CodeInvalidationEpoch.get();
@@ -228,8 +233,19 @@ public final class StoredContinuationAccess {
         CodePointer ip = ImageSingletons.lookup(ContinuationSupport.class).copyFrames(cont, clone, preparedData);
         setIP(clone, ip);
         setOriginalCarrierSP(clone, StoredContinuationAccess.getOriginalCarrierSP(cont));
+        setCodeTethers(clone, cont.codeTethers);
         afterFill(clone);
         return clone;
+    }
+
+    /**
+     * StoredContinuations are written without GC barriers (they must be effectively immutable for
+     * compiled code). Callers that store a non-null value must call {@link #afterFill} afterwards.
+     */
+    @Uninterruptible(reason = "Prevent that the GC sees a partially initialized StoredContinuation.", callerMustBe = true)
+    private static void setCodeTethers(StoredContinuation s, Object[] tethers) {
+        Pointer field = Word.objectToUntrackedPointer(s).add(Word.unsigned(ContinuationSupport.singleton().getCodeTethersOffset()));
+        ReferenceAccess.singleton().writeObjectAt(field, tethers, true);
     }
 
     @Uninterruptible(reason = "Prevent that the GC sees a partially initialized StoredContinuation.", callerMustBe = true)
@@ -250,10 +266,16 @@ public final class StoredContinuationAccess {
      * generation). With runtime compilation, the code of its frames may be freed and its addresses
      * reused, so the stale frames must never be walked again.
      */
-    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static Object[] getCodeTethers(StoredContinuation s) {
+        return s.codeTethers;
+    }
+
+    @Uninterruptible(reason = "Writes the StoredContinuation without GC barriers.")
     public static void markThawed(StoredContinuation s) {
         if (DeoptimizationSupport.enabled() && !Heap.getHeap().isInImageHeap(s)) {
             s.ip = Word.nullPointer();
+            /* The frames are back on a thread stack, where GCImpl.walkStack keeps their code alive. */
+            setCodeTethers(s, null);
         }
     }
 
