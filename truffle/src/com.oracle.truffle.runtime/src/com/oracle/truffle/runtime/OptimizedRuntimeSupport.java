@@ -120,6 +120,15 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
         CompilerAsserts.neverPartOfCompilation();
         OptimizedCallTarget target = (OptimizedCallTarget) callTarget;
         OptimizedRuntimeAccessor.INSTRUMENT.onLoad(target.getRootNode());
+        RootNode shadowRoot = OptimizedCallTarget.CREATING_AOT_SHADOW.get();
+        if (shadowRoot != null && shadowRoot == target.getRootNode()) {
+            /*
+             * An AOT shadow is prepared and compiled by the image builder, and it is not a split
+             * the splitting strategy should account for.
+             */
+            target.setLoaded();
+            return;
+        }
         if (target.engine.compileAOTOnCreate) {
             if (target.prepareForAOT()) {
                 target.compile(true);
