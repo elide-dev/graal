@@ -29,12 +29,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.flow.AnalysisParsedGraph;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 
 import jdk.graal.compiler.bytecode.BytecodeProvider;
 import jdk.graal.compiler.core.common.PermanentBailoutException;
 import jdk.graal.compiler.graph.SourceLanguagePositionProvider;
 import jdk.graal.compiler.nodes.EncodedGraph;
+import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
@@ -81,8 +83,35 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
         return super.createMethodScope(targetGraph, caller, callerLoopScope, encodedGraph, scopeMethod, invokeData, inliningDepth, arguments);
     }
 
+    private static boolean isRuntimeCompilationCandidate(ResolvedJavaMethod method) {
+        return RuntimeCompilationFeature.singleton().isRuntimeCompilationCandidate((AnalysisMethod) method);
+    }
+
+    /**
+     * Only runtime compilation candidates are inlined, as at image run time: there, a method that
+     * is not a candidate has no graph in the image, so it
+     * {@linkplain ResolvedJavaMethod#hasNeverInlineDirective() is never inlined} and the call
+     * remains. Invocation plugins still apply, since they are tried before inlining.
+     */
+    @Override
+    protected LoopScope tryInline(PEMethodScope methodScope, LoopScope loopScope, InvokeData invokeData, MethodCallTargetNode callTarget) {
+        if (callTarget.invokeKind().isDirect() && !isRuntimeCompilationCandidate(callTarget.targetMethod())) {
+            return null;
+        }
+        return super.tryInline(methodScope, loopScope, invokeData, callTarget);
+    }
+
+    /**
+     * Never creates and parses a runtime-compiled variant the JIT would not see. After
+     * {@link #tryInline}, this is only reached for candidates; like the runtime decoder, which
+     * fails for a method without a graph ({@code SubstratePEGraphDecoder}), anything else is an
+     * error, but here it only skips the root.
+     */
     @Override
     protected EncodedGraph lookupEncodedGraph(ResolvedJavaMethod method, BytecodeProvider intrinsicBytecodeProvider) {
+        if (!isRuntimeCompilationCandidate(method)) {
+            throw new PermanentBailoutException("Not a runtime compilation candidate: %s", method.format("%H.%n(%p)"));
+        }
         AnalysisParsedGraph parsed = runtimeVariant(method).ensureGraphParsed(bb);
         EncodedGraph result = parsed == null ? null : parsed.getEncodedGraph();
         if (result == null) {

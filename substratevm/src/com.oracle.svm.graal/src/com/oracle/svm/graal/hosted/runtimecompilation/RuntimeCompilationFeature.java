@@ -340,6 +340,25 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
         return prepareMethodForRuntimeCompilation(config.getMetaAccess().lookupJavaMethod(method), config);
     }
 
+    /**
+     * Whether {@code method} may be part of a runtime compilation, i.e., whether invokes of it in
+     * runtime-compiled code link to its runtime-compiled variant (see
+     * {@code RuntimeCompilationParsingSupport#determineCallees}), and its runtime-compiled variant
+     * has not failed to parse or validate. Only such methods have a graph for runtime partial
+     * evaluation.
+     */
+    public boolean isRuntimeCompilationCandidate(AnalysisMethod method) {
+        AnalysisMethod original = method.getMethodVariant(ORIGINAL_METHOD);
+        if (original == null) {
+            return false;
+        }
+        if (!registeredRuntimeCompilations.contains(original) && !runtimeCompilationCandidatePredicate.allowRuntimeCompilation(original)) {
+            return false;
+        }
+        AnalysisMethod runtimeVariant = original.getMethodVariant(RUNTIME_COMPILED_METHOD);
+        return !invalidForRuntimeCompilation.containsKey(original) && (runtimeVariant == null || !invalidForRuntimeCompilation.containsKey(runtimeVariant));
+    }
+
     public void registerAllowInliningPredicate(AllowInliningPredicate predicate) {
         assert !allowInliningPredicateUpdated;
         allowInliningPredicate = predicate;
