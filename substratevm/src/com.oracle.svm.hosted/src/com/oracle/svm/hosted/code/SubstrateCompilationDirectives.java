@@ -33,6 +33,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.core.code.FrameInfoEncoder;
+import com.oracle.svm.core.deopt.DeoptSourceMethods;
 import com.oracle.svm.shared.singletons.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
@@ -47,9 +48,9 @@ import jdk.graal.compiler.nodes.ValueNode;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
-@AutomaticallyRegisteredImageSingleton
+@AutomaticallyRegisteredImageSingleton({SubstrateCompilationDirectives.class, DeoptSourceMethods.class})
 @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = PartiallyLayerAware.class)
-public class SubstrateCompilationDirectives {
+public class SubstrateCompilationDirectives implements DeoptSourceMethods {
 
     public static boolean isRuntimeCompiledMethod(ResolvedJavaMethod method) {
         if (method instanceof MethodVariant methodVariant) {
@@ -293,6 +294,19 @@ public class SubstrateCompilationDirectives {
 
     public boolean isRegisteredDeoptSource(ResolvedJavaMethod method) {
         return deoptSourceMethods.contains(toAnalysisMethod(method));
+    }
+
+    /**
+     * Like {@link #isRegisteredDeoptSource}, but also accepts {@code null} and methods that are
+     * neither analysis nor hosted methods (e.g., of graphs built outside the universe), for which it
+     * returns false.
+     */
+    @Override
+    public boolean isDeoptSource(ResolvedJavaMethod method) {
+        if (method instanceof AnalysisMethod || method instanceof HostedMethod) {
+            return isRegisteredDeoptSource(method);
+        }
+        return false;
     }
 
     void recordDeoptSourceTarget(ResolvedJavaMethod deoptTarget, AnalysisMethod deoptSource) {

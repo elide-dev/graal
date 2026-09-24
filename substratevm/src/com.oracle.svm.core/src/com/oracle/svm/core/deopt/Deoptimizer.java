@@ -681,6 +681,12 @@ public final class Deoptimizer {
             ip = readLazyDeoptOriginalReturnAddress(thread, sp);
         }
         SubstrateInstalledCode installedCode = CodeInfoTable.lookupInstalledCode(ip);
+        boolean imageCode = false;
+        if (installedCode == null) {
+            /* Image code of a deoptimization source, if its owner registered a lookup. */
+            installedCode = ImageCodeInstalledCodeLookup.lookupOrNull(ip);
+            imageCode = installedCode != null;
+        }
         /*
          * We look up the installedCode before checking if the frame is deoptimized to avoid race
          * conditions. We are not in a VMOperation here. When an eager deoptimization happens, e.g.,
@@ -707,6 +713,15 @@ public final class Deoptimizer {
             installedCode.reprofile();
         }
         installedCode.invalidate();
+        if (imageCode) {
+            /*
+             * Image code is never removed, so invalidating the code that owns it need not have
+             * deoptimized this frame. Returning into it would continue after the deoptimization
+             * point, so deoptimize the frame explicitly. This is a no-op if the invalidation
+             * already deoptimized it. The speculation failure was registered above.
+             */
+            deoptimizeFrame(sp, false, null);
+        }
     }
 
     private static void registerSpeculationFailure(SubstrateInstalledCode installedCode, SpeculationReason speculation) {
