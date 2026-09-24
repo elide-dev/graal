@@ -186,6 +186,15 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
         return preInitializedEngineRef.get();
     }
 
+    /**
+     * Hosted-only static accessor for the pre-initialized engine, or {@code null} if none was
+     * pre-initialized (or it was reset). Used by {@link EngineAccessor} to enumerate the shared
+     * roots of the pre-initialized engine for build-time compilation.
+     */
+    static PolyglotEngineImpl getPreInitializedEngine() {
+        return findInstance().preInitializedEngineRef.get();
+    }
+
     @Override
     public void initialize() {
         super.initialize();

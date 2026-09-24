@@ -844,6 +844,13 @@ public abstract class Accessor {
 
         public abstract void forEachLoadedRootNode(Object sharingLayer, Consumer<RootNode> rootNodeUpdater);
 
+        /**
+         * Hosted only: the loaded root nodes of every SHARED-policy layer of the pre-initialized
+         * engine, plus the roots of its parsed {@code PreinitializeSources} call targets. Returns
+         * an empty list if there is no pre-initialized engine.
+         */
+        public abstract List<RootNode> getPreinitializedSharedRoots();
+
         public abstract Object getSharingLayer(Object languageInstance);
 
         public abstract Context getContextAPI(Object polyglotContextImpl);
