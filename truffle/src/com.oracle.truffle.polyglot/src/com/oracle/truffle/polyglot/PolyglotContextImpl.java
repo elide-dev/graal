@@ -3904,14 +3904,17 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                 context.initializeContextLocals();
             }
 
-            if (!languagesToPreinitialize.isEmpty()) {
+            String sourcesOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME);
+            if (!languagesToPreinitialize.isEmpty() || !sourcesOption.isEmpty()) {
                 Object[] prev = context.engine.enter(context);
                 try {
+                    Set<String> patchedLanguageIds = new HashSet<>();
                     for (PolyglotLanguage language : languagesToPreinitialize) {
                         assert language.engine == engine : "invalid language";
 
                         if (overridesPatchContext(language.getId())) {
                             context.getContextInitialized(language, null);
+                            patchedLanguageIds.add(language.getId());
                             LOG.log(Level.FINE, "Pre-initialized context for language: {0}", language.getId());
                         } else {
                             if (emitWarning) {
@@ -3920,7 +3923,6 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                         }
                     }
 
-                    String sourcesOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME);
                     if (!sourcesOption.isEmpty()) {
                         for (String entry : sourcesOption.split(",")) {
                             int colon = entry.indexOf(':');
@@ -3929,6 +3931,15 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                             if (language == null || colon == entry.length() - 1) {
                                 throw new IllegalArgumentException(
                                                 "Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': expected <language>:<path> with an installed language.");
+                            }
+                            if (!patchedLanguageIds.contains(languageId)) {
+                                if (!languagesToPreinitialize.contains(language)) {
+                                    throw new IllegalArgumentException("Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': language '" + languageId +
+                                                    "' is not pre-initialized; add it to " + ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME + ".");
+                                } else {
+                                    throw new IllegalArgumentException("Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': language '" + languageId +
+                                                    "' does not support context patching (TruffleLanguage.patchContext).");
+                                }
                             }
                             Path path = Path.of(entry.substring(colon + 1));
                             Source source;
