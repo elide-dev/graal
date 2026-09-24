@@ -28,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.ref.Reference;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +44,7 @@ import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
+import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.WordFactory;
 import org.junit.After;
@@ -57,6 +59,8 @@ import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
+import com.oracle.svm.core.thread.ContinuationInternals;
+import com.oracle.svm.core.thread.Target_jdk_internal_vm_Continuation;
 import com.oracle.svm.graal.SubstrateGraalUtils;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.graal.meta.SubstrateMethod;
@@ -65,6 +69,7 @@ import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.ModuleSupport;
+import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.test.NativeImageBuildArgs;
 
 import jdk.vm.ci.code.InstalledCode;
@@ -99,6 +104,8 @@ public class ContinuationsWithRuntimeCompilationTest {
                             "com.oracle.svm.core.code", "com.oracle.svm.core.deopt", "com.oracle.svm.core.stack");
             ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.guest.staging", "com.oracle.svm.guest.staging.core.graal");
             ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "jdk.internal.vm.ci", "jdk.vm.ci.code");
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.core.thread", "com.oracle.svm.core.heap");
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.OPEN, TestFeature.class, false, "java.base", "java.lang");
         }
 
         @Override
@@ -111,6 +118,11 @@ public class ContinuationsWithRuntimeCompilationTest {
             BeforeAnalysisAccessImpl config = (BeforeAnalysisAccessImpl) a;
             RuntimeClassInitialization.initializeAtBuildTime(Holder.class);
             RuntimeClassInitialization.initializeAtBuildTime(JitSubject.class);
+            try {
+                RuntimeReflection.register(Class.forName("java.lang.VirtualThread").getDeclaredField("cont"));
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
             Holder holder = new Holder();
             ImageSingletons.add(Holder.class, holder);
             RuntimeCompilationFeature rcf = RuntimeCompilationFeature.singleton();
@@ -413,5 +425,58 @@ public class ContinuationsWithRuntimeCompilationTest {
             found |= e.getClassName().endsWith("JitSubject") && e.getMethodName().equals("compute");
         }
         assertTrue(Arrays.toString(trace), found);
+    }
+
+    @Test
+    public void thawedStoredContinuationIsNotWalkedAfterItsCodeIsFreed() throws Exception {
+        /*
+         * After resuming, the StoredContinuation that held the frames is garbage, but the GC can
+         * still visit it (e.g., through a dirty card in the old generation). Hold on to it to make
+         * every GC visit it: once its code is invalidated and freed, its stale frames must not be
+         * walked.
+         */
+        AtomicLong jitIp = new AtomicLong();
+        AtomicReference<Object> continuation = new AtomicReference<>();
+        Hooks.beforeYield = () -> {
+            jitIp.set(findRuntimeCompiledFrameIP().rawValue());
+            continuation.set(continuationOf(Thread.currentThread()));
+        };
+        VirtualRun run = startOnVirtualThread(compiled(), 6);
+        awaitParked(run);
+        Object stored = ContinuationInternals.getStoredContinuation(SubstrateUtil.cast(continuation.get(), Target_jdk_internal_vm_Continuation.class));
+        assertTrue("parked virtual thread must have a stored continuation", stored != null);
+        resumeAndJoinSuccessfully(run);
+        assertEquals(expected(6), run.result.get());
+
+        compiled().invalidate();
+        for (int i = 0; i < 5; i++) {
+            System.gc(); // visits the thawed StoredContinuation, which is still reachable through `stored`
+        }
+        assertTrue("invalidated code must be freed: a thawed StoredContinuation must not keep it alive", !isInRuntimeCodeCache(WordFactory.pointer(jitIp.get())));
+        Reference.reachabilityFence(stored);
+    }
+
+    static Object continuationOf(Thread vthread) {
+        try {
+            return VirtualThreadCont.FIELD.get(vthread);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    /**
+     * Separate holder: a reflective class initializer on the test class itself would make it (and
+     * {@link Hooks}) run-time initialized, which breaks runtime compilation of {@link JitSubject}.
+     */
+    static final class VirtualThreadCont {
+        static final Field FIELD;
+        static {
+            try {
+                FIELD = Class.forName("java.lang.VirtualThread").getDeclaredField("cont");
+                FIELD.setAccessible(true);
+            } catch (ReflectiveOperationException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
     }
 }
