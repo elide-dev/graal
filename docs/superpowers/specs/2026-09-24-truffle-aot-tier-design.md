@@ -120,7 +120,7 @@ Unlinking is per call target and permanent. Image code is never freed.
 - Languages override it when the uninitialized clone would share mutable speculative state with the live root. For example GraalJS keeps frame-slot kinds in the `FrameDescriptor`, which `FunctionRootNode.cloneUninitialized()` reuses.
 - Contract: preparing or executing the returned tree never mutates state observable by the original root.
 
-**Shadow targets.**
+**Shadow targets.** *(amended)* `cloneUninitialized()` goes through `RootNode.getCallTarget()` → `notifyOnLoad`, so a shadow shows up in the engine's loaded call targets. `OptimizedCallTarget` therefore gains an `aotShadow` `@CompilationFinal` flag. Shadows are excluded from selection, from `CompileAOTOnCreate`, and from splitting heuristics. In `firstTierCall()` a shadow redirects "threshold reached" to `sourceCallTarget.unlinkAOT()` instead of `lastTierCompile()`. The PE folds the receiver to the shadow (`InterceptReceiverPlugin`), so the flag folds too.
 - `OptimizedCallTarget` gains a hosted-only factory that builds a split-like clone (the same shape as `cloneUninitialized()` at `OptimizedCallTarget.java:1095`: `sourceCallTarget` = the live target) from `cloneForAOT()`, then calls `prepareForAOT()` on it.
 - The shadow is never registered for calls. It is the PE root and owns AOT counters and profiles.
 - Its `DirectCallNode`s point at live callee targets, so calls between AOT roots dispatch through each callee's own code.
@@ -149,12 +149,18 @@ Unlinking is per call target and permanent. Image code is never freed.
 - For each, create a `BuildTimeCompiledMethod` (a `NonBytecodeMethod` with the call-boundary signature `(OptimizedCallTarget, Object[]) → Object`) and register it as an analysis root.
 - Its `buildGraph` runs the build-time PE.
 
-**Build-time PE on analysis types.**
-- Reuse the `SubstratePartialEvaluator` built by `TruffleFeature.preinitializeTruffleCompiler()`. Its `KnownTruffleTypes` already hold `AnalysisType`s.
-- A new `BuildTimePEGraphDecoder` returns, for each callee, the analysis-parsed graph of its `RUNTIME_COMPILED_METHOD` variant (`ensureGraphParsed`). These variants are parsed during analysis with Truffle's runtime plugins; the encoded runtime graphs don't exist until `onCompileQueueCreation`.
+**Build-time PE on analysis types** *(amended 2026-09-24 after code research)*.
+- `SubstratePartialEvaluator` can't be reused. Its method, field and type queries are `final` and hard-cast to `TruffleMethod`/`TruffleField`/`TruffleType`, which only the Substrate universe implements. Its decoder reads encoded runtime graphs, and `RuntimeCompilationSupport.encodedGraph` returns `null` until `onCompileQueueCreation`.
+- A new `BuildTimePartialEvaluator extends PartialEvaluator` runs over analysis `HostedProviders`, with its own `KnownTruffleTypes` on the `AnalysisMetaAccess`. It computes `PartialEvaluationMethodInfo`/`ConstantFieldInfo` the same way `SubstrateTruffleUniverseFactory` does (`PartialEvaluator.computePartialEvaluationMethodInfo`, `computeConstantFieldInfo`).
+- Its `BuildTimePEGraphDecoder` returns, for each callee, `getOrCreateMethodVariant(RUNTIME_COMPILED_METHOD).ensureGraphParsed(bb).getEncodedGraph()`. The `R` variants are parsed during analysis with Truffle's runtime plugins (`RuntimeCompilationFeature.parseRuntimeCompiledMethod`).
 - The first version skips the pre-encoding runtime-graph optimizations (early inlining, early escape analysis). That costs performance, not correctness.
+- **Graph normalization for the hosted compile queue.** The PE graph inherits guards: the `R` graphs ran `ConvertDeoptimizeToGuardPhase`. Hosted compilation requires `FIXED_DEOPTS` after guard lowering (`CompileQueue` ~1214, ~1538), so `buildGraph` lowers guards to fixed deopts before returning the graph.
+- **Outermost frame.** `DeoptimizationUtils.isDeoptEntry` asserts that the root frame's method is the compiled method, and deoptimization needs a deopt target for *every* frame in the chain (`Deoptimizer.hasAOTDeoptTargetMethod`). So a `BuildTimeCompiledMethod` graph is a kit graph that invokes `profiledPERoot`, inlined by the PE, and the method has its own `DEOPT_TARGET_METHOD` variant. That variant's `buildGraph` emits the same kit graph with `DeoptEntryNode`s at the invoke, following the `PodFactorySubstitutionMethod` pattern.
 
-**Deoptimizable image code.** Generalize the `@DeoptTest` path (`DeoptimizationUtils`, `SubstrateCompilationDirectives`, `CompileQueue`, `NativeImageCodeCache.includeLocalValues`, `FrameInfoEncoder`):
+**Deoptimizable image code.** Generalize the `@DeoptTest` path (`DeoptimizationUtils`, `SubstrateCompilationDirectives`, `CompileQueue`, `NativeImageCodeCache.includeLocalValues`, `FrameInfoEncoder`). Escape-analyzed values are already encoded for hosted deopt sources (`FrameInfoEncoder.makeVirtualObject`, `AnalysisToHostedGraphTransplanter.patchEscapeAnalysisState`). The changes:
+- Add a `deoptSourceMethods` set to `SubstrateCompilationDirectives`. It is kept separate from `deoptForTestingMethods` so that `resetDeoptEntries` retains the `D` entries of *all inlined frame methods* for those sources, not just the source's own `D` variant.
+- `DeoptHostedSnippets.DeoptimizeLowering` hard-codes `DeoptimizationAction.None` and rejects most reasons. For deopt-source methods it must keep the original action and reason, and the speculation is always null.
+- `DeoptimizationRuntime.deoptimize` → `Deoptimizer.invalidateMethodOfFrame` must resolve AOT-tier frames through the AOT table below, not throw.
 - Register `BuildTimeCompiledMethod`s as **deopt sources**. For every frame state in their graphs, including inlined states, register deopt entries on the `DEOPT_TARGET_METHOD` variant of the frame's method.
 - Compile them with `canDeoptimize()` and full local-value frame info, including virtual-object materialization data.
 - Add an address-sorted table of AOT methods consulted by `CodeInfoTable.lookupInstalledCode`, so that `Deoptimizer.invalidateMethodOfFrame` works for their frames. Today it throws "Only runtime compiled methods can be invalidated".
@@ -166,7 +172,7 @@ Unlinking is per call target and permanent. Image code is never freed.
 - Unlinking sets `aotCode = null` at a safepoint, the same discipline `installedCode` uses.
 
 **Invalidation.**
-- `AOTInstalledCode.invalidate()` / `onAssumptionInvalidated()` run a VM operation: unlink, then `Deoptimizer.deoptimizeInRange` over the method's `.text` range (lazy by default, like runtime code).
+- `AOTInstalledCode.invalidate()` / `onAssumptionInvalidated()` run a *new* VM operation. `CodeInfoTable.invalidateInstalledCode` can't be used because it only consults the runtime code cache. The operation unlinks, then calls `Deoptimizer.deoptimizeInRange` over the method's `.text` range [entry, entry + size), lazy by default like runtime code. The size is recorded in `afterCompilation` (`@UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class)`).
 - There is no `RuntimeCodeCache` involvement and no freeing.
 - The threshold unlink does not deoptimize; running activations complete normally.
 
