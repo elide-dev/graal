@@ -2751,7 +2751,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
                 if (fallbackEngine == null) {
                     PolyglotImpl polyglot = PolyglotImpl.findInstance();
                     TruffleLanguage<Object> hostLanguage = polyglot.createHostLanguage(polyglot.createHostAccess());
-                    fallbackEngine = PolyglotImpl.findInstance().createDefaultEngine(hostLanguage);
+                    fallbackEngine = PolyglotImpl.findInstance().createDefaultEngine(hostLanguage, true);
                 }
             }
         }
