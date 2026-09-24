@@ -3,6 +3,7 @@
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
 ## Version 25.4
+* (Elide fork) On Native Image built with `-H:+VMContinuationsWithRuntimeCompilation`, polyglot contexts run on continuation-backed virtual threads with runtime compilation, and the "one platform thread per VirtualThread" warning is no longer printed.
 * GR-77721: Removed Truffle Object APIs deprecated in 22.2 and no longer in use.
 * GR-77721: Removed Truffle Strings methods deprecated in 23.0 or earlier.
 * GR-77721: Removed `InteropException.initCause(Throwable)`, deprecated since 20.2.

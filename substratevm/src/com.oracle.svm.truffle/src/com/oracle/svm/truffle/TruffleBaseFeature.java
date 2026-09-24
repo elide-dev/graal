@@ -100,6 +100,7 @@ import com.oracle.svm.core.graal.word.SubstrateWordTypes;
 import com.oracle.svm.core.heap.Pod;
 import com.oracle.svm.core.reflect.target.ReflectionSubstitutionSupport;
 import com.oracle.svm.core.stack.StackOverflowCheck;
+import com.oracle.svm.core.thread.ContinuationSupport;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.graal.hosted.runtimecompilation.GraalGraphObjectReplacer;
 import com.oracle.svm.graal.hosted.runtimecompilation.SubstrateGraalCompilerSetup;
@@ -1667,6 +1668,11 @@ final class Target_com_oracle_truffle_polyglot_PolyglotEngineImpl {
     static void logFallback(String message) {
         Log.log().string(message.getBytes(StandardCharsets.UTF_8));
         Log.log().flush();
+    }
+
+    @Substitute
+    static boolean nativeImageBacksVirtualThreadsWithPlatformThreads() {
+        return !ContinuationSupport.isSupported();
     }
 }
 
