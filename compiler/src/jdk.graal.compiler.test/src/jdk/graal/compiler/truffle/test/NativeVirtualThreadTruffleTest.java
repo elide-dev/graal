@@ -438,4 +438,15 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
         assertTrue(failures.size() + " failures, first: " + (failures.isEmpty() ? "" : failures.get(0)), failures.isEmpty());
         ctx.close();
     }
+    @Test
+    public void noPlatformThreadWarningWhenContinuationsAreSupported() throws Exception {
+        java.io.ByteArrayOutputStream log = new java.io.ByteArrayOutputStream();
+        List<Throwable> failures = runVirtualThreads(1, i -> {
+            try (Context c = Context.newBuilder().logHandler(log).allowExperimentalOptions(true).option("engine.WarnVirtualThreadSupport", "true").build()) {
+                c.initialize(ID);
+            }
+        });
+        assertTrue(failures.toString(), failures.isEmpty());
+        assertEquals("", log.toString());
+    }
 }

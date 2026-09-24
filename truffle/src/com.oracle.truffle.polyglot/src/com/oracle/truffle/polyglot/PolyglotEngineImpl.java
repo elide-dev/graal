@@ -2790,6 +2790,14 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
 
     private final AtomicBoolean warnedVirtualThreadSupport = new AtomicBoolean(false);
 
+    /**
+     * Whether Native Image backs virtual threads with platform threads (continuations unsupported).
+     * Substituted on Native Image; never called on HotSpot.
+     */
+    static boolean nativeImageBacksVirtualThreadsWithPlatformThreads() {
+        return true;
+    }
+
     @SuppressWarnings("try")
     void validateVirtualThreadCreation() {
         var options = getEngineOptionValues();
@@ -2804,7 +2812,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
                                         because access to caller frames in write or materialize mode is not yet supported on virtual threads (some tools and languages depend on that).
                                         To disable this warning use the '--engine.WarnVirtualThreadSupport=false' option or the '-Dpolyglot.engine.WarnVirtualThreadSupport=false' system property.
                                         """);
-                    } else {
+                    } else if (nativeImageBacksVirtualThreadsWithPlatformThreads()) {
                         getEngineLogger().warning(
                                         """
                                                         Using polyglot contexts on Java virtual threads on Native Image currently uses one platform thread per VirtualThread.

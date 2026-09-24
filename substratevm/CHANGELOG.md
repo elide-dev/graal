@@ -3,6 +3,7 @@
 This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.4 (Internal Version 25.4.4)
+* (Elide fork) Added `-H:+VMContinuationsWithRuntimeCompilation`: continuation-backed virtual threads in images with runtime compilation (for example, Truffle JIT). Requires the serial GC and lazy deoptimization. Frames of code invalidated while a virtual thread is parked are deoptimized when it resumes; stacks with eagerly deoptimized frames pin instead of yielding.
 * (GR-75824) When native executables are built with `-H:+StrictRuntimeJavaOptions`, runtime assertion options (for example, `-ea`, `-da`, `-esa`, and `-dsa`) are supported and configure the assertion status of runtime-loaded classes and runtime-initialized image classes. They do not affect build-time-initialized classes whose assertion status is *only* configured by `native-image -ea ...`.
 * (GR-71854) On Linux AMD64, Native Image now records the selected x86-64 ISA level in `.note.gnu.property` for `-march` values requiring x86-64-v2 or newer, so tools such as `readelf` report the requirement correctly.
 * (GR-78784) Default to optional identity hash code fields with SerialGC. Few objects need one, and this optimization adds them during garbage collection. It can be disabled with `-H:-OptionalIdentityHashCodes`.
