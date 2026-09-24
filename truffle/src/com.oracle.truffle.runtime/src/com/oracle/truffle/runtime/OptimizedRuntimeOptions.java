@@ -113,6 +113,10 @@ public final class OptimizedRuntimeOptions {
                         "    ExitVM - Exit the VM process.";
     }
 
+    @Option(help = "Number of calls and loop iterations after which build-time compiled (AOT tier) code of a call target is unlinked so that the target is profiled and JIT compiled. " +
+                    "0 uses FirstTierCompilationThreshold.", usageSyntax = "[0, inf)", category = OptionCategory.EXPERT) //
+    public static final OptionKey<Integer> AOTTierThreshold = new OptionKey<>(0);
+
     @Option(help = "Speculate on arguments types at call sites (default: true)", usageSyntax = "true|false", category = OptionCategory.INTERNAL) //
     public static final OptionKey<Boolean> ArgumentTypeSpeculation = new OptionKey<>(true);
 
@@ -300,6 +304,9 @@ public final class OptimizedRuntimeOptions {
     @Option(help = "Whether an AssertionError is thrown when the maximum number of OSR compilation attempts is reached for a given method (default 'false'). This should only be set to 'true' in testing environments.", //
                     usageSyntax = "true|false", category = OptionCategory.INTERNAL) //
     public static final OptionKey<Boolean> ThrowOnMaxOSRCompilationReAttemptsReached = new OptionKey<>(false);
+
+    @Option(help = "Trace AOT tier events (enter, unlink, invalidate).", category = OptionCategory.INTERNAL) //
+    public static final OptionKey<Boolean> TraceAOT = new OptionKey<>(false);
 
     @Option(help = "Print stack trace on assumption invalidation", category = OptionCategory.INTERNAL) //
     public static final OptionKey<Boolean> TraceAssumptions = new OptionKey<>(false);

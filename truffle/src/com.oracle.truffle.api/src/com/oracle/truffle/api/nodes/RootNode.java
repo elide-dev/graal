@@ -444,17 +444,25 @@ public abstract class RootNode extends ExecutableNode {
             assert clonedRoot.lock == null;
         }
 
+        createClonedCallTarget(sourceCallTarget, clonedRoot);
+        return clonedRoot;
+    }
+
+    /**
+     * Creates and sets up the call target of {@code clonedRoot}, a fresh copy of the root of
+     * {@code sourceCallTarget}, so that the new target is a clone of {@code sourceCallTarget}.
+     */
+    static RootCallTarget createClonedCallTarget(CallTarget sourceCallTarget, RootNode clonedRoot) {
         RootCallTarget clonedTarget = NodeAccessor.RUNTIME.newCallTarget(sourceCallTarget, clonedRoot);
 
         ReentrantLock l = clonedRoot.getLazyLock();
         l.lock();
         try {
-            clonedRoot.setupCallTarget(clonedTarget, "callTarget not null. Was getCallTarget on the result of RootNode.cloneUninitialized called?");
+            clonedRoot.setupCallTarget(clonedTarget, "callTarget not null. Was getCallTarget on the result of RootNode.cloneUninitialized or RootNode.cloneForAOT called?");
         } finally {
             l.unlock();
         }
-
-        return clonedRoot;
+        return clonedTarget;
     }
 
     /**

@@ -216,6 +216,8 @@ public abstract class Accessor {
 
         public abstract RootNode cloneForAOT(RootNode root);
 
+        public abstract CallTarget newCallTargetForClone(CallTarget source, RootNode clonedRoot);
+
         public abstract void setSharingLayer(RootNode rootNode, Object engine);
 
         public abstract boolean countsTowardsStackTraceLimit(RootNode rootNode);

@@ -133,6 +133,16 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     private static final String NODE_REWRITING_ASSUMPTION_NAME = "nodeRewritingAssumption";
     private static final String VALID_ROOT_ASSUMPTION_NAME = "validRootAssumption";
     static final String EXECUTE_ROOT_NODE_METHOD_NAME = "executeRootNode";
+    private static final AtomicReferenceFieldUpdater<OptimizedCallTarget, AOTCode> AOT_CODE_UPDATER = AtomicReferenceFieldUpdater.newUpdater(OptimizedCallTarget.class,
+                    AOTCode.class, "aotCode");
+    /**
+     * The root node of the shadow that {@link #createAOTShadow()} is creating the call target for
+     * on this thread, so that {@link OptimizedRuntimeSupport#notifyOnLoad} can tell the shadow
+     * apart before {@link #aotShadow} is set. Holding the root rather than a flag keeps other call
+     * targets created on this thread meanwhile (for example by {@link RootNode#prepareForCall()}
+     * hooks) from being mistaken for the shadow.
+     */
+    static final ThreadLocal<RootNode> CREATING_AOT_SHADOW = new ThreadLocal<>();
     private static final AtomicReferenceFieldUpdater<OptimizedCallTarget, SpeculationLog> SPECULATION_LOG_UPDATER = AtomicReferenceFieldUpdater.newUpdater(OptimizedCallTarget.class,
                     SpeculationLog.class, "speculationLog");
     private static final AtomicReferenceFieldUpdater<OptimizedCallTarget, Assumption> NODE_REWRITING_ASSUMPTION_UPDATER = AtomicReferenceFieldUpdater.newUpdater(OptimizedCallTarget.class,
@@ -210,6 +220,17 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      */
     private volatile boolean dequeueInlined;
     private volatile boolean aotInitialized;
+    /**
+     * Whether this target is the AOT shadow of its {@link #sourceCallTarget}: an AOT-prepared clone
+     * that is compiled at image build time in place of the live target. See
+     * {@link #createAOTShadow()}.
+     */
+    @CompilationFinal private boolean aotShadow;
+    /**
+     * Build-time compiled code of this (live) target, or {@code null} if it has none or it was
+     * unlinked. See {@link #unlinkAOT(CharSequence)}.
+     */
+    private volatile AOTCode aotCode;
 
     public static final class ArgumentsProfile {
         private static final String ARGUMENT_TYPES_ASSUMPTION_NAME = "Profiled Argument Types";
@@ -737,6 +758,18 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         firstTierLoopCallCount = (firstTierLoopCallCount + 1) + ((firstTierLoopCallCount + 1) >> 31);
         this.callCount = firstTierCallCount;
         this.callAndLoopCount = firstTierLoopCallCount;
+        if (aotShadow) {
+            /*
+             * Build-time compiled code of a shadow is the AOT tier of the live target: at the
+             * threshold it hands the live target over to the regular tiers instead of compiling
+             * the shadow in the last tier. aotShadow is a PE constant, so for all other targets
+             * this branch folds away.
+             */
+            if (firstTierLoopCallCount >= engine.aotTierThreshold) {
+                sourceCallTarget.unlinkAOTFromCompiledCode();
+            }
+            return false;
+        }
         if (firstTierCallCount >= engine.callThresholdInFirstTier //
                         && firstTierLoopCallCount >= scaledThreshold(engine.callAndLoopThresholdInFirstTier) //
                         && !compilationFailed //
@@ -749,6 +782,11 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     @TruffleBoundary
     private boolean lastTierCompile() {
         return compileQueuedByHotness(true);
+    }
+
+    @TruffleBoundary
+    private void unlinkAOTFromCompiledCode() {
+        unlinkAOT("AOT tier threshold reached");
     }
 
     @HostCompilerDirectives.InliningCutoff
@@ -1097,6 +1135,83 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         ensureInitialized();
         RootNode clonedRoot = OptimizedRuntimeAccessor.NODES.cloneUninitialized(this, rootNode, uninitializedRootNode);
         return (OptimizedCallTarget) clonedRoot.getCallTarget();
+    }
+
+    /**
+     * Creates the AOT shadow of this target: a clone of its never-executed root node
+     * ({@link RootNode#cloneForAOT()}) that is structurally a split of this target and is prepared
+     * for AOT. The shadow, not this target, is compiled at image build time; this target and its
+     * AST stay untouched. Hosted use only.
+     *
+     * @return the prepared shadow, or {@code null} if the root refuses AOT compilation or its copy
+     *         cannot be prepared
+     * @throws IllegalStateException if this target was already executed
+     */
+    public final OptimizedCallTarget createAOTShadow() {
+        CompilerAsserts.neverPartOfCompilation();
+        assert !isSplit() && !aotShadow : "Cannot create an AOT shadow of a split or of a shadow.";
+        if (wasExecuted()) {
+            throw new IllegalStateException("Cannot create an AOT shadow of a call target that was already executed.");
+        }
+        RootNode clonedRoot = OptimizedRuntimeAccessor.NODES.cloneForAOT(rootNode);
+        if (clonedRoot == null) {
+            return null;
+        }
+        OptimizedCallTarget shadow;
+        CREATING_AOT_SHADOW.set(clonedRoot);
+        try {
+            shadow = (OptimizedCallTarget) OptimizedRuntimeAccessor.NODES.newCallTargetForClone(this, clonedRoot);
+        } finally {
+            CREATING_AOT_SHADOW.remove();
+        }
+        shadow.aotShadow = true;
+        if (!shadow.prepareForAOT()) {
+            return null;
+        }
+        return shadow;
+    }
+
+    /**
+     * Whether this target is the AOT shadow of its {@linkplain #getSourceCallTarget() source}. See
+     * {@link #createAOTShadow()}.
+     */
+    public final boolean isAOTShadow() {
+        return aotShadow;
+    }
+
+    /**
+     * The build-time compiled code of this target, or {@code null} if it has none or it was
+     * unlinked.
+     */
+    public final AOTCode getAOTCode() {
+        return aotCode;
+    }
+
+    /**
+     * Attaches build-time compiled code to this (live) target. Build time only.
+     */
+    public final void setAOTCode(AOTCode code) {
+        assert !aotShadow : "AOT code is attached to the live target, not to its shadow.";
+        this.aotCode = code;
+    }
+
+    /**
+     * Unlinks the build-time compiled code of this target, if any, so that the next call runs in
+     * the interpreter and the target goes through the regular tiers. Idempotent.
+     */
+    public final void unlinkAOT(CharSequence reason) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (aotCode == null) {
+            // Fast path for calls that race past the threshold after the code was unlinked.
+            return;
+        }
+        AOTCode code = AOT_CODE_UPDATER.getAndSet(this, null);
+        if (code != null) {
+            code.unlink(reason);
+            if (engine.traceAOT) {
+                log("[aot] unlink " + this + ": " + reason);
+            }
+        }
     }
 
     /**

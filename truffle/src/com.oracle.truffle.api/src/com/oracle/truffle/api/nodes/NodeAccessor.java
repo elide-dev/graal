@@ -189,6 +189,11 @@ final class NodeAccessor extends Accessor {
         }
 
         @Override
+        public CallTarget newCallTargetForClone(CallTarget source, RootNode clonedRoot) {
+            return RootNode.createClonedCallTarget(source, clonedRoot);
+        }
+
+        @Override
         public boolean countsTowardsStackTraceLimit(RootNode rootNode) {
             return rootNode.countsTowardsStackTraceLimit();
         }

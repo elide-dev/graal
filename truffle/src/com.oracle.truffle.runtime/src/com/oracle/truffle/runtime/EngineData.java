@@ -40,6 +40,7 @@
  */
 package com.oracle.truffle.runtime;
 
+import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.AOTTierThreshold;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.ArgumentTypeSpeculation;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.BackgroundCompilation;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.Compilation;
@@ -70,6 +71,7 @@ import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.SplittingMaxCal
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.SplittingMaxPropagationDepth;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.SplittingTraceEvents;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.StoppedCompilationRetryDelay;
+import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.TraceAOT;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.TraceCompilation;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.TraceCompilationDetails;
 import static com.oracle.truffle.runtime.OptimizedRuntimeOptions.TraceDeoptimizeFrame;
@@ -160,6 +162,10 @@ public final class EngineData {
     @CompilationFinal public boolean compileAOTOnCreate;
     @CompilationFinal public boolean firstTierOnly;
     @CompilationFinal public long stoppedCompilationRetryDelay;
+
+    // AOT tier options
+    @CompilationFinal public int aotTierThreshold;
+    @CompilationFinal public boolean traceAOT;
 
     // compilation queue options
     @CompilationFinal public boolean priorityQueue;
@@ -336,6 +342,11 @@ public final class EngineData {
         this.propagateCallAndLoopCount = options.get(PropagateLoopCountToLexicalSingleCaller);
         this.propagateCallAndLoopCountMaxDepth = options.get(PropagateLoopCountToLexicalSingleCallerMaxDepth);
         this.stoppedCompilationRetryDelay = options.get(StoppedCompilationRetryDelay);
+
+        // AOT tier options
+        int aotThreshold = options.get(AOTTierThreshold);
+        this.aotTierThreshold = aotThreshold > 0 ? aotThreshold : options.get(FirstTierCompilationThreshold);
+        this.traceAOT = options.get(TraceAOT);
 
         // compilation queue options
         priorityQueue = options.get(PriorityQueue);
