@@ -402,11 +402,16 @@ public abstract class RootNode extends ExecutableNode {
 
     /**
      * Creates the copy of this root that is prepared ({@link #prepareForAOT()}) and compiled at image
-     * build time instead of this root. The default is an uninitialized clone
-     * ({@link #cloneUninitialized()} or a node copy of the uninitialized root). Override if the clone
-     * would otherwise share mutable speculative state with this root (for example frame-slot kinds in
-     * a shared FrameDescriptor): preparing or executing the returned tree must never change state
-     * observable by this root. Return {@code null} if this root must not be compiled ahead of time.
+     * build time instead of this root. The runtime only calls this method for roots whose call target
+     * has never been executed, so the copy is always made from the uninitialized AST.
+     * <p>
+     * The default copy ({@link #cloneUninitialized()}, or otherwise a deep copy of the node tree)
+     * duplicates every {@link Node} but shares every non-{@link Node} field by reference with this
+     * root, including the {@link FrameDescriptor} and any array or other mutable object referenced
+     * from a field. Override this method whenever preparing or executing the returned tree could
+     * mutate state shared that way (for example frame-slot kinds in a shared {@link FrameDescriptor}):
+     * preparing or executing the returned tree must never change state observable by this root. Return
+     * {@code null} if this root must not be compiled ahead of time.
      *
      * @since 25.4
      */
