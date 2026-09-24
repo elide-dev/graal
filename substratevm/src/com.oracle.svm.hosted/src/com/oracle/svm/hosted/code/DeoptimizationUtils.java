@@ -127,6 +127,10 @@ public class DeoptimizationUtils {
      * Note this should only be called within CompileQueue#parseAheadOfTimeCompiledMethods
      */
     public static boolean canDeoptForTesting(AnalysisMethod method, boolean deoptimizeAll, Supplier<Boolean> graphChecker) {
+        if (SubstrateCompilationDirectives.singleton().isRegisteredDeoptSource(method)) {
+            return true;
+        }
+
         if (SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(method)) {
             return true;
         }
@@ -418,6 +422,31 @@ public class DeoptimizationUtils {
              */
             SubstrateCompilationDirectives.singleton().registerForDeoptTesting(aMethod);
         }
+
+        /*
+         * If new frame states are found, then redo the type flow.
+         */
+        for (ResolvedJavaMethod method : recomputeMethods) {
+            assert SubstrateCompilationDirectives.isDeoptTarget(method);
+            ((PointsToAnalysisMethod) method).getTypeFlow().updateFlowsGraph(bb, MethodFlowsGraph.GraphKind.FULL, null, true);
+        }
+    }
+
+    /**
+     * Registers every frame state of a deopt source's graph, including the states of inlined
+     * frames, as a deoptimization entry of the {@link SubstrateCompilationDirectives#DEOPT_TARGET_METHOD}
+     * variant of the frame's method. The entries are kept across
+     * {@link SubstrateCompilationDirectives#resetDeoptEntries()}.
+     */
+    public static void registerDeoptEntriesForDeoptSource(PointsToAnalysis bb, StructuredGraph graph, PointsToAnalysisMethod aMethod) {
+        assert aMethod.isOriginalMethod();
+        assert SubstrateCompilationDirectives.singleton().isRegisteredDeoptSource(aMethod) : aMethod;
+        Iterable<ResolvedJavaMethod> recomputeMethods = DeoptimizationUtils.registerDeoptEntries(graph, true,
+                        deoptEntryMethod -> {
+                            AnalysisMethod target = ((PointsToAnalysisMethod) deoptEntryMethod).getOrCreateMethodVariant(DEOPT_TARGET_METHOD);
+                            SubstrateCompilationDirectives.singleton().recordDeoptSourceTarget(target);
+                            return target;
+                        });
 
         /*
          * If new frame states are found, then redo the type flow.

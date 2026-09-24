@@ -749,7 +749,10 @@ public class CompileQueue {
     private void parseAheadOfTimeCompiledMethods() {
 
         for (HostedMethod method : universe.getMethods()) {
-            if (SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(method)) {
+            if (SubstrateCompilationDirectives.singleton().isRegisteredDeoptSource(method)) {
+                /* The deopt targets of the source's frames were registered during analysis. */
+                method.compilationInfo.canDeoptForTesting = true;
+            } else if (SubstrateCompilationDirectives.singleton().isRegisteredForDeoptTesting(method)) {
                 method.compilationInfo.canDeoptForTesting = true;
                 assert SubstrateCompilationDirectives.singleton().isRegisteredDeoptTarget(method.getMethodVariant(DEOPT_TARGET_METHOD));
             }
