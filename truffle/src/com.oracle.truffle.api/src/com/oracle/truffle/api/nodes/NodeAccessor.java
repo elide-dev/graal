@@ -184,6 +184,11 @@ final class NodeAccessor extends Accessor {
         }
 
         @Override
+        public RootNode cloneForAOT(RootNode root) {
+            return root.cloneForAOT();
+        }
+
+        @Override
         public boolean countsTowardsStackTraceLimit(RootNode rootNode) {
             return rootNode.countsTowardsStackTraceLimit();
         }

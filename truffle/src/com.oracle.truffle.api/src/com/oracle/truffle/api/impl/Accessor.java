@@ -214,6 +214,8 @@ public abstract class Accessor {
 
         public abstract ExecutionSignature prepareForAOT(RootNode rootNode);
 
+        public abstract RootNode cloneForAOT(RootNode root);
+
         public abstract void setSharingLayer(RootNode rootNode, Object engine);
 
         public abstract boolean countsTowardsStackTraceLimit(RootNode rootNode);
