@@ -192,6 +192,7 @@ public class ContextPreInitializationTest {
         patchableLanguages.clear();
         emittedContexts.clear();
         NEXT_ORDER_INDEX.set(0);
+        ContextPreInitializationTestSharedLanguage.multiContextOrder = -1;
 
         final Class<?> holderClz = Class.forName("org.graalvm.polyglot.Engine$ImplHolder", true, ContextPreInitializationTest.class.getClassLoader());
         final Method preInitMethod = holderClz.getDeclaredMethod("resetPreInitializedEngine");
@@ -655,6 +656,30 @@ public class ContextPreInitializationTest {
                 assertNotSame("No sharing with inner contexts.", firstLang, langCtx.language);
             } finally {
                 ctx.leave();
+            }
+        }
+    }
+
+    @Test
+    public void testPreinitializeCodeSharing() throws Exception {
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        try {
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+        }
+        CountingContext preinit = findContext(SHARED, emittedContexts);
+        assertNotNull(preinit);
+        assertTrue("multi-context must be initialized before createContext", preinit.multiContextInitOrder >= 0 && preinit.multiContextInitOrder < preinit.createContextOrder);
+        try (Engine engine = Engine.create()) {
+            try (Context first = Context.newBuilder().engine(engine).build(); Context second = Context.newBuilder().engine(engine).build()) {
+                first.initialize(SHARED);
+                second.initialize(SHARED);
+                List<CountingContext> contexts = new ArrayList<>(findContexts(SHARED, emittedContexts));
+                assertEquals(1, preinit.patchContextCount);
+                CountingContext secondCtx = contexts.get(contexts.size() - 1);
+                assertSame("contexts on the engine must share the pre-initialized language instance", preinit.languageInstance, secondCtx.languageInstance);
             }
         }
     }
@@ -2881,6 +2906,7 @@ public class ContextPreInitializationTest {
 
     private static void resetSystemPropertiesOptions() {
         System.clearProperty("polyglot.image-build-time.PreinitializeContexts");
+        System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
         System.clearProperty(SYS_OPTION1_KEY);
         System.clearProperty(SYS_OPTION2_KEY);
     }
@@ -2980,6 +3006,8 @@ public class ContextPreInitializationTest {
         final List<String> arguments;
         boolean preInitialized;
         final BaseLanguage language;
+        int multiContextInitOrder = -1;
+        Object languageInstance;
         private final Map<Class<?>, Object> lookupItems = new HashMap<>();
 
         CountingContext(final String id, final TruffleLanguage.Env env, final BaseLanguage language) {
@@ -3371,11 +3399,20 @@ public class ContextPreInitializationTest {
         @Option(category = OptionCategory.USER, stability = OptionStability.STABLE, help = "Option 2") //
         public static final OptionKey<Boolean> Option2 = new OptionKey<>(false);
 
+        static volatile int multiContextOrder = -1;
+
+        @Override
+        protected void initializeMultipleContexts() {
+            multiContextOrder = NEXT_ORDER_INDEX.getAndIncrement();
+        }
+
         @Override
         protected CountingContext createContext(Env env) {
             final CountingContext ctx = super.createContext(env);
             ctx.optionValues.put(Option1, env.getOptions().get(Option1));
             ctx.optionValues.put(Option2, env.getOptions().get(Option2));
+            ctx.multiContextInitOrder = multiContextOrder;
+            ctx.languageInstance = this;
             return ctx;
         }
 

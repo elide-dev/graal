@@ -61,6 +61,26 @@ final class ImageBuildTimeOptions {
     @Option(name = DISABLE_PRIVILEGES_NAME, category = OptionCategory.EXPERT, help = "Disable Context privileges so the related code can be excluded from the image.")//
     static final OptionKey<String> DisablePrivileges = new OptionKey<>("");
 
+    static final String PREINITIALIZE_CODE_SHARING_NAME = "PreinitializeCodeSharing";
+    @Option(name = PREINITIALIZE_CODE_SHARING_NAME, category = OptionCategory.EXPERT, help = "Pre-initialize contexts in a shared (multi-context) sharing layer so that pre-initialized code is shared by all contexts of the engine.")//
+    static final OptionKey<Boolean> PreinitializeCodeSharing = new OptionKey<>(false);
+
+    static final String PREINITIALIZE_SOURCES_NAME = "PreinitializeSources";
+    @Option(name = PREINITIALIZE_SOURCES_NAME, category = OptionCategory.EXPERT, help = "Comma separated list of <language>:<path> sources parsed (never executed) during pre-initialization.")//
+    static final OptionKey<String> PreinitializeSources = new OptionKey<>("");
+
+    static final String AOT_COMPILE_NAME = "AOTCompile";
+    @Option(name = AOT_COMPILE_NAME, category = OptionCategory.EXPERT, help = "Compile AOT-preparable shared call targets at image build time. Requires PreinitializeCodeSharing.")//
+    static final OptionKey<Boolean> AOTCompile = new OptionKey<>(false);
+
+    static final String AOT_COMPILE_FILTER_NAME = "AOTCompileFilter";
+    @Option(name = AOT_COMPILE_FILTER_NAME, category = OptionCategory.EXPERT, help = "Glob over root names selecting call targets for build-time compilation (empty: all).")//
+    static final OptionKey<String> AOTCompileFilter = new OptionKey<>("");
+
+    static final String AOT_COMPILE_BUDGET_NAME = "AOTCompileBudget";
+    @Option(name = AOT_COMPILE_BUDGET_NAME, category = OptionCategory.EXPERT, help = "Maximum partial-evaluation graph size (nodes) per build-time compiled root (0: unlimited).")//
+    static final OptionKey<String> AOTCompileBudget = new OptionKey<>("0");
+
     static String get(String optionName) {
         String property = getPropertyName(optionName);
         return System.getProperty(property, "");

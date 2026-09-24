@@ -780,7 +780,8 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     @SuppressWarnings("unchecked")
     public void preInitializeEngine() {
-        PolyglotEngineImpl engine = createDefaultEngine(new PreInitContextHostLanguage());
+        boolean sharing = ImageBuildTimeOptions.getBoolean(ImageBuildTimeOptions.PREINITIALIZE_CODE_SHARING_NAME);
+        PolyglotEngineImpl engine = createDefaultEngine(new PreInitContextHostLanguage(), !sharing);
         Object apiEngine = getAPIAccess().newEngine(engineDispatch, engine, false);
         try {
             engine.preInitialize();
@@ -800,7 +801,7 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     /*
      * Used for preinitialized contexts and fallback engine.
      */
-    PolyglotEngineImpl createDefaultEngine(TruffleLanguage<Object> hostLanguage) {
+    PolyglotEngineImpl createDefaultEngine(TruffleLanguage<Object> hostLanguage, boolean boundEngine) {
         Map<String, String> systemPropertiesOptions = getAPIAccess().readOptionsFromSystemProperties();
         Map<String, String> options = applyPresetOptions(Map.of(), systemPropertiesOptions, true, false);
         LogConfig logConfig = new LogConfig();
@@ -811,7 +812,7 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
         LogHandler logHandler = PolyglotEngineImpl.createLogHandler(logConfig, err, sandboxPolicy);
         EngineLoggerProvider loggerProvider = new PolyglotLoggers.EngineLoggerProvider(logHandler, logConfig.logLevels);
         final PolyglotEngineImpl engine = new PolyglotEngineImpl(this, sandboxPolicy, new String[0], out, err, System.in, engineOptions, logConfig.logLevels, loggerProvider, options,
-                        systemPropertiesOptions, true, true, true, true, null, logHandler, hostLanguage, false, false, new DefaultPolyglotHostService(this), null);
+                        systemPropertiesOptions, true, true, boundEngine, true, null, logHandler, hostLanguage, false, false, new DefaultPolyglotHostService(this), null);
         getAPIAccess().newEngine(engineDispatch, engine, false);
         return engine;
     }

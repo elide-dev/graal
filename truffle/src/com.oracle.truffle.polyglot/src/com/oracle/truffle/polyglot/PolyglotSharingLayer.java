@@ -260,7 +260,18 @@ final class PolyglotSharingLayer {
             s.singleContextValue.update(context);
         } else {
             s.singleContextValue.invalidate();
-            hostLanguage.singleLanguageContext.invalidate();
+            if (hostLanguage != null) {
+                /*
+                 * hostLanguage can still be null here during context pre-initialization: with
+                 * PreInitContextHostLanguage the host language context is not created until the
+                 * context is patched at image execution time (see
+                 * PolyglotContextImpl#maybeInitializeHostLanguage). Once the real host language
+                 * context is created, PolyglotLanguageContext#ensureCreated invalidates its
+                 * singleLanguageContext itself based on the (by then non-single-context) sharing
+                 * layer.
+                 */
+                hostLanguage.singleLanguageContext.invalidate();
+            }
         }
 
         s.claimedCount++;
