@@ -38,6 +38,7 @@ import com.oracle.svm.truffle.SubstrateTruffleCompilationIdentifier;
 import com.oracle.svm.truffle.api.SubstratePostPartialEvaluationSuite;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompilerImpl;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
+import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.compiler.OptimizedAssumptionDependency;
 import com.oracle.truffle.compiler.TruffleCompilable;
 import com.oracle.truffle.compiler.TruffleCompilationTask;
@@ -242,8 +243,9 @@ final class BuildTimeTruffleCompiler extends TruffleCompilerImpl {
     }
 
     /**
-     * A call target as seen by the build-time compiler. Only queries are delegated; compilation
-     * callbacks are ignored, since nothing is compiled or installed for the call target here.
+     * A call target as seen by the build-time compiler. Only queries are delegated, and none of
+     * them mutates a live target; compilation callbacks are ignored, since nothing is compiled or
+     * installed for the call target here.
      */
     static final class Compilable implements TruffleCompilable {
         private final Runtime runtime;
@@ -292,9 +294,10 @@ final class BuildTimeTruffleCompiler extends TruffleCompilerImpl {
             return target.getName();
         }
 
+        /** Uncached for live targets: the target caches the count in a field. */
         @Override
         public int getNonTrivialNodeCount() {
-            return target.getNonTrivialNodeCount();
+            return target.isAOTShadow() ? target.getNonTrivialNodeCount() : NodeUtil.countNodes(target.getRootNode());
         }
 
         @Override
@@ -322,8 +325,18 @@ final class BuildTimeTruffleCompiler extends TruffleCompilerImpl {
             return target.getKnownCallSiteCount();
         }
 
+        /**
+         * Only AOT shadows are prepared at build time. A live callee must stay untouched: preparing
+         * it would run {@code RootNode.prepareForCompilation} on the live root and create the
+         * target's rewriting and valid-root assumptions if it was executed during
+         * pre-initialization. Refusing makes the call site a real call, dispatching through the
+         * callee's own code, instead of inlining the callee.
+         */
         @Override
         public boolean prepareForCompilation(boolean rootCompilation, int compilationTier, boolean lastTier) {
+            if (!target.isAOTShadow()) {
+                return false;
+            }
             return target.prepareForCompilation(rootCompilation, compilationTier, lastTier);
         }
 

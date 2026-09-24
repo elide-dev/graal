@@ -24,6 +24,7 @@
  */
 package jdk.graal.compiler.truffle.test.aot;
 
+import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.options.OptionValues;
 
 import com.oracle.truffle.api.CallTarget;
@@ -37,6 +38,7 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.ExecutionSignature;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
@@ -45,7 +47,9 @@ import com.oracle.truffle.api.nodes.RootNode;
 /**
  * Test language for the AOT tier. A source "add:N" parses to a root computing {@code arg0 + N}
  * with a DSL node that is AOT-preparable; "refuse" parses to a root that refuses AOT; "throw"
- * throws; "recurse" calls itself {@code arg0} times.
+ * throws; "recurse" calls itself {@code arg0} times; "call" calls, through a direct call, a trivial
+ * callee that is executed while parsing (so, during pre-initialization, it is a live, initialized
+ * target).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
 public final class AOTTestLanguage extends TruffleLanguage<Object> {
@@ -53,6 +57,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     public static final String ID = "AOTTierTestLanguage";
 
     private static final LanguageReference<AOTTestLanguage> REFERENCE = LanguageReference.create(AOTTestLanguage.class);
+
+    /**
+     * Test hook: the callee of the last parsed "call" source. Static rather than per language
+     * instance, so that it is found in the image regardless of which engine adopted the
+     * pre-initialized one.
+     */
+    public static volatile CalleeRoot lastCallee;
 
     @Override
     protected Object createContext(Env env) {
@@ -94,6 +105,11 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new ThrowRoot(language);
         } else if (trimmed.equals("recurse")) {
             root = new RecurseRoot(language);
+        } else if (trimmed.equals("call")) {
+            CalleeRoot callee = new CalleeRoot(language);
+            callee.getCallTarget().call(0);
+            lastCallee = callee;
+            root = new CallRoot(language, callee.getCallTarget());
         } else {
             throw new IllegalArgumentException(trimmed);
         }
@@ -258,6 +274,68 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "recurse";
+        }
+    }
+
+    public static final class CallRoot extends RootNode {
+        @Child DirectCallNode call;
+
+        CallRoot(TruffleLanguage<?> language, CallTarget callee) {
+            super(language);
+            this.call = DirectCallNode.create(callee);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return call.call(frame.getArguments());
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "call";
+        }
+    }
+
+    /** A trivial root, so that first-tier partial evaluation of a caller tries to inline it. */
+    public static final class CalleeRoot extends RootNode {
+        /** Test hook: whether this root was prepared for compilation in the image builder. */
+        public volatile boolean preparedAtBuildTime;
+
+        CalleeRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return 42;
+        }
+
+        @Override
+        protected boolean isTrivial() {
+            return true;
+        }
+
+        @Override
+        protected boolean prepareForCompilation(boolean rootCompilation, int compilationTier, boolean lastTier) {
+            if (ImageInfo.inImageBuildtimeCode()) {
+                preparedAtBuildTime = true;
+            }
+            return true;
+        }
+
+        @Override
+        public String getName() {
+            return "callee";
         }
     }
 
