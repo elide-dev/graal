@@ -2053,7 +2053,7 @@ suite = {
           "java.logging",
           "java.management",
           "jdk.management",
-          "java.sql", # java.sql.date java.sql.Time
+          "static java.sql", # java.sql.date java.sql.Time, see HostSqlTypes
           "org.graalvm.collections",
           "org.graalvm.nativeimage",
           "static org.graalvm.nativebridge",
