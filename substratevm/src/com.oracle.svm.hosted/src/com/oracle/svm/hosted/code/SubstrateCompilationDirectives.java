@@ -185,6 +185,15 @@ public class SubstrateCompilationDirectives {
      */
     private Map<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> deoptEntries = new ConcurrentHashMap<>();
     private final Set<AnalysisMethod> deoptForTestingMethods = ConcurrentHashMap.newKeySet();
+    /**
+     * Builder-compiled methods whose frames (including all inlined frames) must be deoptimizable.
+     * Unlike {@link #deoptForTestingMethods}, a deopt source does not need a deopt target of its
+     * own for correctness of inner frames, and all deopt entries registered for its inlined frames
+     * are kept by {@link #resetDeoptEntries()}.
+     */
+    private final Set<AnalysisMethod> deoptSourceMethods = ConcurrentHashMap.newKeySet();
+    /** Deopt-target methods that received entries on behalf of a deopt source. */
+    private final Set<AnalysisMethod> deoptSourceTargets = ConcurrentHashMap.newKeySet();
     private final Set<AnalysisMethod> deoptInliningExcludes = ConcurrentHashMap.newKeySet();
 
     public static SubstrateCompilationDirectives singleton() {
@@ -256,6 +265,27 @@ public class SubstrateCompilationDirectives {
         return deoptForTestingMethods.contains(toAnalysisMethod(method));
     }
 
+    /**
+     * Registers a builder-compiled method as a deoptimization source: every frame state in its
+     * graph, including the states of inlined frames, becomes a deoptimization entry of the
+     * {@link #DEOPT_TARGET_METHOD} variant of the frame's method. Must be called before analysis
+     * finishes.
+     */
+    public void registerDeoptSource(AnalysisMethod method) {
+        assert deoptInfoModifiable();
+        deoptSourceMethods.add(method);
+    }
+
+    public boolean isRegisteredDeoptSource(ResolvedJavaMethod method) {
+        return deoptSourceMethods.contains(toAnalysisMethod(method));
+    }
+
+    void recordDeoptSourceTarget(ResolvedJavaMethod deoptTarget) {
+        assert deoptInfoModifiable();
+        assert isDeoptTarget(deoptTarget) : deoptTarget;
+        deoptSourceTargets.add(toAnalysisMethod(deoptTarget));
+    }
+
     public boolean isRegisteredDeoptTarget(ResolvedJavaMethod method) {
         return deoptEntries.containsKey(toAnalysisMethod(method));
     }
@@ -322,6 +352,13 @@ public class SubstrateCompilationDirectives {
             var value = deoptEntries.get(key);
             assert key != null && value != null : "Unexpected null value " + key + ", " + value;
             newDeoptEntries.put(key, value);
+        }
+        // all deopt targets which received entries on behalf of a deopt source cannot be cleared
+        for (AnalysisMethod target : deoptSourceTargets) {
+            Map<Long, DeoptSourceFrameInfo> entries = deoptEntries.get(target);
+            if (entries != null) {
+                newDeoptEntries.put(target, entries);
+            }
         }
         deoptEntries = newDeoptEntries;
         // all methods which require frame information must have a deoptimization entry

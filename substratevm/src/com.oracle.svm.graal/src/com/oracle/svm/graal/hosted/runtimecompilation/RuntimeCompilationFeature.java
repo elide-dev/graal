@@ -847,6 +847,9 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
                     recordFailed(aMethod);
                     return false;
                 }
+            } else if (SubstrateCompilationDirectives.singleton().isRegisteredDeoptSource(aMethod)) {
+                DeoptimizationUtils.registerDeoptEntriesForDeoptSource(bb, graph, aMethod);
+                return true;
             } else if (DeoptimizationUtils.canDeoptForTesting(aMethod, false, graphChecker)) {
                 DeoptimizationUtils.registerDeoptEntriesForDeoptTesting(bb, graph, aMethod);
                 return true;
