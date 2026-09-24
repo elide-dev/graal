@@ -251,6 +251,9 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
 
     final List<PolyglotSharingLayer> sharedLayers = new ArrayList<>();
 
+    /** Parse results of build-time sources; strong so they survive into the image heap. */
+    final List<CallTarget> preinitializedCallTargets = new ArrayList<>();
+
     private final ReferenceQueue<Source> deadSourcesQueue = new ReferenceQueue<>();
 
     private boolean runtimeInitialized;

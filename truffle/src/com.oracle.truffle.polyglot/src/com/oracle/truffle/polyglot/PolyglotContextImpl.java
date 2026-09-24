@@ -51,6 +51,7 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -3916,6 +3917,29 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                             if (emitWarning) {
                                 LOG.log(Level.WARNING, "Language {0} cannot be pre-initialized as it does not override TruffleLanguage.patchContext method.", language.getId());
                             }
+                        }
+                    }
+
+                    String sourcesOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME);
+                    if (!sourcesOption.isEmpty()) {
+                        for (String entry : sourcesOption.split(",")) {
+                            int colon = entry.indexOf(':');
+                            String languageId = colon > 0 ? entry.substring(0, colon) : null;
+                            PolyglotLanguage language = languageId == null ? null : engine.idToLanguage.get(languageId);
+                            if (language == null || colon == entry.length() - 1) {
+                                throw new IllegalArgumentException(
+                                                "Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': expected <language>:<path> with an installed language.");
+                            }
+                            Path path = Path.of(entry.substring(colon + 1));
+                            Source source;
+                            try {
+                                source = Source.newBuilder(languageId, Files.readString(path), path.getFileName().toString()).build();
+                            } catch (IOException e) {
+                                throw new IllegalArgumentException("Cannot read " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': " + e.getMessage(), e);
+                            }
+                            PolyglotLanguageContext languageContext = context.getContextInitialized(language, null);
+                            CallTarget target = languageContext.parseCached(ParseOrigin.EMBEDDING, null, source, null);
+                            engine.preinitializedCallTargets.add(target);
                         }
                     }
 
