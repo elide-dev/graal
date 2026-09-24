@@ -132,6 +132,8 @@ import com.oracle.svm.core.reflect.MissingReflectionRegistrationUtils;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackOverflowCheck;
+import com.oracle.svm.core.thread.ContinuationSupport;
+import com.oracle.svm.core.thread.VirtualThreadMountListener;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.graal.RuntimeCompilationSupport;
 import com.oracle.svm.graal.hosted.runtimecompilation.CallTreeInfo;
@@ -163,6 +165,7 @@ import com.oracle.svm.truffle.api.SubstrateThreadLocalHandshake;
 import com.oracle.svm.truffle.api.SubstrateThreadLocalHandshakeSnippets;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompiler;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
+import com.oracle.svm.truffle.api.SubstrateTruffleVirtualThreadSupport;
 import com.oracle.svm.truffle.api.SubstrateTruffleUniverseFactory;
 import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.OriginalClassProvider;
@@ -415,6 +418,11 @@ public class TruffleFeature implements InternalFeature {
          */
         config.registerOpaqueMethodReturn(ReflectionUtil.lookupMethod(CompilerDirectives.class, "inInterpreter"));
         config.registerOpaqueMethodReturn(ReflectionUtil.lookupMethod(HostCompilerDirectives.class, "inInterpreterFastPath"));
+
+        if (ContinuationSupport.isSupported()) {
+            /* Continuation-backed virtual threads: move Truffle's carrier-local state with them. */
+            ImageSingletons.add(VirtualThreadMountListener.class, new SubstrateTruffleVirtualThreadSupport());
+        }
 
         SubstrateTruffleRuntime truffleRuntime = (SubstrateTruffleRuntime) Truffle.getRuntime();
         TruffleHostEnvironment.overrideLookup(new SubstrateTruffleHostEnvironmentLookup(truffleRuntime, config.getMetaAccess()));

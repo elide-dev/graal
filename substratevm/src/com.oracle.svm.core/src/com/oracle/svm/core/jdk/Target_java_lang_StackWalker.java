@@ -60,7 +60,6 @@ import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameSourceInfo;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
-import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.deopt.VirtualFrame;
@@ -397,8 +396,7 @@ final class Target_java_lang_StackWalker {
 
             JavaFrame frame = getCurrentFrame();
             UntetheredCodeInfo untetheredInfo = frame.getIPCodeInfo();
-            VMError.guarantee(UntetheredCodeInfoAccess.isAOTImageCode(untetheredInfo));
-
+            /* Runtime-compiled frames are fine: the tether keeps their CodeInfo alive during the query. */
             Object tether = CodeInfoAccess.acquireTether(untetheredInfo);
             try {
                 CodeInfo info = CodeInfoAccess.convert(untetheredInfo, tether);
@@ -454,7 +452,8 @@ final class Target_java_lang_StackWalker {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
             VMError.guarantee(!JavaFrames.isEntryPoint(frame), "Entry point frames are not supported");
             VMError.guarantee(!JavaFrames.isUnknownFrame(frame), "Stack walk must not encounter unknown frame");
-            VMError.guarantee(!Deoptimizer.checkIsDeoptimized(frame), "Deoptimized frames are not supported");
+            /* Frames pending lazy deoptimization can be frozen; eagerly deoptimized frames cannot. */
+            VMError.guarantee(Deoptimizer.checkEagerDeoptimized(frame) == null, "Eagerly deoptimized frames are not supported in continuations");
             return frame;
         }
     }

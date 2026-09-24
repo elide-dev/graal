@@ -67,7 +67,7 @@ public class LoomTest extends AbstractPolyglotTest {
             }
         });
 
-        if (isGraalRuntime()) {
+        if (isGraalRuntime() && !(TruffleOptions.AOT && continuationBackedVirtualThreads())) {
             assertTrue(log.toString(), log.toString().startsWith("[engine] WARNING: Using polyglot contexts on Java virtual threads"));
         } else {
             assertEquals("", log.toString());
@@ -76,7 +76,7 @@ public class LoomTest extends AbstractPolyglotTest {
 
     @Test
     public void testManyVirtualThreads() throws Throwable {
-        Assume.assumeTrue(canCreateVirtualThreads() && !TruffleOptions.AOT);
+        Assume.assumeTrue(canCreateVirtualThreads() && (!TruffleOptions.AOT || continuationBackedVirtualThreads()));
 
         // We want a big number of virtual threads but also to execute this test in reasonable time
         int n = 1000;
@@ -123,6 +123,11 @@ public class LoomTest extends AbstractPolyglotTest {
                 throw error[0];
             }
         }
+    }
+
+    private static boolean continuationBackedVirtualThreads() {
+        return "java.lang.VirtualThread".equals(Thread.ofVirtual().unstarted(() -> {
+        }).getClass().getName());
     }
 
     private static void await(CountDownLatch latch) {

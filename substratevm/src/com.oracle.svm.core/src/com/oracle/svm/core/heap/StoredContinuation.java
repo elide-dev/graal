@@ -47,6 +47,13 @@ public final class StoredContinuation {
      */
     Pointer originalCarrierSP;
 
+    /**
+     * The {@link com.oracle.svm.core.code.CodeInfoTether}s of all runtime-compiled frames in the
+     * stack data, so that their code stays alive for as long as the GC may walk these frames, or
+     * {@code null}. Zeroed at allocation, like {@link #ip}, because the object is not filled.
+     */
+    Object[] codeTethers;
+
     /** Must be allocated via {@link StoredContinuationAccess}. */
     private StoredContinuation() {
     }

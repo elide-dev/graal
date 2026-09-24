@@ -64,4 +64,13 @@ final class SubstrateFastThreadLocal extends OptimizedFastThreadLocal {
         }
     }
 
+    /** Raw access to the carrier's slot, for moving the value with a virtual thread. */
+    static Object[] getCurrentRaw() {
+        return CONTEXT.get();
+    }
+
+    static void setCurrentRaw(Object[] value) {
+        CONTEXT.set(value);
+    }
+
 }
