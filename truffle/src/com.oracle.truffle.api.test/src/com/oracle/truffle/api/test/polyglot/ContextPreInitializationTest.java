@@ -53,6 +53,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -681,6 +682,41 @@ public class ContextPreInitializationTest {
                 CountingContext secondCtx = contexts.get(contexts.size() - 1);
                 assertSame("contexts on the engine must share the pre-initialized language instance", preinit.languageInstance, secondCtx.languageInstance);
             }
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesParseOnly() throws Exception {
+        Path file = Files.createTempFile("preinit", ".shared");
+        Files.writeString(file, "test source");
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", SHARED + ":" + file);
+        try {
+            BaseLanguage.parsedSources.clear();
+            BaseLanguage.executed.set(0);
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+            Files.delete(file);
+        }
+        assertEquals(List.of("test source"), BaseLanguage.parsedSources);
+        assertEquals("pre-initialization must never execute build-time sources", 0, BaseLanguage.executed.get());
+    }
+
+    @Test
+    public void testPreinitializeSourcesUnknownLanguage() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", "nosuchlanguage:/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("nosuchlanguage:/x"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         }
     }
 
@@ -2907,6 +2943,7 @@ public class ContextPreInitializationTest {
     private static void resetSystemPropertiesOptions() {
         System.clearProperty("polyglot.image-build-time.PreinitializeContexts");
         System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+        System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         System.clearProperty(SYS_OPTION1_KEY);
         System.clearProperty(SYS_OPTION2_KEY);
     }
@@ -3052,6 +3089,9 @@ public class ContextPreInitializationTest {
 
     abstract static class BaseLanguage extends TruffleLanguage<CountingContext> {
 
+        static final List<String> parsedSources = Collections.synchronizedList(new ArrayList<>());
+        static final AtomicInteger executed = new AtomicInteger();
+
         static Map<Pair<Class<? extends BaseLanguage>, ActionKind>, Function<TruffleLanguage.Env, Object>> actions = new HashMap<>();
 
         static void registerAction(Class<? extends BaseLanguage> languageClass, ActionKind kind, Consumer<TruffleLanguage.Env> action) {
@@ -3136,9 +3176,11 @@ public class ContextPreInitializationTest {
         @Override
         protected CallTarget parse(TruffleLanguage.ParsingRequest request) throws Exception {
             final CharSequence result = request.getSource().getCharacters();
+            parsedSources.add(result.toString());
             return new RootNode(this) {
                 @Override
                 public Object execute(VirtualFrame frame) {
+                    executed.incrementAndGet();
                     executeImpl(getContextReference0().get(this));
                     return result;
                 }
