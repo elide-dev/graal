@@ -40,6 +40,7 @@ import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.FeatureHandler;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.hosted.NativeImageGenerator;
+import com.oracle.svm.shared.util.LogUtils;
 import com.oracle.svm.truffle.TruffleFeature;
 import com.oracle.svm.truffle.api.SubstrateKnownTruffleTypes;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
@@ -112,11 +113,13 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     }
 
     private static void partialEvaluate(BuildTimeTruffleCompiler compiler, BuildTimeCompilationSupport.Pair pair, DebugContext debug) {
-        OptimizedCallTarget shadow = pair.shadow();
-        assert shadow.isAOTShadow() : "only AOT shadows are compiled at build time: " + shadow;
-        String name = rootName(pair.live());
+        String name = "<unnamed root>";
         try {
-            StructuredGraph graph = compiler.partialEvaluateForBuildTime(compiler.asCompilable(shadow), debug, reason -> summary("skipped " + name + ": " + reason));
+            name = rootName(pair.live());
+            String rootName = name;
+            OptimizedCallTarget shadow = pair.shadow();
+            assert shadow.isAOTShadow() : "only AOT shadows are compiled at build time: " + shadow;
+            StructuredGraph graph = compiler.partialEvaluateForBuildTime(compiler.asCompilable(shadow), debug, reason -> summary("skipped " + rootName + ": " + reason));
             if (graph != null) {
                 summary("compiled " + name + " nodes=" + graph.getNodeCount());
             }
@@ -127,16 +130,19 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
              * A failure to compile one root never fails the build by itself; whether skipped roots
              * are errors is decided by TruffleAOTFailOnError.
              */
-            summary("skipped " + name + ": " + t);
             if (BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
+                summary("skipped " + name + ": " + t);
                 t.printStackTrace(System.out);
+            } else {
+                /* Unexpected failures are reported even without the summary. */
+                LogUtils.warning("Truffle build-time compilation skipped %s: %s", name, t);
             }
         }
     }
 
     private static String rootName(OptimizedCallTarget target) {
         String name = target.getRootNode().getName();
-        return name == null ? target.getRootNode().toString() : name;
+        return name == null ? String.valueOf(target.getRootNode()) : name;
     }
 
     /**
