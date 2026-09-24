@@ -2389,6 +2389,7 @@ suite = {
                     "com.oracle.svm.truffle.nfi.posix to org.graalvm.nativeimage.builder,jdk.graal.compiler",
                     "com.oracle.svm.truffle.api to org.graalvm.nativeimage.builder,jdk.graal.compiler",
                     "com.oracle.svm.truffle.isolated to org.graalvm.nativeimage.builder,jdk.graal.compiler",
+                    "com.oracle.svm.truffle.buildtime to org.graalvm.nativeimage.builder,jdk.graal.compiler",
                 ],
                 "requires": [
                     "java.management",

@@ -27,6 +27,7 @@ package jdk.graal.compiler.truffle.test.aot;
 import org.graalvm.options.OptionValues;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.AOTSupport;
 import com.oracle.truffle.api.dsl.GenerateAOT;
@@ -122,6 +123,12 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
         @Specialization
         static String doString(String left, int right) {
+            return concat(left, right);
+        }
+
+        /* String concatenation cannot be runtime compiled in a native image. */
+        @TruffleBoundary
+        static String concat(String left, int right) {
             return left + right;
         }
     }
@@ -194,13 +201,16 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     }
 
     public static final class ThrowRoot extends RootNode {
+        /* A constant: string concatenation cannot be runtime compiled in a native image. */
+        static final String MESSAGE = "thrown by throw";
+
         ThrowRoot(TruffleLanguage<?> language) {
             super(language);
         }
 
         @Override
         public Object execute(VirtualFrame frame) {
-            throw new AOTTestException("thrown by " + getName(), this);
+            throw new AOTTestException(MESSAGE, this);
         }
 
         @Override

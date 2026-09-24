@@ -253,14 +253,20 @@ public abstract class TruffleCompilerImpl implements TruffleCompiler, Compilatio
     public OptionValues getOrCreateCompilerOptions(TruffleCompilable compilable) throws IllegalArgumentException {
         // Options are guaranteed to be unchanged per engine.
         Long engineId = compilable.engineId();
-        return cachedOptions.computeIfAbsent(engineId, (id) -> {
-            OptionValues graalOptions = getGraalOptions();
-            Map<String, String> options = compilable.getCompilerOptions();
-            EconomicMap<OptionKey<?>, Object> map = parseOptions(options);
-            graalOptions = TruffleCompilerOptions.updateValues(graalOptions, map);
-            map.putAll(graalOptions.getMap());
-            return new OptionValues(map);
-        });
+        return cachedOptions.computeIfAbsent(engineId, (id) -> createCompilerOptions(compilable));
+    }
+
+    /**
+     * Creates the compiler options for {@code compilable}, without caching them like
+     * {@link #getOrCreateCompilerOptions(TruffleCompilable)} does.
+     */
+    protected final OptionValues createCompilerOptions(TruffleCompilable compilable) throws IllegalArgumentException {
+        OptionValues graalOptions = getGraalOptions();
+        Map<String, String> options = compilable.getCompilerOptions();
+        EconomicMap<OptionKey<?>, Object> map = parseOptions(options);
+        graalOptions = TruffleCompilerOptions.updateValues(graalOptions, map);
+        map.putAll(graalOptions.getMap());
+        return new OptionValues(map);
     }
 
     private static EconomicMap<OptionKey<?>, Object> parseOptions(Map<String, String> options) {

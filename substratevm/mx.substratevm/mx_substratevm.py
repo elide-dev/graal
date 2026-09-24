@@ -32,6 +32,7 @@ import re
 import shutil
 import tempfile
 import textwrap
+import zipfile
 from glob import glob
 from contextlib import contextmanager
 from itertools import islice
@@ -500,6 +501,49 @@ def truffle_unittest_task(extra_build_args=None):
     finally:
         if success:
             os.unlink(logfile_name)
+
+    truffle_aot_tier_native_tests(extra_build_args)
+
+
+def _truffle_test_image_args_without_preinitialization():
+    """
+    truffle-test.jar (on the class path of every compiler native unit test) sets
+    polyglot.image-build-time.PreinitializeContexts in its native-image.properties, which the image builder applies after,
+    and so overrides, the command line. Excludes that file and passes its other arguments explicitly instead.
+    """
+    properties_path = 'META-INF/native-image/native-image.properties'
+    with zipfile.ZipFile(mx.distribution('truffle:TRUFFLE_TEST').path) as jar:
+        text = jar.read(properties_path).decode('utf-8')
+    # Continuation lines end with a backslash; Args is then a single line.
+    args_value = next((line.split('=', 1)[1] for line in text.replace('\\\n', ' ').splitlines() if line.strip().startswith('Args')), '')
+    args = [a for a in shlex.split(args_value) if not a.startswith('-Dpolyglot.image-build-time.PreinitializeContexts=')]
+    return ['--exclude-config', '.*/truffle-test.jar', properties_path] + args
+
+
+def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
+    """Builds a test image that compiles pre-initialized Truffle call targets at build time (the AOT tier) and runs AOTTierNativeTest."""
+    extra_build_args = extra_build_args or []
+    fixtures = {}
+    tmp = tempfile.mkdtemp(prefix='truffle-aot-')
+    for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse')]:
+        path = os.path.join(tmp, name + '.aot')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(code)
+        fixtures[name] = path
+    sources = ','.join('AOTTierTestLanguage:' + p for p in fixtures.values())
+    build_args = extra_build_args + svm_experimental_options(['-H:-SupportCompileInIsolates', '-H:+TruffleAOTPrintSummary']) + _truffle_test_image_args_without_preinitialization() + [
+        '-Dpolyglot.image-build-time.PreinitializeContexts=AOTTierTestLanguage',
+        '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
+        '-Dpolyglot.image-build-time.PreinitializeSources=' + sources,
+        '-Dpolyglot.image-build-time.AOTCompile=true',
+    ]
+    native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(build_args) + (run_args or []))
+
+
+@mx.command(suite.name, 'truffle-aot-native-tests', '[image-builder-args...]')
+def truffle_aot_native_tests(args):
+    """Builds and runs the Truffle AOT tier native unit tests; arguments are passed to the image builder."""
+    truffle_aot_tier_native_tests(args)
 
 
 def svm_gate_body(args, tasks):

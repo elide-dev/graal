@@ -95,7 +95,7 @@ public final class SubstrateTruffleUniverseFactory extends SubstrateUniverseFact
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    static PartialEvaluationMethodInfo createPartialEvaluationMethodInfo(TruffleCompilerRuntime runtime, ResolvedJavaMethod method,
+    public static PartialEvaluationMethodInfo createPartialEvaluationMethodInfo(TruffleCompilerRuntime runtime, ResolvedJavaMethod method,
                     KnownTruffleTypes types) {
         Map<ResolvedJavaType, AnnotationValue> annotations = GuestAnnotationAccess.getDeclaredAnnotationValues(method);
         var info = PartialEvaluator.computePartialEvaluationMethodInfo(runtime, method, annotations, types, OriginalClassProvider::getOriginalType);
