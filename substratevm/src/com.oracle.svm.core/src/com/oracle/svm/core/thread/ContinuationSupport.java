@@ -124,6 +124,7 @@ public class ContinuationSupport {
         // Code must not rely on remaining uninterruptible until after frames were copied.
         CodePointer enterIP = singleton().copyFrames(storedCont, topSP, preparedData);
         patchStackAddressesInCopiedFrames(storedCont, enterIP, topSP);
+        StoredContinuationAccess.markThawed(storedCont);
         KnownIntrinsics.farReturn(FREEZE_OK, topSP, enterIP, false);
     }
 

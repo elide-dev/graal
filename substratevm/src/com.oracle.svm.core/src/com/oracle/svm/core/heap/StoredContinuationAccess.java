@@ -244,6 +244,19 @@ public final class StoredContinuationAccess {
         cont.ip = ip;
     }
 
+    /**
+     * Called once the frames of {@code s} have been copied back onto a thread stack. From then on
+     * {@code s} is garbage, but the GC can still visit it (e.g., via a dirty card in the old
+     * generation). With runtime compilation, the code of its frames may be freed and its addresses
+     * reused, so the stale frames must never be walked again.
+     */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static void markThawed(StoredContinuation s) {
+        if (DeoptimizationSupport.enabled() && !Heap.getHeap().isInImageHeap(s)) {
+            s.ip = Word.nullPointer();
+        }
+    }
+
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static boolean shouldWalkContinuation(StoredContinuation s) {
         /*
