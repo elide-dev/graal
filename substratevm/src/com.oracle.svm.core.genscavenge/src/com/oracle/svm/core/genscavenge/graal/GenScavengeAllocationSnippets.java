@@ -85,12 +85,12 @@ public final class GenScavengeAllocationSnippets implements Snippets {
 
     @Snippet
     public static Object formatStoredContinuation(Word memory, DynamicHub hub, int length, boolean rememberedSet, boolean unaligned, @ConstantParameter long ipOffset,
-                    @ConstantParameter boolean emitMemoryBarrier, @ConstantParameter AllocationSnippets.AllocationSnippetCounters snippetCounters) {
+                    @ConstantParameter long codeTethersOffset, @ConstantParameter boolean emitMemoryBarrier, @ConstantParameter AllocationSnippets.AllocationSnippetCounters snippetCounters) {
         DynamicHub hubNonNull = (DynamicHub) PiNode.piCastNonNull(hub, SnippetAnchorNode.anchor());
         int layoutEncoding = hubNonNull.getLayoutEncoding();
         UnsignedWord size = LayoutEncoding.getArrayAllocationSize(layoutEncoding, length);
         Word objectHeader = encodeAsObjectHeader(hubNonNull, rememberedSet, unaligned);
-        return alloc().formatStoredContinuation(objectHeader, size, length, memory, emitMemoryBarrier, ipOffset, snippetCounters);
+        return alloc().formatStoredContinuation(objectHeader, size, length, memory, emitMemoryBarrier, ipOffset, codeTethersOffset, snippetCounters);
     }
 
     @Snippet
@@ -197,6 +197,7 @@ public final class GenScavengeAllocationSnippets implements Snippets {
                 args.add("rememberedSet", node.getRememberedSet());
                 args.add("unaligned", node.getUnaligned());
                 args.add("ipOffset", ContinuationSupport.singleton().getIPOffset());
+                args.add("codeTethersOffset", ContinuationSupport.singleton().getCodeTethersOffset());
                 args.add("emitMemoryBarrier", node.getEmitMemoryBarrier());
                 args.add("snippetCounters", baseTemplates.getSnippetCounters());
                 template(tool, node, args).instantiate(tool.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
