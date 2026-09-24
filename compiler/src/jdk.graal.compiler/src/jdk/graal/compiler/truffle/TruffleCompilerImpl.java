@@ -615,6 +615,65 @@ public abstract class TruffleCompilerImpl implements TruffleCompiler, Compilatio
     }
 
     /**
+     * Partially evaluates {@code compilable} as first-tier code (with call/loop counting) and applies
+     * the Truffle tier, stopping before the backend. Used by Native Image to compile the AOT tier at
+     * build time. No speculation log is used. Returns null on a bailout; the reason is passed to
+     * {@code onBailout}.
+     */
+    public StructuredGraph partialEvaluateForBuildTime(TruffleCompilable compilable, DebugContext debug, Consumer<String> onBailout) {
+        return partialEvaluateForBuildTime(partialEvaluator, compilable, debug, onBailout);
+    }
+
+    /**
+     * Like {@link #partialEvaluateForBuildTime(TruffleCompilable, DebugContext, Consumer)}, but
+     * partially evaluates with {@code pe} instead of this compiler's own partial evaluator. Only this
+     * compiler is {@linkplain #initialize initialized} here; the caller is responsible for
+     * initializing {@code pe}.
+     */
+    @SuppressWarnings("try")
+    public StructuredGraph partialEvaluateForBuildTime(PartialEvaluator pe, TruffleCompilable compilable, DebugContext debug, Consumer<String> onBailout) {
+        initialize(compilable, true);
+        TruffleCompilationTask task = new BuildTimeCompilationTask();
+        OptionValues compilerOptions = getOrCreateCompilerOptions(compilable);
+        try (TruffleCompilation compilation = openCompilation(task, compilable)) {
+            try (DebugContext.Scope s = debug.scope("TruffleBuildTimeCompilation", new TruffleDebugJavaMethod(task, compilable));
+                            PerformanceInformationHandler handler = PerformanceInformationHandler.install(config.runtime(), compilerOptions);
+                            CompilationAlarm alarm = CompilationAlarm.trackCompilationPeriod(debug.getOptions())) {
+                TruffleTierContext context = TruffleTierContext.createInitialContext(pe, compilerOptions, debug, compilable,
+                                compilation.getCompilationId(), null, task, handler);
+                truffleTier.apply(context.graph, context);
+                return context.graph;
+            } catch (BailoutException e) {
+                onBailout.accept(e.getMessage());
+                return null;
+            } catch (Throwable e) {
+                throw debug.handle(e);
+            }
+        }
+    }
+
+    /**
+     * The first-tier task of a build-time compilation: it is never cancelled and has a next tier,
+     * so call and loop counting is compiled in.
+     */
+    private static final class BuildTimeCompilationTask implements TruffleCompilationTask {
+        @Override
+        public boolean isCancelled() {
+            return false;
+        }
+
+        @Override
+        public boolean isLastTier() {
+            return false;
+        }
+
+        @Override
+        public boolean hasNextTier() {
+            return true;
+        }
+    }
+
+    /**
      * Compiles a graph produced by {@link TruffleTier}, i.e.
      * {@link #truffleTier(TruffleCompilationWrapper, DebugContext)}.
      *
