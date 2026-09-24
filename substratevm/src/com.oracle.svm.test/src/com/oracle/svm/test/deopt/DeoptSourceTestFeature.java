@@ -80,7 +80,7 @@ public final class DeoptSourceTestFeature implements InternalFeature {
         plugins.appendInlineInvokePlugin(new InlineInvokePlugin() {
             @Override
             public InlineInfo shouldInlineInvoke(GraphBuilderContext b, ResolvedJavaMethod method, ValueNode[] args) {
-                if (method.getName().equals("helper") && method.getDeclaringClass().equals(b.getMetaAccess().lookupJavaType(DeoptSourceTest.class)) && inDeoptSourceGraph(b)) {
+                if (method.getName().startsWith("helper") && method.getDeclaringClass().equals(b.getMetaAccess().lookupJavaType(DeoptSourceTest.class)) && inDeoptSourceGraph(b)) {
                     return InlineInfo.createStandardInlineInfo(method);
                 }
                 return null;
@@ -131,18 +131,25 @@ public final class DeoptSourceTestFeature implements InternalFeature {
     public void beforeAnalysis(Feature.BeforeAnalysisAccess a) {
         BeforeAnalysisAccessImpl access = (BeforeAnalysisAccessImpl) a;
         try {
-            AnalysisMethod compute = access.getMetaAccess().lookupJavaMethod(DeoptSourceTest.class.getDeclaredMethod("compute", int.class));
-            SubstrateCompilationDirectives.singleton().registerDeoptSource(compute);
-
-            /*
-             * Nothing calls the deopt target of the inlined helper, so it must be made reachable
-             * explicitly for the analysis to parse it.
-             */
-            AnalysisMethod helper = access.getMetaAccess().lookupJavaMethod(DeoptSourceTest.class.getDeclaredMethod("helper", int.class));
-            ((PointsToAnalysisMethod) helper).getOrCreateMethodVariant(DEOPT_TARGET_METHOD);
-            access.registerAsRoot(helper, true, "deopt source test", DEOPT_TARGET_METHOD);
+            registerDeoptSource(access, "compute", "helper");
+            registerDeoptSource(access, "computeCatching", "helperCatching");
         } catch (NoSuchMethodException e) {
             throw new AssertionError(e);
         }
+    }
+
+    private static void registerDeoptSource(BeforeAnalysisAccessImpl access, String source, String inlined) throws NoSuchMethodException {
+        AnalysisMethod sourceMethod = access.getMetaAccess().lookupJavaMethod(DeoptSourceTest.class.getDeclaredMethod(source, int.class));
+        SubstrateCompilationDirectives.singleton().registerDeoptSource(sourceMethod);
+
+        /*
+         * The inlined frame is an original-variant frame, not one from a runtime-compiled graph,
+         * so nothing links its deopt target. Rooting the deopt target satisfies the precondition
+         * of registerDeoptSource. The source's own deopt target is linked as a stub by the test
+         * method that calls the source.
+         */
+        AnalysisMethod inlinedMethod = access.getMetaAccess().lookupJavaMethod(DeoptSourceTest.class.getDeclaredMethod(inlined, int.class));
+        ((PointsToAnalysisMethod) inlinedMethod).getOrCreateMethodVariant(DEOPT_TARGET_METHOD);
+        access.registerAsRoot(inlinedMethod, true, "deopt source test", DEOPT_TARGET_METHOD);
     }
 }
