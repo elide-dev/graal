@@ -59,6 +59,12 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
     final AOTEntry entry;
     private volatile boolean unlinked;
     /**
+     * Whether an {@link InvalidateAOTCodeOperation} deoptimized the activations of this code. Set
+     * at the safepoint of that operation, after which the code is unlinked and has no activation
+     * that is not deoptimized, so no later invalidation needs a safepoint.
+     */
+    volatile boolean deoptimized;
+    /**
      * Whether AOT code of {@link #live} was entered. Only ever set, under the lock of this code
      * ({@link #firstEnter()}), after the first entry was processed. Volatile: a thread that sees it
      * set without taking the lock ({@link #enter}) must also see the live target initialized.
@@ -182,7 +188,10 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
 
     /**
      * Not gated on {@link #isValid()}: after the code was unlinked without deoptimization (by the
-     * AOT tier threshold), activations of it can still be on a stack.
+     * AOT tier threshold), activations of it can still be on a stack. Gated on
+     * {@link #deoptimized} instead: the code stays a dependency of all its assumptions, and each
+     * one invalidated later would otherwise cost another safepoint for nothing. A thread that
+     * races past the check with another invalidation only enqueues a redundant operation.
      */
     private void invalidate(CharSequence reason) {
         if (SubstrateUtil.HOSTED) {
@@ -190,10 +199,16 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
             TruffleBuildTimeCompilationFeature.dropAtBuildTime(this, reason);
             return;
         }
+        if (deoptimized) {
+            return;
+        }
         InvalidateAOTCodeOperation operation = new InvalidateAOTCodeOperation(this, reason);
         operation.enqueue();
         if (operation.unlinked) {
             live.traceUnlinkAOT(reason);
+        }
+        if (live.engine.traceAOT) {
+            live.log("[aot] deoptimize " + rootName(live) + ": " + reason);
         }
     }
 

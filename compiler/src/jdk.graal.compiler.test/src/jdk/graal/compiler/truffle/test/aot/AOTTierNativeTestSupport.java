@@ -27,6 +27,7 @@ package jdk.graal.compiler.truffle.test.aot;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -68,6 +69,26 @@ final class AOTTierNativeTestSupport {
         return builder.build();
     }
 
+    /**
+     * Joins {@code thread} for at most {@code seconds}, and fails, with the thread's stack, if it
+     * is still running: a test must fail rather than hang.
+     */
+    static void join(Thread thread, long seconds) throws InterruptedException {
+        thread.join(TimeUnit.SECONDS.toMillis(seconds));
+        if (thread.isAlive()) {
+            AssertionError error = new AssertionError(thread.getName() + " did not finish within " + seconds + " s");
+            error.setStackTrace(thread.getStackTrace());
+            throw error;
+        }
+    }
+
+    /** A daemon thread, so that a thread a failed test leaves running cannot keep the run alive. */
+    static Thread daemon(String name, Runnable body) {
+        Thread thread = new Thread(body, name);
+        thread.setDaemon(true);
+        return thread;
+    }
+
     static String text(ByteArrayOutputStream log) {
         synchronized (log) {
             return log.toString();
@@ -77,6 +98,14 @@ final class AOTTierNativeTestSupport {
     /** The number of {@code [aot] enter <root>} lines of {@code log}. */
     static int enters(String log, String root) {
         return count(log, "\\[aot\\] enter " + Pattern.quote(root) + "$");
+    }
+
+    /**
+     * The number of {@code [aot] deoptimize <root>: <reason>} lines of {@code log}: the safepoints
+     * that invalidations of the code of {@code root} took.
+     */
+    static int deoptimizations(String log, String root) {
+        return count(log, "\\[aot\\] deoptimize " + Pattern.quote(root) + ": ");
     }
 
     /** The number of {@code [aot] unlink <root>: <reason>} lines of {@code log}. */

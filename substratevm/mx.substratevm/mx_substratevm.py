@@ -604,7 +604,8 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
                        ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin'), ('add5', 'add:5'), ('add6', 'add:6'),
                        ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
                        ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval'),
-                       ('lateinval', 'lateinval'), ('typed', 'typed'), ('typedcall', 'typedcall')]:
+                       ('lateinval', 'lateinval'), ('typed', 'typed'), ('typedcall', 'typedcall'),
+                       ('twoassume', 'twoassume'), ('callapi', 'callapi')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
@@ -623,10 +624,10 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
     ]
     # The final state of each root in the build summary, which has no other roots: all fixtures are compiled, except these.
-    # "call", "throwcall", "throwinval" and "typedcall" also create the roots "callee", "thrower", "throwinvalcallee" and
-    # "typedcallee". The engine's
+    # "call", "throwcall", "throwinval", "typedcall" and "callapi" also create the roots "callee", "thrower",
+    # "throwinvalcallee", "typedcallee" and "callapithrower". The engine's
     # RootNode.Constant root has no guest language, so it is not in the summary.
-    expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee', 'typedcallee']}
+    expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee', 'typedcallee', 'callapithrower']}
     expected_summary.update({
         'refuse': 'skipped root refused AOT (cloneForAOT or prepareForAOT)',
         'callee': 'skipped executed at build time',

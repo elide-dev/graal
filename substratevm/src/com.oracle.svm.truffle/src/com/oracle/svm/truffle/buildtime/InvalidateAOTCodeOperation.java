@@ -63,5 +63,6 @@ final class InvalidateAOTCodeOperation extends JavaVMOperation {
         CodePointer start = code.entry.entryPoint;
         CodePointer end = Word.pointer(start.rawValue() + code.entry.codeSize);
         Deoptimizer.deoptimizeInRange(start, end, false, CurrentIsolate.getCurrentThread());
+        code.deoptimized = true;
     }
 }

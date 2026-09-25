@@ -154,6 +154,20 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     static final Assumption JIT_FIELD_A = Truffle.getRuntime().createAssumption("aot-jit-field-a");
     static final Assumption JIT_FIELD_B = Truffle.getRuntime().createAssumption("aot-jit-field-b");
 
+    /** Test hooks: the two assumptions the "twoassume" root depends on. */
+    static final Assumption TWO_A = Truffle.getRuntime().createAssumption("aot-two-a");
+    static final Assumption TWO_B = Truffle.getRuntime().createAssumption("aot-two-b");
+
+    /** Invalidates {@link #TWO_A}. */
+    public static void invalidateTwoA() {
+        TWO_A.invalidate();
+    }
+
+    /** Invalidates {@link #TWO_B}. */
+    public static void invalidateTwoB() {
+        TWO_B.invalidate();
+    }
+
     /** Test hook: the assumption the "throwinval" root depends on. */
     static final Assumption THROW_STABLE = Truffle.getRuntime().createAssumption("aot-throw-test");
 
@@ -327,6 +341,12 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             MisbehavingRoot misbehavingRoot = new MisbehavingRoot(language, trimmed.substring("misbehave:".length()));
             misbehaving.put(misbehavingRoot.mode, misbehavingRoot);
             root = misbehavingRoot;
+        } else if (trimmed.equals("callapi")) {
+            /* The callee is not executed: it is compiled at build time too. */
+            ThrowRoot callee = new ThrowRoot(language, "callapithrower", null);
+            root = new CallApiRoot(language, callee.getCallTarget());
+        } else if (trimmed.equals("twoassume")) {
+            root = new TwoAssumeRoot(language);
         } else if (trimmed.equals("typed")) {
             root = new TypedRoot(language, "typed");
         } else if (trimmed.equals("typedcall")) {
@@ -1210,6 +1230,70 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return name;
+        }
+    }
+
+    /**
+     * Calls its callee through {@link CallTarget#call}, not a call node: the call target is a
+     * constant of its code, so compiled code profiles the exceptions of the callee.
+     */
+    public static final class CallApiRoot extends RootNode {
+        private final CallTarget callee;
+
+        CallApiRoot(TruffleLanguage<?> language, CallTarget callee) {
+            super(language);
+            this.callee = callee;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return callee.call(frame.getArguments());
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "callapi";
+        }
+    }
+
+    /** Returns 1 while both {@link #TWO_A} and {@link #TWO_B} are valid, and 2 afterwards. */
+    public static final class TwoAssumeRoot extends RootNode {
+        TwoAssumeRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (TWO_A.isValid() && TWO_B.isValid()) {
+                return 1;
+            }
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            return 2;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "twoassume";
         }
     }
 
