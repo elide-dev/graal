@@ -44,6 +44,7 @@ The AOT tier compiles AOT-prepared *shadow* copies of shared call targets at Nat
 A shadow is a clone of a call target's root node that is prepared and compiled before the target has ever run, while the live root node stays untouched.
 At run time the AOT-compiled shadow code runs from the very first call, so an application skips the interpreter for that call target.
 The runtime counts calls and loop iterations against `engine.AOTTierThreshold` and, once the threshold is reached, unlinks the AOT code and hands the call target over to the interpreter, which then warms up towards the just-in-time (JIT) compiler as usual.
+The threshold is checked only when the call target is called, and AOT code has no on-stack replacement (OSR), so a single long-running activation stays in the AOT code until it returns.
 
 For example, an engine option controls when the hand-over happens:
 
@@ -71,12 +72,20 @@ protected RootNode cloneForAOT() {
 Returning `null` from `cloneForAOT()` opts the root node out of the AOT tier.
 The runtime calls `cloneForAOT()` only for a call target that has never executed.
 
+The runtime checks the copy, and leaves a root node out of the AOT tier, unchanged, in the following cases:
+
+* `cloneForAOT()` or `prepareForAOT()` throws an exception. The build summary reports the exception.
+* The copy is the live root node, or shares an adoptable node with it. Nodes that are never adopted, for example uncached nodes, may be shared.
+* `prepareForAOT()` changed the kind of a frame slot of, or added a slot to, a `FrameDescriptor` that the copy shares with the live root node. The runtime restores the slot kinds.
+
+So a root node whose `prepareForAOT()` initializes frame-slot kinds must override `cloneForAOT()` and give the copy its own `FrameDescriptor`, as in the example above.
+
 ### Profiles in the Shadow
 
 The shadow is compiled without ever running, so a profile that is still in its uninitialized state when it is compiled would fold into an invalidating deoptimization the first time compiled code takes the profiled path, for example on the first guest exception, permanently unlinking the AOT code.
 To avoid this, the runtime starts some of the shadow's profiles in their generic state:
 
-* The exception profile of the shadow's call target, and the exception profiles of the call nodes in its AST, start generic.
+* The argument, return, and exception profiles of the shadow's call target, and the exception profiles of the call nodes in its AST, start generic. So the argument and return types of the `ExecutionSignature` that `prepareForAOT()` returns are not trusted by the shadow's compiled code.
 * Every `com.oracle.truffle.api.profiles.Profile` instance referenced from a non-inlined `NodeCloneable` field of a node in the shadow's AST is replaced by a disabled copy, so a profile instance shared with the live AST, or with any other AST, is not changed.
 
 Any other speculative state of the shadow, for example an inlined profile or a `CompilationFinal` field that is otherwise initialized only on first execution, is the responsibility of `prepareForAOT()`.
@@ -86,3 +95,11 @@ The result of that call is still correct; the call target simply moves to the in
 
 The live abstract syntax tree (AST) is never prepared for AOT at build time.
 AOT preparation state is sticky, and preparing the live AST would lower its JIT peak performance once it eventually warms up.
+
+### Frames of AOT Code
+
+In frames of AOT code, `FrameInstance.getCallTarget()`, `Node.getRootNode()`, and `TruffleStackTraceElement.getTarget()` return the shadow, not the live call target.
+Like a split call target, the shadow is a different object with equal source sections.
+A language that compares call targets or root nodes by identity, for example to find its own frames in a stack walk, must compare them in a way that also matches the shadow.
+
+See [Truffle Build-Time Compilation](../../docs/reference-manual/native-image/TruffleBuildTimeCompilation.md) for the build options, registering sources for pre-initialization, and diagnostics.

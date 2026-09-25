@@ -413,16 +413,28 @@ public abstract class RootNode extends ExecutableNode {
      * preparing or executing the returned tree must never change state observable by this root. Return
      * {@code null} if this root must not be compiled ahead of time.
      * <p>
+     * The runtime checks the copy and does not compile this root ahead of time, leaving it
+     * unchanged, if this method or {@link #prepareForAOT()} throws, if the copy is this root or
+     * shares an adoptable {@link Node} with it (nodes that are never adopted, for example uncached
+     * nodes, may be shared), or if {@link #prepareForAOT()} changed the kind of a slot of, or added
+     * a slot to, a {@link FrameDescriptor} that the copy shares with this root. In the last case the
+     * slot kinds are restored. So a root whose {@link #prepareForAOT()} initializes slot kinds must
+     * override this method and give the copy its own {@link FrameDescriptor#copy() copy} of the
+     * descriptor.
+     * <p>
      * The copy is compiled without ever being executed, so speculative state that is still
      * uninitialized when it is compiled deoptimizes and invalidates the compiled code the first
      * time it is used, which permanently unlinks that code. The runtime therefore starts some
-     * profiles of the copy in their generic state, after {@link #prepareForAOT()}: the exception
-     * profiles of its call target and call nodes, and every {@link NodeCloneable} profile
+     * profiles of the copy in their generic state, after {@link #prepareForAOT()}: the argument,
+     * return and exception profiles of its call target, the exception profiles of its call nodes,
+     * and every {@link NodeCloneable} profile
      * referenced by a field of one of its nodes, which it replaces by a disabled copy (so profile
      * instances that the copy shares with this root are not changed). The DSL disables the profiles
      * of cached values when it prepares a node for AOT. Any other such state of the copy, for
      * example inlined profiles or {@code CompilationFinal} fields initialized on the first
-     * execution, must be initialized by {@link #prepareForAOT()}.
+     * execution, must be initialized by {@link #prepareForAOT()}. The argument and return types of
+     * the {@link ExecutionSignature} that {@link #prepareForAOT()} returns for the copy are not
+     * trusted: the compiled code of the copy is called with arguments nobody checked against them.
      *
      * @since 25.4
      */
@@ -763,6 +775,10 @@ public abstract class RootNode extends ExecutableNode {
      * create new {@link CallTarget call targets} during preparation of the root node or perform
      * modifications to the {@link TruffleLanguage language} of this root node.
      * <p>
+     * When a native image is built with the Truffle AOT tier, this method is invoked on the copy
+     * that {@link #cloneForAOT()} returns, never on this root. The default copy shares this root's
+     * {@link FrameDescriptor}, so to initialize local variable types, override
+     * {@link #cloneForAOT()} too, see there.
      *
      * @see #prepareForCompilation(boolean, int, boolean)
      * @since 20.3
