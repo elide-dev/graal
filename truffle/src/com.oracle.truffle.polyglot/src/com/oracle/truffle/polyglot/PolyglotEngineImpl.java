@@ -2204,10 +2204,10 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
             // patched to shared. In that case the pre-init context is stored in the
             // AtomicReference, not in a sharing layer.
             if (context == null) {
-                context = preInitializedContext.getAndSet(null);
+                context = takePreinitializedContext(config);
             }
         } else {
-            context = preInitializedContext.getAndSet(null);
+            context = takePreinitializedContext(config);
         }
 
         if (context == null) {
@@ -2278,6 +2278,21 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
             }
         }
         return contextAPI;
+    }
+
+    /**
+     * Takes the pre-initialized context stored in the engine, unless it was pre-initialized in a
+     * shared layer whose code a context with {@code config} must not share: then it is left for a
+     * later context with compatible options.
+     */
+    private PolyglotContextImpl takePreinitializedContext(PolyglotContextConfig config) {
+        synchronized (this.lock) {
+            PolyglotContextImpl context = preInitializedContext.get();
+            if (context != null && !context.layer.isCompatibleWithPreinitializedContext(config)) {
+                return null;
+            }
+            return preInitializedContext.getAndSet(null);
+        }
     }
 
     private static boolean arePreInitializedLanguagesCompatible(PolyglotContextImpl context, PolyglotContextConfig config) {
