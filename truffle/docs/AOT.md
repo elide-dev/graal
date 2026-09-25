@@ -71,5 +71,18 @@ protected RootNode cloneForAOT() {
 Returning `null` from `cloneForAOT()` opts the root node out of the AOT tier.
 The runtime calls `cloneForAOT()` only for a call target that has never executed.
 
+### Profiles in the Shadow
+
+The shadow is compiled without ever running, so a profile that is still in its uninitialized state when it is compiled would fold into an invalidating deoptimization the first time compiled code takes the profiled path, for example on the first guest exception, permanently unlinking the AOT code.
+To avoid this, the runtime starts some of the shadow's profiles in their generic state:
+
+* The exception profile of the shadow's call target, and the exception profiles of the call nodes in its AST, start generic.
+* Every `com.oracle.truffle.api.profiles.Profile` instance referenced from a non-inlined `NodeCloneable` field of a node in the shadow's AST is replaced by a disabled copy, so a profile instance shared with the live AST, or with any other AST, is not changed.
+
+Any other speculative state of the shadow, for example an inlined profile or a `CompilationFinal` field that is otherwise initialized only on first execution, is the responsibility of `prepareForAOT()`.
+Truffle DSL already disables the profiles of cached values when it prepares a node for AOT.
+If such state is still uninitialized when the shadow's compiled code first reaches it, the code deoptimizes and the target's AOT code is unlinked permanently, once.
+The result of that call is still correct; the call target simply moves to the interpreter, and from there warms up to the JIT compiler like an ordinary call target.
+
 The live abstract syntax tree (AST) is never prepared for AOT at build time.
 AOT preparation state is sticky, and preparing the live AST would lower its JIT peak performance once it eventually warms up.
