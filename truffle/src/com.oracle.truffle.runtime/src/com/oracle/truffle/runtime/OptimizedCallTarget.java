@@ -1250,7 +1250,8 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
             return true;
         });
         copy.accept(node -> {
-            if (liveNodes.contains(node)) {
+            /* A node that is never adopted, e.g., an uncached node, can be shared by any trees. */
+            if (node.isAdoptable() && liveNodes.contains(node)) {
                 throw new IllegalStateException("cloneForAOT returned a tree that shares node " + node.getClass().getName() + " with the live root; it must return a copy");
             }
             return true;
@@ -1344,9 +1345,10 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         this.aotCode = code;
         /*
          * Its shadow was prepared for AOT in its place. The AOT code counts calls on the shadow, so
-         * this target may look like it was never executed; compile must never prepare its AST.
+         * this target may look like it was never executed; compile must never prepare its AST. A
+         * target whose code is dropped at build time never ran it.
          */
-        this.aotInitialized = true;
+        this.aotInitialized = code != null;
     }
 
     /**

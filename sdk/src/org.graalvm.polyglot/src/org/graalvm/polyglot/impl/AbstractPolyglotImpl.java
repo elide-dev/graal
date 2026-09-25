@@ -461,10 +461,10 @@ public abstract class AbstractPolyglotImpl {
     public abstract void resetPreInitializedEngine();
 
     /**
-     * Registers the source {@code sourceReceiver} to be parsed by context pre-initialization. See
-     * {@code org.graalvm.polyglot.PreinitializedSources}.
+     * Registers the sources {@code sourceReceivers}, all or none, to be parsed by context
+     * pre-initialization. See {@code org.graalvm.polyglot.PreinitializedSources}.
      */
-    public void registerPreinitializedSource(Object sourceReceiver) {
+    public void registerPreinitializedSources(Object[] sourceReceivers) {
         throw new UnsupportedOperationException("Context pre-initialization is not supported by this polyglot implementation.");
     }
 

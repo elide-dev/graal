@@ -41,9 +41,11 @@ import com.oracle.svm.core.code.CodeInfoTable;
  * registered in one image; each must return {@code null} for every frame it does not own, so that
  * the error for invalidating a frame that nobody owns is preserved.
  * <p>
- * A lookup runs on the thread that deoptimizes, in ordinary (interruptible) Java code outside of a
- * VM operation. It is only consulted for frames that are not runtime-compiled code, i.e., never on
- * the path of runtime-compiled code.
+ * A lookup runs on the thread that deoptimizes, in {@link Deoptimizer#invalidateMethodOfFrame}
+ * outside of a VM operation, and also inside the VM operations that deoptimize frames, where
+ * {@link Deoptimizer} records the owner of a deoptimized image-code frame as its source. So a
+ * lookup must not lock or block. It is only consulted for frames that are not runtime-compiled
+ * code, i.e., never on the path of runtime-compiled code.
  */
 public interface ImageCodeInstalledCodeLookup {
 

@@ -37,7 +37,8 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 
 /**
  * The constant field provider of build-time partial evaluation: that of the Truffle partial
- * evaluator, except that the exception profile of every call target is generic.
+ * evaluator, except that the exception profile of every call target is generic and the return
+ * profile of every call target is unset.
  * <p>
  * Build-time partial evaluation folds the state of the targets that AOT tier code calls as it is
  * when the image is built. The exception profile of a target that was never executed is still
@@ -46,16 +47,23 @@ import jdk.vm.ci.meta.ResolvedJavaField;
  * of the caller. The profile only lets a caller narrow the type of the exceptions it rethrows, so
  * treating it as generic is always correct. (The shadows' own profiles start generic anyway, see
  * {@code OptimizedCallTarget.createAOTShadow}.)
+ * <p>
+ * Likewise for the return profile of a target that was executed at build time: code that folded
+ * its type depends on its assumption, and would be unlinked the first time the target returns
+ * another type. An unset profile makes compiled code neither cast the result nor profile it, which
+ * is always correct.
  */
 final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
     private final ConstantFieldProvider delegate;
     private final ResolvedJavaField exceptionProfile;
+    private final ResolvedJavaField returnProfile;
     private final JavaConstant generic;
 
     BuildTimeConstantFieldProvider(ConstantFieldProvider delegate, MetaAccessProvider metaAccess, ConstantReflectionProvider constantReflection) {
         this.delegate = delegate;
         try {
             this.exceptionProfile = metaAccess.lookupJavaField(OptimizedCallTarget.class.getDeclaredField("exceptionProfile"));
+            this.returnProfile = metaAccess.lookupJavaField(OptimizedCallTarget.class.getDeclaredField("returnProfile"));
             this.generic = constantReflection.readFieldValue(metaAccess.lookupJavaField(OptimizedCallTarget.class.getDeclaredField("PROFILE_GENERIC")), null);
         } catch (ReflectiveOperationException e) {
             throw VMError.shouldNotReachHere(e);
@@ -67,6 +75,9 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
     public <T> T readConstantField(ResolvedJavaField field, ConstantFieldTool<T> tool) {
         if (field.equals(exceptionProfile) && !tool.getReceiver().isNull()) {
             return tool.foldConstant(generic);
+        }
+        if (field.equals(returnProfile) && !tool.getReceiver().isNull()) {
+            return tool.foldConstant(JavaConstant.NULL_POINTER);
         }
         return delegate.readConstantField(field, tool);
     }

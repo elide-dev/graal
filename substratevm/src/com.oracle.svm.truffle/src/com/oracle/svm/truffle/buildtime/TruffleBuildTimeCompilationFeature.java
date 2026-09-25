@@ -150,11 +150,13 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private AnalysisMethod enter;
     private ImageHeapScanner heapScanner;
     private ResolvedJavaField aotCodeField;
+    private ResolvedJavaField aotInitializedField;
     private ResolvedJavaField unlinkedField;
     /** The fields of an OptimizedAssumption that registering a dependency changes. */
     private List<ResolvedJavaField> assumptionDependencyFields;
     /** {@code OptimizedAssumption.Entry.dependency} and {@code pending}. */
     private List<ResolvedJavaField> assumptionEntryFields;
+    private Class<?> assumptionEntryClass;
 
     /**
      * The roots of the selection, in a deterministic order: the rejected ones, then the selected
@@ -245,15 +247,16 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             enter = access.getMetaAccess().lookupJavaMethod(AOTInstalledCode.class.getDeclaredMethod("enter", AOTInstalledCode.class));
             Field field = OptimizedCallTarget.class.getDeclaredField("aotCode");
             aotCodeField = originalMetaAccess.lookupJavaField(field);
+            aotInitializedField = originalMetaAccess.lookupJavaField(OptimizedCallTarget.class.getDeclaredField("aotInitialized"));
             unlinkedField = originalMetaAccess.lookupJavaField(AOTInstalledCode.class.getDeclaredField("unlinked"));
             List<ResolvedJavaField> fields = new ArrayList<>();
             for (String name : new String[]{"dependencies", "size", "sizeAfterLastRemove"}) {
                 fields.add(originalMetaAccess.lookupJavaField(OptimizedAssumption.class.getDeclaredField(name)));
             }
             assumptionDependencyFields = List.copyOf(fields);
-            Class<?> entryClass = Class.forName(OptimizedAssumption.class.getName() + "$Entry");
-            assumptionEntryFields = List.of(originalMetaAccess.lookupJavaField(entryClass.getDeclaredField("dependency")),
-                            originalMetaAccess.lookupJavaField(entryClass.getDeclaredField("pending")));
+            assumptionEntryClass = Class.forName(OptimizedAssumption.class.getName() + "$Entry");
+            assumptionEntryFields = List.of(originalMetaAccess.lookupJavaField(assumptionEntryClass.getDeclaredField("dependency")),
+                            originalMetaAccess.lookupJavaField(assumptionEntryClass.getDeclaredField("pending")));
         } catch (ReflectiveOperationException e) {
             throw VMError.shouldNotReachHere(e);
         }
@@ -314,6 +317,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         try {
             BuildTimeCompilationSupport.attach(pair.live(), method.code);
             heapScanner.rescanField(pair.live(), aotCodeField, new OtherReason("Truffle AOT tier code of " + name));
+            heapScanner.rescanField(pair.live(), aotInitializedField, new OtherReason("Truffle AOT tier code of " + name));
         } catch (Throwable t) {
             /* Skipped by the caller, which records the rejection. */
             BuildTimeCompilationSupport.attach(pair.live(), null);
@@ -524,6 +528,10 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
          * invalidating its assumption wait for it forever.
          */
         for (Consumer<OptimizedAssumptionDependency> entry : entries) {
+            if (!assumptionEntryClass.isInstance(entry)) {
+                /* E.g., the discarding consumer of an assumption that is always valid. */
+                continue;
+            }
             for (ResolvedJavaField field : assumptionEntryFields) {
                 heapScanner.rescanField(entry, field, new OtherReason("Truffle AOT tier code of " + name + " registered"));
             }
@@ -587,6 +595,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         if (!BuildPhaseProvider.isAnalysisFinished()) {
             OtherReason rescanReason = new OtherReason("Truffle AOT tier code of " + root.name + " dropped");
             heapScanner.rescanField(code.live, aotCodeField, rescanReason);
+            heapScanner.rescanField(code.live, aotInitializedField, rescanReason);
             heapScanner.rescanField(code, unlinkedField, rescanReason);
         }
         reject(root, why);
@@ -596,7 +605,9 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private void unlink(BuildTimeCompiledMethod method, String reason) {
         reject(method.root, reason);
         BuildTimeCompilationSupport.attach(method.live, null);
-        heapScanner.rescanField(method.live, aotCodeField, new OtherReason("Truffle AOT tier code of " + method.root.name + " unlinked"));
+        OtherReason rescanReason = new OtherReason("Truffle AOT tier code of " + method.root.name + " unlinked");
+        heapScanner.rescanField(method.live, aotCodeField, rescanReason);
+        heapScanner.rescanField(method.live, aotInitializedField, rescanReason);
     }
 
     @Override

@@ -3918,8 +3918,16 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         for (Source source : engine.getImpl().getRegisteredPreinitializedSources()) {
             String entry = "pre-initialized source '" + source.getLanguage() + ":" + (source.getPath() != null ? source.getPath() : source.getName()) + "'";
             PolyglotLanguage language = engine.idToLanguage.get(source.getLanguage());
-            if (language == null) {
-                throw new IllegalArgumentException("Invalid " + entry + ": language '" + source.getLanguage() + "' is not installed.");
+            if (language == null || !languagesToPreinitialize.contains(language)) {
+                /*
+                 * Registering is a hint that libraries may give from their own features: an image
+                 * that does not pre-initialize the language, or does not contain it, skips the
+                 * source rather than failing to build. Warn if pre-initialization was requested,
+                 * so a missing language in PreinitializeContexts does not go unnoticed.
+                 */
+                engine.getEngineLogger().log(languagesToPreinitialize.isEmpty() ? Level.FINE : Level.WARNING, "Skipping registered {0}: language ''{1}'' is not pre-initialized; add it to {2} to parse it.",
+                                new Object[]{entry, source.getLanguage(), ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME});
+                continue;
             }
             checkPreinitializedSourceLanguage(entry, language, languagesToPreinitialize);
             sources.add(source);
