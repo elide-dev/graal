@@ -164,7 +164,13 @@ public final class EngineData {
     @CompilationFinal public long stoppedCompilationRetryDelay;
 
     // AOT tier options
-    @CompilationFinal public int aotTierThreshold;
+    /**
+     * Not a compilation constant: it is only read by the AOT tier code of shadows, which is
+     * compiled at image build time, but the option is set when an engine adopts the pre-initialized
+     * engine at run time.
+     */
+    public int aotTierThreshold;
+    /** Only read outside of compiled code. */
     @CompilationFinal public boolean traceAOT;
 
     // compilation queue options

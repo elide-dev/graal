@@ -74,6 +74,29 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertNull(parse("refuse").createAOTShadow());
     }
 
+    /**
+     * Runs the shadow's own code, like the AOT tier dispatch of its live target does (through the
+     * target's code entry, not a call site): a call of a shadow is a call of its live target.
+     */
+    private static Object enterShadowCode(OptimizedCallTarget shadow, Object... args) {
+        return shadow.callOSR(args);
+    }
+
+    /**
+     * Calls to a shadow, e.g. by the shadow's AST calling its own call target, are calls to the live
+     * target, which profiles them before its compiled code can rely on its profile.
+     */
+    @Test
+    public void callOfShadowIsCallOfLiveTarget() {
+        OptimizedCallTarget live = parse("add:1");
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        assertEquals(2, shadow.call(1));
+        assertEquals(3, shadow.call(new Object[]{2}));
+        assertEquals("calls of the shadow run the live target", 2, live.getCallCount());
+        assertEquals("the shadow itself is not called", 0, shadow.getCallCount());
+        assertFalse("the live AST runs in the interpreter", ((AOTTestLanguage.AddRoot) live.getRootNode()).isUninitialized());
+    }
+
     @Test
     public void firstTierShadowUnlinksLiveAtThreshold() {
         OptimizedCallTarget live = parse("add:1");
@@ -83,7 +106,7 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         shadow.compile(false); // first tier: counts via firstTierCall()
         assertTrue(shadow.isValid());
         for (int i = 0; i < 5; i++) {
-            assertEquals(i + 1, shadow.call(i));
+            assertEquals(i + 1, enterShadowCode(shadow, i));
         }
         assertNotNull("threshold must unlink the live target's AOT code", unlinked.get());
         assertNull(live.getAOTCode());
@@ -108,7 +131,7 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         OptimizedCallTarget live = parse("add:1", multiTier);
         OptimizedCallTarget shadow = live.createAOTShadow();
         for (int i = 0; i < 100; i++) {
-            assertEquals(i + 1, shadow.call(i));
+            assertEquals(i + 1, enterShadowCode(shadow, i));
         }
         assertTrue("the shadow was called past the threshold", shadow.getCallCount() >= 100);
         assertFalse("hotness must never submit a shadow for compilation", shadow.isSubmittedForCompilation());
