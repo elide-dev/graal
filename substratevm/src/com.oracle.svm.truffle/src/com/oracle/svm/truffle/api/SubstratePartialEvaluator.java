@@ -107,6 +107,19 @@ public class SubstratePartialEvaluator extends PartialEvaluator {
         return ((TruffleType) type).isValueType();
     }
 
+    /**
+     * The graphs parsed with {@link #getGraphBuilderConfigPrototype()} are the runtime compiled
+     * graphs of the image, whose encoding drops their assumptions
+     * ({@code RuntimeCompilationSupport.encodedGraph}). An assumption folded while parsing, e.g.,
+     * one read from a static final field of a class initialized at image build time, would have its
+     * build-time state in every compilation that uses the graph, without a dependency on it. The
+     * partial evaluation at run time folds the check instead.
+     */
+    @Override
+    protected boolean foldAssumptionsWhenParsing() {
+        return false;
+    }
+
     @Override
     protected void registerGraphBuilderInvocationPlugins(InvocationPlugins invocationPlugins, boolean canDelayIntrinsification) {
         super.registerGraphBuilderInvocationPlugins(invocationPlugins, canDelayIntrinsification);

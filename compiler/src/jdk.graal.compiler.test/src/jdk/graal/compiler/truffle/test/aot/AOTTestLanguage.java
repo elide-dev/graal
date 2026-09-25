@@ -76,8 +76,9 @@ import com.oracle.truffle.api.source.SourceSection;
  * ({@link AOTTestBuildTimeInvalidationFeature}); "spin" loops until its assumption is found invalid
  * (see {@link SpinRoot}). The other sources are described with their roots: "throwcall"
  * ({@link ThrowCallRoot}), "deopt" ({@link DeoptRoot}), "drecurse" ({@link DirectRecurseRoot}),
- * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot})
- * and "assumeloop" ({@link AssumeLoopRoot}).
+ * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot}),
+ * "assumeloop" ({@link AssumeLoopRoot}), "jitstatic:a|b" ({@link StaticAssumeRoot}) and "jitfield:a|b"
+ * ({@link FieldAssumeRoot}).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
 @ProvidedTags(StandardTags.StatementTag.class)
@@ -122,6 +123,17 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
     /** Test hook: the assumption the "assumeloop" root depends on. */
     static final Assumption LOOP_STABLE = Truffle.getRuntime().createAssumption("aot-loop-test");
+
+    /**
+     * Test hooks: the static final assumptions of the "jitstatic:a" and "jitstatic:b" roots, read
+     * directly by {@link StaticAssumeRoot#execute}, so the image builder sees them as constants.
+     */
+    static final Assumption JIT_STATIC_A = Truffle.getRuntime().createAssumption("aot-jit-static-a");
+    static final Assumption JIT_STATIC_B = Truffle.getRuntime().createAssumption("aot-jit-static-b");
+
+    /** Test hooks: the assumptions of the "jitfield:a" and "jitfield:b" roots, in instance fields. */
+    static final Assumption JIT_FIELD_A = Truffle.getRuntime().createAssumption("aot-jit-field-a");
+    static final Assumption JIT_FIELD_B = Truffle.getRuntime().createAssumption("aot-jit-field-b");
 
     /** Invalidates {@link #POLL_STABLE}. */
     public static void invalidatePollStable() {
@@ -232,6 +244,10 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new StatementRoot(language, trimmed, section);
         } else if (trimmed.equals("assumeloop")) {
             root = new AssumeLoopRoot(language);
+        } else if (trimmed.equals("jitstatic:a") || trimmed.equals("jitstatic:b")) {
+            root = new StaticAssumeRoot(language, trimmed.endsWith("b"));
+        } else if (trimmed.equals("jitfield:a") || trimmed.equals("jitfield:b")) {
+            root = new FieldAssumeRoot(language, trimmed.endsWith("b") ? JIT_FIELD_B : JIT_FIELD_A);
         } else if (trimmed.equals("loop")) {
             root = new LoopRoot(language);
         } else if (trimmed.equals("recurse")) {
@@ -900,6 +916,56 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "assumeloop";
+        }
+    }
+
+    /**
+     * "jitstatic:a|b": returns 1 while {@link #JIT_STATIC_A} (or {@link #JIT_STATIC_B}) is valid
+     * and 2 afterwards, plus 10 in compiled code. The assumption is read from a static final field,
+     * so the image builder, which initializes this class, parses the load as a constant: the
+     * runtime compiled graph of this method must still leave the check of the assumption to the
+     * partial evaluation at run time, which makes the compiled code depend on it.
+     */
+    public static final class StaticAssumeRoot extends RootNode {
+        private final boolean b;
+
+        StaticAssumeRoot(TruffleLanguage<?> language, boolean b) {
+            super(language);
+            this.b = b;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            boolean valid = b ? JIT_STATIC_B.isValid() : JIT_STATIC_A.isValid();
+            return (valid ? 1 : 2) + (CompilerDirectives.inCompiledCode() ? 10 : 0);
+        }
+
+        @Override
+        public String getName() {
+            return b ? "jitstatic:b" : "jitstatic:a";
+        }
+    }
+
+    /**
+     * "jitfield:a|b": the same as {@link StaticAssumeRoot}, with the assumption in an instance
+     * field, which the image builder does not see as a constant.
+     */
+    public static final class FieldAssumeRoot extends RootNode {
+        private final Assumption assumption;
+
+        FieldAssumeRoot(TruffleLanguage<?> language, Assumption assumption) {
+            super(language);
+            this.assumption = assumption;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return (assumption.isValid() ? 1 : 2) + (CompilerDirectives.inCompiledCode() ? 10 : 0);
+        }
+
+        @Override
+        public String getName() {
+            return assumption == JIT_FIELD_B ? "jitfield:b" : "jitfield:a";
         }
     }
 

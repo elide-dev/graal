@@ -190,6 +190,12 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
 
     /** Same as {@link SubstratePartialEvaluator}. */
     @Override
+    protected boolean foldAssumptionsWhenParsing() {
+        return false;
+    }
+
+    /** Same as {@link SubstratePartialEvaluator}. */
+    @Override
     protected void registerGraphBuilderInvocationPlugins(InvocationPlugins invocationPlugins, boolean canDelayIntrinsification) {
         super.registerGraphBuilderInvocationPlugins(invocationPlugins, canDelayIntrinsification);
         SubstrateTruffleGraphBuilderPlugins.registerInvocationPlugins(invocationPlugins, canDelayIntrinsification, (SubstrateKnownTruffleTypes) getTypes());

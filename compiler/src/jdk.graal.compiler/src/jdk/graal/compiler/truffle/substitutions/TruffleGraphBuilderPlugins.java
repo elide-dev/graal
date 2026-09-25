@@ -173,9 +173,18 @@ public class TruffleGraphBuilderPlugins {
     }
 
     public static void registerInvocationPlugins(InvocationPlugins plugins, KnownTruffleTypes types, Providers providers, boolean canDelayIntrinsification) {
+        registerInvocationPlugins(plugins, types, providers, canDelayIntrinsification, true);
+    }
+
+    /**
+     * Registers the plugins. {@code foldAssumptions} is whether the checks of constant Truffle
+     * assumptions are folded (see {@link #registerOptimizedAssumptionPlugins(InvocationPlugins,
+     * KnownTruffleTypes, boolean)}).
+     */
+    public static void registerInvocationPlugins(InvocationPlugins plugins, KnownTruffleTypes types, Providers providers, boolean canDelayIntrinsification, boolean foldAssumptions) {
         MetaAccessProvider metaAccess = providers.getMetaAccess();
         registerObjectsPlugins(plugins, types);
-        registerOptimizedAssumptionPlugins(plugins, types);
+        registerOptimizedAssumptionPlugins(plugins, types, foldAssumptions);
         registerExactMathPlugins(plugins, types);
         registerHostCompilerDirectivesPlugins(plugins, types);
         registerCompilerDirectivesPlugins(plugins, types, canDelayIntrinsification);
@@ -256,10 +265,23 @@ public class TruffleGraphBuilderPlugins {
     }
 
     public static void registerOptimizedAssumptionPlugins(InvocationPlugins plugins, KnownTruffleTypes types) {
+        registerOptimizedAssumptionPlugins(plugins, types, true);
+    }
+
+    /**
+     * Registers the plugins of {@code OptimizedAssumption.isValid} and {@code check}, which fold the
+     * check of a constant assumption and record the assumption in the graph, if {@code fold} is
+     * set. The plugins are registered even if they do not fold: a method with a plugin is not
+     * inlined while parsing, so the check stays an invoke that a later partial evaluation folds.
+     */
+    public static void registerOptimizedAssumptionPlugins(InvocationPlugins plugins, KnownTruffleTypes types, boolean fold) {
         Registration r = new Registration(plugins, new TypeSymbol(types.OptimizedAssumption));
         r.register(new RequiredInvocationPlugin("isValid", Receiver.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
+                if (!fold) {
+                    return false;
+                }
                 JavaConstant assumption = receiver.get(false).asJavaConstant();
                 if (b.getAssumptions() != null && assumption != null && assumption.isNonNull()) {
                     JavaConstant isValid = b.getConstantReflection().readFieldValue(types.AbstractAssumption_isValid, assumption);
@@ -279,6 +301,9 @@ public class TruffleGraphBuilderPlugins {
         r.register(new RequiredInvocationPlugin("check", Receiver.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
+                if (!fold) {
+                    return false;
+                }
                 JavaConstant assumption = receiver.get(false).asJavaConstant();
                 if (b.getAssumptions() != null && assumption != null && assumption.isNonNull()) {
                     JavaConstant isValid = b.getConstantReflection().readFieldValue(types.AbstractAssumption_isValid, assumption);

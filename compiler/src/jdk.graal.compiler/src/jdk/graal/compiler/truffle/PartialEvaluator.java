@@ -602,8 +602,20 @@ public abstract class PartialEvaluator {
         return plugins.getNodePlugins();
     }
 
+    /**
+     * Whether the plugins of the graphs parsed for partial evaluation
+     * ({@link #getGraphBuilderConfigPrototype()}) fold the checks of constant Truffle assumptions.
+     * A fold records the assumption in the parsed graph, so it is only correct if every
+     * compilation that uses the graph gets its assumptions too. Otherwise the partial evaluation
+     * folds the checks, with its graph-decoding plugins.
+     */
+    protected boolean foldAssumptionsWhenParsing() {
+        return true;
+    }
+
     protected void registerGraphBuilderInvocationPlugins(InvocationPlugins invocationPlugins, boolean canDelayIntrinsification) {
-        TruffleGraphBuilderPlugins.registerInvocationPlugins(invocationPlugins, types, config.lastTier().providers(), canDelayIntrinsification);
+        TruffleGraphBuilderPlugins.registerInvocationPlugins(invocationPlugins, types, config.lastTier().providers(), canDelayIntrinsification,
+                        !canDelayIntrinsification || foldAssumptionsWhenParsing());
         for (GraphBuilderInvocationPluginProvider p : GraalServices.load(GraphBuilderInvocationPluginProvider.class)) {
             p.registerInvocationPlugins(invocationPlugins, config.types(), config.lastTier().providers(), config.architecture(), canDelayIntrinsification);
         }
