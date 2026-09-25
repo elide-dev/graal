@@ -562,6 +562,22 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * The build invalidated {@link AOTTestLanguage#LATE_STABLE}, which the AOT code of "lateinval"
+     * was compiled against, after the image heap snapshot was sealed
+     * (AOTTestBuildTimeInvalidationFeature, after the heap layout): the image was written from the
+     * snapshot, so it has the assumption valid and the code linked, and the root runs its AOT code.
+     */
+    @Test
+    public void keptAfterHeapSnapshotRunsAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        assertTrue(AOTTestLanguage.LATE_STABLE.isValid());
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            assertEquals(8, context.parse(fixture("lateinval", "lateinval")).execute().asInt());
+        }
+        assertTrue(log(), log().contains("[aot] enter lateinval"));
+    }
+
+    /**
      * Invalidating an assumption deoptimizes the activations of the AOT code on all threads: the
      * loop of "spin", in AOT code on another thread, stopped at a safepoint in the loop, continues in
      * the deoptimization target, which sees the invalid assumption.

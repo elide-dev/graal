@@ -24,17 +24,34 @@
  */
 package com.oracle.svm.truffle.buildtime;
 
+import org.graalvm.collections.EconomicMap;
+
+import com.oracle.svm.hosted.image.NativeImageCodeCache;
 import com.oracle.svm.shared.option.HostedOptionKey;
 
 import jdk.graal.compiler.options.Option;
+import jdk.graal.compiler.options.OptionKey;
 
 /** Hosted options of the Truffle AOT tier (build-time compilation of pre-initialized roots). */
 public final class BuildTimeCompilationOptions {
     @Option(help = "Print a per-root summary of Truffle build-time (AOT tier) compilation.")//
     public static final HostedOptionKey<Boolean> TruffleAOTPrintSummary = new HostedOptionKey<>(false);
 
-    @Option(help = "Fail the image build if a selected root cannot be compiled at build time.")//
-    public static final HostedOptionKey<Boolean> TruffleAOTFailOnError = new HostedOptionKey<>(false);
+    /**
+     * Also enables {@code VerifyDeoptSourceEntryPoints}: a failed verification fails the build,
+     * which only this option allows the AOT tier to do.
+     */
+    @Option(help = "Fail the image build if a root of the pre-initialized engine is not compiled at build time, unless polyglot.image-build-time.AOTCompileFilter excludes it. " +
+                    "Enables VerifyDeoptSourceEntryPoints.")//
+    public static final HostedOptionKey<Boolean> TruffleAOTFailOnError = new HostedOptionKey<>(false) {
+        @Override
+        protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, Boolean oldValue, Boolean newValue) {
+            super.onValueUpdate(values, oldValue, newValue);
+            if (newValue) {
+                NativeImageCodeCache.Options.VerifyDeoptSourceEntryPoints.update(values, true);
+            }
+        }
+    };
 
     private BuildTimeCompilationOptions() {
     }

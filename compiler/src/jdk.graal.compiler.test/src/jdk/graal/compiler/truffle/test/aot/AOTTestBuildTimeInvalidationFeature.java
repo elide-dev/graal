@@ -30,10 +30,19 @@ import org.graalvm.nativeimage.hosted.Feature;
  * Invalidates {@link AOTTestLanguage#BUILD_STABLE} after the analysis, i.e., after the AOT tier
  * code of the "buildinval" root was compiled against it and registered as its dependency, so that
  * the build must drop that code (see {@code mx_substratevm.truffle_aot_tier_native_tests}).
+ * <p>
+ * Invalidates {@link AOTTestLanguage#LATE_STABLE} after the heap layout, i.e., after the image heap
+ * snapshot was sealed: the image is written from the snapshot, which has the assumption valid and
+ * the code of the "lateinval" root linked, so the build keeps the code.
  */
 public final class AOTTestBuildTimeInvalidationFeature implements Feature {
     @Override
     public void afterAnalysis(AfterAnalysisAccess access) {
         AOTTestLanguage.invalidateBuildStable();
+    }
+
+    @Override
+    public void afterHeapLayout(AfterHeapLayoutAccess access) {
+        AOTTestLanguage.invalidateLateStable();
     }
 }
