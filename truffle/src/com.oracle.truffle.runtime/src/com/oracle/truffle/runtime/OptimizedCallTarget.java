@@ -1352,6 +1352,26 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     }
 
     /**
+     * Links build-time compiled code that was not linked in the image: code that folded state of
+     * the pre-initialized context, once patching the context left that state unchanged. Run time
+     * only, before the context is used.
+     */
+    public final void linkAOTCode(AOTCode code) {
+        CompilerAsserts.neverPartOfCompilation();
+        assert !aotShadow : "AOT code is attached to the live target, not to its shadow.";
+        this.aotInitialized = true;
+        AOT_CODE_UPDATER.compareAndSet(this, null, code);
+    }
+
+    /** Traces {@code message} with the {@code [aot]} prefix if {@code engine.TraceAOT} is set. */
+    public final void traceAOT(String message) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (engine.traceAOT) {
+            log("[aot] " + message);
+        }
+    }
+
+    /**
      * Unlinks the build-time compiled code of this target, if any, so that the next call runs in
      * the interpreter and the target goes through the regular tiers. Idempotent.
      */

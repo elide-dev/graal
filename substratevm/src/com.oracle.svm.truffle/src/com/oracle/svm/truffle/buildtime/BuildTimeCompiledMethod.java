@@ -40,6 +40,7 @@ import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.Signature;
 
@@ -76,6 +77,19 @@ final class BuildTimeCompiledMethod extends NonBytecodeMethod {
      * {@code TruffleBuildTimeCompilationFeature.registerAssumptionDependencies}).
      */
     volatile List<Assumptions.Assumption> assumptions = List.of();
+    /**
+     * The fields of language and context state that patching can change, folded into the code
+     * ({@code BuildTimeConstantFieldProvider}). If there are any, {@link #live} is linked at run
+     * time, once patching the pre-initialized context left them unchanged ({@code AOTCodeTable}).
+     */
+    volatile List<FoldedField> folded = List.of();
+
+    /**
+     * {@code field} of {@code receiver} had the value {@code reference}, or the primitive value
+     * {@code bits} (as raw bits), when it was folded.
+     */
+    record FoldedField(Object receiver, ResolvedJavaField field, Object reference, long bits) {
+    }
 
     BuildTimeCompiledMethod(TruffleBuildTimeCompilationFeature feature, TruffleBuildTimeCompilationFeature.AOTRoot root, OptimizedCallTarget live, OptimizedCallTarget shadow,
                     ResolvedJavaType holder, Signature signature, ConstantPool cp) {

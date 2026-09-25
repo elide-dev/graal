@@ -106,6 +106,41 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
     }
 
     /**
+     * Links the code to {@link #live}, which it was not in the image because it folded state of the
+     * pre-initialized context: patching the context left the {@code verified} folded fields
+     * unchanged ({@link AOTCodeTable#linkAfterPatch()}). Not if an assumption of the code was
+     * invalidated meanwhile.
+     */
+    void linkAfterPatch(int verified) {
+        if (unlinked || deoptimized) {
+            return;
+        }
+        live.linkAOTCode(this);
+        if (deoptimized) {
+            /* Raced with the invalidation of an assumption, which found the code not linked yet. */
+            live.unlinkAOTQuietly("invalidated");
+            return;
+        }
+        live.traceAOT("link " + rootName(live) + ": " + verified + " folded fields unchanged by patching");
+    }
+
+    /** Never links the code: patching changed a field it folded ({@link #linkAfterPatch(int)}). */
+    void unlinkAfterPatch(String reason) {
+        unlink(reason);
+        live.traceUnlinkAOT(reason);
+    }
+
+    /**
+     * Links the codes that folded state of the pre-initialized context once it is patched
+     * ({@link AOTCodeTable#linkAfterPatch()}).
+     */
+    public static void linkAfterPreinitializedContextPatch() {
+        if (isAOTTierInImage()) {
+            ImageSingletons.lookup(AOTCodeTable.class).linkAfterPatch();
+        }
+    }
+
+    /**
      * Called first thing by the AOT tier code of {@link #live} (see
      * {@link BuildTimeCompiledMethod}). On the first entry, it initializes the live target, which
      * the interpreter would otherwise have done on its first call (the AOT tier runs instead), and

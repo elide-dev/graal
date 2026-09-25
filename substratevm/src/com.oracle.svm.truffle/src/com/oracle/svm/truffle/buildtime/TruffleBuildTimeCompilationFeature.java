@@ -61,6 +61,7 @@ import com.oracle.svm.hosted.NativeImageGenerator;
 import com.oracle.svm.hosted.code.CompileQueue;
 import com.oracle.svm.hosted.code.DeoptimizationUtils;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
+import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
@@ -78,6 +79,7 @@ import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedAssumption;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
+import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.nodes.ConstantNode;
@@ -102,6 +104,8 @@ import jdk.graal.compiler.truffle.nodes.frame.ForceMaterializeNode;
 import jdk.graal.compiler.truffle.phases.TruffleSafepointInsertionPhase;
 import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.ConstantPool;
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaType;
@@ -353,8 +357,15 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             StructuredGraph rootGraph = method.buildKitGraph(debug, aMethod, providers, null, profiledPERoot, method.shadow);
             EncodedGraph encodedRoot = GraphEncoder.encodeSingleGraph(rootGraph, AnalysisParsedGraph.HOST_ARCHITECTURE);
             String[] bailout = new String[1];
-            StructuredGraph graph = compiler.partialEvaluator().partiallyEvaluateAt(method.shadow, aMethod, encodedRoot,
-                            () -> compiler.partialEvaluateForBuildTime(compiler.asCompilable(method.shadow), debug, reason -> bailout[0] = reason));
+            StructuredGraph graph;
+            List<BuildTimeConstantFieldProvider.Fold> folds;
+            BuildTimeConstantFieldProvider.startRecording();
+            try {
+                graph = compiler.partialEvaluator().partiallyEvaluateAt(method.shadow, aMethod, encodedRoot,
+                                () -> compiler.partialEvaluateForBuildTime(compiler.asCompilable(method.shadow), debug, reason -> bailout[0] = reason));
+            } finally {
+                folds = BuildTimeConstantFieldProvider.stopRecording();
+            }
             if (graph == null) {
                 unlink(method, String.valueOf(bailout[0]));
                 return null;
@@ -388,6 +399,14 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 unlink(method, invalid);
                 return null;
             }
+            if (!folds.isEmpty()) {
+                method.folded = foldedFields(folds, providers);
+                /* Linked at run time, once patching left the folded fields unchanged. */
+                BuildTimeCompilationSupport.attach(method.live, null);
+                OtherReason reason = new OtherReason("Truffle AOT tier code of " + name + " linked after patching");
+                heapScanner.rescanField(method.live, aotCodeField, reason);
+                heapScanner.rescanField(method.live, aotInitializedField, reason);
+            }
             compiled(method.root, "nodes=" + nodes + " assumptions=" + method.assumptions.size());
             return result;
         } catch (OutOfMemoryError e) {
@@ -396,6 +415,26 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             unlink(method, failure(name, t));
             return null;
         }
+    }
+
+    private static List<BuildTimeCompiledMethod.FoldedField> foldedFields(List<BuildTimeConstantFieldProvider.Fold> folds, HostedProviders providers) {
+        SnippetReflectionProvider snippetReflection = providers.getSnippetReflection();
+        List<BuildTimeCompiledMethod.FoldedField> result = new ArrayList<>();
+        for (BuildTimeConstantFieldProvider.Fold fold : folds) {
+            Object receiver = snippetReflection.asObject(Object.class, fold.receiver());
+            JavaConstant value = fold.value();
+            Object reference = null;
+            long bits = 0;
+            switch (fold.field() == null ? JavaKind.Object : fold.field().getJavaKind()) {
+                case Object -> reference = value.isNull() ? null : snippetReflection.asObject(Object.class, value);
+                case Float -> bits = Float.floatToRawIntBits(value.asFloat());
+                case Double -> bits = Double.doubleToRawLongBits(value.asDouble());
+                case Boolean -> bits = value.asBoolean() ? 1 : 0;
+                default -> bits = value.asLong();
+            }
+            result.add(new BuildTimeCompiledMethod.FoldedField(receiver, fold.field(), reference, bits));
+        }
+        return List.copyOf(result);
     }
 
     private void insertTruffleSafepoints(StructuredGraph graph) {
@@ -641,7 +680,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             CompileQueue.CompileTask task = compilations.get(hMethod);
             VMError.guarantee(task != null && task.result != null && hMethod.isCodeAddressOffsetValid(), "AOT tier method not compiled: %s", hMethod);
             method.code.entry.codeSize = task.result.getTargetCodeSize();
-            placed.add(new PlacedCode(hMethod.getCodeAddressOffset(), method.code));
+            placed.add(new PlacedCode(hMethod.getCodeAddressOffset(), method.code, method.folded));
             root.installed = "as " + hMethod.getName() + " codeSize=" + method.code.entry.codeSize;
         }
         /*
@@ -650,9 +689,43 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
          */
         placed.sort(Comparator.comparingInt(PlacedCode::offset));
         table.setCodes(placed.stream().map(PlacedCode::code).toArray(AOTInstalledCode[]::new));
+        setFoldedState(access, placed);
     }
 
-    private record PlacedCode(int offset, AOTInstalledCode code) {
+    /** The folded fields of each code, for the check after the context is patched. */
+    private void setFoldedState(AfterCompilationAccessImpl access, List<PlacedCode> placed) {
+        int total = placed.stream().mapToInt(p -> p.folded().size()).sum();
+        int[] starts = new int[placed.size() + 1];
+        Object[] receivers = new Object[total];
+        long[] offsets = new long[total];
+        char[] kinds = new char[total];
+        Object[] references = new Object[total];
+        long[] bits = new long[total];
+        String[] names = new String[total];
+        int j = 0;
+        for (int i = 0; i < placed.size(); i++) {
+            starts[i] = j;
+            for (BuildTimeCompiledMethod.FoldedField f : placed.get(i).folded()) {
+                receivers[j] = f.receiver();
+                references[j] = f.reference();
+                bits[j] = f.bits();
+                if (f.field() == null) {
+                    kinds[j] = AOTCodeTable.LANGUAGE_CONTEXT_OBJECT;
+                    names[j] = "the context object of " + f.receiver();
+                } else {
+                    HostedField hField = access.getUniverse().lookup(f.field());
+                    offsets[j] = hField.getLocation();
+                    kinds[j] = f.field().getJavaKind().getTypeChar();
+                    names[j] = f.field().format("%H.%n");
+                }
+                j++;
+            }
+        }
+        starts[placed.size()] = j;
+        table.setFoldedState(starts, receivers, offsets, kinds, references, bits, names);
+    }
+
+    private record PlacedCode(int offset, AOTInstalledCode code, List<BuildTimeCompiledMethod.FoldedField> folded) {
     }
 
     /**

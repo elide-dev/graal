@@ -720,6 +720,12 @@ public abstract class Accessor {
 
         public abstract Object getContext(Object polyglotLanguageContext);
 
+        /**
+         * The context object that the language created for {@code polyglotLanguageContext}, as
+         * context references return it, or {@code null} if it was not created.
+         */
+        public abstract Object getLanguageContextObject(Object polyglotLanguageContext);
+
         public abstract Object getStaticObjectClassLoaders(Object polyglotLanguageInstance, Class<?> referenceClass);
 
         public abstract void setStaticObjectClassLoaders(Object polyglotLanguageInstance, Class<?> referenceClass, Object value);
@@ -1368,6 +1374,13 @@ public abstract class Accessor {
         public abstract void onEnginePatch(Object runtimeData, OptionValues runtimeOptions, Function<String, TruffleLogger> logSupplier, SandboxPolicy sandboxPolicy);
 
         public abstract void onEnginePatchSuccess(Object runtimeData);
+
+        /**
+         * Called after the pre-initialized context of an engine was patched successfully, before
+         * the context is used. Code patching ran in the context before this call.
+         */
+        public void onPreinitializedContextPatched(Object runtimeData) {
+        }
 
         public abstract boolean onEngineClosing(Object runtimeData);
 

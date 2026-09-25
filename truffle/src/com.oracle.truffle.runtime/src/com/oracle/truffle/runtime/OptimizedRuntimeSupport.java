@@ -374,6 +374,11 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     }
 
     @Override
+    public void onPreinitializedContextPatched(Object runtimeData) {
+        OptimizedTruffleRuntime.getRuntime().onPreinitializedContextPatched((EngineData) runtimeData);
+    }
+
+    @Override
     public boolean onEngineClosing(Object runtimeData) {
         return ((EngineData) runtimeData).onEngineClosing();
     }
