@@ -91,6 +91,19 @@ public class BuildTimeSelectionTest {
         selection.selected().forEach(p -> assertTrue(p.shadow().isAOTShadow()));
     }
 
+    /**
+     * Roots without a guest language are not guest code, so the selection skips them silently: the
+     * engine creates a {@code RootNode.createConstantNode} root in the shared layer of every
+     * pre-initialized context (PolyglotEngineImpl.ensureRuntimeInitialized), which must be neither
+     * selected nor rejected.
+     */
+    @Test
+    public void rootsWithoutLanguageAreNotSelectedOrRejected() throws Exception {
+        var selection = preinit(files("add:1", "refuse"), "");
+        assertEquals(List.of("add1"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
+        assertEquals(List.of(new BuildTimeCompilationSupport.Rejection("refuse", "root refused AOT (cloneForAOT or prepareForAOT)")), selection.rejected());
+    }
+
     @Test
     public void filterRejects() throws Exception {
         var selection = preinit(files("add:1", "add:2"), "add2");

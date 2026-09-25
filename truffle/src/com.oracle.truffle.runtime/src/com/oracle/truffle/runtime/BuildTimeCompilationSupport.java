@@ -80,7 +80,20 @@ public final class BuildTimeCompilationSupport {
 
     /**
      * Hosted only: select shared call targets of the pre-initialized engine for build-time
-     * compilation.
+     * compilation. The roots of the claimed shared layers are considered once each, in engine
+     * order:
+     * <ul>
+     * <li>AOT shadows, splits, and roots without a guest language
+     * ({@link RootNode#getLanguageInfo()} is {@code null}, e.g., the engine's
+     * {@link RootNode#createConstantNode constant root}) are skipped silently: they are not guest
+     * code of their own, so they are neither selected nor rejected.</li>
+     * <li>A root that {@code polyglot.image-build-time.AOTCompileFilter} excludes is rejected as
+     * {@link #FILTERED}.</li>
+     * <li>A root executed at build time is rejected as {@link #EXECUTED_AT_BUILD_TIME}: its live
+     * AST is specialized already.</li>
+     * <li>A root that refuses AOT ({@code cloneForAOT} or {@code prepareForAOT}) is rejected.</li>
+     * <li>Every other root is selected, with its AOT shadow.</li>
+     * </ul>
      */
     public static Selection selectPreinitialized() {
         if (!Boolean.getBoolean("polyglot.image-build-time.AOTCompile")) {
@@ -95,7 +108,7 @@ public final class BuildTimeCompilationSupport {
         Map<OptimizedCallTarget, Boolean> seen = new LinkedHashMap<>();
         for (RootNode root : OptimizedRuntimeAccessor.ENGINE.getPreinitializedSharedRoots()) {
             OptimizedCallTarget target = (OptimizedCallTarget) root.getCallTarget();
-            if (target.isAOTShadow() || target.isSplit() || seen.putIfAbsent(target, Boolean.TRUE) != null) {
+            if (target.isAOTShadow() || target.isSplit() || root.getLanguageInfo() == null || seen.putIfAbsent(target, Boolean.TRUE) != null) {
                 continue;
             }
             String name = root.getName() == null ? root.toString() : root.getName();
