@@ -3944,13 +3944,21 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                             Path path = Path.of(entry.substring(colon + 1));
                             Source source;
                             try {
-                                source = Source.newBuilder(languageId, Files.readString(path), path.getFileName().toString()).build();
+                                /*
+                                 * An embedder source, like those the embedder parses (see
+                                 * PolyglotImpl.buildSource), so that parsing an equal source at
+                                 * run time finds the pre-initialized call target.
+                                 */
+                                Source.SourceBuilder builder = Source.newBuilder(languageId, Files.readString(path), path.getFileName().toString());
+                                EngineAccessor.SOURCE.setEmbedderSource(builder, true);
+                                source = builder.build();
                             } catch (IOException e) {
                                 throw new IllegalArgumentException("Cannot read " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': " + e.getMessage(), e);
                             }
                             PolyglotLanguageContext languageContext = context.getContextInitialized(language, null);
                             CallTarget target = languageContext.parseCached(ParseOrigin.EMBEDDING, null, source, null);
                             engine.preinitializedCallTargets.add(target);
+                            engine.preinitializedSources.add(source);
                         }
                     }
 
