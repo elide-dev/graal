@@ -61,6 +61,7 @@ import com.oracle.truffle.api.instrumentation.Instrumenter;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.runtime.OptimizedAssumption;
 import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
@@ -470,6 +471,56 @@ public class AOTTierNativeTest {
             }
             assertTrue(log(), Pattern.compile("opt done .*AOTTestLanguage\\.AssumeRoot@").matcher(log()).find());
         }
+    }
+
+    /**
+     * JIT code that reads an assumption from a static final field depends on it. The image builder
+     * initializes {@link AOTTestLanguage}, so it parses the load of {@link AOTTestLanguage#JIT_STATIC_A}
+     * in {@link AOTTestLanguage.StaticAssumeRoot#execute} as a constant. The runtime compiled graph
+     * of that method must still leave the check of the assumption to the partial evaluation at run
+     * time: the encoded graph drops the assumptions the image builder records. Without that, the
+     * JIT code has the value of the assumption at build time folded in, and no dependency on it.
+     * "jitfield" is the control: its assumption is in an instance field.
+     * <p>
+     * The engine refuses the pre-initialized context, so it does not take the pre-initialized
+     * engine from the other tests (see {@link AOTTierPreinitRefusedNativeTest}), and its targets are
+     * compiled on their first call.
+     */
+    @Test
+    public void staticFinalAssumptionInvalidatesJITCode() {
+        TruffleTestAssumptions.assumeAOT();
+        ByteArrayOutputStream jitLog = new ByteArrayOutputStream();
+        try (Engine jit = AOTTierNativeTestSupport.traceEngine(jitLog, "engine.UsePreInitializedContext", "false", "engine.CompileImmediately", "true", "engine.BackgroundCompilation", "false",
+                        "engine.TraceCompilation", "true");
+                        Context context = Context.newBuilder().engine(jit).build()) {
+            for (String kind : new String[]{"jitstatic", "jitfield"}) {
+                boolean isStatic = kind.equals("jitstatic");
+                OptimizedAssumption a = (OptimizedAssumption) (isStatic ? AOTTestLanguage.JIT_STATIC_A : AOTTestLanguage.JIT_FIELD_A);
+                OptimizedAssumption b = (OptimizedAssumption) (isStatic ? AOTTestLanguage.JIT_STATIC_B : AOTTestLanguage.JIT_FIELD_B);
+
+                /* Compiled while the assumption is valid: the code depends on it. */
+                Value fa = context.parse(Source.create(AOTTestLanguage.ID, kind + ":a"));
+                int dependencies = a.countDependencies();
+                assertEquals(kind + ": " + text(jitLog), 11, fa.execute().asInt());
+                assertTrue(kind + ": no dependency of the JIT code: " + text(jitLog), a.countDependencies() > dependencies);
+                /* So invalidating the assumption invalidates the code. */
+                a.invalidate();
+                for (int i = 0; i < 3; i++) {
+                    assertEquals(kind + ", call " + i + " after the invalidation: " + text(jitLog), 2, fa.execute().asInt() % 10);
+                }
+
+                /* Compiled after the assumption was invalidated: the code folds it as invalid. */
+                b.invalidate();
+                Value fb = context.parse(Source.create(AOTTestLanguage.ID, kind + ":b"));
+                for (int i = 0; i < 3; i++) {
+                    assertEquals(kind + ", call " + i + " of code compiled after the invalidation: " + text(jitLog), 12, fb.execute().asInt());
+                }
+            }
+        }
+    }
+
+    private static String text(ByteArrayOutputStream log) {
+        return AOTTierNativeTestSupport.text(log);
     }
 
     /**

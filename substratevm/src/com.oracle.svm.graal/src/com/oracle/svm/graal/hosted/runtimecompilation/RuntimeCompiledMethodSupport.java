@@ -116,9 +116,11 @@ import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.printer.GraalDebugHandlersFactory;
 import jdk.graal.compiler.replacements.nodes.MacroNode;
 import jdk.graal.compiler.replacements.nodes.MacroWithExceptionNode;
+import jdk.graal.compiler.truffle.nodes.TruffleAssumption;
 import jdk.graal.compiler.truffle.phases.DeoptimizeOnExceptionPhase;
 import jdk.vm.ci.code.Architecture;
 import jdk.vm.ci.code.BytecodeFrame;
+import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MetaAccessProvider;
@@ -368,6 +370,22 @@ public class RuntimeCompiledMethodSupport {
         return true;
     }
 
+    /**
+     * The encoding of a runtime compiled graph drops its assumptions (see
+     * {@code RuntimeCompilationSupport.encodedGraph}), so a Truffle assumption recorded while
+     * parsing it would never be registered by the compilations that use it: their code would
+     * depend on the state of the assumption at image build time.
+     */
+    private static boolean verifyNoTruffleAssumptions(StructuredGraph graph, HostedMethod method) {
+        if (graph.getAssumptions() != null) {
+            for (Assumptions.Assumption assumption : graph.getAssumptions()) {
+                assert !(assumption instanceof TruffleAssumption) : "runtime compiled graph records a Truffle assumption, which its encoding drops: " + method.format("%H.%n(%p)") + ": " +
+                                assumption;
+            }
+        }
+        return true;
+    }
+
     private static void encodeRuntimeCompiledMethods(HostedUniverse hUniverse, CompilationState compilationState) {
         compilationState.graphEncoder.finishPrepare();
 
@@ -377,6 +395,7 @@ public class RuntimeCompiledMethodSupport {
         for (var runtimeInfo : compilationState.runtimeGraphs.entrySet()) {
             var graph = runtimeInfo.getValue();
             var method = runtimeInfo.getKey();
+            assert verifyNoTruffleAssumptions(graph, method);
             DebugContext debug = new DebugContext.Builder(graph.getOptions(), new GraalDebugHandlersFactory(compilationState.runtimeCompilationProviders.getSnippetReflection())).build();
             graph.resetDebug(debug);
             try (DebugContext.Scope _ = debug.scope("Graph Encoding", graph);
