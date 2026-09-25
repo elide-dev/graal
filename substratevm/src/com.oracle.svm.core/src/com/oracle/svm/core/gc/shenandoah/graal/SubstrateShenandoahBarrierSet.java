@@ -32,6 +32,8 @@ import com.oracle.svm.core.graal.nodes.SubstrateCompressionNode;
 import com.oracle.svm.core.heap.ReferenceAccess;
 
 import jdk.graal.compiler.core.common.CompressEncoding;
+import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocal;
+
 import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.nodes.ValueNode;
@@ -106,6 +108,17 @@ public class SubstrateShenandoahBarrierSet extends ShenandoahBarrierSet {
             return BarrierType.NONE;
         }
         return super.readBarrierType(location, address, loadStamp);
+    }
+
+    /**
+     * SubstrateVM writes object references into off-heap slots: an object-typed VM thread local lives
+     * inside the (non-heap) {@code IsolateThread} and carries a {@link BarrierType#FIELD} barrier so
+     * that the SATB pre barrier remembers the overwritten value. The card table is indexed by heap
+     * address, so marking a card for such a store would dirty an arbitrary byte outside the table.
+     */
+    @Override
+    protected boolean isInHeap(LocationIdentity location) {
+        return !(location instanceof FastThreadLocal.FastThreadLocalLocationIdentity);
     }
 
     @Override
