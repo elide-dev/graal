@@ -87,6 +87,13 @@ Note that not every language can be compiled without prior execution and produce
 Statically typed languages are typically more suitable for this.
 
 
+### Build-Time Compilation with Native Image (AOT Tier)
+
+Native Image can go a step further than triggering compilation without profiling: it can perform the compilation itself, at image build time, for AOT-preparable shared call targets of a pre-initialized context.
+The compiled code runs from the first call at run time and hands over to the JIT compiler once the call target warms up.
+See the [AOT tutorial](AOT.md#aot-tier) for what a language implementation must do, and [Truffle Build-Time Compilation](../../docs/reference-manual/native-image/TruffleBuildTimeCompilation.md) for the Native Image build-time options.
+
+
 ### Application Snapshotting
 
 It is planned to also support persisting runtime values of polyglot context instances to disk.
