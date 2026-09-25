@@ -60,6 +60,15 @@ final class AOTTierNativeTestSupport {
         return Source.newBuilder(AOTTestLanguage.ID, code, name + ".aot").buildLiteral();
     }
 
+    /**
+     * The "add7" source {@link AOTTestPreinitializedSourcesFeature} registers; a context of the
+     * image must parse an equal source to use its pre-initialized call target. Not a method of the
+     * feature: image code cannot reference a {@code Feature} class.
+     */
+    static Source registeredAdd7() {
+        return Source.newBuilder(AOTTestLanguage.ID, "add:7", "add7.aotm").mimeType(AOTTestLanguage.MODULE_MIME_TYPE).buildLiteral();
+    }
+
     /** An engine with {@code engine.TraceAOT} that logs to {@code log}, with extra options. */
     static Engine traceEngine(ByteArrayOutputStream log, String... options) {
         Engine.Builder builder = Engine.newBuilder().allowExperimentalOptions(true).option("engine.TraceAOT", "true").logHandler(log);

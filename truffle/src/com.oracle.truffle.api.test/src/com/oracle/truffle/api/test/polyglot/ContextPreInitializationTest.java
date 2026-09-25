@@ -97,6 +97,7 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.PolyglotAccess;
 import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.PreinitializedSources;
 import org.graalvm.polyglot.SandboxPolicy;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
@@ -147,6 +148,8 @@ public class ContextPreInitializationTest {
     static final String SECOND = "ContextPreInitializationSecond";
     static final String INTERNAL = "ContextPreInitializationInternal";
     static final String SHARED = "ContextPreInitializationShared";
+    static final String SHARED_MIME_TYPE = "text/x-contextpreinitializationshared";
+    static final String SHARED_MODULE_MIME_TYPE = "text/x-contextpreinitializationshared-module";
     static final String CONSTRAINED = "ContextPreInitializationConstrained";
 
     private static final AtomicInteger NEXT_ORDER_INDEX = new AtomicInteger();
@@ -736,6 +739,60 @@ public class ContextPreInitializationTest {
         } finally {
             System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
             System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+        }
+    }
+
+    @Test
+    public void testRegisteredPreinitializedSource() throws Exception {
+        setPatchable(SHARED);
+        Source source = Source.newBuilder(SHARED, "registered module", "module.shared").mimeType(SHARED_MODULE_MIME_TYPE).build();
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        try {
+            BaseLanguage.parsedSources.clear();
+            BaseLanguage.executed.set(0);
+            PreinitializedSources.register(source);
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+        }
+        assertEquals(List.of("registered module"), BaseLanguage.parsedSources);
+        assertEquals("pre-initialization must never execute registered sources", 0, BaseLanguage.executed.get());
+        try (Context ctx = Context.create()) {
+            Source equal = Source.newBuilder(SHARED, "registered module", "module.shared").mimeType(SHARED_MODULE_MIME_TYPE).build();
+            assertEquals("registered module", ctx.eval(equal).asString());
+            assertEquals("an equal source must use the pre-initialized call target", List.of("registered module"), BaseLanguage.parsedSources);
+            assertEquals("registered module", ctx.eval(Source.newBuilder(SHARED, "registered module", "module.shared").build()).asString());
+            assertEquals("a source with another MIME type is not equal and is parsed again", List.of("registered module", "registered module"), BaseLanguage.parsedSources);
+        }
+    }
+
+    @Test
+    public void testRegisterPreinitializedSourceAfterPreInitialization() throws Exception {
+        setPatchable(SHARED);
+        doContextPreinitialize(SHARED);
+        try {
+            PreinitializedSources.register(Source.create(SHARED, "too late"));
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("already pre-initialized"));
+        }
+    }
+
+    @Test
+    public void testRegisteredPreinitializedSourceLanguageNotPreinitialized() throws Exception {
+        setPatchable(SHARED, FIRST);
+        PreinitializedSources.register(Source.newBuilder(FIRST, "first source", "first.src").build());
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        try {
+            BaseLanguage.parsedSources.clear();
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains(FIRST + ":first.src"));
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("PreinitializeContexts"));
+            assertEquals("no source is parsed if one is invalid", List.of(), BaseLanguage.parsedSources);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
         }
     }
 
@@ -3453,7 +3510,8 @@ public class ContextPreInitializationTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = SHARED, name = SHARED, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
+    @TruffleLanguage.Registration(id = SHARED, name = SHARED, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED, //
+                    characterMimeTypes = {SHARED_MIME_TYPE, SHARED_MODULE_MIME_TYPE}, defaultMimeType = SHARED_MIME_TYPE)
     public static final class ContextPreInitializationTestSharedLanguage extends BaseLanguage {
         @Option(category = OptionCategory.USER, stability = OptionStability.STABLE, help = "Option 1") //
         public static final OptionKey<Boolean> Option1 = new OptionKey<>(false);

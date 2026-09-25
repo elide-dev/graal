@@ -56,6 +56,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -146,6 +147,13 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     final PolyglotLanguageDispatch languageDispatch = new PolyglotLanguageDispatch(this);
 
     private final AtomicReference<PolyglotEngineImpl> preInitializedEngineRef = new AtomicReference<>();
+
+    /**
+     * Sources registered with {@code org.graalvm.polyglot.PreinitializedSources}, parsed by context
+     * pre-initialization. Guarded by itself.
+     */
+    private final List<Source> registeredPreinitializedSources = new ArrayList<>();
+    private boolean engineWasPreInitialized; // guarded by registeredPreinitializedSources
 
     private final Map<Class<?>, PolyglotValueDispatch> primitiveValues = new HashMap<>();
     Object hostNull; // effectively final
@@ -789,6 +797,9 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     @SuppressWarnings("unchecked")
     public void preInitializeEngine() {
+        synchronized (registeredPreinitializedSources) {
+            engineWasPreInitialized = true;
+        }
         boolean sharing = ImageBuildTimeOptions.getBoolean(ImageBuildTimeOptions.PREINITIALIZE_CODE_SHARING_NAME);
         PolyglotEngineImpl engine = createDefaultEngine(new PreInitContextHostLanguage(), !sharing);
         Object apiEngine = getAPIAccess().newEngine(engineDispatch, engine, false);
@@ -838,6 +849,31 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     public void resetPreInitializedEngine() {
         preInitializedEngineRef.set(null);
+        synchronized (registeredPreinitializedSources) {
+            registeredPreinitializedSources.clear();
+            engineWasPreInitialized = false;
+        }
+    }
+
+    @Override
+    public void registerPreinitializedSource(Object sourceReceiver) {
+        if (ImageInfo.inImageRuntimeCode()) {
+            throw new IllegalStateException("Sources for context pre-initialization can only be registered while a native image is built.");
+        }
+        Source source = (Source) sourceReceiver;
+        synchronized (registeredPreinitializedSources) {
+            if (engineWasPreInitialized) {
+                throw new IllegalStateException("Cannot register source '" + source.getName() + "' for context pre-initialization: the contexts were already pre-initialized. " +
+                                "Register sources before, e.g., in Feature.duringSetup.");
+            }
+            registeredPreinitializedSources.add(source);
+        }
+    }
+
+    List<Source> getRegisteredPreinitializedSources() {
+        synchronized (registeredPreinitializedSources) {
+            return List.copyOf(registeredPreinitializedSources);
+        }
     }
 
     /**
