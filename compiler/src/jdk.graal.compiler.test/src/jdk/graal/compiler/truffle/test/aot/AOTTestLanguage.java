@@ -28,6 +28,7 @@ import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.options.OptionValues;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.AOTSupport;
@@ -246,6 +247,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     }
 
     public static final class RecurseRoot extends RootNode {
+        /**
+         * Test hook: the number of executions of any "recurse" root in compiled code, e.g., in
+         * the AOT tier code of the live target (but not in the interpreter or a deoptimization
+         * target).
+         */
+        public static int compiledExecutions;
+
         @Child IndirectCallNode call = IndirectCallNode.create();
 
         RecurseRoot(TruffleLanguage<?> language) {
@@ -254,6 +262,9 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
         @Override
         public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
             int n = (Integer) frame.getArguments()[0];
             if (n <= 0) {
                 return 0;

@@ -101,6 +101,10 @@ final class BuildTimeTruffleCompiler extends TruffleCompilerImpl {
         return ((Runtime) config.runtime()).wrap(target);
     }
 
+    BuildTimePartialEvaluator partialEvaluator() {
+        return (BuildTimePartialEvaluator) partialEvaluator;
+    }
+
     @Override
     protected PartialEvaluator createPartialEvaluator(TruffleCompilerConfiguration configuration) {
         return new BuildTimePartialEvaluator(configuration, builderConfig, ((Runtime) configuration.runtime()).bb);

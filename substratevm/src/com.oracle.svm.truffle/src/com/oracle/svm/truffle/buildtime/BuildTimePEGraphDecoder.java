@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.truffle.buildtime;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.oracle.graal.pointsto.BigBang;
@@ -56,14 +57,20 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  */
 final class BuildTimePEGraphDecoder extends PEGraphDecoder {
     private final BigBang bb;
+    /**
+     * The graphs of compilation root methods that are not runtime-compiled methods, see
+     * {@code BuildTimePartialEvaluator.partiallyEvaluateAt}.
+     */
+    private final Map<ResolvedJavaMethod, EncodedGraph> rootGraphs;
 
-    BuildTimePEGraphDecoder(BigBang bb, StructuredGraph graph, CoreProviders providers, LoopExplosionPlugin loopExplosionPlugin, InvocationPlugins invocationPlugins,
+    BuildTimePEGraphDecoder(BigBang bb, Map<ResolvedJavaMethod, EncodedGraph> rootGraphs, StructuredGraph graph, CoreProviders providers, LoopExplosionPlugin loopExplosionPlugin, InvocationPlugins invocationPlugins,
                     InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin, NodePlugin[] nodePlugins, SourceLanguagePositionProvider sourceLanguagePosition,
                     ConcurrentHashMap<SpecialCallTargetCacheKey, Object> specialCallTargetCache, ConcurrentHashMap<ResolvedJavaMethod, Object> invocationPluginsCache) {
         /* Same flags as the runtime decoder (SubstratePEGraphDecoder). */
         super(AnalysisParsedGraph.HOST_ARCHITECTURE, graph, providers, loopExplosionPlugin, invocationPlugins, inlineInvokePlugins, parameterPlugin, nodePlugins, sourceLanguagePosition,
                         specialCallTargetCache, invocationPluginsCache, false, false);
         this.bb = bb;
+        this.rootGraphs = rootGraphs;
     }
 
     private static AnalysisMethod runtimeVariant(ResolvedJavaMethod method) {
@@ -79,7 +86,7 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
     @Override
     protected PEMethodScope createMethodScope(StructuredGraph targetGraph, PEMethodScope caller, LoopScope callerLoopScope, EncodedGraph encodedGraph, ResolvedJavaMethod method,
                     InvokeData invokeData, int inliningDepth, ValueNode[] arguments) {
-        ResolvedJavaMethod scopeMethod = encodedGraph != null ? runtimeVariant(method) : method;
+        ResolvedJavaMethod scopeMethod = encodedGraph != null && !rootGraphs.containsKey(method) ? runtimeVariant(method) : method;
         return super.createMethodScope(targetGraph, caller, callerLoopScope, encodedGraph, scopeMethod, invokeData, inliningDepth, arguments);
     }
 
@@ -109,6 +116,10 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
      */
     @Override
     protected EncodedGraph lookupEncodedGraph(ResolvedJavaMethod method, BytecodeProvider intrinsicBytecodeProvider) {
+        EncodedGraph rootGraph = rootGraphs.get(method);
+        if (rootGraph != null) {
+            return rootGraph;
+        }
         if (!isRuntimeCompilationCandidate(method)) {
             throw new PermanentBailoutException("Not a runtime compilation candidate: %s", method.format("%H.%n(%p)"));
         }

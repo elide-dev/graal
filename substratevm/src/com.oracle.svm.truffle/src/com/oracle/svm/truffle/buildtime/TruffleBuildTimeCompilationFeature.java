@@ -26,21 +26,42 @@ package com.oracle.svm.truffle.buildtime;
 
 import static com.oracle.svm.common.meta.MethodVariant.ORIGINAL_METHOD;
 
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.graalvm.nativeimage.hosted.Feature;
 
 import com.oracle.graal.pointsto.BigBang;
+import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
+import com.oracle.graal.pointsto.flow.AnalysisParsedGraph;
+import com.oracle.graal.pointsto.heap.ImageHeapScanner;
+import com.oracle.graal.pointsto.infrastructure.ResolvedSignature;
+import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.HostedProviders;
+import com.oracle.svm.core.deopt.ImageCodeInstalledCodeLookup;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
+import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.graal.RuntimeCompilationSupport;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.FeatureHandler;
+import com.oracle.svm.hosted.FeatureImpl.AfterCompilationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
+import com.oracle.svm.hosted.FeatureImpl.BeforeCompilationAccessImpl;
 import com.oracle.svm.hosted.NativeImageGenerator;
+import com.oracle.svm.hosted.code.CompileQueue;
+import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
+import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.shared.util.LogUtils;
+import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.truffle.TruffleFeature;
 import com.oracle.svm.truffle.api.SubstrateKnownTruffleTypes;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
@@ -49,22 +70,38 @@ import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.debug.DebugContext;
+import jdk.graal.compiler.nodes.EncodedGraph;
+import jdk.graal.compiler.nodes.GraphDecoder;
+import jdk.graal.compiler.nodes.GraphEncoder;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
+import jdk.graal.compiler.phases.common.GuardLoweringPhase;
 import jdk.graal.compiler.truffle.EconomyPartialEvaluatorConfiguration;
 import jdk.graal.compiler.truffle.KnownTruffleTypes;
 import jdk.graal.compiler.truffle.PartialEvaluatorConfiguration;
 import jdk.graal.compiler.truffle.TruffleCompilerConfiguration;
 import jdk.graal.compiler.truffle.TruffleCompilerImpl;
 import jdk.graal.compiler.truffle.TruffleTierConfiguration;
+import jdk.graal.compiler.truffle.nodes.SpeculativeExceptionAnchorNode;
+import jdk.vm.ci.meta.ConstantPool;
+import jdk.vm.ci.meta.MetaAccessProvider;
+import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
- * Orchestrates the Truffle AOT tier: selects the shared call targets of the pre-initialized engine
- * and partially evaluates their AOT shadows on analysis types. Installation follows in a later
- * step; for now the partial evaluation results are only reported
- * ({@link BuildTimeCompilationOptions#TruffleAOTPrintSummary}).
+ * The Truffle AOT tier: compiles the AOT shadows of the shared call targets of the pre-initialized
+ * engine into the image, and links each live target to its code.
+ * <p>
+ * For each selected target, a {@link BuildTimeCompiledMethod} is registered as an analysis root and
+ * as a deoptimization source. Its graph is the build-time partial evaluation of the shadow, built
+ * when the analysis parses the method. The live target's {@link OptimizedCallTarget#getAOTCode()
+ * AOT code} is an {@link AOTInstalledCode} pointing to the compiled method, which
+ * {@code SubstrateOptimizedCallTargetInstalledCode.doInvoke} calls while it is linked.
  */
 public final class TruffleBuildTimeCompilationFeature implements InternalFeature {
+
+    /** The {@code polyglot.image-build-time} option that limits the graph size of a root. */
+    private static final String AOT_COMPILE_BUDGET = "polyglot.image-build-time.AOTCompileBudget";
 
     private BuildTimeCompilationSupport.Selection selection;
     /**
@@ -72,6 +109,20 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      * parsing plugins: the plugins the runtime Truffle compiler is configured with.
      */
     private GraphBuilderConfiguration.Plugins runtimePlugins;
+    private final AOTCodeTable table = new AOTCodeTable();
+
+    private BuildTimeTruffleCompiler compiler;
+    private int budget;
+    private AnalysisMethod profiledPERoot;
+    private AnalysisMethod callBoundary;
+    private AnalysisMethod enter;
+    private ImageHeapScanner heapScanner;
+    private ResolvedJavaField aotCodeField;
+
+    /** The AOT tier methods, in selection order. */
+    private final List<BuildTimeCompiledMethod> methods = new ArrayList<>();
+    /** The methods whose root was skipped when its graph was built. */
+    private final Set<BuildTimeCompiledMethod> skipped = ConcurrentHashMap.newKeySet();
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
@@ -86,10 +137,11 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         RuntimeCompilationFeature.singleton().addAfterInstallRuntimeConfigCallback(() -> runtimePlugins = RuntimeCompilationFeature.singleton().getHostedProviders().getGraphBuilderPlugins());
+        /* Lookups must be registered before setup finishes; the table is filled after compilation. */
+        ImageCodeInstalledCodeLookup.register(table);
     }
 
     @Override
-    @SuppressWarnings("try")
     public void beforeAnalysis(BeforeAnalysisAccess a) {
         BeforeAnalysisAccessImpl access = (BeforeAnalysisAccessImpl) a;
         /* TruffleFeature.beforeAnalysis, which runs first, pre-initialized the engine. */
@@ -100,49 +152,224 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         if (selection.selected().isEmpty()) {
             return;
         }
+        compiler = new BuildTimeTruffleCompiler(createAnalysisConfig(access, runtimePlugins), access.getBigBang().getOptions());
+        budget = parseBudget();
+        heapScanner = access.getUniverse().getHeapScanner();
+        MetaAccessProvider originalMetaAccess = access.getMetaAccess().getWrapped();
+        try {
+            profiledPERoot = access.getMetaAccess().lookupJavaMethod(OptimizedCallTarget.class.getDeclaredMethod("profiledPERoot", Object[].class));
+            callBoundary = access.getMetaAccess().lookupJavaMethod(OptimizedCallTarget.class.getDeclaredMethod("callBoundary", Object[].class));
+            enter = access.getMetaAccess().lookupJavaMethod(AOTInstalledCode.class.getDeclaredMethod("enter", AOTInstalledCode.class));
+            Field field = OptimizedCallTarget.class.getDeclaredField("aotCode");
+            aotCodeField = originalMetaAccess.lookupJavaField(field);
+        } catch (ReflectiveOperationException e) {
+            throw VMError.shouldNotReachHere(e);
+        }
         /*
-         * Partial evaluation runs eagerly here to validate the pipeline. Installation will move it
-         * into the graph building of the build-time compiled methods.
+         * The graph of an AOT tier method is complete when the analysis parses it: inlining
+         * original methods into it would add frames whose deoptimization targets may not be
+         * reachable (see SubstrateCompilationDirectives.registerDeoptSource).
          */
-        BuildTimeTruffleCompiler compiler = new BuildTimeTruffleCompiler(createAnalysisConfig(access, runtimePlugins), access.getBigBang().getOptions());
-        try (DebugContext debug = new DebugContext.Builder(access.getBigBang().getOptions()).build()) {
-            for (BuildTimeCompilationSupport.Pair pair : selection.selected()) {
-                partialEvaluate(compiler, pair, debug);
+        access.getHostVM().registerNeverInlineTrivialHandler((caller, callee) -> caller.getWrapped() instanceof BuildTimeCompiledMethod);
+
+        ResolvedJavaType holder = originalMetaAccess.lookupJavaType(AOTInstalledCode.class);
+        ConstantPool constantPool = holder.getDeclaredConstructors(false)[0].getConstantPool();
+        ResolvedSignature<ResolvedJavaType> signature = ResolvedSignature.fromMethodType(MethodType.methodType(Object.class, OptimizedCallTarget.class, Object[].class), originalMetaAccess);
+        for (BuildTimeCompilationSupport.Pair pair : selection.selected()) {
+            String name = "<unnamed root>";
+            try {
+                name = AOTInstalledCode.rootName(pair.live());
+                register(access, pair, name, holder, signature, constantPool);
+            } catch (OutOfMemoryError e) {
+                throw e;
+            } catch (Throwable t) {
+                skip(name, t);
             }
         }
     }
 
-    private static void partialEvaluate(BuildTimeTruffleCompiler compiler, BuildTimeCompilationSupport.Pair pair, DebugContext debug) {
+    private void register(BeforeAnalysisAccessImpl access, BuildTimeCompilationSupport.Pair pair, String name, ResolvedJavaType holder, ResolvedSignature<ResolvedJavaType> signature,
+                    ConstantPool constantPool) {
+        OptimizedCallTarget shadow = pair.shadow();
+        VMError.guarantee(shadow.isAOTShadow(), "only AOT shadows are compiled at build time: %s", shadow);
+        /*
+         * Prepare the shadow now, which partial evaluation would do anyway: the shadow may be
+         * scanned into the image heap as soon as its method is parsed, and it must not change
+         * afterwards.
+         */
+        if (!compiler.asCompilable(shadow).prepareForCompilation(true, 1, false)) {
+            summary("skipped " + name + ": not ready for compilation");
+            return;
+        }
+        shadow.getNonTrivialNodeCount();
+
+        BuildTimeCompiledMethod method = new BuildTimeCompiledMethod(this, pair.live(), shadow, holder, signature, constantPool);
+        AnalysisMethod aMethod = access.getUniverse().lookup(method);
+        method.analysisMethod = aMethod;
+        method.code = new AOTInstalledCode(pair.live(), new AOTEntry(new MethodPointer(aMethod)));
+        /* The deoptimization target of the outermost frame must be reachable on its own. */
+        SubstrateCompilationDirectives.singleton().registerDeoptSource(aMethod);
+        aMethod.getOrCreateMethodVariant(SubstrateCompilationDirectives.DEOPT_TARGET_METHOD);
+        access.registerAsRoot(aMethod, true, "Truffle AOT tier " + name, SubstrateCompilationDirectives.DEOPT_TARGET_METHOD);
+        methods.add(method);
+        /* Link last: the live target must only reference a method that is compiled. */
+        BuildTimeCompilationSupport.attach(pair.live(), method.code);
+        heapScanner.rescanField(pair.live(), aotCodeField, new OtherReason("Truffle AOT tier code of " + name));
+    }
+
+    AnalysisMethod profiledPERoot() {
+        return profiledPERoot;
+    }
+
+    AnalysisMethod callBoundary() {
+        return callBoundary;
+    }
+
+    AnalysisMethod enter() {
+        return enter;
+    }
+
+    /**
+     * The graph of the original variant of {@code method}: the kit graph as the compilation root
+     * of the partial evaluation of the shadow, with guards lowered to fixed deoptimizations as
+     * hosted compilation requires. Returns {@code null} if the root is skipped, in which case its
+     * live target is unlinked again.
+     */
+    StructuredGraph partiallyEvaluate(BuildTimeCompiledMethod method, DebugContext debug, AnalysisMethod aMethod, HostedProviders providers) {
         String name = "<unnamed root>";
         try {
-            name = rootName(pair.live());
+            name = AOTInstalledCode.rootName(method.live);
             String rootName = name;
-            OptimizedCallTarget shadow = pair.shadow();
-            assert shadow.isAOTShadow() : "only AOT shadows are compiled at build time: " + shadow;
-            StructuredGraph graph = compiler.partialEvaluateForBuildTime(compiler.asCompilable(shadow), debug, reason -> summary("skipped " + rootName + ": " + reason));
-            if (graph != null) {
-                summary("compiled " + name + " nodes=" + graph.getNodeCount());
+            StructuredGraph rootGraph = method.buildKitGraph(debug, aMethod, providers, null, profiledPERoot, method.shadow);
+            EncodedGraph encodedRoot = GraphEncoder.encodeSingleGraph(rootGraph, AnalysisParsedGraph.HOST_ARCHITECTURE);
+            String[] bailout = new String[1];
+            StructuredGraph graph = compiler.partialEvaluator().partiallyEvaluateAt(method.shadow, aMethod, encodedRoot,
+                            () -> compiler.partialEvaluateForBuildTime(compiler.asCompilable(method.shadow), debug, reason -> bailout[0] = reason));
+            if (graph == null) {
+                unlink(method, rootName, String.valueOf(bailout[0]));
+                return null;
             }
+            removeSpeculativeExceptionAnchors(graph);
+            new GuardLoweringPhase().apply(graph, providers);
+            int nodes = graph.getNodeCount();
+            if (budget > 0 && nodes > budget) {
+                unlink(method, rootName, "over budget (" + nodes + " > " + budget + ")");
+                return null;
+            }
+            StructuredGraph result = toHostedGraph(graph, aMethod, debug);
+            method.assumptions = graph.getAssumptions() == null ? List.of() : List.of(graph.getAssumptions().toArray());
+            summary("compiled " + name + " nodes=" + nodes + " assumptions=" + method.assumptions.size());
+            return result;
         } catch (OutOfMemoryError e) {
             throw e;
         } catch (Throwable t) {
-            /*
-             * A failure to compile one root never fails the build by itself; whether skipped roots
-             * are errors is decided by TruffleAOTFailOnError.
-             */
-            if (BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
-                summary("skipped " + name + ": " + t);
-                t.printStackTrace(System.out);
-            } else {
-                /* Unexpected failures are reported even without the summary. */
-                LogUtils.warning("Truffle build-time compilation skipped %s: %s", name, t);
-            }
+            skip(name, t);
+            unlink(method, name, null);
+            return null;
         }
     }
 
-    private static String rootName(OptimizedCallTarget target) {
-        String name = target.getRootNode().getName();
-        return name == null ? String.valueOf(target.getRootNode()) : name;
+    /**
+     * Without a speculation log, the exception edges of Truffle boundary calls cannot speculate
+     * that no exception is thrown ({@link SpeculativeExceptionAnchorNode} would stay). They are
+     * compiled as if the speculation had failed: the exception is propagated in the compiled code,
+     * instead of deoptimizing (and invalidating the AOT code) on every such exception.
+     */
+    private static void removeSpeculativeExceptionAnchors(StructuredGraph graph) {
+        for (SpeculativeExceptionAnchorNode anchor : graph.getNodes().filter(SpeculativeExceptionAnchorNode.class).snapshot()) {
+            graph.removeFixed(anchor);
+        }
+    }
+
+    /**
+     * A copy of the partially evaluated {@code graph} in the form the analysis and the hosted
+     * compile queue expect of a hosted graph: without assumptions (the partial evaluation records
+     * the Truffle assumptions it folded, which are recorded separately), and with explicit
+     * exceptions and fixed deoptimizations (see
+     * {@code GraphState.configureExplicitExceptionsNoDeoptIfNecessary}), guards being lowered
+     * already.
+     */
+    private static StructuredGraph toHostedGraph(StructuredGraph graph, AnalysisMethod aMethod, DebugContext debug) {
+        EncodedGraph encoded = GraphEncoder.encodeSingleGraph(graph, AnalysisParsedGraph.HOST_ARCHITECTURE);
+        EncodedGraph withoutAssumptions = new EncodedGraph(encoded.getEncoding(), encoded.getStartOffset(), encoded.getObjects(), encoded.getNodeClasses(), null,
+                        encoded.getInlinedMethods(), encoded.hasUnsafeAccess(), encoded.trackNodeSourcePosition());
+        StructuredGraph result = new StructuredGraph.Builder(graph.getOptions(), debug, StructuredGraph.AllowAssumptions.NO)
+                        .method(aMethod)
+                        .trackNodeSourcePosition(encoded.trackNodeSourcePosition())
+                        .recordInlinedMethods(encoded.getInlinedMethods() != null)
+                        .build();
+        new GraphDecoder(AnalysisParsedGraph.HOST_ARCHITECTURE, result).decode(withoutAssumptions);
+        result.getGraphState().configureExplicitExceptionsNoDeoptIfNecessary();
+        return result;
+    }
+
+    /** Unlinks the AOT code of a skipped root, before the image heap is written. */
+    private void unlink(BuildTimeCompiledMethod method, String name, String reason) {
+        if (reason != null) {
+            summary("skipped " + name + ": " + reason);
+        }
+        skipped.add(method);
+        BuildTimeCompilationSupport.attach(method.live, null);
+        heapScanner.rescanField(method.live, aotCodeField, new OtherReason("Truffle AOT tier code of " + name + " unlinked"));
+    }
+
+    @Override
+    public void beforeCompilation(BeforeCompilationAccess a) {
+        BeforeCompilationAccessImpl access = (BeforeCompilationAccessImpl) a;
+        for (BuildTimeCompiledMethod method : methods) {
+            /* Objects that hold relocatable pointers must be immutable. */
+            access.registerAsImmutable(method.code.entry);
+        }
+    }
+
+    @Override
+    public void afterCompilation(AfterCompilationAccess a) {
+        AfterCompilationAccessImpl access = (AfterCompilationAccessImpl) a;
+        Map<HostedMethod, CompileQueue.CompileTask> compilations = access.getCompilations();
+        List<PlacedCode> placed = new ArrayList<>();
+        for (BuildTimeCompiledMethod method : methods) {
+            if (skipped.contains(method)) {
+                continue;
+            }
+            HostedMethod hMethod = access.getUniverse().lookup(method.analysisMethod);
+            CompileQueue.CompileTask task = compilations.get(hMethod);
+            VMError.guarantee(task != null && task.result != null && hMethod.isCodeAddressOffsetValid(), "AOT tier method not compiled: %s", hMethod);
+            method.code.entry.codeSize = task.result.getTargetCodeSize();
+            placed.add(new PlacedCode(hMethod.getCodeAddressOffset(), method.code));
+            summary("installed " + AOTInstalledCode.rootName(method.live) + " as " + hMethod.getName() + " codeSize=" + method.code.entry.codeSize);
+        }
+        /*
+         * Sorted by the offset in the code section: the relocated entry points have the same order
+         * at run time.
+         */
+        placed.sort(Comparator.comparingInt(PlacedCode::offset));
+        table.setCodes(placed.stream().map(PlacedCode::code).toArray(AOTInstalledCode[]::new));
+    }
+
+    private record PlacedCode(int offset, AOTInstalledCode code) {
+    }
+
+    private static int parseBudget() {
+        String value = System.getProperty(AOT_COMPILE_BUDGET, "0").strip();
+        try {
+            return value.isEmpty() ? 0 : Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw UserError.abort("Invalid value for %s, expected a number of nodes: %s", AOT_COMPILE_BUDGET, value);
+        }
+    }
+
+    private static void skip(String name, Throwable t) {
+        /*
+         * A failure to compile one root never fails the build by itself; whether skipped roots
+         * are errors is decided by TruffleAOTFailOnError.
+         */
+        if (BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
+            summary("skipped " + name + ": " + t);
+            t.printStackTrace(System.out);
+        } else {
+            /* Unexpected failures are reported even without the summary. */
+            LogUtils.warning("Truffle build-time compilation skipped %s: %s", name, t);
+        }
     }
 
     /**
