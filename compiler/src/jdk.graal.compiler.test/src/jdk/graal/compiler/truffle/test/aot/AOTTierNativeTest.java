@@ -30,6 +30,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.enters;
+import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.guestFrames;
+import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.unlinks;
+
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -58,7 +62,10 @@ import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
  * See {@code mx_substratevm.truffle_aot_tier_native_tests}.
  * <p>
  * All tests share one explicit engine: only the first engine created in the process adopts the
- * pre-initialized engine, whose shared layer holds the call targets compiled at build time.
+ * pre-initialized engine, whose shared layer holds the call targets compiled at build time. Tests
+ * that need that engine to have other options run in image runs of their own (see
+ * {@link AOTTierNativeTestSupport}). Calls of a fixture count towards the AOT tier threshold across
+ * tests, so each scenario has a fixture of its own.
  */
 public class AOTTierNativeTest {
 
@@ -74,8 +81,7 @@ public class AOTTierNativeTest {
 
     private static synchronized Engine engine() {
         if (engine == null) {
-            engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.TraceAOT", "true").option("engine.AOTTierThreshold",
-                            String.valueOf(AOT_TIER_THRESHOLD)).logHandler(LOG).build();
+            engine = AOTTierNativeTestSupport.traceEngine(LOG, "engine.AOTTierThreshold", String.valueOf(AOT_TIER_THRESHOLD));
         }
         return engine;
     }
@@ -107,7 +113,7 @@ public class AOTTierNativeTest {
      * target in the shared layer's source cache.
      */
     private static Source fixture(String name, String code) {
-        return Source.newBuilder(AOTTestLanguage.ID, code, name + ".aot").buildLiteral();
+        return AOTTierNativeTestSupport.fixture(name, code);
     }
 
     /**
@@ -171,16 +177,118 @@ public class AOTTierNativeTest {
         assertFalse("every caller frame has a call node: " + haveCallNode, haveCallNode.subList(1, haveCallNode.size()).contains(false));
     }
 
+    /**
+     * A guest exception thrown in AOT code does not unlink it (its exception profiles start
+     * generic): the later throws run in AOT code too. The exception has the type, message and guest
+     * stack trace it has when the same target runs in the interpreter (once the threshold unlinked
+     * its AOT code).
+     */
     @Test
-    public void exceptionFromAOTCode() {
+    public void exceptionThroughAOTCode() {
         TruffleTestAssumptions.assumeAOT();
         try (Context context = Context.newBuilder().engine(engine()).build()) {
             Value throwing = context.parse(fixture("throw", "throw"));
-            PolyglotException e = assertThrows(PolyglotException.class, throwing::execute);
-            assertTrue(e.isGuestException());
-            assertEquals(AOTTestLanguage.ThrowRoot.MESSAGE, e.getMessage());
+            int compiledBefore = AOTTestLanguage.ThrowRoot.compiledExecutions;
+            List<String> aotFrames = null;
+            for (int i = 0; i < 3; i++) {
+                PolyglotException e = assertThrows(PolyglotException.class, throwing::execute);
+                assertTrue(e.isGuestException());
+                assertEquals(AOTTestLanguage.ThrowRoot.MESSAGE, e.getMessage());
+                if (aotFrames == null) {
+                    aotFrames = guestFrames(e);
+                } else {
+                    assertEquals(aotFrames, guestFrames(e));
+                }
+            }
+            assertEquals(log(), 1, enters(log(), "throw"));
+            assertEquals(log(), 0, unlinks(log(), "throw"));
+            assertEquals("throws in AOT code", 3, AOTTestLanguage.ThrowRoot.compiledExecutions - compiledBefore);
+            assertEquals(List.of("throw@throw.aot:0-5"), aotFrames);
+
+            assertEquals(interpretedAfterThreshold(throwing, "throw", 3), aotFrames);
+            assertEquals(log(), 1, unlinks(log(), "throw"));
         }
-        assertTrue(log(), log().contains("[aot] enter throw"));
+    }
+
+    /**
+     * Calls {@code f} (which throws) until the AOT tier threshold unlinks the AOT code of
+     * {@code root}, once {@code callsBefore} calls were made; then once more, in the interpreter,
+     * and returns the guest frames of that exception.
+     */
+    private static List<String> interpretedAfterThreshold(Value f, String root, int callsBefore, Object... args) {
+        for (int i = callsBefore; i < AOT_TIER_THRESHOLD; i++) {
+            assertThrows(PolyglotException.class, () -> f.execute(args));
+        }
+        assertEquals(log(), 1, unlinks(log(), root, "AOT tier threshold reached"));
+        int compiled = AOTTestLanguage.ThrowRoot.compiledExecutions + AOTTestLanguage.ThrowCallRoot.compiledExecutions + AOTTestLanguage.DeoptRoot.compiledExecutions;
+        PolyglotException e = assertThrows(PolyglotException.class, () -> f.execute(args));
+        assertTrue(e.isGuestException());
+        assertEquals("the interpreter ran", compiled, AOTTestLanguage.ThrowRoot.compiledExecutions + AOTTestLanguage.ThrowCallRoot.compiledExecutions + AOTTestLanguage.DeoptRoot.compiledExecutions);
+        return guestFrames(e);
+    }
+
+    /**
+     * An exception thrown by the AOT code of a callee crosses a call site in the AOT code of its
+     * caller. Neither code is unlinked by it, and the guest stack trace is the interpreter's.
+     */
+    @Test
+    public void exceptionCrossesCallSiteInAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value throwcall = context.parse(fixture("throwcall", "throwcall"));
+            int callerBefore = AOTTestLanguage.ThrowCallRoot.compiledExecutions;
+            int calleeBefore = AOTTestLanguage.ThrowRoot.compiledExecutions;
+            List<String> aotFrames = null;
+            for (int i = 0; i < 3; i++) {
+                PolyglotException e = assertThrows(PolyglotException.class, throwcall::execute);
+                assertTrue(e.isGuestException());
+                assertEquals(AOTTestLanguage.ThrowRoot.MESSAGE, e.getMessage());
+                if (aotFrames == null) {
+                    aotFrames = guestFrames(e);
+                } else {
+                    assertEquals(aotFrames, guestFrames(e));
+                }
+            }
+            assertEquals(log(), 1, enters(log(), "throwcall"));
+            assertEquals(log(), 1, enters(log(), "thrower"));
+            assertEquals(log(), 0, unlinks(log(), "throwcall"));
+            assertEquals(log(), 0, unlinks(log(), "thrower"));
+            assertEquals("caller runs in AOT code", 3, AOTTestLanguage.ThrowCallRoot.compiledExecutions - callerBefore);
+            assertEquals("callee runs in AOT code", 3, AOTTestLanguage.ThrowRoot.compiledExecutions - calleeBefore);
+            assertEquals(List.of("thrower@throwcall.aot:0-5", "throwcall@throwcall.aot:0-9"), aotFrames);
+
+            assertEquals(interpretedAfterThreshold(throwcall, "throwcall", 3), aotFrames);
+            assertEquals(log(), 1, unlinks(log(), "thrower", "AOT tier threshold reached"));
+        }
+    }
+
+    /**
+     * A transfer to the interpreter that does not invalidate deoptimizes the activation of AOT code
+     * (its virtual frame is rematerialized), which completes in the deoptimization target; the code
+     * stays linked. An exception thrown right after such a deoptimization has the interpreter's
+     * message and guest stack trace.
+     */
+    @Test
+    public void nonInvalidatingDeoptimizationKeepsAOTCodeLinked() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value deopt = context.parse(fixture("deopt", "deopt"));
+            int compiledBefore = AOTTestLanguage.DeoptRoot.compiledExecutions;
+            assertEquals(2, deopt.execute(1).asInt());
+            assertEquals(3, deopt.execute(-3).asInt());
+            assertEquals(4, deopt.execute(3).asInt());
+            PolyglotException e = assertThrows(PolyglotException.class, () -> deopt.execute(-1));
+            assertTrue(e.isGuestException());
+            assertEquals(AOTTestLanguage.DeoptRoot.MESSAGE, e.getMessage());
+            List<String> afterDeoptFrames = guestFrames(e);
+            assertEquals(6, deopt.execute(5).asInt());
+            assertEquals(log(), 1, enters(log(), "deopt"));
+            assertEquals(log(), 0, unlinks(log(), "deopt"));
+            assertEquals("every call entered AOT code", 5, AOTTestLanguage.DeoptRoot.compiledExecutions - compiledBefore);
+            assertEquals(List.of("deopt@deopt.aot:0-5"), afterDeoptFrames);
+
+            assertEquals(interpretedAfterThreshold(deopt, "deopt", 5, -1), afterDeoptFrames);
+        }
     }
 
     /** AOT code of "call" calls its live callee, which runs in the interpreter. */
@@ -327,4 +435,5 @@ public class AOTTierNativeTest {
         assertTrue(log(), log().contains("[aot] enter spin"));
         assertTrue(log(), log().contains("[aot] unlink spin: aot-spin-test"));
     }
+
 }

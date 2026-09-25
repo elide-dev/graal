@@ -29,6 +29,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -138,4 +139,24 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertFalse("hotness must never compile a shadow", shadow.isValid());
         assertFalse(shadow.shouldCompile());
     }
+
+    /**
+     * The shadow is compiled without being executed: its exception profiles start generic, so
+     * that its compiled code survives a guest exception thrown through its call site and its root.
+     * The live target's profiles are not changed.
+     */
+    @Test
+    public void shadowExceptionProfilesStartGeneric() {
+        OptimizedCallTarget live = parse("throwcall");
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        live.setAOTCode(reason -> {
+        });
+        shadow.compile(false);
+        assertTrue(shadow.isValid());
+        for (int i = 0; i < 3; i++) {
+            assertThrows(AOTTestLanguage.AOTTestException.class, () -> enterShadowCode(shadow));
+        }
+        assertTrue("a guest exception must not invalidate the shadow's code", shadow.isValid());
+    }
+
 }

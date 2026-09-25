@@ -25,6 +25,9 @@
 package jdk.graal.compiler.truffle.test.aot;
 
 import org.graalvm.nativeimage.ImageInfo;
+import org.graalvm.options.OptionCategory;
+import org.graalvm.options.OptionDescriptors;
+import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionValues;
 
 import java.util.ArrayList;
@@ -34,8 +37,11 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Option;
+import com.oracle.truffle.api.ThreadLocalAction;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.dsl.AOTSupport;
 import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Introspectable;
@@ -44,11 +50,21 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.instrumentation.GenerateWrapper;
+import com.oracle.truffle.api.instrumentation.InstrumentableNode;
+import com.oracle.truffle.api.instrumentation.ProbeNode;
+import com.oracle.truffle.api.instrumentation.ProvidedTags;
+import com.oracle.truffle.api.instrumentation.StandardTags;
+import com.oracle.truffle.api.instrumentation.Tag;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.ExecutionSignature;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.profiles.BranchProfile;
+import com.oracle.truffle.api.profiles.ConditionProfile;
+import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 
 /**
  * Test language for the AOT tier. A source "add:N" parses to a root computing {@code arg0 + N}
@@ -58,14 +74,26 @@ import com.oracle.truffle.api.nodes.RootNode;
  * target); "assume" returns 1 while the assumption {@link #STABLE} is valid, and 2 afterwards;
  * "buildinval" depends on {@link #BUILD_STABLE}, which the test image invalidates during the build
  * ({@link AOTTestBuildTimeInvalidationFeature}); "spin" loops until its assumption is found invalid
- * (see {@link SpinRoot}).
+ * (see {@link SpinRoot}). The other sources are described with their roots: "throwcall"
+ * ({@link ThrowCallRoot}), "deopt" ({@link DeoptRoot}), "drecurse" ({@link DirectRecurseRoot}),
+ * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot})
+ * and "assumeloop" ({@link AssumeLoopRoot}).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
+@ProvidedTags(StandardTags.StatementTag.class)
 public final class AOTTestLanguage extends TruffleLanguage<Object> {
     /* Not "AOTTestLanguage": that id is taken by the AOTTutorial language in truffle-test. */
     public static final String ID = "AOTTierTestLanguage";
 
     private static final LanguageReference<AOTTestLanguage> REFERENCE = LanguageReference.create(AOTTestLanguage.class);
+    private static final ContextReference<Object> CONTEXT = ContextReference.create(AOTTestLanguage.class);
+
+    /**
+     * A context whose mode differs from the mode of the pre-initialized context (the default) has
+     * options incompatible with it ({@link #areOptionsCompatible}), so it cannot use it.
+     */
+    @Option(help = "The mode of the context; contexts of different modes have incompatible options.", category = OptionCategory.USER) //
+    static final OptionKey<String> Mode = new OptionKey<>("");
 
     /**
      * Test hook: the callee of the last parsed "call" source. Static rather than per language
@@ -88,6 +116,22 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
     /** Test hook: the assumption the "spin" root depends on. */
     static final Assumption SPIN_STABLE = Truffle.getRuntime().createAssumption("aot-spin-test");
+
+    /** Test hook: the assumption the "pollspin" root depends on. */
+    static final Assumption POLL_STABLE = Truffle.getRuntime().createAssumption("aot-poll-test");
+
+    /** Test hook: the assumption the "assumeloop" root depends on. */
+    static final Assumption LOOP_STABLE = Truffle.getRuntime().createAssumption("aot-loop-test");
+
+    /** Invalidates {@link #POLL_STABLE}. */
+    public static void invalidatePollStable() {
+        POLL_STABLE.invalidate();
+    }
+
+    /** Invalidates {@link #LOOP_STABLE}. */
+    public static void invalidateLoopStable() {
+        LOOP_STABLE.invalidate();
+    }
 
     /** Invalidates {@link #SPIN_STABLE}. */
     public static void invalidateSpinStable() {
@@ -115,8 +159,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     }
 
     @Override
+    protected OptionDescriptors getOptionDescriptors() {
+        return new AOTTestLanguageOptionDescriptors();
+    }
+
+    @Override
     protected boolean areOptionsCompatible(OptionValues firstOptions, OptionValues newOptions) {
-        return true;
+        return firstOptions.get(Mode).equals(newOptions.get(Mode));
     }
 
     /* A context is used by several threads in AOTTierNativeTest. */
@@ -127,7 +176,15 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
     @Override
     protected CallTarget parse(ParsingRequest request) {
-        return parseTarget(this, request.getSource().getCharacters().toString());
+        return parseTarget(this, request.getSource().getCharacters().toString(), request.getSource());
+    }
+
+    /**
+     * Submits {@code action} to {@code thread}, a thread of the current context; the caller must be
+     * entered in it.
+     */
+    public static void submitThreadLocal(Thread thread, ThreadLocalAction action) {
+        ((Env) CONTEXT.get(null)).submitThreadLocal(new Thread[]{thread}, action);
     }
 
     /** The language of the current context; the caller must be entered in a context. */
@@ -140,14 +197,43 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * The caller must be entered in a context.
      */
     public static CallTarget parseTarget(AOTTestLanguage language, String code) {
+        return parseTarget(language, code, null);
+    }
+
+    /**
+     * Parses {@code code}, the characters of {@code source}, if any: the roots of some sources have
+     * source sections, for guest stack traces.
+     */
+    static CallTarget parseTarget(AOTTestLanguage language, String code, Source source) {
         String trimmed = code.trim();
+        SourceSection section = source == null ? null : source.createSection(0, source.getLength());
         RootNode root;
         if (trimmed.startsWith("add:")) {
             root = new AddRoot(language, Integer.parseInt(trimmed.substring(4)));
         } else if (trimmed.equals("refuse")) {
             root = new RefusingRoot(language);
         } else if (trimmed.equals("throw")) {
-            root = new ThrowRoot(language);
+            root = new ThrowRoot(language, "throw", section);
+        } else if (trimmed.equals("throwcall")) {
+            /* The callee is not executed: it is compiled at build time too. */
+            ThrowRoot callee = new ThrowRoot(language, "thrower", source == null ? null : source.createSection(0, "throw".length()));
+            root = new ThrowCallRoot(language, callee.getCallTarget(), section);
+        } else if (trimmed.equals("deopt")) {
+            root = new DeoptRoot(language, section);
+        } else if (trimmed.equals("drecurse")) {
+            DirectRecurseRoot recurse = new DirectRecurseRoot(language);
+            recurse.self = recurse.insert(DirectCallNode.create(recurse.getCallTarget()));
+            root = recurse;
+        } else if (trimmed.equals("branch")) {
+            root = new BranchRoot(language);
+        } else if (trimmed.equals("pollspin")) {
+            root = new PollSpinRoot(language);
+        } else if (trimmed.startsWith("instr")) {
+            root = new StatementRoot(language, trimmed, section);
+        } else if (trimmed.equals("assumeloop")) {
+            root = new AssumeLoopRoot(language);
+        } else if (trimmed.equals("loop")) {
+            root = new LoopRoot(language);
         } else if (trimmed.equals("recurse")) {
             root = new RecurseRoot(language);
         } else if (trimmed.equals("assume")) {
@@ -363,17 +449,34 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         }
     }
 
+    /** Throws a guest exception, located at this root, whose source section is the whole source. */
     public static final class ThrowRoot extends RootNode {
         /* A constant: string concatenation cannot be runtime compiled in a native image. */
         static final String MESSAGE = "thrown by throw";
 
-        ThrowRoot(TruffleLanguage<?> language) {
+        /** Test hook: the number of executions of any throwing root in compiled code. */
+        public static volatile int compiledExecutions;
+
+        private final String name;
+        private final SourceSection section;
+
+        ThrowRoot(TruffleLanguage<?> language, String name, SourceSection section) {
             super(language);
+            this.name = name;
+            this.section = section;
         }
 
         @Override
         public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
             throw new AOTTestException(MESSAGE, this);
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
         }
 
         @Override
@@ -388,7 +491,415 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
         @Override
         public String getName() {
-            return "throw";
+            return name;
+        }
+    }
+
+    /**
+     * "throwcall": calls, through a direct call, a callee "thrower" (a {@link ThrowRoot}, not
+     * executed while parsing), so its exception crosses the call site.
+     */
+    public static final class ThrowCallRoot extends RootNode {
+        /** Test hook: the number of executions of "throwcall" in compiled code. */
+        public static volatile int compiledExecutions;
+
+        private final SourceSection section;
+        @Child DirectCallNode call;
+
+        ThrowCallRoot(TruffleLanguage<?> language, CallTarget callee, SourceSection section) {
+            super(language);
+            this.section = section;
+            this.call = DirectCallNode.create(callee);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
+            return call.call(frame.getArguments());
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "throwcall";
+        }
+    }
+
+    /**
+     * "deopt": returns {@code arg0 + 1} for a non-negative argument. For a negative one, it
+     * transfers to the interpreter without invalidating, i.e., deoptimizes compiled code, which
+     * stays valid; then it returns {@code -arg0}, or, for -1, throws.
+     */
+    public static final class DeoptRoot extends RootNode {
+        static final String MESSAGE = "thrown after a deoptimization";
+
+        /** Test hook: the number of executions of "deopt" in compiled code. */
+        public static volatile int compiledExecutions;
+
+        private final SourceSection section;
+
+        DeoptRoot(TruffleLanguage<?> language, SourceSection section) {
+            super(language);
+            this.section = section;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
+            int n = (Integer) frame.getArguments()[0];
+            if (n < 0) {
+                CompilerDirectives.transferToInterpreter();
+                if (n == -1) {
+                    throw new AOTTestException(MESSAGE, this);
+                }
+                return -n;
+            }
+            return n + 1;
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "deopt";
+        }
+    }
+
+    /**
+     * "drecurse": calls itself {@code arg0} times through a direct call of its (source) call
+     * target, which a copy of the root keeps calling.
+     */
+    public static final class DirectRecurseRoot extends RootNode {
+        /** Test hook: the number of executions of "drecurse" in compiled code. */
+        public static volatile int compiledExecutions;
+
+        @Child DirectCallNode self;
+
+        DirectRecurseRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
+            int n = (Integer) frame.getArguments()[0];
+            if (n <= 0) {
+                return 0;
+            }
+            return 1 + (Integer) self.call(n - 1);
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "drecurse";
+        }
+    }
+
+    /**
+     * "branch": profiles its paths with a {@link ConditionProfile} and a {@link BranchProfile} of
+     * its own, not managed by the DSL: returns {@code arg0} if it is over 1000, {@code -arg0} if it
+     * is negative, and {@code arg0 + 1} otherwise.
+     */
+    public static final class BranchRoot extends RootNode {
+        /** Test hook: the number of executions of "branch" in compiled code. */
+        public static volatile int compiledExecutions;
+
+        final ConditionProfile big = ConditionProfile.create();
+        final BranchProfile negative = BranchProfile.create();
+
+        BranchRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (CompilerDirectives.inCompiledCode()) {
+                compiledExecutions++;
+            }
+            int n = (Integer) frame.getArguments()[0];
+            if (big.profile(n > 1000)) {
+                return n;
+            }
+            if (n < 0) {
+                negative.enter();
+                return -n;
+            }
+            return n + 1;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "branch";
+        }
+    }
+
+    /**
+     * "pollspin": like {@link SpinRoot}, for {@link #POLL_STABLE}, but it polls Truffle safepoints
+     * in its loop, so a thread-local action can stop the loop's thread at the poll.
+     */
+    public static final class PollSpinRoot extends RootNode {
+        /** Test hook: set when an execution entered the loop. */
+        public static volatile boolean started;
+        /** Test hook: ends the loop regardless of the assumption. */
+        public static volatile boolean stop;
+        /** Test hook: whether the execution that entered the loop runs in compiled code. */
+        public static volatile boolean startedInCompiledCode;
+
+        PollSpinRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            startedInCompiledCode = CompilerDirectives.inCompiledCode();
+            started = true;
+            long iterations = 0;
+            while (!stop) {
+                TruffleSafepoint.poll(this);
+                if (!POLL_STABLE.isValid()) {
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                    return -1L;
+                }
+                iterations++;
+            }
+            return iterations;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "pollspin";
+        }
+    }
+
+    /**
+     * "loop": loops until {@link #stop} is set, and returns the number of iterations. It does not
+     * poll Truffle safepoints itself: the compilation inserts the polls.
+     */
+    public static final class LoopRoot extends RootNode {
+        /** Test hook: set when an execution entered the loop. */
+        public static volatile boolean started;
+        /** Test hook: whether the execution that entered the loop runs in compiled code. */
+        public static volatile boolean startedInCompiledCode;
+        /** Test hook: ends the loop. */
+        public static volatile boolean stop;
+
+        LoopRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            startedInCompiledCode = CompilerDirectives.inCompiledCode();
+            started = true;
+            long iterations = 0;
+            while (!stop) {
+                iterations++;
+            }
+            return iterations;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "loop";
+        }
+    }
+
+    /**
+     * An instrumentable statement: returns {@code arg0 + 100}. Its source section is the whole
+     * source.
+     */
+    @GenerateWrapper
+    public abstract static class AOTStatementNode extends Node implements InstrumentableNode {
+        public abstract Object execute(VirtualFrame frame);
+
+        @Override
+        public boolean isInstrumentable() {
+            return getSourceSection() != null;
+        }
+
+        @Override
+        public boolean hasTag(Class<? extends Tag> tag) {
+            return tag == StandardTags.StatementTag.class;
+        }
+
+        @Override
+        public WrapperNode createWrapper(ProbeNode probe) {
+            return new AOTStatementNodeWrapper(this, probe);
+        }
+    }
+
+    static final class ArgPlus100Node extends AOTStatementNode {
+        private final SourceSection section;
+
+        ArgPlus100Node(SourceSection section) {
+            this.section = section;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return (Integer) frame.getArguments()[0] + 100;
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
+        }
+    }
+
+    /** "instr...": a root whose body is one instrumentable statement, {@link ArgPlus100Node}. */
+    public static final class StatementRoot extends RootNode {
+        private final String name;
+        private final SourceSection section;
+        @Child AOTStatementNode body;
+
+        StatementRoot(TruffleLanguage<?> language, String name, SourceSection section) {
+            super(language);
+            this.name = name;
+            this.section = section;
+            this.body = new ArgPlus100Node(section);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return body.execute(frame);
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+    }
+
+    /**
+     * "assumeloop": sums {@code arg0} terms, each 1 while {@link #LOOP_STABLE} is valid and 2
+     * afterwards. Compiled code folds the check. So an activation that is deoptimized in its loop
+     * returns a sum between {@code arg0} and {@code 2 * arg0}, and a call that starts after the
+     * assumption was invalidated returns {@code 2 * arg0}, unless it runs stale code.
+     */
+    public static final class AssumeLoopRoot extends RootNode {
+        /** Read in the loop, so that compiled code cannot fold the sum. */
+        static volatile int one = 1;
+
+        AssumeLoopRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            int n = (Integer) frame.getArguments()[0];
+            long sum = 0;
+            for (int i = 0; i < n; i++) {
+                if (LOOP_STABLE.isValid()) {
+                    sum += one;
+                } else {
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                    sum += 2 * one;
+                }
+            }
+            return sum;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "assumeloop";
         }
     }
 

@@ -526,7 +526,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     fixtures = {}
     tmp = tempfile.mkdtemp(prefix='truffle-aot-')
     for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call'),
-                       ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin')]:
+                       ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin'), ('add5', 'add:5'), ('add6', 'add:6'),
+                       ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
+                       ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
@@ -540,7 +542,10 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         # Invalidates an assumption of the "buildinval" root after it was compiled.
         '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
     ]
-    native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(build_args) + (run_args or []))
+    # Each test class runs in an image run of its own (of the same image): only the first engine of a run that can use the
+    # pre-initialized context adopts the pre-initialized engine, and some classes need that engine to have other options.
+    test_classes = ['jdk.graal.compiler.truffle.test.aot.' + c for c in ['AOTTierNativeTest', 'AOTTierDeepRecursionNativeTest']]
+    native_unittest(test_classes + ['--test-classes-per-run', '1'] + truffle_args(build_args) + (run_args or []))
 
 
 @mx.command(suite.name, 'truffle-aot-native-tests', '[image-builder-args...]')

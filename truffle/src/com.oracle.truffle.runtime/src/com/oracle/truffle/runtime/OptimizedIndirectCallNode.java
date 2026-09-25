@@ -41,6 +41,7 @@
 package com.oracle.truffle.runtime;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
@@ -78,6 +79,15 @@ public final class OptimizedIndirectCallNode extends IndirectCallNode {
         Throwable profiled = profileExceptionType(t);
         OptimizedRuntimeAccessor.LANGUAGE.addStackFrameInfo(this, null, profiled, null);
         throw OptimizedCallTarget.rethrow(profiled);
+    }
+
+    /**
+     * Starts the exception profile in its generic state, for the AST of an AOT shadow, which is
+     * compiled without being executed. See {@link OptimizedCallTarget#createAOTShadow()}.
+     */
+    void startExceptionProfileGeneric() {
+        CompilerAsserts.neverPartOfCompilation();
+        exceptionProfile = Throwable.class;
     }
 
     @SuppressWarnings("unchecked")
