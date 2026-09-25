@@ -134,6 +134,7 @@ import com.oracle.truffle.api.nodes.ExecutionSignature;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.NodeCloneable;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.provider.InternalResourceProvider;
 import com.oracle.truffle.api.provider.TruffleLanguageProvider;
@@ -215,6 +216,13 @@ public abstract class Accessor {
         public abstract ExecutionSignature prepareForAOT(RootNode rootNode);
 
         public abstract RootNode cloneForAOT(RootNode root);
+
+        /**
+         * Replaces, in every node of the tree of {@code root}, each {@link NodeCloneable} field value
+         * that {@code filter} accepts by a clone of it, which {@code prepareCopy} gets before it is
+         * stored. The replaced values themselves are not changed.
+         */
+        public abstract void replaceCloneableFieldValues(Node root, Predicate<NodeCloneable> filter, Consumer<NodeCloneable> prepareCopy);
 
         public abstract CallTarget newCallTargetForClone(CallTarget source, RootNode clonedRoot);
 

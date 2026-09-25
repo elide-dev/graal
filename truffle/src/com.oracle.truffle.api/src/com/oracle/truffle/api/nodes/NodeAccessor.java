@@ -44,6 +44,8 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -186,6 +188,24 @@ final class NodeAccessor extends Accessor {
         @Override
         public RootNode cloneForAOT(RootNode root) {
             return root.cloneForAOT();
+        }
+
+        @Override
+        public void replaceCloneableFieldValues(Node root, Predicate<NodeCloneable> filter, Consumer<NodeCloneable> prepareCopy) {
+            root.accept(node -> {
+                NodeClass nodeClass = node.getNodeClass();
+                for (Object field : nodeClass.getNodeFieldArray()) {
+                    if (nodeClass.isCloneableField(field)) {
+                        Object value = nodeClass.getFieldObject(field, node);
+                        if (value instanceof NodeCloneable cloneable && filter.test(cloneable)) {
+                            NodeCloneable copy = (NodeCloneable) cloneable.clone();
+                            prepareCopy.accept(copy);
+                            nodeClass.putFieldObject(field, node, copy);
+                        }
+                    }
+                }
+                return true;
+            });
         }
 
         @Override
