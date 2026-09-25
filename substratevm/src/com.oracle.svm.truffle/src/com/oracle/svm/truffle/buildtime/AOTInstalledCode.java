@@ -58,7 +58,10 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
     final OptimizedCallTarget live;
     final AOTEntry entry;
     private volatile boolean unlinked;
-    /** Whether AOT code of {@link #live} was entered. Only ever set, so races are benign. */
+    /**
+     * Whether AOT code of {@link #live} was entered. Only ever set, under the lock of this code
+     * ({@link #firstEnter()}), after the first entry was processed.
+     */
     private boolean entered;
 
     /**
@@ -108,7 +111,14 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
         }
     }
 
-    private void firstEnter() {
+    /**
+     * Only one of the threads that enter the code for the first time at once processes the entry,
+     * so that it is traced once; the others wait until the live target is initialized.
+     */
+    private synchronized void firstEnter() {
+        if (entered) {
+            return;
+        }
         live.ensureInitialized();
         entered = true;
         if (live.engine.traceAOT) {
