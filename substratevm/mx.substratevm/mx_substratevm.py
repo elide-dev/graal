@@ -525,7 +525,7 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     extra_build_args = extra_build_args or []
     fixtures = {}
     tmp = tempfile.mkdtemp(prefix='truffle-aot-')
-    for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call')]:
+    for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)

@@ -255,8 +255,11 @@ public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode imp
             SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer target = Word.pointer(start);
             return target.invoke(callTarget, args);
         }
-        if (SubstrateUtil.HOSTED) {
-            /* During the image build, e.g., pre-initialization, there is no AOT tier code yet. */
+        if (SubstrateUtil.HOSTED || !AOTInstalledCode.isAOTTierInImage()) {
+            /*
+             * No AOT tier code: during the image build (e.g., pre-initialization), and in images
+             * built without it, where this folds so that the interpreter path is unchanged.
+             */
             return callTarget.invokeCallBoundary(args);
         }
         /*
@@ -268,14 +271,6 @@ public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode imp
         if (aotState.aotCode instanceof AOTInstalledCode code) {
             SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer target = (SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer) code.getEntry().getEntryPoint();
             return target.invoke(callTarget, args);
-        }
-        if (aotState.aotShadow) {
-            /*
-             * A call to an AOT shadow, e.g., by a root that calls itself through getCallTarget() in
-             * the shadow's AST, is a call to the live target: a shadow is never compiled or linked
-             * itself, it only provides the AST of the live target's AOT tier code.
-             */
-            return doInvoke((SubstrateOptimizedCallTarget) aotState.sourceCallTarget, args);
         }
         return callTarget.invokeCallBoundary(args);
     }

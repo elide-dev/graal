@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.truffle.buildtime;
 
+import org.graalvm.nativeimage.ImageSingletons;
+
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.core.deopt.SubstrateSpeculationLog;
 import com.oracle.svm.shared.NeverInline;
@@ -32,6 +34,7 @@ import com.oracle.svm.shared.util.VMError;
 import com.oracle.truffle.runtime.AOTCode;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
+import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.core.common.CompilationIdentifier;
 import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
@@ -51,6 +54,16 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode {
     private volatile boolean unlinked;
     /** Whether AOT code of {@link #live} was entered. Only ever set, so races are benign. */
     private boolean entered;
+
+    /**
+     * Whether this image contains the AOT tier, i.e., was built with
+     * {@code -Dpolyglot.image-build-time.AOTCompile=true}. Folded when the image is built, so that
+     * images without it do not contain the AOT tier dispatch.
+     */
+    @Fold
+    public static boolean isAOTTierInImage() {
+        return ImageSingletons.contains(AOTCodeTable.class);
+    }
 
     AOTInstalledCode(OptimizedCallTarget live, AOTEntry entry) {
         this.live = live;

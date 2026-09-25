@@ -60,11 +60,18 @@ public class AOTTierNativeTest {
 
     static final ByteArrayOutputStream LOG = new ByteArrayOutputStream();
 
+    /**
+     * The AOT tier threshold of the engine, set at run time: different from the build-time value
+     * (the default), and larger than the number of calls of any fixture in the other tests.
+     */
+    static final int AOT_TIER_THRESHOLD = 10;
+
     private static Engine engine;
 
     private static synchronized Engine engine() {
         if (engine == null) {
-            engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.TraceAOT", "true").logHandler(LOG).build();
+            engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.TraceAOT", "true").option("engine.AOTTierThreshold",
+                            String.valueOf(AOT_TIER_THRESHOLD)).logHandler(LOG).build();
         }
         return engine;
     }
@@ -187,6 +194,27 @@ public class AOTTierNativeTest {
             assertTrue(e.toString(), e.isInternalError());
             assertTrue(log(), log().contains("[aot] unlink add2: invalidated"));
             assertEquals(4, add2.execute(2).asInt());
+        }
+    }
+
+    /**
+     * The AOT tier threshold is the engine's option at run time, not the value when the image was
+     * built: the AOT code of "add3" is unlinked by the threshold-th call.
+     */
+    @Test
+    public void runTimeAOTTierThresholdUnlinks() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value add3 = context.parse(fixture("add3", "add:3"));
+            for (int i = 1; i < AOT_TIER_THRESHOLD; i++) {
+                assertEquals(i + 3, add3.execute(i).asInt());
+            }
+            assertTrue(log(), log().contains("[aot] enter add3"));
+            assertFalse(log(), log().contains("[aot] unlink add3"));
+            assertEquals(AOT_TIER_THRESHOLD + 3, add3.execute(AOT_TIER_THRESHOLD).asInt());
+            assertTrue(log(), log().contains("[aot] unlink add3: AOT tier threshold reached"));
+            /* Now in the interpreter, on the live target's AST. */
+            assertEquals(4, add3.execute(1).asInt());
         }
     }
 }

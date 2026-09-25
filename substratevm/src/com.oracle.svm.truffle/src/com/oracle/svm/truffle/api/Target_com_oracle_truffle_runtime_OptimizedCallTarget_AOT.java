@@ -31,13 +31,11 @@ import com.oracle.truffle.runtime.AOTCode;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 /**
- * The AOT tier state of {@link OptimizedCallTarget}, as fields for the uninterruptible dispatch in
+ * The AOT tier code of {@link OptimizedCallTarget}, as a field for the uninterruptible dispatch in
  * {@link SubstrateOptimizedCallTargetInstalledCode#doInvoke}, which cannot call the (interruptible)
- * accessors.
+ * accessor.
  */
 @TargetClass(className = "com.oracle.truffle.runtime.OptimizedCallTarget", onlyWith = TruffleFeature.IsEnabled.class)
 final class Target_com_oracle_truffle_runtime_OptimizedCallTarget_AOT {
     @Alias volatile AOTCode aotCode;
-    @Alias boolean aotShadow;
-    @Alias OptimizedCallTarget sourceCallTarget;
 }
