@@ -1209,7 +1209,29 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         if (!shadow.prepareForAOT()) {
             return null;
         }
+        shadow.startProfilesGenericForAOT();
         return shadow;
+    }
+
+    /**
+     * The shadow is compiled without ever being executed, so a profile that is still uninitialized
+     * when it is compiled folds into an invalidating deoptimization: the first time the code takes
+     * the profiled path, e.g., on the first guest exception, it would permanently unlink the AOT
+     * tier code of the live target. So the shadow's exception profiles start in their generic
+     * state instead: the exception profile of the shadow target, and the exception profiles of the
+     * call nodes in the shadow's AST.
+     */
+    private void startProfilesGenericForAOT() {
+        assert aotShadow;
+        exceptionProfile = PROFILE_GENERIC;
+        rootNode.accept(node -> {
+            if (node instanceof OptimizedDirectCallNode directCall) {
+                directCall.startExceptionProfileGeneric();
+            } else if (node instanceof OptimizedIndirectCallNode indirectCall) {
+                indirectCall.startExceptionProfileGeneric();
+            }
+            return true;
+        });
     }
 
     /**

@@ -96,6 +96,15 @@ public final class OptimizedDirectCallNode extends DirectCallNode {
         throw OptimizedCallTarget.rethrow(profiled);
     }
 
+    /**
+     * Starts the exception profile in its generic state, for the AST of an AOT shadow, which is
+     * compiled without being executed. See {@link OptimizedCallTarget#createAOTShadow()}.
+     */
+    void startExceptionProfileGeneric() {
+        CompilerAsserts.neverPartOfCompilation();
+        exceptionProfile = Throwable.class;
+    }
+
     @SuppressWarnings("unchecked")
     private <T extends Throwable> T profileExceptionType(T value) {
         Class<? extends Throwable> clazz = exceptionProfile;
