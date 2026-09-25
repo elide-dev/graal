@@ -169,6 +169,24 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * "retcallee" returned an Integer at build time, so its return profile is typed. AOT code of
+     * "retcall" must not fold that profile (finding m1 of the re-review): if it did, it would depend
+     * on the profile's assumption, and the first String the callee returns would unlink it.
+     */
+    @Test
+    public void returnOfAnotherTypeKeepsAOTCodeLinked() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value retcall = context.parse(fixture("retcall", "retcall"));
+            assertEquals(1, retcall.execute(1).asInt());
+            assertEquals("s", retcall.execute("s").asString());
+            assertEquals(2, retcall.execute(2).asInt());
+        }
+        assertEquals(log(), 1, enters(log(), "retcall"));
+        assertEquals(log(), 0, unlinks(log(), "retcall"));
+    }
+
+    /**
      * "add7" was registered with a MIME type by {@link AOTTestPreinitializedSourcesFeature}
      * (finding I5): a source with the same characters and name but no MIME type is not equal, so it
      * is parsed again and has no AOT code; an equal source runs the AOT code from its first call.

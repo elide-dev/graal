@@ -148,12 +148,16 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
 
     private final AtomicReference<PolyglotEngineImpl> preInitializedEngineRef = new AtomicReference<>();
 
+    private final Object preinitializedSourcesLock = new Object();
+
     /**
      * Sources registered with {@code org.graalvm.polyglot.PreinitializedSources}, parsed by context
-     * pre-initialization. Guarded by itself.
+     * pre-initialization, which clears them. Reset in the image, so that sources registered in a
+     * build that does not pre-initialize are not in the image heap either. Guarded by
+     * {@link #preinitializedSourcesLock}.
      */
-    private final List<Source> registeredPreinitializedSources = new ArrayList<>();
-    private boolean engineWasPreInitialized; // guarded by registeredPreinitializedSources
+    private List<Source> registeredPreinitializedSources = new ArrayList<>();
+    private boolean engineWasPreInitialized; // guarded by preinitializedSourcesLock
 
     private final Map<Class<?>, PolyglotValueDispatch> primitiveValues = new HashMap<>();
     Object hostNull; // effectively final
@@ -797,7 +801,7 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     @SuppressWarnings("unchecked")
     public void preInitializeEngine() {
-        synchronized (registeredPreinitializedSources) {
+        synchronized (preinitializedSourcesLock) {
             engineWasPreInitialized = true;
         }
         boolean sharing = ImageBuildTimeOptions.getBoolean(ImageBuildTimeOptions.PREINITIALIZE_CODE_SHARING_NAME);
@@ -816,6 +820,10 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
             engine.logHandler = null;
         }
         preInitializedEngineRef.set(engine);
+        synchronized (preinitializedSourcesLock) {
+            // parsed and kept alive by the engine (preinitializedSources)
+            registeredPreinitializedSources = new ArrayList<>();
+        }
     }
 
     /*
@@ -849,29 +857,30 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     public void resetPreInitializedEngine() {
         preInitializedEngineRef.set(null);
-        synchronized (registeredPreinitializedSources) {
-            registeredPreinitializedSources.clear();
+        synchronized (preinitializedSourcesLock) {
+            registeredPreinitializedSources = new ArrayList<>();
             engineWasPreInitialized = false;
         }
     }
 
     @Override
-    public void registerPreinitializedSource(Object sourceReceiver) {
+    public void registerPreinitializedSources(Object[] sourceReceivers) {
         if (ImageInfo.inImageRuntimeCode()) {
             throw new IllegalStateException("Sources for context pre-initialization can only be registered while a native image is built.");
         }
-        Source source = (Source) sourceReceiver;
-        synchronized (registeredPreinitializedSources) {
+        synchronized (preinitializedSourcesLock) {
             if (engineWasPreInitialized) {
-                throw new IllegalStateException("Cannot register source '" + source.getName() + "' for context pre-initialization: the contexts were already pre-initialized. " +
+                throw new IllegalStateException("Cannot register sources for context pre-initialization: the contexts were already pre-initialized. " +
                                 "Register sources before, e.g., in Feature.duringSetup.");
             }
-            registeredPreinitializedSources.add(source);
+            for (Object sourceReceiver : sourceReceivers) {
+                registeredPreinitializedSources.add((Source) sourceReceiver);
+            }
         }
     }
 
     List<Source> getRegisteredPreinitializedSources() {
-        synchronized (registeredPreinitializedSources) {
+        synchronized (preinitializedSourcesLock) {
             return List.copyOf(registeredPreinitializedSources);
         }
     }

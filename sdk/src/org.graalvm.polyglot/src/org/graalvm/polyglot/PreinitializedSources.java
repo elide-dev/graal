@@ -60,19 +60,30 @@ import java.util.Objects;
  * property {@code polyglot.image-build-time.PreinitializeSources} is a shorthand for registering
  * sources read from files, with a name and no MIME type.
  * <p>
- * The language of every registered source must be pre-initialized and support context patching,
- * or pre-initialization fails.
+ * Registering is a hint: a registered source is parsed only if the image pre-initializes its
+ * language, i.e., the language is listed in {@code polyglot.image-build-time.PreinitializeContexts}.
+ * Otherwise the source is skipped, so a library can register its sources from its own feature
+ * without failing the builds of images that do not pre-initialize its language. If the language is
+ * pre-initialized but does not support context patching, the image build fails.
  * <p>
  * Only sources that the embedder parses, e.g., with {@link Context#eval(Source)} or
  * {@link Context#parse(Source)}, can use a registered source. A source that a language creates
  * itself, e.g., a module that its module loader loads for an {@code import}, is never equal to a
- * registered source.
+ * registered source. A source built from a {@link java.io.File} or {@link java.net.URL} has the
+ * path or URI of the build machine, so it is equal to a source of the image only if the image
+ * builds it from the same path or URI; prefer a {@linkplain Source#newBuilder(String, CharSequence,
+ * String) literal source} with a name and a MIME type.
+ * <p>
+ * On a JVM, context pre-initialization can be debugged by setting the system property
+ * {@code polyglot.image-build-time.PreinitializeContexts}: the contexts are then pre-initialized
+ * when the polyglot implementation is loaded, before any source can be registered, so sources
+ * cannot be registered in this mode.
  *
  * <pre>
  * public final class MyFeature implements Feature {
  *     &#64;Override
  *     public void duringSetup(DuringSetupAccess access) {
- *         PreinitializedSources.register(Source.newBuilder("js", file).mimeType("application/javascript+module").build());
+ *         PreinitializedSources.register(Source.newBuilder("js", moduleCode, "main.mjs").mimeType("application/javascript+module").buildLiteral());
  *     }
  * }
  * </pre>
@@ -85,16 +96,20 @@ public final class PreinitializedSources {
     }
 
     /**
-     * Registers {@code sources} to be parsed by context pre-initialization.
+     * Registers {@code sources} to be parsed by context pre-initialization: all of them, or none if
+     * this method throws.
      *
      * @throws IllegalStateException if the contexts were already pre-initialized, or if called in
      *             a native image at run time
+     * @throws UnsupportedOperationException if no polyglot implementation that supports context
+     *             pre-initialization is installed
      * @since 25.4
      */
     public static void register(Source... sources) {
-        Objects.requireNonNull(sources);
-        for (Source source : sources) {
-            Engine.getImpl().registerPreinitializedSource(Objects.requireNonNull(source).receiver);
+        Object[] receivers = new Object[sources.length];
+        for (int i = 0; i < sources.length; i++) {
+            receivers[i] = Objects.requireNonNull(sources[i]).receiver;
         }
+        Engine.getImpl().registerPreinitializedSources(receivers);
     }
 }

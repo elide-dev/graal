@@ -46,6 +46,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -778,22 +779,45 @@ public class ContextPreInitializationTest {
         }
     }
 
+    /*
+     * Registering is a hint (finding I-1): a library may register sources from its own feature, and
+     * an image that does not pre-initialize the language must still build.
+     */
     @Test
     public void testRegisteredPreinitializedSourceLanguageNotPreinitialized() throws Exception {
         setPatchable(SHARED, FIRST);
-        PreinitializedSources.register(Source.newBuilder(FIRST, "first source", "first.src").build());
+        PreinitializedSources.register(Source.newBuilder(FIRST, "first source", "first.src").build(), Source.create(SHARED, "shared source"));
         System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
         try {
             BaseLanguage.parsedSources.clear();
             doContextPreinitialize(SHARED);
-            fail("expected IllegalArgumentException");
-        } catch (InvocationTargetException e) {
-            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains(FIRST + ":first.src"));
-            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("PreinitializeContexts"));
-            assertEquals("no source is parsed if one is invalid", List.of(), BaseLanguage.parsedSources);
         } finally {
             System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
         }
+        assertEquals("the source of the language that is not pre-initialized is skipped", List.of("shared source"), BaseLanguage.parsedSources);
+    }
+
+    @Test
+    public void testRegisteredPreinitializedSourceNoLanguagePreinitialized() throws Exception {
+        setPatchable(SHARED);
+        PreinitializedSources.register(Source.create(SHARED, "shared source"));
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize();
+        assertEquals(List.of(), BaseLanguage.parsedSources);
+    }
+
+    @Test
+    public void testRegisterPreinitializedSourcesAllOrNone() throws Exception {
+        setPatchable(SHARED);
+        assertThrows(NullPointerException.class, () -> PreinitializedSources.register(Source.create(SHARED, "shared source"), null));
+        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        try {
+            BaseLanguage.parsedSources.clear();
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeCodeSharing");
+        }
+        assertEquals("a failed register call registers no source", List.of(), BaseLanguage.parsedSources);
     }
 
     @Test

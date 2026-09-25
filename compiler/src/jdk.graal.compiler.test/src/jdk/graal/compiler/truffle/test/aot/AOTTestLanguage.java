@@ -363,6 +363,11 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             callee.getCallTarget().call(0);
             lastCallee = callee;
             root = new CallRoot(language, callee.getCallTarget());
+        } else if (trimmed.equals("retcall")) {
+            /* Executed at build time: the return profile of the callee is Integer. */
+            EchoRoot callee = new EchoRoot(language);
+            callee.getCallTarget().call(0);
+            root = new CallRoot(language, "retcall", callee.getCallTarget());
         } else {
             throw new IllegalArgumentException(trimmed);
         }
@@ -1316,9 +1321,21 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     static final class LeafNode extends Node {
     }
 
+    /** A node that is never adopted, like an uncached node: several trees may share it. */
+    static final class UnadoptableNode extends Node {
+        static final UnadoptableNode INSTANCE = new UnadoptableNode();
+
+        @Override
+        public boolean isAdoptable() {
+            return false;
+        }
+    }
+
     public static final class MisbehavingRoot extends RootNode {
         private final String mode;
         @Child LeafNode child = new LeafNode();
+        /* Only in mode "shareunadoptable", whose copy shares it with the live root. */
+        @Child UnadoptableNode unadoptable;
 
         MisbehavingRoot(TruffleLanguage<?> language, String mode) {
             this(language, mode, oneSlotDescriptor());
@@ -1333,6 +1350,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         private MisbehavingRoot(TruffleLanguage<?> language, String mode, FrameDescriptor descriptor) {
             super(language, descriptor);
             this.mode = mode;
+            this.unadoptable = mode.equals("shareunadoptable") ? UnadoptableNode.INSTANCE : null;
         }
 
         @Override
@@ -1352,6 +1370,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
                     copy.child = child;
                     return copy;
                 case "owndesc":
+                case "shareunadoptable":
                     return new MisbehavingRoot(getLanguage(AOTTestLanguage.class), mode, getFrameDescriptor().copy());
                 default:
                     return new MisbehavingRoot(getLanguage(AOTTestLanguage.class), mode, getFrameDescriptor());
@@ -1403,6 +1422,23 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return name;
+        }
+    }
+
+    /** Returns its argument: "retcallee", the callee of "retcall". */
+    public static final class EchoRoot extends RootNode {
+        EchoRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return frame.getArguments()[0];
+        }
+
+        @Override
+        public String getName() {
+            return "retcallee";
         }
     }
 

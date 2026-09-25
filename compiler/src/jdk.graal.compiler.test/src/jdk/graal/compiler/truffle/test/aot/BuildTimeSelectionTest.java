@@ -121,12 +121,13 @@ public class BuildTimeSelectionTest {
     /**
      * A root whose AOT shadow cannot be created, whatever its language did wrong, is rejected with
      * the reason, never fails the selection (and so the image build), and leaves the live root as
-     * it was. The well-behaved roots are still selected.
+     * it was. The well-behaved roots are still selected, including one whose copy shares a node
+     * that is never adopted with the live root (finding m5).
      */
     @Test
     public void misbehavingRootsAreRejectedAndLiveRootsUnchanged() throws Exception {
-        var selection = preinit(files("misbehave:clonethrow", "misbehave:prepthrow", "misbehave:cloneself", "misbehave:cloneshare", "misbehave:sharedesc", "misbehave:owndesc", "add:1"), "");
-        assertEquals(List.of("add1", "owndesc"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).sorted().toList());
+        var selection = preinit(files("misbehave:clonethrow", "misbehave:prepthrow", "misbehave:cloneself", "misbehave:cloneshare", "misbehave:sharedesc", "misbehave:owndesc", "misbehave:shareunadoptable", "add:1"), "");
+        assertEquals(List.of("add1", "owndesc", "shareunadoptable"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).sorted().toList());
         Map<String, String> reasons = selection.rejected().stream().collect(Collectors.toMap(BuildTimeCompilationSupport.Rejection::rootName, BuildTimeCompilationSupport.Rejection::reason, (a, b) -> a, TreeMap::new));
         assertEquals(List.of("cloneself", "cloneshare", "clonethrow", "prepthrow", "sharedesc"), List.copyOf(reasons.keySet()));
         String failed = BuildTimeCompilationSupport.SHADOW_FAILED + ": ";
@@ -137,7 +138,7 @@ public class BuildTimeSelectionTest {
         }
         assertTrue(reasons.get("sharedesc"), reasons.get("sharedesc").startsWith(failed + "java.lang.IllegalStateException: prepareForAOT changed the FrameDescriptor"));
 
-        for (String mode : List.of("clonethrow", "prepthrow", "cloneself", "cloneshare", "sharedesc", "owndesc")) {
+        for (String mode : List.of("clonethrow", "prepthrow", "cloneself", "cloneshare", "sharedesc", "owndesc", "shareunadoptable")) {
             AOTTestLanguage.MisbehavingRoot live = AOTTestLanguage.misbehaving.get(mode);
             assertEquals(mode, FrameSlotKind.Illegal, live.getFrameDescriptor().getSlotKind(0));
             assertSame(mode, live, live.child.getParent());
