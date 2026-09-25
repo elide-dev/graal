@@ -569,7 +569,15 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
     public final Object callIndirect(Node location, Object... args) {
         if (aotShadow) {
-            return callSourceOfAOTShadow(location, args);
+            try {
+                return callSourceOfAOTShadow(location, args);
+            } finally {
+                /*
+                 * As below: the frame of this method provides the call node of the caller when
+                 * frames are iterated.
+                 */
+                Reference.reachabilityFence(location);
+            }
         }
         /*
          * Indirect calls should not invalidate existing compilations of the callee, and the callee
@@ -594,7 +602,15 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     public final Object callDirect(Node location, Object... args) {
         CompilerAsserts.partialEvaluationConstant(this);
         if (aotShadow) {
-            return callSourceOfAOTShadow(location, args);
+            try {
+                return callSourceOfAOTShadow(location, args);
+            } finally {
+                /*
+                 * As below: the frame of this method provides the call node of the caller when
+                 * frames are iterated.
+                 */
+                Reference.reachabilityFence(location);
+            }
         }
         try {
             profileArguments(args);

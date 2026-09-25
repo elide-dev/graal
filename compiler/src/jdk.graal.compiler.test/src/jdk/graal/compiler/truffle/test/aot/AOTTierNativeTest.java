@@ -31,6 +31,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
@@ -147,11 +148,24 @@ public class AOTTierNativeTest {
     public void recursionThroughShadowEntersAOTCode() {
         TruffleTestAssumptions.assumeAOT();
         int compiledBefore = AOTTestLanguage.RecurseRoot.compiledExecutions;
+        AOTTestLanguage.RecurseRoot.captureFrames = true;
         try (Context context = Context.newBuilder().engine(engine()).build()) {
             assertEquals(5, context.parse(fixture("recurse", "recurse")).execute(5).asInt());
+        } finally {
+            AOTTestLanguage.RecurseRoot.captureFrames = false;
         }
         assertTrue(log(), log().contains("[aot] enter recurse"));
         assertEquals("executions of recurse in compiled code", 6, AOTTestLanguage.RecurseRoot.compiledExecutions - compiledBefore);
+        /*
+         * The caller frames of calls redirected from the shadow to the live target keep their call
+         * nodes (guest stack trace locations): all frames but the innermost one have one. The six
+         * recurse frames are followed by the frame of the embedder's call.
+         */
+        List<Boolean> haveCallNode = AOTTestLanguage.RecurseRoot.capturedFramesHaveCallNode;
+        assertNotNull(haveCallNode);
+        assertTrue("guest frames at the bottom of recurse(5): " + haveCallNode, haveCallNode.size() >= 6);
+        assertFalse("the innermost frame has no call node: " + haveCallNode, haveCallNode.get(0));
+        assertFalse("every caller frame has a call node: " + haveCallNode, haveCallNode.subList(1, haveCallNode.size()).contains(false));
     }
 
     @Test
