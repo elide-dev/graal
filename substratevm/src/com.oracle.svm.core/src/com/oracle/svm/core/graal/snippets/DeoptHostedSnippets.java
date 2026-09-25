@@ -141,7 +141,11 @@ public final class DeoptHostedSnippets extends SubstrateTemplates implements Sni
         super(options, providers);
 
         this.deopt = snippet(providers, DeoptHostedSnippets.class, "deoptSnippet");
-        this.deoptSource = snippet(providers, DeoptHostedSnippets.class, "deoptSourceSnippet");
+        /*
+         * Only with deoptimization support: the snippet calls DeoptimizationRuntime.DEOPTIMIZE,
+         * which has no implementation otherwise, and every registered snippet is analyzed.
+         */
+        this.deoptSource = DeoptimizationSupport.enabled() ? snippet(providers, DeoptHostedSnippets.class, "deoptSourceSnippet") : null;
 
         lowerings.put(DeoptimizeNode.class, new DeoptimizeLowering());
     }
