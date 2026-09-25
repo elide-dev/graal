@@ -29,11 +29,13 @@ import static com.oracle.svm.common.meta.MethodVariant.ORIGINAL_METHOD;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.hosted.Feature;
@@ -62,13 +64,20 @@ import com.oracle.svm.hosted.code.CompileQueue;
 import com.oracle.svm.hosted.code.DeoptimizationUtils;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.meta.HostedMethod;
+import com.oracle.svm.shared.BuildPhaseProvider;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.LogUtils;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.truffle.TruffleFeature;
 import com.oracle.svm.truffle.api.SubstrateKnownTruffleTypes;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.compiler.OptimizedAssumptionDependency;
 import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
+import com.oracle.truffle.runtime.OptimizedAssumption;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.debug.DebugContext;
@@ -87,8 +96,10 @@ import jdk.graal.compiler.truffle.TruffleCompilerImpl;
 import jdk.graal.compiler.truffle.TruffleTierConfiguration;
 import jdk.graal.compiler.truffle.nodes.IsCompilationConstantNode;
 import jdk.graal.compiler.truffle.nodes.SpeculativeExceptionAnchorNode;
+import jdk.graal.compiler.truffle.nodes.TruffleAssumption;
 import jdk.graal.compiler.truffle.nodes.TruffleSafepointNode;
 import jdk.graal.compiler.truffle.nodes.frame.ForceMaterializeNode;
+import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
@@ -103,7 +114,13 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * when the analysis parses the method. The live target's {@link OptimizedCallTarget#getAOTCode()
  * AOT code} is an {@link AOTInstalledCode} pointing to the compiled method, which
  * {@code SubstrateOptimizedCallTargetInstalledCode.doInvoke} calls while it is linked.
+ * <p>
+ * The code is registered as a dependency of the Truffle assumptions its partial evaluation folded,
+ * and these registrations are in the image heap, so that invalidating one of them at run time
+ * invalidates the code. An assumption invalidated during the build drops the code instead
+ * ({@link #dropAtBuildTime}).
  */
+@SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public final class TruffleBuildTimeCompilationFeature implements InternalFeature {
 
     /** The {@code polyglot.image-build-time} option that limits the graph size of a root. */
@@ -124,11 +141,19 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private AnalysisMethod enter;
     private ImageHeapScanner heapScanner;
     private ResolvedJavaField aotCodeField;
+    private ResolvedJavaField unlinkedField;
+    /** The fields of an OptimizedAssumption that registering a dependency changes. */
+    private List<ResolvedJavaField> assumptionDependencyFields;
 
     /** The AOT tier methods, in selection order. */
     private final List<BuildTimeCompiledMethod> methods = new ArrayList<>();
-    /** The methods whose root was skipped when its graph was built. */
+    /**
+     * The methods whose root was skipped when its graph was built, or whose code was dropped
+     * because an assumption was invalidated during the build: never linked, and not in the table.
+     */
     private final Set<BuildTimeCompiledMethod> skipped = ConcurrentHashMap.newKeySet();
+    /** Every root that is not compiled, or whose code is dropped, with the reason. */
+    private final List<BuildTimeCompilationSupport.Rejection> rejections = Collections.synchronizedList(new ArrayList<>());
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
@@ -138,6 +163,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     @Override
     public List<Class<? extends Feature>> getRequiredFeatures() {
         return List.of(TruffleFeature.class);
+    }
+
+    @Override
+    public void onRegistration(OnRegistrationAccess access) {
+        /* Looked up by dropAtBuildTime. */
+        ImageSingletons.add(TruffleBuildTimeCompilationFeature.class, this);
     }
 
     @Override
@@ -155,7 +186,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         /* TruffleFeature.beforeAnalysis, which runs first, pre-initialized the engine. */
         selection = BuildTimeCompilationSupport.selectPreinitialized();
         for (BuildTimeCompilationSupport.Rejection r : selection.rejected()) {
-            summary("skipped " + r.rootName() + ": " + r.reason());
+            reject(r.rootName(), r.reason());
         }
         if (selection.selected().isEmpty()) {
             return;
@@ -170,6 +201,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             enter = access.getMetaAccess().lookupJavaMethod(AOTInstalledCode.class.getDeclaredMethod("enter", AOTInstalledCode.class));
             Field field = OptimizedCallTarget.class.getDeclaredField("aotCode");
             aotCodeField = originalMetaAccess.lookupJavaField(field);
+            unlinkedField = originalMetaAccess.lookupJavaField(AOTInstalledCode.class.getDeclaredField("unlinked"));
+            List<ResolvedJavaField> fields = new ArrayList<>();
+            for (String name : new String[]{"dependencies", "size", "sizeAfterLastRemove"}) {
+                fields.add(originalMetaAccess.lookupJavaField(OptimizedAssumption.class.getDeclaredField(name)));
+            }
+            assumptionDependencyFields = List.copyOf(fields);
         } catch (ReflectiveOperationException e) {
             throw VMError.shouldNotReachHere(e);
         }
@@ -206,7 +243,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
          * afterwards.
          */
         if (!compiler.asCompilable(shadow).prepareForCompilation(true, 1, false)) {
-            summary("skipped " + name + ": not ready for compilation");
+            reject(name, "not ready for compilation");
             return;
         }
         shadow.getNonTrivialNodeCount();
@@ -281,6 +318,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 return null;
             }
             method.assumptions = graph.getAssumptions() == null ? List.of() : List.of(graph.getAssumptions().toArray());
+            /* Last: nothing may skip the root after its code became a dependency. */
+            String invalid = registerAssumptionDependencies(method, providers, rootName);
+            if (invalid != null) {
+                unlink(method, rootName, invalid);
+                return null;
+            }
             summary("compiled " + name + " nodes=" + nodes + " assumptions=" + method.assumptions.size());
             return result;
         } catch (OutOfMemoryError e) {
@@ -360,10 +403,97 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         return result;
     }
 
+    /**
+     * Registers the code of {@code method} as a dependency of each Truffle assumption its partial
+     * evaluation folded, and rescans the assumptions, so that the registrations are in the image
+     * heap: invalidating the assumption at run time invalidates the code. Returns the reason to skip
+     * the root, or {@code null}. Either all assumptions are registered or none.
+     * <p>
+     * Graphs of hosted methods cannot record other assumptions: if the partial evaluation recorded
+     * one, the root is skipped, since nothing would invalidate the code when it is.
+     */
+    private String registerAssumptionDependencies(BuildTimeCompiledMethod method, HostedProviders providers, String name) {
+        List<OptimizedAssumption> assumptions = new ArrayList<>();
+        for (Assumptions.Assumption a : method.assumptions) {
+            if (a instanceof TruffleAssumption ta) {
+                assumptions.add(providers.getSnippetReflection().asObject(OptimizedAssumption.class, ta.getAssumption()));
+            } else {
+                return "unsupported assumption " + a;
+            }
+        }
+        List<Consumer<OptimizedAssumptionDependency>> entries = new ArrayList<>();
+        String invalid = null;
+        for (OptimizedAssumption assumption : assumptions) {
+            Consumer<OptimizedAssumptionDependency> entry = assumption.registerDependency();
+            if (entry == null) {
+                /* Invalidated after the partial evaluation relied on it. */
+                invalid = "assumption invalid at build time";
+                break;
+            }
+            entries.add(entry);
+        }
+        /* A registered entry must be notified, or invalidating the assumption would wait for it. */
+        for (Consumer<OptimizedAssumptionDependency> entry : entries) {
+            entry.accept(invalid == null ? method.code : null);
+        }
+        for (OptimizedAssumption assumption : assumptions) {
+            for (ResolvedJavaField field : assumptionDependencyFields) {
+                heapScanner.rescanField(assumption, field, new OtherReason("Truffle AOT tier code of " + name + " depends on " + assumption));
+            }
+        }
+        return invalid;
+    }
+
+    /**
+     * Drops the AOT code {@code code}: an assumption it depends on was invalidated while the image
+     * is built ({@code AOTInstalledCode.invalidate}). There are no activations of the code yet, but
+     * the image must not link it:
+     * <ul>
+     * <li>During the analysis, the target is unlinked and rescanned, and the method is excluded
+     * from the {@link AOTCodeTable}.</li>
+     * <li>After the analysis, and until the image heap is laid out, the scanner does not accept
+     * rescans any more; the heap snapshot verification after compilation and before the heap
+     * layout patches the snapshot with the unlinked target and the invalidated assumption instead.
+     * Until the table is built (after compilation), the method is excluded from it; after that, it
+     * stays in it, unlinked, so it is never entered.</li>
+     * <li>After the heap layout, the image heap is written from the snapshot, which still has the
+     * valid assumption and the linked code that relies on it: consistent, so the code is kept.</li>
+     * </ul>
+     */
+    static void dropAtBuildTime(AOTInstalledCode code, CharSequence reason) {
+        ImageSingletons.lookup(TruffleBuildTimeCompilationFeature.class).drop(code, reason);
+    }
+
+    private synchronized void drop(AOTInstalledCode code, CharSequence reason) {
+        if (code.isUnlinked()) {
+            /* Dropped already, for another of its assumptions. */
+            return;
+        }
+        String name = AOTInstalledCode.rootName(code.live);
+        String why = "assumption invalidated during build: " + reason;
+        if (BuildPhaseProvider.isHeapLayoutFinished()) {
+            reject(name, why + " (after the heap layout: the image keeps the code, with the assumption valid)");
+            return;
+        }
+        for (BuildTimeCompiledMethod method : methods) {
+            if (method.code == code) {
+                skipped.add(method);
+            }
+        }
+        code.unlink(why);
+        BuildTimeCompilationSupport.attach(code.live, null);
+        if (!BuildPhaseProvider.isAnalysisFinished()) {
+            OtherReason rescanReason = new OtherReason("Truffle AOT tier code of " + name + " dropped");
+            heapScanner.rescanField(code.live, aotCodeField, rescanReason);
+            heapScanner.rescanField(code, unlinkedField, rescanReason);
+        }
+        reject(name, why);
+    }
+
     /** Unlinks the AOT code of a skipped root, before the image heap is written. */
     private void unlink(BuildTimeCompiledMethod method, String name, String reason) {
         if (reason != null) {
-            summary("skipped " + name + ": " + reason);
+            reject(name, reason);
         }
         skipped.add(method);
         BuildTimeCompilationSupport.attach(method.live, null);
@@ -415,11 +545,25 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         }
     }
 
-    private static void skip(String name, Throwable t) {
+    /** Records that the root {@code name} is not compiled, or its code dropped, and why. */
+    private void reject(String name, String reason) {
+        rejections.add(new BuildTimeCompilationSupport.Rejection(name, reason));
+        summary("skipped " + name + ": " + reason);
+    }
+
+    /** The roots that are not compiled, or whose code is dropped, with the reason. */
+    List<BuildTimeCompilationSupport.Rejection> rejections() {
+        synchronized (rejections) {
+            return List.copyOf(rejections);
+        }
+    }
+
+    private void skip(String name, Throwable t) {
         /*
          * A failure to compile one root never fails the build by itself; whether skipped roots
          * are errors is decided by TruffleAOTFailOnError.
          */
+        rejections.add(new BuildTimeCompilationSupport.Rejection(name, String.valueOf(t)));
         if (BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
             summary("skipped " + name + ": " + t);
             t.printStackTrace(System.out);

@@ -33,6 +33,7 @@ import java.util.List;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.AOTSupport;
@@ -54,7 +55,10 @@ import com.oracle.truffle.api.nodes.RootNode;
  * with a DSL node that is AOT-preparable; "refuse" parses to a root that refuses AOT; "throw"
  * throws; "recurse" calls itself {@code arg0} times; "call" calls, through a direct call, a trivial
  * callee that is executed while parsing (so, during pre-initialization, it is a live, initialized
- * target).
+ * target); "assume" returns 1 while the assumption {@link #STABLE} is valid, and 2 afterwards;
+ * "buildinval" depends on {@link #BUILD_STABLE}, which the test image invalidates during the build
+ * ({@link AOTTestBuildTimeInvalidationFeature}); "spin" loops until its assumption is found invalid
+ * (see {@link SpinRoot}).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
 public final class AOTTestLanguage extends TruffleLanguage<Object> {
@@ -70,6 +74,36 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      */
     public static volatile CalleeRoot lastCallee;
 
+    /**
+     * Test hook: the assumption the "assume" root depends on. Created when the language class is
+     * initialized, i.e., in the image builder for the test image, so it is in the image heap.
+     */
+    static final Assumption STABLE = Truffle.getRuntime().createAssumption("aot-test");
+
+    /**
+     * Test hook: the assumption the "buildinval" root depends on, invalidated during the image
+     * build after the root was compiled ({@link AOTTestBuildTimeInvalidationFeature}).
+     */
+    static final Assumption BUILD_STABLE = Truffle.getRuntime().createAssumption("aot-build-test");
+
+    /** Test hook: the assumption the "spin" root depends on. */
+    static final Assumption SPIN_STABLE = Truffle.getRuntime().createAssumption("aot-spin-test");
+
+    /** Invalidates {@link #SPIN_STABLE}. */
+    public static void invalidateSpinStable() {
+        SPIN_STABLE.invalidate();
+    }
+
+    /** Invalidates {@link #STABLE}. */
+    public static void invalidateStable() {
+        STABLE.invalidate();
+    }
+
+    /** Invalidates {@link #BUILD_STABLE}. */
+    public static void invalidateBuildStable() {
+        BUILD_STABLE.invalidate();
+    }
+
     @Override
     protected Object createContext(Env env) {
         return env;
@@ -82,6 +116,12 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
     @Override
     protected boolean areOptionsCompatible(OptionValues firstOptions, OptionValues newOptions) {
+        return true;
+    }
+
+    /* A context is used by several threads in AOTTierNativeTest. */
+    @Override
+    protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
         return true;
     }
 
@@ -110,6 +150,12 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new ThrowRoot(language);
         } else if (trimmed.equals("recurse")) {
             root = new RecurseRoot(language);
+        } else if (trimmed.equals("assume")) {
+            root = new AssumeRoot(language, "assume", STABLE, 1, 2);
+        } else if (trimmed.equals("buildinval")) {
+            root = new AssumeRoot(language, "buildinval", BUILD_STABLE, 7, 7);
+        } else if (trimmed.equals("spin")) {
+            root = new SpinRoot(language);
         } else if (trimmed.equals("call")) {
             CalleeRoot callee = new CalleeRoot(language);
             callee.getCallTarget().call(0);
@@ -124,7 +170,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     /*
      * doLong deliberately does not replace doInt: AOT preparation activates every specialization
      * that is not replaced, so int arguments stay on the prepared fast path instead of deoptimizing
-     * the build-time compiled code on the first call.
+     * the build-time compiled code on the first call. doIntOverflow is the int specialization after
+     * doInt overflowed (rewriteOn), which is a deoptimization out of the compiled code.
      */
     @GenerateAOT
     @Introspectable
@@ -135,6 +182,11 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Specialization(rewriteOn = ArithmeticException.class)
         static int doInt(int left, int right) {
             return Math.addExact(left, right);
+        }
+
+        @Specialization
+        static long doIntOverflow(int left, int right) {
+            return (long) left + right;
         }
 
         @Specialization
@@ -197,6 +249,96 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         /** Test hook: the DSL state of the add node, to prove the live AST is untouched. */
         public boolean isUninitialized() {
             return Introspection.getSpecializations(add).stream().noneMatch(Introspection.SpecializationInfo::isActive);
+        }
+    }
+
+    /**
+     * Returns {@code valid} while {@code assumption} is valid, and {@code invalid} afterwards.
+     * Compiled code folds the check, relying on the assumption.
+     */
+    public static final class AssumeRoot extends RootNode {
+        private final String name;
+        private final Assumption assumption;
+        private final int valid;
+        private final int invalid;
+
+        AssumeRoot(TruffleLanguage<?> language, String name, Assumption assumption, int valid, int invalid) {
+            super(language);
+            this.name = name;
+            this.assumption = assumption;
+            this.valid = valid;
+            this.invalid = invalid;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (assumption.isValid()) {
+                return valid;
+            }
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            return invalid;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+    }
+
+    /**
+     * Loops until {@link AOTTestLanguage#SPIN_STABLE} is invalid, and returns -1; or, if
+     * {@link #stop} is set first, returns the number of iterations. Compiled code folds the check
+     * of the assumption, so its loop only ends with {@link #stop} unless the activation is
+     * deoptimized: then the loop continues in the deoptimization target, which sees the invalid
+     * assumption.
+     */
+    public static final class SpinRoot extends RootNode {
+        /** Test hook: set when an execution entered the loop. */
+        public static volatile boolean started;
+        /** Test hook: ends the loop regardless of the assumption. */
+        public static volatile boolean stop;
+
+        SpinRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            started = true;
+            long iterations = 0;
+            while (!stop) {
+                if (!SPIN_STABLE.isValid()) {
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                    return -1L;
+                }
+                iterations++;
+            }
+            return iterations;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "spin";
         }
     }
 
