@@ -27,7 +27,7 @@ Enable the AOT tier with the following system properties, passed to `native-imag
 | `-Dpolyglot.image-build-time.AOTCompileFilter=<glob>,...` | build | A glob over root names (`*` and `?` as wildcards, comma-separated alternatives) that selects which call targets are compiled. An empty value selects all roots. |
 | `-Dpolyglot.image-build-time.AOTCompileBudget=<n>` | build | The maximum partial-evaluation graph size, in nodes, per compiled root. `0` means unlimited. |
 | `engine.AOTTierThreshold` | run time | The number of calls and loop iterations after which a call target's AOT code is unlinked. `0`, the default, uses the value of `FirstTierCompilationThreshold`. |
-| `engine.TraceAOT` | run time, internal | Traces `[aot] unlink <name>: <reason>` each time the runtime unlinks a target's AOT code. |
+| `engine.TraceAOT` | run time, internal | Traces `[aot] enter <name>` once per target, on its first call, and `[aot] unlink <name>: <reason>` each time the runtime unlinks a target's AOT code. |
 | `-H:+TruffleAOTPrintSummary` | hosted | Prints a per-root build summary. |
 | `-H:+TruffleAOTFailOnError` | hosted | Fails the build if a selected root was not compiled. |
 
@@ -86,9 +86,10 @@ Truffle AOT tier: root 'myFunction' was not compiled: <reason>
 `-H:+TruffleAOTFailOnError` never counts roots that were filtered out or executed at build time as failures, since those are excluded by design.
 It also enables `-H:+VerifyDeoptSourceEntryPoints`, which fails the build if the AOT tier code is missing a deoptimization entry point that it needs.
 
-At run time, `engine.TraceAOT` prints a line each time the runtime unlinks a call target's AOT code, for example when the `engine.AOTTierThreshold` is reached or an assumption is invalidated:
+At run time, `engine.TraceAOT` prints a line the first time each target's AOT code is entered, and a line each time the runtime unlinks a call target's AOT code, for example when the `engine.AOTTierThreshold` is reached or an assumption is invalidated:
 
 ```
+[aot] enter myFunction
 [aot] unlink myFunction: AOT tier threshold reached
 ```
 
@@ -97,4 +98,4 @@ At run time, `engine.TraceAOT` prints a line each time the runtime unlinks a cal
 Instruments also wrap the shadow ASTs that back the AOT tier.
 Since shadows are loaded roots like any other, a tool that enumerates loaded roots can observe each AOT-compiled root twice: once as the shadow and once as the live root node.
 
-A native executable built without `-Dpolyglot.image-build-time.AOTCompile=true` is unaffected by the AOT tier.
+A native executable built without `-Dpolyglot.image-build-time.AOTCompile=true` is unaffected by the AOT tier, with one exception: a pre-existing bug fix for `Assumption`s held in static final fields and read by run-time partial evaluation, which previously could be folded at build time and lose the JIT compiler's dependency on them, applies to every Truffle native image, whether or not it uses the AOT tier.
