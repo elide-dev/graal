@@ -30,13 +30,21 @@ import com.oracle.svm.core.deopt.ImageCodeInstalledCodeLookup;
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.shared.BuildPhaseProvider;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
+import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 
 /**
  * Resolves frames of AOT tier methods to their {@link AOTInstalledCode}, for
  * {@code Deoptimizer.invalidateMethodOfFrame}. The codes are sorted by entry address when the image
  * code is laid out; the order is kept at run time because all entry points are relocated relative
  * to the same code base.
+ * <p>
+ * Also the image singleton that marks an image as containing the AOT tier
+ * ({@link AOTInstalledCode#isAOTTierInImage()}).
  */
+@SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class)
 final class AOTCodeTable implements ImageCodeInstalledCodeLookup {
     @UnknownObjectField(availability = BuildPhaseProvider.AfterCompilation.class) //
     private AOTInstalledCode[] codes;

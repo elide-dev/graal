@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.hosted.Feature;
 
 import com.oracle.graal.pointsto.BigBang;
@@ -58,6 +59,7 @@ import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeCompilationAccessImpl;
 import com.oracle.svm.hosted.NativeImageGenerator;
 import com.oracle.svm.hosted.code.CompileQueue;
+import com.oracle.svm.hosted.code.DeoptimizationUtils;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.shared.util.LogUtils;
@@ -70,6 +72,7 @@ import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.debug.DebugContext;
+import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.GraphDecoder;
 import jdk.graal.compiler.nodes.GraphEncoder;
@@ -82,7 +85,10 @@ import jdk.graal.compiler.truffle.PartialEvaluatorConfiguration;
 import jdk.graal.compiler.truffle.TruffleCompilerConfiguration;
 import jdk.graal.compiler.truffle.TruffleCompilerImpl;
 import jdk.graal.compiler.truffle.TruffleTierConfiguration;
+import jdk.graal.compiler.truffle.nodes.IsCompilationConstantNode;
 import jdk.graal.compiler.truffle.nodes.SpeculativeExceptionAnchorNode;
+import jdk.graal.compiler.truffle.nodes.TruffleSafepointNode;
+import jdk.graal.compiler.truffle.nodes.frame.ForceMaterializeNode;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
@@ -139,6 +145,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         RuntimeCompilationFeature.singleton().addAfterInstallRuntimeConfigCallback(() -> runtimePlugins = RuntimeCompilationFeature.singleton().getHostedProviders().getGraphBuilderPlugins());
         /* Lookups must be registered before setup finishes; the table is filled after compilation. */
         ImageCodeInstalledCodeLookup.register(table);
+        /* Marks the image as containing the AOT tier: AOTInstalledCode.isAOTTierInImage. */
+        ImageSingletons.add(AOTCodeTable.class, table);
     }
 
     @Override
@@ -211,10 +219,20 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         SubstrateCompilationDirectives.singleton().registerDeoptSource(aMethod);
         aMethod.getOrCreateMethodVariant(SubstrateCompilationDirectives.DEOPT_TARGET_METHOD);
         access.registerAsRoot(aMethod, true, "Truffle AOT tier " + name, SubstrateCompilationDirectives.DEOPT_TARGET_METHOD);
+        /*
+         * Known from now on: the method is compiled and its entry, which its graph references, must
+         * be immutable, whether or not the target ends up linked to it.
+         */
         methods.add(method);
         /* Link last: the live target must only reference a method that is compiled. */
-        BuildTimeCompilationSupport.attach(pair.live(), method.code);
-        heapScanner.rescanField(pair.live(), aotCodeField, new OtherReason("Truffle AOT tier code of " + name));
+        try {
+            BuildTimeCompilationSupport.attach(pair.live(), method.code);
+            heapScanner.rescanField(pair.live(), aotCodeField, new OtherReason("Truffle AOT tier code of " + name));
+        } catch (Throwable t) {
+            skipped.add(method);
+            BuildTimeCompilationSupport.attach(pair.live(), null);
+            throw t;
+        }
     }
 
     AnalysisMethod profiledPERoot() {
@@ -257,6 +275,11 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 return null;
             }
             StructuredGraph result = toHostedGraph(graph, aMethod, debug);
+            Class<?> unsupported = findUnsupportedNode(result);
+            if (unsupported != null) {
+                unlink(method, rootName, "unsupported node " + unsupported.getName());
+                return null;
+            }
             method.assumptions = graph.getAssumptions() == null ? List.of() : List.of(graph.getAssumptions().toArray());
             summary("compiled " + name + " nodes=" + nodes + " assumptions=" + method.assumptions.size());
             return result;
@@ -280,6 +303,40 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             graph.removeFixed(anchor);
         }
     }
+
+    /**
+     * Nodes of the Truffle compiler ({@code jdk.graal.compiler.truffle.nodes}) that hosted
+     * compilation can lower. All others only exist during partial evaluation and the Truffle tier,
+     * and no hosted lowering is registered for them.
+     */
+    private static final Set<Class<? extends Node>> HOSTED_TRUFFLE_NODES = Set.of(
+                    /* Lowered by SubstrateThreadLocalHandshakeSnippets, registered for hosted too. */
+                    TruffleSafepointNode.class,
+                    /* Lowers itself. */
+                    IsCompilationConstantNode.class,
+                    /* LIR-lowerable, generating nothing. */
+                    ForceMaterializeNode.class);
+
+    /**
+     * Returns the class of a node of {@code graph} that the hosted compile queue cannot compile, or
+     * {@code null}: the root is skipped rather than failing the image build later. These are the
+     * Truffle compiler nodes that are left after partial evaluation and have no hosted lowering, and
+     * the nodes that cannot be compiled in a method with deoptimization targets.
+     */
+    static Class<?> findUnsupportedNode(StructuredGraph graph) {
+        for (Node node : graph.getNodes()) {
+            Class<? extends Node> nodeClass = node.getClass();
+            if (nodeClass.getPackageName().startsWith(TRUFFLE_NODES_PACKAGE) && !HOSTED_TRUFFLE_NODES.contains(nodeClass)) {
+                return nodeClass;
+            }
+            if (DeoptimizationUtils.AOT_COMPILATION_INVALID_NODES.test(node)) {
+                return nodeClass;
+            }
+        }
+        return null;
+    }
+
+    private static final String TRUFFLE_NODES_PACKAGE = TruffleSafepointNode.class.getPackageName();
 
     /**
      * A copy of the partially evaluated {@code graph} in the form the analysis and the hosted
