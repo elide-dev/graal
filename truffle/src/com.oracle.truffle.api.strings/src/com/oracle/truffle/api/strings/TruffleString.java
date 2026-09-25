@@ -86,6 +86,7 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.NeverDefault;
@@ -1835,6 +1836,7 @@ public final class TruffleString extends AbstractTruffleString {
      *
      * @since 22.1
      */
+    @GenerateAOT
     public abstract static class FromLongNode extends AbstractPublicNode {
 
         FromLongNode() {
@@ -2113,6 +2115,7 @@ public final class TruffleString extends AbstractTruffleString {
      *
      * @since 22.1
      */
+    @GenerateAOT
     public abstract static class FromJavaStringNode extends AbstractPublicNode {
 
         FromJavaStringNode() {
@@ -2884,6 +2887,7 @@ public final class TruffleString extends AbstractTruffleString {
         }
     }
 
+    @GenerateAOT
     abstract static class InternalAsTruffleStringNode extends AbstractInternalNode {
 
         /**
@@ -6594,6 +6598,7 @@ public final class TruffleString extends AbstractTruffleString {
      *
      * @since 22.1
      */
+    @GenerateAOT
     public abstract static class ConcatNode extends AbstractPublicNode {
 
         ConcatNode() {
@@ -8482,6 +8487,7 @@ public final class TruffleString extends AbstractTruffleString {
         }
     }
 
+    @GenerateAOT
     abstract static class InternalSwitchEncodingNode extends AbstractInternalNode {
 
         abstract TruffleString execute(Node node, AbstractTruffleString a, Encoding targetEncoding, TranscodingErrorHandler errorHandler);

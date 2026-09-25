@@ -16,6 +16,7 @@ This changelog summarizes major changes between Truffle versions relevant to lan
 * GR-72480: Bytecode DSL: Implemented compressed source information, configurable with `@GenerateBytecode(enableCompressedSources = true|false)`. Compression is enabled by default and reduces the source-table memory footprint, at the cost of slower decoding when source information is accessed.
 * Added `RootNode.cloneForAOT()`: the copy of a root that is prepared and compiled at native-image build time instead of the root itself, so AOT preparation never affects the live AST.
 * Added the AOT tier for Native Image: with `-Dpolyglot.image-build-time.PreinitializeCodeSharing=true` and `-Dpolyglot.image-build-time.AOTCompile=true`, AOT-preparable shared call targets are compiled at image build time and run from the first call. New engine options `engine.AOTTierThreshold` and `engine.TraceAOT`.
+* `TruffleString.ConcatNode`, `FromLongNode` and `FromJavaStringNode` can be prepared for AOT compilation (`@GenerateAOT`), so that language nodes that cache them can be `@GenerateAOT` too.
 * On Native Image, an `Assumption` held in a static final field and read from code that is partially evaluated at run time could be folded while the image was built, losing the JIT compiler's dependency on it, so a run-time invalidation of the assumption did not deoptimize the affected JIT code. Such assumptions are now registered as dependencies, so invalidation deoptimizes as expected.
 
 ## Version 25.3

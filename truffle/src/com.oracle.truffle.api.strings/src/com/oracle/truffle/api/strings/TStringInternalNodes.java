@@ -83,6 +83,7 @@ import java.util.Arrays;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
@@ -162,6 +163,7 @@ final class TStringInternalNodes {
         }
     }
 
+    @GenerateAOT
     abstract static class GetPreciseCodeRangeWithMaterializationNode extends AbstractInternalNode {
 
         abstract int execute(Node node, AbstractTruffleString a, Encoding encoding);
@@ -415,6 +417,7 @@ final class TStringInternalNodes {
         }
     }
 
+    @GenerateAOT
     abstract static class FromBufferWithStringCompactionKnownAttributesNode extends AbstractInternalNode {
 
         final TruffleString execute(Node node, AbstractTruffleString a, Encoding encoding) {
@@ -1602,6 +1605,7 @@ final class TStringInternalNodes {
         }
     }
 
+    @GenerateAOT
     abstract static class CalcStringAttributesNode extends AbstractInternalNode {
 
         abstract long execute(Node node, AbstractTruffleString a, byte[] arrayA, long offsetA, int length, int stride, Encoding encoding, int fromIndex, int knownCodeRange);
@@ -1934,6 +1938,7 @@ final class TStringInternalNodes {
         }
     }
 
+    @GenerateAOT
     abstract static class TransCodeNode extends AbstractInternalNode {
 
         @InliningCutoff
@@ -1977,6 +1982,7 @@ final class TStringInternalNodes {
         }
     }
 
+    @GenerateAOT
     abstract static class TransCodeIntlWithErrorHandlerNode extends AbstractInternalNode {
 
         abstract TruffleString execute(Node node, AbstractTruffleString a, byte[] arrayA, long offsetA, int lengthA, int strideA, int codePointLengthA, int codeRangeA,
@@ -2032,6 +2038,7 @@ final class TStringInternalNodes {
     }
 
     @ImportStatic(TSCodeRange.class)
+    @GenerateAOT
     abstract static class TransCodeIntlNode extends AbstractInternalNode {
 
         abstract TruffleString execute(Node node, AbstractTruffleString a, byte[] arrayA, long offsetA, int lengthA, int strideA, int codePointLengthA, int codeRangeA,

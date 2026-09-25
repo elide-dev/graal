@@ -57,6 +57,7 @@ import java.util.Arrays;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
@@ -534,6 +535,7 @@ public abstract sealed class TruffleStringBuilder permits TruffleStringBuilderGe
         }
     }
 
+    @GenerateAOT
     abstract static class AppendCodePointIntlNode extends AbstractInternalNode {
 
         abstract void execute(Node node, TruffleStringBuilder sb, int codepoint, int repeat, boolean allowUTF16Surrogates);
@@ -1104,6 +1106,7 @@ public abstract sealed class TruffleStringBuilder permits TruffleStringBuilderGe
         }
     }
 
+    @GenerateAOT
     abstract static class AppendStringIntlNode extends AbstractInternalNode {
 
         public abstract void execute(Node node, TruffleStringBuilder sb, AbstractTruffleString a);
@@ -1853,6 +1856,7 @@ public abstract sealed class TruffleStringBuilder permits TruffleStringBuilderGe
         }
     }
 
+    @GenerateAOT
     abstract static class ToStringIntlNode extends AbstractInternalNode {
 
         public abstract TruffleString execute(Node node, TruffleStringBuilder sb, boolean lazy);
