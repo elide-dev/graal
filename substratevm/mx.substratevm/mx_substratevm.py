@@ -549,7 +549,7 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     # pre-initialized context adopts the pre-initialized engine, and some classes need that engine to have other options.
     test_classes = ['jdk.graal.compiler.truffle.test.aot.' + c for c in ['AOTTierNativeTest', 'AOTTierThresholdOneNativeTest', 'AOTTierConcurrencyNativeTest',
                                                                            'AOTTierDeepRecursionNativeTest', 'AOTTierPreinitRefusedNativeTest',
-                                                                           'AOTTierIncompatibleOptionsNativeTest', 'AOTTierBoundEngineNativeTest']]
+                                                                           'AOTTierIncompatibleOptionsNativeTest', 'AOTTierBoundEngineNativeTest', 'AOTTierPatchNativeTest']]
     native_unittest(test_classes + ['--test-classes-per-run', '1'] + truffle_args(build_args) + (run_args or []))
 
 

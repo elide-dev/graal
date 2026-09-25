@@ -3816,6 +3816,10 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
             s.sourceCache.patch(TracingSourceCacheListener.createOrNull(engine), engine.sourceCacheStatisticsListener);
             layer.initializeInstructionTracers(s);
         }
+        synchronized (engine.lock) {
+            // other contexts may share the layer from now on
+            layer.markPatched();
+        }
         return true;
     }
 
@@ -3980,6 +3984,10 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                                                     "Unclosed context: %s",
                                     childContext));
                 }
+            }
+            synchronized (engine.lock) {
+                // the layer is not shared with other contexts until the context is patched
+                context.layer.markPatchPending();
             }
             return context;
         } finally {
