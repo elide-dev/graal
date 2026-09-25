@@ -30,7 +30,10 @@ import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.core.deopt.SubstrateSpeculationLog;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
+import com.oracle.truffle.compiler.OptimizedAssumptionDependency;
+import com.oracle.truffle.compiler.TruffleCompilable;
 import com.oracle.truffle.runtime.AOTCode;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
@@ -45,10 +48,13 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * while it is linked ({@link OptimizedCallTarget#getAOTCode()}).
  * <p>
  * It is also the {@link SubstrateInstalledCode} of the frames of that method
- * ({@link AOTCodeTable}), so that an invalidating deoptimization in AOT code unlinks it.
- * Invalidation of all its activations and assumption dependencies are not implemented yet.
+ * ({@link AOTCodeTable}), so that an invalidating deoptimization in AOT code invalidates it, and
+ * the {@link OptimizedAssumptionDependency} of the Truffle assumptions its compilation relied on,
+ * registered at build time. Invalidation ({@link InvalidateAOTCodeOperation}) unlinks the code at
+ * a safepoint and deoptimizes all its activations. Image code is never freed, so the code stays
+ * {@linkplain #isAlive() alive}.
  */
-public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode {
+public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, OptimizedAssumptionDependency {
     final OptimizedCallTarget live;
     final AOTEntry entry;
     private volatile boolean unlinked;
@@ -132,7 +138,10 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode {
         return entry.entryPoint.rawValue();
     }
 
-    /** Image code is never freed. */
+    /**
+     * Image code is never freed, and its activations can outlive an unlink, so an assumption never
+     * drops this dependency ({@code OptimizedAssumption.removeDeadDependencies}).
+     */
     @Override
     @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public boolean isAlive() {
@@ -145,12 +154,42 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode {
     }
 
     /**
-     * Unlinks the code, so that the next call of the target runs in the interpreter. The caller
-     * ({@code Deoptimizer.invalidateMethodOfFrame}) deoptimizes the requesting frame.
+     * Unlinks the code, so that the next call of the target runs in the interpreter, and
+     * deoptimizes all its activations. Called by {@code Deoptimizer.invalidateMethodOfFrame} for an
+     * invalidating deoptimization in the code.
      */
     @Override
     public void invalidate() {
-        live.unlinkAOT("invalidated");
+        invalidate("invalidated");
+    }
+
+    /** A Truffle assumption the code relies on was invalidated: see {@link #invalidate()}. */
+    @Override
+    public void onAssumptionInvalidated(Object source, CharSequence reason) {
+        invalidate(reason);
+    }
+
+    /**
+     * Not gated on {@link #isValid()}: after the code was unlinked without deoptimization (by the
+     * AOT tier threshold), activations of it can still be on a stack.
+     */
+    private void invalidate(CharSequence reason) {
+        if (SubstrateUtil.HOSTED) {
+            /* An assumption invalidated while the image is built: no VM operations, no activations. */
+            TruffleBuildTimeCompilationFeature.dropAtBuildTime(this, reason);
+            return;
+        }
+        InvalidateAOTCodeOperation operation = new InvalidateAOTCodeOperation(this, reason);
+        operation.enqueue();
+        if (operation.unlinked) {
+            live.traceUnlinkAOT(reason);
+        }
+    }
+
+    /** The live target: the target whose calls run this code. */
+    @Override
+    public TruffleCompilable getCompilable() {
+        return live;
     }
 
     @Override

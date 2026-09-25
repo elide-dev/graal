@@ -32,6 +32,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
@@ -51,6 +53,7 @@ import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
  * <li>{@code -Dpolyglot.image-build-time.PreinitializeCodeSharing=true}</li>
  * <li>{@code -Dpolyglot.image-build-time.PreinitializeSources=AOTTierTestLanguage:<add1>,...,AOTTierTestLanguage:<call>}</li>
  * <li>{@code -Dpolyglot.image-build-time.AOTCompile=true -H:+TruffleAOTPrintSummary}</li>
+ * <li>{@code --features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature}</li>
  * </ul>
  * See {@code mx_substratevm.truffle_aot_tier_native_tests}.
  * <p>
@@ -230,5 +233,98 @@ public class AOTTierNativeTest {
             /* Now in the interpreter, on the live target's AST. */
             assertEquals(4, add3.execute(1).asInt());
         }
+    }
+
+    /**
+     * The AOT code of "assume" folds the check of {@link AOTTestLanguage#STABLE}: the assumption was
+     * registered with the code when it was compiled, at build time, and that dependency is in the
+     * image heap. Invalidating the assumption at run time unlinks the code (and deoptimizes its
+     * activations), so the next call runs in the interpreter and sees the invalid assumption.
+     */
+    @Test
+    public void assumptionRegisteredAtBuildTimeInvalidatesAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value f = context.parse(fixture("assume", "assume"));
+            assertEquals(1, f.execute().asInt());
+            assertTrue(log(), log().contains("[aot] enter assume"));
+            assertFalse(log(), log().contains("[aot] unlink assume"));
+            AOTTestLanguage.invalidateStable();
+            assertTrue(log(), log().contains("[aot] unlink assume: aot-test"));
+            assertEquals(2, f.execute().asInt());
+        }
+    }
+
+    /**
+     * An int overflow in the AOT code of "add4" (doInt, rewriteOn ArithmeticException) is a
+     * deoptimization out of the AOT code: the activation completes in the deoptimization targets
+     * with the next specialization, doIntOverflow, and the code is unlinked. The results stay
+     * correct, also for the calls after it, in the interpreter.
+     */
+    @Test
+    public void exclusionDeoptKeepsCorrectResult() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value add4 = context.parse(fixture("add4", "add:4"));
+            assertEquals(5, add4.execute(1).asInt());
+            assertTrue(log(), log().contains("[aot] enter add4"));
+            assertEquals(Integer.MAX_VALUE + 4L, add4.execute(Integer.MAX_VALUE).asLong());
+            /* The overflow was an invalidating deoptimization out of the AOT code. */
+            assertTrue(log(), log().contains("[aot] unlink add4: invalidated"));
+            assertEquals(6, add4.execute(2).asInt());
+            assertEquals("x4", add4.execute("x").asString());
+            assertEquals(Integer.MAX_VALUE + 4L, add4.execute(Integer.MAX_VALUE).asLong());
+        }
+    }
+
+    /**
+     * The AOT code of "buildinval" was compiled against {@link AOTTestLanguage#BUILD_STABLE}, which
+     * the image build invalidated afterwards (AOTTestBuildTimeInvalidationFeature, after the
+     * analysis): the build dropped the code, so the root runs in the interpreter.
+     */
+    @Test
+    public void droppedAtBuildTimeRunsInterpreted() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            assertEquals(7, context.parse(fixture("buildinval", "buildinval")).execute().asInt());
+        }
+        assertFalse(log(), log().contains("[aot] enter buildinval"));
+        /* The image heap has the assumption as the build left it. */
+        assertFalse(AOTTestLanguage.BUILD_STABLE.isValid());
+    }
+
+    /**
+     * Invalidating an assumption deoptimizes the activations of the AOT code on all threads: the
+     * loop of "spin", in AOT code on another thread, stopped at a safepoint in the loop, continues in
+     * the deoptimization target, which sees the invalid assumption.
+     */
+    @Test
+    public void invalidationDeoptimizesActivationsOnOtherThreads() throws InterruptedException {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value spin = context.parse(fixture("spin", "spin"));
+            AtomicReference<Object> result = new AtomicReference<>();
+            Thread spinner = new Thread(() -> {
+                try {
+                    result.set(spin.execute().asLong());
+                } catch (Throwable t) {
+                    result.set(t);
+                }
+            });
+            spinner.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (!AOTTestLanguage.SpinRoot.started && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            assertTrue("spin started", AOTTestLanguage.SpinRoot.started);
+            AOTTestLanguage.invalidateSpinStable();
+            spinner.join(TimeUnit.SECONDS.toMillis(30));
+            /* Not deoptimized: end the loop, so that the test fails rather than hangs. */
+            AOTTestLanguage.SpinRoot.stop = true;
+            spinner.join();
+            assertEquals("result of spin (-1: deoptimized; otherwise iterations until stopped)", -1L, result.get());
+        }
+        assertTrue(log(), log().contains("[aot] enter spin"));
+        assertTrue(log(), log().contains("[aot] unlink spin: aot-spin-test"));
     }
 }

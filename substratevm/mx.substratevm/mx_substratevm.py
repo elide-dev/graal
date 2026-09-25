@@ -525,7 +525,8 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     extra_build_args = extra_build_args or []
     fixtures = {}
     tmp = tempfile.mkdtemp(prefix='truffle-aot-')
-    for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call')]:
+    for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call'),
+                       ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
@@ -536,6 +537,8 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
         '-Dpolyglot.image-build-time.PreinitializeSources=' + sources,
         '-Dpolyglot.image-build-time.AOTCompile=true',
+        # Invalidates an assumption of the "buildinval" root after it was compiled.
+        '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
     ]
     native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(build_args) + (run_args or []))
 

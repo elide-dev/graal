@@ -69,8 +69,9 @@ final class BuildTimeCompiledMethod extends NonBytecodeMethod {
     /** The code linked to {@link #live}; set right after creation. */
     AOTInstalledCode code;
     /**
-     * The assumptions the partially evaluated graph relies on; the code must be invalidated when
-     * one of them is. Not yet registered: see {@code AOTInstalledCode}.
+     * The assumptions the partially evaluated graph relies on; the code is registered as their
+     * dependency, so that it is invalidated when one of them is (see
+     * {@code TruffleBuildTimeCompilationFeature.registerAssumptionDependencies}).
      */
     volatile List<Assumptions.Assumption> assumptions = List.of();
 
