@@ -549,9 +549,9 @@ _TRUFFLE_AOT_SUMMARY_PREFIX = '[truffle-aot] '
 
 def _check_truffle_aot_summary(output, expected):
     """
-    Checks the `[truffle-aot]` build summary in the build output `output`: it has one line per root, and for each root
-    of `expected` (root name -> expected line, without the prefix and the root name), the expected line. For a compiled
-    root, the expected line is 'compiled', which matches any compilation statistics. Returns the errors.
+    Checks the `[truffle-aot]` build summary in the build output `output`: it has one line per root, exactly for the roots
+    of `expected` (root name -> expected line, without the prefix and the root name), with the expected line. For a
+    compiled root, the expected line is 'compiled', which matches any compilation statistics. Returns the errors.
     """
     compiled = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+$')
     kept = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+(: .*)$')
@@ -566,6 +566,8 @@ def _check_truffle_aot_summary(output, expected):
             errors.append(f'unexpected Truffle AOT tier summary line: {line}')
         elif name in lines:
             errors.append(f'root {name} is in the Truffle AOT tier summary more than once: {lines[name]} and {line}')
+        elif name not in expected:
+            errors.append(f'unexpected root in the Truffle AOT tier summary: {line}')
         else:
             lines[name] = line
     for name, expected_line in expected.items():
@@ -620,8 +622,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         # heap snapshot was sealed.
         '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
     ]
-    # The final state of each root in the build summary: all fixtures are compiled, except these. "call", "throwcall" and
-    # "throwinval" also create the roots "callee", "thrower" and "throwinvalcallee".
+    # The final state of each root in the build summary, which has no other roots: all fixtures are compiled, except these.
+    # "call", "throwcall" and "throwinval" also create the roots "callee", "thrower" and "throwinvalcallee". The engine's
+    # RootNode.Constant root has no guest language, so it is not in the summary.
     expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee']}
     expected_summary.update({
         'refuse': 'skipped root refused AOT (cloneForAOT or prepareForAOT)',
@@ -647,8 +650,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError'])
     fail_output = []
     expected_error = "Truffle AOT tier: root 'refuse' was not compiled: root refused AOT (cloneForAOT or prepareForAOT)"
-    # "callee" was executed at build time: not eligible by design, so not an error.
-    unexpected_error = "Truffle AOT tier: root 'callee' was not compiled"
+    # "callee" was executed at build time: not eligible by design, so not an error. The engine's RootNode.Constant root has
+    # no guest language, so it is not even selected.
+    unexpected_errors = ["Truffle AOT tier: root 'callee' was not compiled", "Truffle AOT tier: root 'RootNode.Constant"]
     try:
         native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(fail_args),
                         native_image_wrapper=_capturing_image_build(fail_output))
@@ -656,8 +660,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         mx.log('TruffleAOTFailOnError failed the build as expected')
         if not any(expected_error in line for line in fail_output):
             errors.append(f'expected the build output of -H:+TruffleAOTFailOnError to contain: {expected_error}')
-        if any(unexpected_error in line for line in fail_output):
-            errors.append(f'expected the build output of -H:+TruffleAOTFailOnError not to contain: {unexpected_error}')
+        for unexpected_error in unexpected_errors:
+            if any(unexpected_error in line for line in fail_output):
+                errors.append(f'expected the build output of -H:+TruffleAOTFailOnError not to contain: {unexpected_error}')
     else:
         errors.append('expected -H:+TruffleAOTFailOnError to fail the build because of the refusing root')
     if errors:
