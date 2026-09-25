@@ -39,7 +39,9 @@ import com.oracle.svm.core.deopt.SubstrateSpeculationLog;
 import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.graal.meta.SubstrateInstalledCodeImpl;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
+import com.oracle.svm.truffle.buildtime.AOTInstalledCode;
 import com.oracle.truffle.compiler.OptimizedAssumptionDependency;
 import com.oracle.truffle.compiler.TruffleCompilable;
 
@@ -252,9 +254,30 @@ public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode imp
         if (start != 0) {
             SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer target = Word.pointer(start);
             return target.invoke(callTarget, args);
-        } else {
+        }
+        if (SubstrateUtil.HOSTED) {
+            /* During the image build, e.g., pre-initialization, there is no AOT tier code yet. */
             return callTarget.invokeCallBoundary(args);
         }
+        /*
+         * Otherwise, the AOT tier code compiled into the image, while it is linked. Image code is
+         * never freed, but the read of the code and the call must not be separated by a safepoint
+         * either, so that no call enters AOT code after it was unlinked at a safepoint.
+         */
+        Target_com_oracle_truffle_runtime_OptimizedCallTarget_AOT aotState = SubstrateUtil.cast(callTarget, Target_com_oracle_truffle_runtime_OptimizedCallTarget_AOT.class);
+        if (aotState.aotCode instanceof AOTInstalledCode code) {
+            SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer target = (SubstrateOptimizedCallTarget.CallBoundaryFunctionPointer) code.getEntry().getEntryPoint();
+            return target.invoke(callTarget, args);
+        }
+        if (aotState.aotShadow) {
+            /*
+             * A call to an AOT shadow, e.g., by a root that calls itself through getCallTarget() in
+             * the shadow's AST, is a call to the live target: a shadow is never compiled or linked
+             * itself, it only provides the AST of the live target's AOT tier code.
+             */
+            return doInvoke((SubstrateOptimizedCallTarget) aotState.sourceCallTarget, args);
+        }
+        return callTarget.invokeCallBoundary(args);
     }
 
     @Uninterruptible(reason = "Prevent the GC from freeing the CodeInfo object.")

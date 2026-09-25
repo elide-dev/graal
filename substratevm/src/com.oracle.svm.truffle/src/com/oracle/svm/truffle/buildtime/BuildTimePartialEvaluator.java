@@ -42,6 +42,7 @@ import com.oracle.svm.truffle.api.SubstrateTruffleUniverseFactory;
 import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.OriginalClassProvider;
 import com.oracle.truffle.compiler.TruffleCompilable;
+import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.annotation.AnnotationValue;
 import jdk.graal.compiler.graph.SourceLanguagePositionProvider;
@@ -87,6 +88,10 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
     private final ConcurrentHashMap<ResolvedJavaType, Boolean> valueTypes = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<ResolvedJavaMethod, Object> invocationPluginsCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SpecialCallTargetCacheKey, Object> specialCallTargetCache = new ConcurrentHashMap<>();
+    /** The compilation root method of each shadow being partially evaluated, see {@link #partiallyEvaluateAt}. */
+    private final ConcurrentHashMap<OptimizedCallTarget, AnalysisMethod> rootMethods = new ConcurrentHashMap<>();
+    /** The graphs of the compilation root methods of {@link #rootMethods}. */
+    private final ConcurrentHashMap<ResolvedJavaMethod, EncodedGraph> rootGraphs = new ConcurrentHashMap<>();
 
     BuildTimePartialEvaluator(TruffleCompilerConfiguration config, GraphBuilderConfiguration graphBuilderConfigForRoot, BigBang bb) {
         super(config, graphBuilderConfigForRoot);
@@ -97,7 +102,7 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
     protected PEGraphDecoder createGraphDecoder(TruffleTierContext context, InvocationPlugins invocationPlugins, InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin,
                     NodePlugin[] nodePlugins, SourceLanguagePositionProvider sourceLanguagePositionProvider, EconomicMap<ResolvedJavaMethod, EncodedGraph> graphCache,
                     Supplier<AutoCloseable> createCachedGraphScope) {
-        return new BuildTimePEGraphDecoder(bb, context.graph, config.lastTier().providers().copyWith(this.constantFieldProvider), loopExplosionPlugin, invocationPlugins,
+        return new BuildTimePEGraphDecoder(bb, rootGraphs, context.graph, config.lastTier().providers().copyWith(this.constantFieldProvider), loopExplosionPlugin, invocationPlugins,
                         inlineInvokePlugins, parameterPlugin, nodePlugins, sourceLanguagePositionProvider, specialCallTargetCache, invocationPluginsCache);
     }
 
@@ -112,8 +117,32 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
         return ((AnalysisMethod) method).getOrCreateMethodVariant(SubstrateCompilationDirectives.RUNTIME_COMPILED_METHOD);
     }
 
+    /**
+     * Runs {@code partialEvaluation} with {@code rootMethod} and its graph {@code rootGraph} as the
+     * compilation root of {@code shadow}, instead of {@code profiledPERoot}: the graph produced for
+     * {@code shadow} is then a graph of {@code rootMethod}, whose outermost frame is
+     * {@code rootMethod}, and in which {@code profiledPERoot} is inlined where {@code rootGraph}
+     * calls it (with the shadow as a constant receiver).
+     */
+    <T> T partiallyEvaluateAt(OptimizedCallTarget shadow, AnalysisMethod rootMethod, EncodedGraph rootGraph, Supplier<T> partialEvaluation) {
+        VMError.guarantee(rootMethods.putIfAbsent(shadow, rootMethod) == null, "concurrent partial evaluation of %s", shadow);
+        rootGraphs.put(rootMethod, rootGraph);
+        try {
+            return partialEvaluation.get();
+        } finally {
+            rootGraphs.remove(rootMethod);
+            rootMethods.remove(shadow);
+        }
+    }
+
     @Override
     public ResolvedJavaMethod rootForCallTarget(TruffleCompilable compilable) {
+        if (compilable instanceof BuildTimeTruffleCompiler.Compilable c) {
+            AnalysisMethod rootMethod = rootMethods.get(c.target);
+            if (rootMethod != null) {
+                return rootMethod;
+            }
+        }
         return runtimeVariant(super.rootForCallTarget(compilable));
     }
 
