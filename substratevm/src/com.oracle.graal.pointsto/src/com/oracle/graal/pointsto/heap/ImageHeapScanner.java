@@ -99,7 +99,8 @@ public abstract class ImageHeapScanner {
 
     protected ObjectScanningObserver scanningObserver;
 
-    private boolean sealed;
+    /* Volatile: read by isSealed, possibly from other threads. */
+    private volatile boolean sealed;
 
     /** Reserved for constants that are only known late, e.g., like interned strings array. */
     public static final ScanReason LATE_SCAN = new OtherReason("Constant scanned manually after sealing the heap.");
