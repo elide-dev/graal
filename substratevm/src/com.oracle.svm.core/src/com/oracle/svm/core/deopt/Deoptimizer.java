@@ -703,6 +703,8 @@ public final class Deoptimizer {
                 /* When the method was invalidated before, all the metadata can be gone by now. */
                 return;
             }
+            /* The frame is deoptimized already: no need to deoptimize it again below. */
+            imageCode = false;
         } else if (installedCode == null) {
             throw VMError.shouldNotReachHere("Only runtime compiled methods can be invalidated. sp = " + Long.toHexString(sp.rawValue()) + ", returnAddress = " + Long.toHexString(ip.rawValue()));
         }
@@ -1459,7 +1461,16 @@ public final class Deoptimizer {
         RelockObjectData[] relockObjectData = relockedObjects == null ? null : relockedObjects.toArray(new RelockObjectData[relockedObjects.size()]);
         boolean rethrowException = FrameInfoDecoder.decodeRethrowException(frameInfo.getEncodedBci());
         /* Allocate a buffer to hold the contents of the new target frame. */
-        DeoptimizedBaselineCompiledFrame deoptimizedFrame = new DeoptimizedBaselineCompiledFrame(sourceChunk.getEncodedFrameSize(), CodeInfoTable.lookupInstalledCode(pc),
+        /*
+         * Image code of a deoptimization source has an owner too, if its owner registered a lookup:
+         * recording it lets invalidateMethodOfFrame invalidate the owner after an eager
+         * deoptimization of the frame, when the frame's return address no longer denotes the code.
+         */
+        SubstrateInstalledCode sourceInstalledCode = CodeInfoTable.lookupInstalledCode(pc);
+        if (sourceInstalledCode == null) {
+            sourceInstalledCode = ImageCodeInstalledCodeLookup.lookupOrNull(pc);
+        }
+        DeoptimizedBaselineCompiledFrame deoptimizedFrame = new DeoptimizedBaselineCompiledFrame(sourceChunk.getEncodedFrameSize(), sourceInstalledCode,
                         topFrame, targetContentSize, relockObjectData, pc,
                         rethrowException, isEagerDeopt);
         return deoptimizedFrame;

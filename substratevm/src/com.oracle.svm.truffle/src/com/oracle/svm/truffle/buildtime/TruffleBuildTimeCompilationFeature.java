@@ -153,6 +153,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private ResolvedJavaField unlinkedField;
     /** The fields of an OptimizedAssumption that registering a dependency changes. */
     private List<ResolvedJavaField> assumptionDependencyFields;
+    /** {@code OptimizedAssumption.Entry.dependency} and {@code pending}. */
+    private List<ResolvedJavaField> assumptionEntryFields;
 
     /**
      * The roots of the selection, in a deterministic order: the rejected ones, then the selected
@@ -249,6 +251,9 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 fields.add(originalMetaAccess.lookupJavaField(OptimizedAssumption.class.getDeclaredField(name)));
             }
             assumptionDependencyFields = List.copyOf(fields);
+            Class<?> entryClass = Class.forName(OptimizedAssumption.class.getName() + "$Entry");
+            assumptionEntryFields = List.of(originalMetaAccess.lookupJavaField(entryClass.getDeclaredField("dependency")),
+                            originalMetaAccess.lookupJavaField(entryClass.getDeclaredField("pending")));
         } catch (ReflectiveOperationException e) {
             throw VMError.shouldNotReachHere(e);
         }
@@ -511,6 +516,16 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         for (OptimizedAssumption assumption : assumptions) {
             for (ResolvedJavaField field : assumptionDependencyFields) {
                 heapScanner.rescanField(assumption, field, new OtherReason("Truffle AOT tier code of " + name + " depends on " + assumption));
+            }
+        }
+        /*
+         * The entries too: the scanner may have seen an entry before it was notified, e.g., while
+         * rescanning an assumption for another root. An entry left pending in the image would make
+         * invalidating its assumption wait for it forever.
+         */
+        for (Consumer<OptimizedAssumptionDependency> entry : entries) {
+            for (ResolvedJavaField field : assumptionEntryFields) {
+                heapScanner.rescanField(entry, field, new OtherReason("Truffle AOT tier code of " + name + " registered"));
             }
         }
         return invalid;

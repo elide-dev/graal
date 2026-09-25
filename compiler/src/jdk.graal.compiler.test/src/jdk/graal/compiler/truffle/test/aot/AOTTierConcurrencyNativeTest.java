@@ -94,7 +94,7 @@ public class AOTTierConcurrencyNativeTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         for (int t = 0; t < THREADS; t++) {
             int index = t;
-            threads.add(new Thread(() -> {
+            threads.add(AOTTierNativeTestSupport.daemon("aot-worker-" + t, () -> {
                 try {
                     body.run(index);
                 } catch (Throwable e) {
@@ -104,7 +104,7 @@ public class AOTTierConcurrencyNativeTest {
         }
         threads.forEach(Thread::start);
         for (Thread th : threads) {
-            th.join(TimeUnit.MINUTES.toMillis(2));
+            AOTTierNativeTestSupport.join(th, TimeUnit.MINUTES.toSeconds(2));
         }
         if (failure.get() != null) {
             throw new AssertionError(failure.get());
@@ -146,7 +146,7 @@ public class AOTTierConcurrencyNativeTest {
         AtomicInteger started = new AtomicInteger();
         AtomicInteger inFlight = new AtomicInteger();
         List<String> stale = Collections.synchronizedList(new ArrayList<>());
-        Thread invalidator = new Thread(() -> {
+        Thread invalidator = AOTTierNativeTestSupport.daemon("aot-invalidator", () -> {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
             while (started.get() < THREADS && System.nanoTime() < deadline) {
                 Thread.onSpinWait();
@@ -182,7 +182,7 @@ public class AOTTierConcurrencyNativeTest {
                 }
             }
         });
-        invalidator.join();
+        AOTTierNativeTestSupport.join(invalidator, 60);
         String log = text(LOG);
         assertEquals("calls that started after the invalidation and ran stale code: " + stale + "; log: " + log, List.of(), stale);
         /*
@@ -209,7 +209,7 @@ public class AOTTierConcurrencyNativeTest {
         TruffleTestAssumptions.assumeAOT();
         final int calls = 10;
         AtomicInteger done = new AtomicInteger();
-        Thread invalidator = new Thread(() -> {
+        Thread invalidator = AOTTierNativeTestSupport.daemon("aot-invalidator", () -> {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
             while (done.get() < 2 * THREADS && System.nanoTime() < deadline) {
                 Thread.onSpinWait();
@@ -238,7 +238,7 @@ public class AOTTierConcurrencyNativeTest {
                 }
             }
         });
-        invalidator.join();
+        AOTTierNativeTestSupport.join(invalidator, 60);
         String log = text(LOG);
         assertEquals(log, THREADS * calls, done.get());
         assertEquals(log, 1, enters(log, "throwinval"));

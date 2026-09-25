@@ -78,7 +78,7 @@ public class AOTTierPatchNativeTest {
         try (Engine engine = AOTTierNativeTestSupport.traceEngine(trace)) {
             AtomicReference<Context> first = new AtomicReference<>();
             AtomicReference<Throwable> failure = new AtomicReference<>();
-            Thread patching = new Thread(() -> {
+            Thread patching = AOTTierNativeTestSupport.daemon("aot-patching", () -> {
                 try {
                     first.set(Context.newBuilder().engine(engine).build());
                 } catch (Throwable t) {
@@ -95,7 +95,7 @@ public class AOTTierPatchNativeTest {
             } finally {
                 release.countDown();
             }
-            patching.join(TimeUnit.MINUTES.toMillis(1));
+            AOTTierNativeTestSupport.join(patching, 60);
             if (failure.get() != null) {
                 throw new AssertionError(failure.get());
             }

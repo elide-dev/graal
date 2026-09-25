@@ -93,16 +93,19 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
     /** The graphs of the compilation root methods of {@link #rootMethods}. */
     private final ConcurrentHashMap<ResolvedJavaMethod, EncodedGraph> rootGraphs = new ConcurrentHashMap<>();
 
+    private final BuildTimeConstantFieldProvider buildTimeConstantFieldProvider;
+
     BuildTimePartialEvaluator(TruffleCompilerConfiguration config, GraphBuilderConfiguration graphBuilderConfigForRoot, BigBang bb) {
         super(config, graphBuilderConfigForRoot);
         this.bb = bb;
+        this.buildTimeConstantFieldProvider = new BuildTimeConstantFieldProvider(this.constantFieldProvider, bb.getMetaAccess(), bb.getConstantReflectionProvider());
     }
 
     @Override
     protected PEGraphDecoder createGraphDecoder(TruffleTierContext context, InvocationPlugins invocationPlugins, InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin,
                     NodePlugin[] nodePlugins, SourceLanguagePositionProvider sourceLanguagePositionProvider, EconomicMap<ResolvedJavaMethod, EncodedGraph> graphCache,
                     Supplier<AutoCloseable> createCachedGraphScope) {
-        return new BuildTimePEGraphDecoder(bb, rootGraphs, context.graph, config.lastTier().providers().copyWith(this.constantFieldProvider), loopExplosionPlugin, invocationPlugins,
+        return new BuildTimePEGraphDecoder(bb, rootGraphs, context.graph, config.lastTier().providers().copyWith(buildTimeConstantFieldProvider), loopExplosionPlugin, invocationPlugins,
                         inlineInvokePlugins, parameterPlugin, nodePlugins, sourceLanguagePositionProvider, specialCallTargetCache, invocationPluginsCache);
     }
 

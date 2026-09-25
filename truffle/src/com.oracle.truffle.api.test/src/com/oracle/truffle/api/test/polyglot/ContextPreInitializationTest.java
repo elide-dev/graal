@@ -679,7 +679,10 @@ public class ContextPreInitializationTest {
                 second.initialize(SHARED);
                 List<CountingContext> contexts = new ArrayList<>(findContexts(SHARED, emittedContexts));
                 assertEquals(1, preinit.patchContextCount);
-                CountingContext secondCtx = contexts.get(contexts.size() - 1);
+                assertEquals("the first context adopts the pre-initialized one, the second creates its own: " + contexts, 2, contexts.size());
+                assertSame(preinit, contexts.get(0));
+                CountingContext secondCtx = contexts.get(1);
+                assertNotSame(preinit, secondCtx);
                 assertSame("contexts on the engine must share the pre-initialized language instance", preinit.languageInstance, secondCtx.languageInstance);
             }
         }

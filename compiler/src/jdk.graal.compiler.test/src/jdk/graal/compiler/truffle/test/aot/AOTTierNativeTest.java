@@ -30,6 +30,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.deoptimizations;
 import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.enters;
 import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.guestFrames;
 import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.unlinks;
@@ -447,6 +448,48 @@ public class AOTTierNativeTest {
         assertTrue(log(), log().contains("[aot] enter typedcall"));
     }
 
+    /**
+     * The AOT code of "callapi" calls its live callee through {@code CallTarget.call}, with the
+     * callee as a constant. The callee was never executed at build time, so its exception profile
+     * was uninitialized; the exceptions the callee throws must not unlink the AOT code of the caller.
+     */
+    @Test
+    public void exceptionOfConstantCallTargetKeepsAOTCodeLinked() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value callApi = context.parse(fixture("callapi", "callapi"));
+            for (int i = 0; i < 3; i++) {
+                PolyglotException e = assertThrows(PolyglotException.class, callApi::execute);
+                assertEquals(AOTTestLanguage.ThrowRoot.MESSAGE, e.getMessage());
+            }
+        }
+        String log = log();
+        assertEquals(log, 1, enters(log, "callapi"));
+        assertEquals(log, 0, unlinks(log, "callapi"));
+    }
+
+    /**
+     * The AOT code of "twoassume" depends on two assumptions. Invalidating the first unlinks the
+     * code and deoptimizes it at a safepoint; invalidating the second, which the code still depends
+     * on, must not need another safepoint: no activation of the code can be left.
+     */
+    @Test
+    public void secondInvalidationNeedsNoSafepoint() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value twoAssume = context.parse(fixture("twoassume", "twoassume"));
+            assertEquals(1, twoAssume.execute().asInt());
+            AOTTestLanguage.invalidateTwoA();
+            String log = log();
+            assertEquals(log, 1, unlinks(log, "twoassume"));
+            assertEquals(log, 1, deoptimizations(log, "twoassume"));
+            AOTTestLanguage.invalidateTwoB();
+            log = log();
+            assertEquals(log, 1, deoptimizations(log, "twoassume"));
+            assertEquals(2, twoAssume.execute().asInt());
+        }
+    }
+
     /** AOT code of "call" calls its live callee, which runs in the interpreter. */
     @Test
     public void aotCodeCallsLiveCallee() {
@@ -640,7 +683,7 @@ public class AOTTierNativeTest {
         try (Context context = Context.newBuilder().engine(engine()).build()) {
             Value spin = context.parse(fixture("spin", "spin"));
             AtomicReference<Object> result = new AtomicReference<>();
-            Thread spinner = new Thread(() -> {
+            Thread spinner = AOTTierNativeTestSupport.daemon("aot-spinner", () -> {
                 try {
                     result.set(spin.execute().asLong());
                 } catch (Throwable t) {
@@ -657,7 +700,7 @@ public class AOTTierNativeTest {
             spinner.join(TimeUnit.SECONDS.toMillis(30));
             /* Not deoptimized: end the loop, so that the test fails rather than hangs. */
             AOTTestLanguage.SpinRoot.stop = true;
-            spinner.join();
+            AOTTierNativeTestSupport.join(spinner, 30);
             assertEquals("result of spin (-1: deoptimized; otherwise iterations until stopped)", -1L, result.get());
         }
         assertTrue(log(), log().contains("[aot] enter spin"));
@@ -675,7 +718,7 @@ public class AOTTierNativeTest {
         try (Context context = Context.newBuilder().engine(engine()).build()) {
             Value spin = context.parse(fixture("pollspin", "pollspin"));
             AtomicReference<Object> result = new AtomicReference<>();
-            Thread spinner = new Thread(() -> {
+            Thread spinner = AOTTierNativeTestSupport.daemon("aot-spinner", () -> {
                 try {
                     result.set(spin.execute().asLong());
                 } catch (Throwable t) {
@@ -716,7 +759,7 @@ public class AOTTierNativeTest {
             spinner.join(TimeUnit.SECONDS.toMillis(30));
             /* Not deoptimized: end the loop, so that the test fails rather than hangs. */
             AOTTestLanguage.PollSpinRoot.stop = true;
-            spinner.join(TimeUnit.SECONDS.toMillis(30));
+            AOTTierNativeTestSupport.join(spinner, 30);
             assertEquals("result of pollspin (-1: deoptimized; otherwise iterations until stopped)", -1L, result.get());
         }
         assertEquals(log(), 1, enters(log(), "pollspin"));
@@ -733,7 +776,7 @@ public class AOTTierNativeTest {
         try (Context context = Context.newBuilder().engine(engine()).build()) {
             Value loop = context.parse(fixture("loop", "loop"));
             AtomicReference<Object> result = new AtomicReference<>();
-            Thread looper = new Thread(() -> {
+            Thread looper = AOTTierNativeTestSupport.daemon("aot-looper", () -> {
                 try {
                     result.set(loop.execute().asLong());
                 } catch (Throwable t) {
@@ -752,7 +795,7 @@ public class AOTTierNativeTest {
             } finally {
                 /* Not interrupted: end the loop, so that the test fails rather than hangs. */
                 AOTTestLanguage.LoopRoot.stop = true;
-                looper.join(TimeUnit.SECONDS.toMillis(30));
+                AOTTierNativeTestSupport.join(looper, 30);
             }
             assertTrue(String.valueOf(result.get()), result.get() instanceof PolyglotException e && e.isInterrupted());
         }
