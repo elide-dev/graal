@@ -110,6 +110,14 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     @Override
     public DirectCallNode createDirectCallNode(CallTarget target) {
         OptimizedCallTarget optimizedTarget = (OptimizedCallTarget) target;
+        if (optimizedTarget.isAOTShadow()) {
+            /*
+             * E.g., a call node the shadow's AST creates for its own getCallTarget(). A call of a
+             * shadow is a call of its live target, so the node calls the live target, which is
+             * also the one splitting may clone.
+             */
+            optimizedTarget = optimizedTarget.getSourceCallTarget();
+        }
         final OptimizedDirectCallNode directCallNode = new OptimizedDirectCallNode(optimizedTarget);
         optimizedTarget.addDirectCallNode(directCallNode);
         return directCallNode;
