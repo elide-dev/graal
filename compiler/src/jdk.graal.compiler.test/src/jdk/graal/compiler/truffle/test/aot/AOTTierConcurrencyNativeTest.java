@@ -32,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -62,7 +63,8 @@ public class AOTTierConcurrencyNativeTest {
 
     private static synchronized Engine engine() {
         if (engine == null) {
-            engine = AOTTierNativeTestSupport.traceEngine(LOG, "engine.AOTTierThreshold", "100");
+            /* Compilations are traced: a failure's message includes the log. */
+            engine = AOTTierNativeTestSupport.traceEngine(LOG, "engine.AOTTierThreshold", "100", "engine.TraceCompilation", "true");
         }
         return engine;
     }
@@ -131,9 +133,9 @@ public class AOTTierConcurrencyNativeTest {
     /**
      * Eight contexts on eight threads call "assumeloop", whose calls take long in its loop, while
      * the assumption its AOT code folds is invalidated (while the first call of every thread runs),
-     * well before the threshold. A call returns
-     * between N and 2N (2N if all of its loop ran after the invalidation); a call that starts
-     * after the invalidation returned must return 2N: it must not enter the unlinked code.
+     * well before the threshold. A call returns between N and 2N (2N if all of its loop ran after
+     * the invalidation); a call that starts after the invalidation returned must return 2N: it must
+     * not enter the unlinked code.
      */
     @Test
     public void concurrentCallsDuringInvalidation() throws Exception {
@@ -142,6 +144,7 @@ public class AOTTierConcurrencyNativeTest {
         final int calls = 4;
         AtomicInteger started = new AtomicInteger();
         AtomicInteger inFlight = new AtomicInteger();
+        List<String> stale = Collections.synchronizedList(new ArrayList<>());
         Thread invalidator = new Thread(() -> {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
             while (started.get() < THREADS && System.nanoTime() < deadline) {
@@ -170,7 +173,7 @@ public class AOTTierConcurrencyNativeTest {
                         throw new AssertionError("wrong result " + sum);
                     }
                     if (after && sum != 2L * n) {
-                        throw new AssertionError("stale code after the invalidation: " + sum);
+                        stale.add("thread " + t + ", call " + i + ": " + sum);
                     }
                     if (sum != n && sum != 2L * n) {
                         inFlight.incrementAndGet();
@@ -180,6 +183,7 @@ public class AOTTierConcurrencyNativeTest {
         });
         invalidator.join();
         String log = text(LOG);
+        assertEquals("calls that started after the invalidation and ran stale code: " + stale + "; log: " + log, List.of(), stale);
         /*
          * Informational: the loop has no VM safepoint in image code, so the invalidation waits for
          * the loops in flight to end (see spin and pollspin in AOTTierNativeTest for activations

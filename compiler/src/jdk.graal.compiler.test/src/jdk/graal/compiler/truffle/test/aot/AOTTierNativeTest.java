@@ -463,6 +463,12 @@ public class AOTTierNativeTest {
             AOTTestLanguage.invalidateStable();
             assertTrue(log(), log().contains("[aot] unlink assume: aot-test"));
             assertEquals(2, f.execute().asInt());
+            /* The JIT compiles the live target for the invalid assumption. */
+            /* Then the JIT compiles the live target, for the invalid assumption. */
+            for (int i = 0; i < 2000; i++) {
+                assertEquals(2, f.execute().asInt());
+            }
+            assertTrue(log(), Pattern.compile("opt done .*AOTTestLanguage\\.AssumeRoot@").matcher(log()).find());
         }
     }
 
