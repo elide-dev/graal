@@ -25,16 +25,23 @@
 package jdk.graal.compiler.truffle.test.aot;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import org.junit.After;
 import org.junit.Test;
 
+import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
+import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 public class BuildTimeSelectionTest {
 
@@ -109,6 +116,36 @@ public class BuildTimeSelectionTest {
         var selection = preinit(files("add:1", "add:2"), "add2");
         assertEquals(List.of("add2"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
         assertTrue(selection.rejected().contains(new BuildTimeCompilationSupport.Rejection("add1", "filtered")));
+    }
+
+    /**
+     * A root whose AOT shadow cannot be created, whatever its language did wrong, is rejected with
+     * the reason, never fails the selection (and so the image build), and leaves the live root as
+     * it was. The well-behaved roots are still selected.
+     */
+    @Test
+    public void misbehavingRootsAreRejectedAndLiveRootsUnchanged() throws Exception {
+        var selection = preinit(files("misbehave:clonethrow", "misbehave:prepthrow", "misbehave:cloneself", "misbehave:cloneshare", "misbehave:sharedesc", "misbehave:owndesc", "add:1"), "");
+        assertEquals(List.of("add1", "owndesc"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).sorted().toList());
+        Map<String, String> reasons = selection.rejected().stream().collect(Collectors.toMap(BuildTimeCompilationSupport.Rejection::rootName, BuildTimeCompilationSupport.Rejection::reason, (a, b) -> a, TreeMap::new));
+        assertEquals(List.of("cloneself", "cloneshare", "clonethrow", "prepthrow", "sharedesc"), List.copyOf(reasons.keySet()));
+        String failed = BuildTimeCompilationSupport.SHADOW_FAILED + ": ";
+        assertEquals(failed + "java.lang.UnsupportedOperationException: clonethrow", reasons.get("clonethrow"));
+        assertEquals(failed + "java.lang.IllegalStateException: prepthrow", reasons.get("prepthrow"));
+        for (String mode : List.of("cloneself", "cloneshare")) {
+            assertTrue(reasons.get(mode), reasons.get(mode).startsWith(failed + "java.lang.IllegalStateException: cloneForAOT returned a tree that shares node"));
+        }
+        assertTrue(reasons.get("sharedesc"), reasons.get("sharedesc").startsWith(failed + "java.lang.IllegalStateException: prepareForAOT changed the FrameDescriptor"));
+
+        for (String mode : List.of("clonethrow", "prepthrow", "cloneself", "cloneshare", "sharedesc", "owndesc")) {
+            AOTTestLanguage.MisbehavingRoot live = AOTTestLanguage.misbehaving.get(mode);
+            assertEquals(mode, FrameSlotKind.Illegal, live.getFrameDescriptor().getSlotKind(0));
+            assertSame(mode, live, live.child.getParent());
+            assertSame(mode, live, live.getCallTarget().getRootNode());
+            assertFalse(mode, ((OptimizedCallTarget) live.getCallTarget()).isAOTShadow());
+        }
+        OptimizedCallTarget ownDescShadow = selection.selected().stream().filter(p -> p.live().getRootNode().getName().equals("owndesc")).findFirst().orElseThrow().shadow();
+        assertEquals(FrameSlotKind.Int, ownDescShadow.getRootNode().getFrameDescriptor().getSlotKind(0));
     }
 
     /**

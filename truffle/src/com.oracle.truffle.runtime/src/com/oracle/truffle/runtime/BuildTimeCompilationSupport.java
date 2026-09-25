@@ -72,6 +72,12 @@ public final class BuildTimeCompilationSupport {
      */
     public static final String EXECUTED_AT_BUILD_TIME = "executed at build time";
 
+    /**
+     * The prefix of the {@link Rejection#reason() reason} of a root whose AOT shadow could not be
+     * created, followed by the exception.
+     */
+    public static final String SHADOW_FAILED = "cannot create AOT shadow";
+
     public record Selection(List<Pair> selected, List<Rejection> rejected) {
     }
 
@@ -92,6 +98,9 @@ public final class BuildTimeCompilationSupport {
      * <li>A root executed at build time is rejected as {@link #EXECUTED_AT_BUILD_TIME}: its live
      * AST is specialized already.</li>
      * <li>A root that refuses AOT ({@code cloneForAOT} or {@code prepareForAOT}) is rejected.</li>
+     * <li>A root whose AOT shadow cannot be created is rejected with the exception that prevented
+     * it, e.g., one thrown by the language's {@code cloneForAOT} or {@code prepareForAOT}: a bug in
+     * one root must not fail the image build.</li>
      * <li>Every other root is selected, with its AOT shadow.</li>
      * </ul>
      */
@@ -117,7 +126,15 @@ public final class BuildTimeCompilationSupport {
             } else if (target.wasExecuted()) {
                 rejected.add(new Rejection(name, EXECUTED_AT_BUILD_TIME));
             } else {
-                OptimizedCallTarget shadow = target.createAOTShadow();
+                OptimizedCallTarget shadow;
+                try {
+                    shadow = target.createAOTShadow();
+                } catch (VirtualMachineError e) {
+                    throw e;
+                } catch (Throwable t) {
+                    rejected.add(new Rejection(name, SHADOW_FAILED + ": " + t));
+                    continue;
+                }
                 if (shadow == null) {
                     rejected.add(new Rejection(name, "root refused AOT (cloneForAOT or prepareForAOT)"));
                 } else {

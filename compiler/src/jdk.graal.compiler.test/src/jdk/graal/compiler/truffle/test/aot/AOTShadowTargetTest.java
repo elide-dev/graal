@@ -71,6 +71,22 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertFalse("shadow AST must be AOT-prepared", ((AOTTestLanguage.AddRoot) shadow.getRootNode()).isUninitialized());
     }
 
+    /**
+     * A live target with AOT code runs that code instead of its own AST, which the code counts on
+     * the shadow: the live target may look never executed. An explicit synchronous compilation must
+     * still not prepare its AST for AOT (prepareForAOT is only for never-executed targets).
+     */
+    @Test
+    public void compileNeverPreparesLiveTargetWithAOTCode() {
+        OptimizedCallTarget live = parse("add:1");
+        assertNotNull(live.createAOTShadow());
+        live.setAOTCode(reason -> {
+        });
+        assertFalse(live.wasExecuted());
+        live.compile(true);
+        assertTrue("live AST must stay uninitialized", ((AOTTestLanguage.AddRoot) live.getRootNode()).isUninitialized());
+    }
+
     @Test
     public void refusingRootHasNoShadow() {
         assertNull(parse("refuse").createAOTShadow());
