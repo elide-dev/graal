@@ -32,6 +32,8 @@ import org.graalvm.options.OptionValues;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -51,6 +53,7 @@ import com.oracle.truffle.api.dsl.Introspection;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.GenerateWrapper;
 import com.oracle.truffle.api.instrumentation.InstrumentableNode;
@@ -105,6 +108,9 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * pre-initialized one.
      */
     public static volatile CalleeRoot lastCallee;
+
+    /** Test hook: the last parsed "misbehave:<mode>" root of each mode. */
+    public static final Map<String, MisbehavingRoot> misbehaving = new ConcurrentHashMap<>();
 
     /** Test hook: the call target of the callee of the last parsed "typedcall" source. */
     public static volatile CallTarget lastTypedCallee;
@@ -317,6 +323,10 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new AssumeRoot(language, "lateinval", LATE_STABLE, 8, 8);
         } else if (trimmed.equals("spin")) {
             root = new SpinRoot(language);
+        } else if (trimmed.startsWith("misbehave:")) {
+            MisbehavingRoot misbehavingRoot = new MisbehavingRoot(language, trimmed.substring("misbehave:".length()));
+            misbehaving.put(misbehavingRoot.mode, misbehavingRoot);
+            root = misbehavingRoot;
         } else if (trimmed.equals("typed")) {
             root = new TypedRoot(language, "typed");
         } else if (trimmed.equals("typedcall")) {
@@ -1200,6 +1210,78 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return name;
+        }
+    }
+
+    /**
+     * A root whose {@link #cloneForAOT()} or {@link #prepareForAOT()} misbehaves as its mode says,
+     * which must never fail the image build or change the live root:
+     * <ul>
+     * <li>"clonethrow": cloneForAOT throws;
+     * <li>"prepthrow": prepareForAOT throws;
+     * <li>"cloneself": cloneForAOT returns this root;
+     * <li>"cloneshare": cloneForAOT returns a new root that shares this root's child;
+     * <li>"sharedesc": the copy shares the frame descriptor, and prepareForAOT sets a slot kind;
+     * <li>"owndesc": like "sharedesc", but cloneForAOT copies the descriptor, as it should.
+     * </ul>
+     */
+    static final class LeafNode extends Node {
+    }
+
+    public static final class MisbehavingRoot extends RootNode {
+        private final String mode;
+        @Child LeafNode child = new LeafNode();
+
+        MisbehavingRoot(TruffleLanguage<?> language, String mode) {
+            this(language, mode, oneSlotDescriptor());
+        }
+
+        private static FrameDescriptor oneSlotDescriptor() {
+            FrameDescriptor.Builder builder = FrameDescriptor.newBuilder();
+            builder.addSlot(FrameSlotKind.Illegal, "slot", null);
+            return builder.build();
+        }
+
+        private MisbehavingRoot(TruffleLanguage<?> language, String mode, FrameDescriptor descriptor) {
+            super(language, descriptor);
+            this.mode = mode;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return 0;
+        }
+
+        @Override
+        protected RootNode cloneForAOT() {
+            switch (mode) {
+                case "clonethrow":
+                    throw new UnsupportedOperationException("clonethrow");
+                case "cloneself":
+                    return this;
+                case "cloneshare":
+                    MisbehavingRoot copy = new MisbehavingRoot(getLanguage(AOTTestLanguage.class), mode, getFrameDescriptor());
+                    copy.child = child;
+                    return copy;
+                case "owndesc":
+                    return new MisbehavingRoot(getLanguage(AOTTestLanguage.class), mode, getFrameDescriptor().copy());
+                default:
+                    return new MisbehavingRoot(getLanguage(AOTTestLanguage.class), mode, getFrameDescriptor());
+            }
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            if (mode.equals("prepthrow")) {
+                throw new IllegalStateException("prepthrow");
+            }
+            getFrameDescriptor().setSlotKind(0, FrameSlotKind.Int);
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return mode;
         }
     }
 

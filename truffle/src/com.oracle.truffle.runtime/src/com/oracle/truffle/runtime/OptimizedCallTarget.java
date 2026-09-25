@@ -44,10 +44,13 @@ import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -72,6 +75,7 @@ import com.oracle.truffle.api.TruffleOptions;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.impl.FrameWithoutBoxing;
 import com.oracle.truffle.api.nodes.BlockNode;
@@ -1185,9 +1189,14 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      * for AOT. The shadow, not this target, is compiled at image build time; this target and its
      * AST stay untouched. Hosted use only.
      *
+     * Preparing the copy must not change this target's state. So the copy must not share nodes with
+     * this root, and if it shares this root's {@link FrameDescriptor}, preparing it must not change
+     * the descriptor; otherwise the shadow is not created.
+     *
      * @return the prepared shadow, or {@code null} if the root refuses AOT compilation or its copy
      *         cannot be prepared
-     * @throws IllegalStateException if this target was already executed
+     * @throws IllegalStateException if this target was already executed, if the copy shares nodes
+     *             with this root, or if preparing the copy changed the shared frame descriptor
      */
     public final OptimizedCallTarget createAOTShadow() {
         CompilerAsserts.neverPartOfCompilation();
@@ -1199,6 +1208,14 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         if (clonedRoot == null) {
             return null;
         }
+        /*
+         * Checked before the copy is adopted by its call target: adopting a node of this root would
+         * already change its parent.
+         */
+        checkNoSharedNodes(rootNode, clonedRoot);
+        FrameDescriptor sharedDescriptor = clonedRoot.getFrameDescriptor() == rootNode.getFrameDescriptor() ? rootNode.getFrameDescriptor() : null;
+        FrameSlotKind[] slotKinds = sharedDescriptor == null ? null : slotKinds(sharedDescriptor);
+        int auxiliarySlots = sharedDescriptor == null ? 0 : sharedDescriptor.getNumberOfAuxiliarySlots();
         OptimizedCallTarget shadow;
         CREATING_AOT_SHADOW.set(clonedRoot);
         try {
@@ -1207,11 +1224,61 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
             CREATING_AOT_SHADOW.remove();
         }
         shadow.aotShadow = true;
-        if (!shadow.prepareForAOT()) {
+        boolean prepared;
+        boolean descriptorChanged = false;
+        try {
+            prepared = shadow.prepareForAOT();
+        } finally {
+            if (sharedDescriptor != null) {
+                descriptorChanged = restoreSlotKinds(sharedDescriptor, slotKinds) || sharedDescriptor.getNumberOfAuxiliarySlots() != auxiliarySlots;
+            }
+        }
+        if (descriptorChanged) {
+            throw new IllegalStateException("prepareForAOT changed the FrameDescriptor that the copy of cloneForAOT shares with the live root; cloneForAOT must copy it");
+        }
+        if (!prepared) {
             return null;
         }
         shadow.startProfilesGenericForAOT();
         return shadow;
+    }
+
+    private static void checkNoSharedNodes(RootNode live, RootNode copy) {
+        Set<Node> liveNodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        live.accept(node -> {
+            liveNodes.add(node);
+            return true;
+        });
+        copy.accept(node -> {
+            if (liveNodes.contains(node)) {
+                throw new IllegalStateException("cloneForAOT returned a tree that shares node " + node.getClass().getName() + " with the live root; it must return a copy");
+            }
+            return true;
+        });
+    }
+
+    private static FrameSlotKind[] slotKinds(FrameDescriptor descriptor) {
+        FrameSlotKind[] kinds = new FrameSlotKind[descriptor.getNumberOfSlots()];
+        for (int i = 0; i < kinds.length; i++) {
+            kinds[i] = descriptor.getSlotKind(i);
+        }
+        return kinds;
+    }
+
+    /**
+     * Restores the slot kinds of {@code descriptor}, shared by the live root and the copy that was
+     * just prepared, and returns whether preparing the copy changed them. (Auxiliary slots it added
+     * cannot be removed again.)
+     */
+    private static boolean restoreSlotKinds(FrameDescriptor descriptor, FrameSlotKind[] kinds) {
+        boolean changed = false;
+        for (int i = 0; i < kinds.length; i++) {
+            if (descriptor.getSlotKind(i) != kinds[i]) {
+                descriptor.setSlotKind(i, kinds[i]);
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     /**
@@ -1275,6 +1342,11 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     public final void setAOTCode(AOTCode code) {
         assert !aotShadow : "AOT code is attached to the live target, not to its shadow.";
         this.aotCode = code;
+        /*
+         * Its shadow was prepared for AOT in its place. The AOT code counts calls on the shadow, so
+         * this target may look like it was never executed; compile must never prepare its AST.
+         */
+        this.aotInitialized = true;
     }
 
     /**

@@ -180,7 +180,7 @@ public abstract class RootNode extends ExecutableNode {
         return root;
     }
 
-    private static void resetFieldsAfterCopy(RootNode root) {
+    static void resetFieldsAfterCopy(RootNode root) {
         root.callTarget = null;
         root.instrumentationBits = 0;
         root.lock = null;

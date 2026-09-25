@@ -187,7 +187,12 @@ final class NodeAccessor extends Accessor {
 
         @Override
         public RootNode cloneForAOT(RootNode root) {
-            return root.cloneForAOT();
+            RootNode clone = root.cloneForAOT();
+            if (clone != null && clone != root) {
+                // As for cloneUninitialized: the language may have copied these fields.
+                RootNode.resetFieldsAfterCopy(clone);
+            }
+            return clone;
         }
 
         @Override
