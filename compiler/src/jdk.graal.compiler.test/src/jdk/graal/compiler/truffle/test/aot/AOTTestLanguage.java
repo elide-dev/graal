@@ -27,9 +27,13 @@ package jdk.graal.compiler.truffle.test.aot;
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.options.OptionValues;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.AOTSupport;
 import com.oracle.truffle.api.dsl.GenerateAOT;
@@ -254,6 +258,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
          */
         public static int compiledExecutions;
 
+        /**
+         * Test hook: if set, the innermost execution records, for each guest frame on the stack
+         * (innermost first), whether it has a call node.
+         */
+        public static volatile boolean captureFrames;
+        public static volatile List<Boolean> capturedFramesHaveCallNode;
+
         @Child IndirectCallNode call = IndirectCallNode.create();
 
         RecurseRoot(TruffleLanguage<?> language) {
@@ -267,9 +278,22 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             }
             int n = (Integer) frame.getArguments()[0];
             if (n <= 0) {
+                if (captureFrames) {
+                    captureFrames();
+                }
                 return 0;
             }
             return 1 + (Integer) call.call(getCallTarget(), n - 1);
+        }
+
+        @TruffleBoundary
+        private static void captureFrames() {
+            List<Boolean> haveCallNode = new ArrayList<>();
+            Truffle.getRuntime().iterateFrames(f -> {
+                haveCallNode.add(f.getCallNode() != null);
+                return null;
+            });
+            capturedFramesHaveCallNode = haveCallNode;
         }
 
         @Override
