@@ -36,7 +36,7 @@ This design replaces every shortcut the spike took.
 
 ### Non-goals (this delivery)
 
-- OSR call targets (loops still get OSR at run time)
+- OSR call targets. Loops get OSR at run time only outside AOT code: AOT code has no OSR, and its threshold is checked on call entry only, so a long-running activation stays in AOT code (see the implementation notes of 2026-09-25)
 - polyglot isolates / `IsolateAwareTruffleCompiler`
 - layered images (`TruffleBaseFeature` is `DisallowLayered`)
 - single-context specialized variants
@@ -319,3 +319,19 @@ Deviations and decisions made while implementing this design, as built at HEAD `
 - **Build-time PE inlines only runtime-compilation candidates.** The build-time partial evaluator decodes callees from their `RUNTIME_COMPILED_METHOD` variant, the same encoded graphs the runtime JIT would inline. This reuses one encoding and one set of inlining decisions instead of maintaining a second, build-time-only inlining policy.
 - **The pre-existing static-final-assumption bug fix.** Independently of the AOT tier, `Assumption`s read from static final fields in code partially evaluated at run time could be folded at image build time, so the JIT compiler recorded no dependency on them and a later invalidation did not deoptimize the affected JIT code. They are now registered as dependencies (commit `7c14fec1f56`). This applies to every Truffle native image, including ones built without `AOTCompile`, because it was a correctness gap in ordinary runtime compilation on Native Image, not something the AOT tier introduced.
 - **A separate build-time Truffle compiler.** Build-time compilation uses its own `BuildTimePartialEvaluator` over the analysis universe (`HostedProviders`, `AnalysisMetaAccess`), rather than the runtime `SubstrateTruffleUniverseFactory`/`SubstratePartialEvaluator` pair, because the runtime compiler's method, field and type queries are hard-cast to Substrate-universe types that do not exist yet during analysis, and its decoder reads encoded runtime graphs that are not available until after the compile queue is created.
+
+## Implementation notes (2026-09-25)
+
+Changes and decisions after the final review, as built at HEAD `98852975107`.
+
+- **Shadow argument and return profiles start generic (C1).** The argument and return types of the `ExecutionSignature` a shadow's `prepareForAOT()` returns are not trusted, because no caller checks arguments against them.
+- **AOT code profiles the arguments of live callees (C2).** Build-time partial evaluation retargets `profileArguments` to the boundary `profileIndirectArguments`, at the cost of one boundary call per call from AOT code to a live target.
+- **Profiles of live call targets are folded conservatively (P1, re-review m1).** Build-time partial evaluation folds `OptimizedCallTarget.exceptionProfile` as generic and `returnProfile` as unset, so AOT code never depends on the profiles of a live callee and is not unlinked by the callee's first exception or first return of another type.
+- **Selection guards (I1, I7, re-review m5).** An exception in `cloneForAOT()` or `prepareForAOT()`, a copy that shares an adoptable node with the live root, and a `prepareForAOT()` that changes a shared `FrameDescriptor` reject the root; the slot kinds are restored.
+- **Typed source registration (I5).** `org.graalvm.polyglot.PreinitializedSources.register(Source...)`, called while the image is built, registers sources that can carry a MIME type, path, or URI; `PreinitializeSources` stays as a shorthand. Registering is a hint: a registered source whose language is not pre-initialized is skipped, so libraries can register from their own features (re-review I-1). Modules that a language loads itself are never embedder sources, so the GraalJS follow-up needs its own pre-initialization hook for module graphs.
+- **I2, long-running activations: documented, follow-up.** The threshold is checked on call entry only, and AOT code has no OSR. A non-invalidating transfer to the interpreter at a loop back-edge is follow-up work; OSR of a shadow needs its own design.
+- **I4, single-context speed: documented, measured later.** A bound engine that adopts the shared layer runs its single context multi-context, without single-context constant folding. It is to be measured on GraalJS in the follow-up PR before deciding on an option.
+- **I3, the static-final-assumption fix `7c14fec1f56`, is split out** into its own upstream PR, which this branch stacks on.
+- **M10: internal invariants stay hard build failures.** An unreachable deoptimization target of AOT code and a failed compilation after the analysis fail the build even without `FailOnError`; the error names the `aot_<id>_<root>` method, and `AOTCompileFilter` excludes the root as a workaround.
+- **Frame identity (I6).** In frames of AOT code, the call target and root node are the shadow's, like a split.
+
