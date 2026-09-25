@@ -106,6 +106,9 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      */
     public static volatile CalleeRoot lastCallee;
 
+    /** Test hook: the call target of the callee of the last parsed "typedcall" source. */
+    public static volatile CallTarget lastTypedCallee;
+
     /**
      * Test hook: the assumption the "assume" root depends on. Created when the language class is
      * initialized, i.e., in the image builder for the test image, so it is in the image heap.
@@ -314,6 +317,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new AssumeRoot(language, "lateinval", LATE_STABLE, 8, 8);
         } else if (trimmed.equals("spin")) {
             root = new SpinRoot(language);
+        } else if (trimmed.equals("typed")) {
+            root = new TypedRoot(language, "typed");
+        } else if (trimmed.equals("typedcall")) {
+            /* The callee is not executed: it is compiled at build time too. */
+            TypedRoot callee = new TypedRoot(language, "typedcallee");
+            lastTypedCallee = callee.getCallTarget();
+            root = new CallRoot(language, "typedcall", callee.getCallTarget());
         } else if (trimmed.equals("call")) {
             CalleeRoot callee = new CalleeRoot(language);
             callee.getCallTarget().call(0);
@@ -1159,10 +1169,16 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     }
 
     public static final class CallRoot extends RootNode {
+        private final String name;
         @Child DirectCallNode call;
 
         CallRoot(TruffleLanguage<?> language, CallTarget callee) {
+            this(language, "call", callee);
+        }
+
+        CallRoot(TruffleLanguage<?> language, String name, CallTarget callee) {
             super(language);
+            this.name = name;
             this.call = DirectCallNode.create(callee);
         }
 
@@ -1183,7 +1199,40 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
         @Override
         public String getName() {
-            return "call";
+            return name;
+        }
+    }
+
+    /**
+     * A root whose {@link #prepareForAOT()} declares an {@link Integer} argument, and which reports
+     * whether its argument is one: "int" or "other".
+     */
+    public static final class TypedRoot extends RootNode {
+        private final String name;
+
+        TypedRoot(TruffleLanguage<?> language, String name) {
+            super(language);
+            this.name = name;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return frame.getArguments()[0] instanceof Integer ? "int" : "other";
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.create(String.class, new Class<?>[]{Integer.class});
+        }
+
+        @Override
+        public String getName() {
+            return name;
         }
     }
 

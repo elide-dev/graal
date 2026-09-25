@@ -1229,9 +1229,18 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      * Profiles that are not referenced by such a field, e.g., inlined profiles, are the
      * responsibility of the root's {@link RootNode#prepareForAOT() prepareForAOT} (the DSL already
      * disables the profiles of its cached values when it prepares a node for AOT).
+     * <p>
+     * The argument and return profiles of the shadow are generic too, whatever
+     * {@link ExecutionSignature} prepareForAOT returned. Compiled code trusts the argument types of
+     * a valid argument profile, and only calls of the target itself check them against the profile
+     * and invalidate it. But no call ever reaches the shadow: calls go to the live target, which
+     * checks its own profile, not the shadow's. A typed profile of the shadow would therefore never
+     * be checked, and the AOT tier code would treat arguments of other types as the profiled types.
      */
     private void startProfilesGenericForAOT() {
         assert aotShadow;
+        argumentsProfile = ArgumentsProfile.INVALID;
+        returnProfile = ReturnProfile.INVALID;
         exceptionProfile = PROFILE_GENERIC;
         rootNode.accept(node -> {
             if (node instanceof OptimizedDirectCallNode directCall) {
