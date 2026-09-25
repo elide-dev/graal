@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -193,6 +194,57 @@ public class AOTTierConcurrencyNativeTest {
         assertEquals(log, 1, enters(log, "assumeloop"));
         assertEquals(log, 1, unlinks(log, "assumeloop"));
         assertEquals(log, 1, unlinks(log, "assumeloop", "aot-loop-test"));
+    }
+
+    /**
+     * Eight contexts on eight threads throw guest exceptions through the AOT code of "throwinval"
+     * (caller) and "throwinvalcallee", while another thread invalidates the assumption the caller's
+     * AOT code depends on. The invalidation deoptimizes the caller's activations wherever they are,
+     * e.g., in the exception path of its call site or root, which calls into the runtime to capture
+     * the guest stack trace. Every call throws the guest exception, with the same guest frames; the
+     * calls stay well below the threshold, so the only unlink is the invalidation.
+     */
+    @Test
+    public void exceptionsThroughAOTCodeDuringInvalidation() throws Exception {
+        TruffleTestAssumptions.assumeAOT();
+        final int calls = 10;
+        AtomicInteger done = new AtomicInteger();
+        Thread invalidator = new Thread(() -> {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (done.get() < 2 * THREADS && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
+            AOTTestLanguage.invalidateThrowStable();
+        });
+        invalidator.start();
+        List<String> expectedFrames = List.of("throwinvalcallee@throwinval.aot:0-5", "throwinval@throwinval.aot:0-10");
+        runThreads(t -> {
+            try (Context c = Context.newBuilder().engine(engine()).build()) {
+                Value f = c.parse(fixture("throwinval", "throwinval"));
+                for (int i = 0; i < calls; i++) {
+                    try {
+                        f.execute(i);
+                        throw new AssertionError("no exception at call " + i);
+                    } catch (PolyglotException e) {
+                        if (!e.isGuestException() || !AOTTestLanguage.ThrowRoot.MESSAGE.equals(e.getMessage())) {
+                            throw new AssertionError("wrong exception at call " + i, e);
+                        }
+                        List<String> frames = AOTTierNativeTestSupport.guestFrames(e);
+                        if (!frames.equals(expectedFrames)) {
+                            throw new AssertionError("wrong guest frames at call " + i + ": " + frames);
+                        }
+                    }
+                    done.incrementAndGet();
+                }
+            }
+        });
+        invalidator.join();
+        String log = text(LOG);
+        assertEquals(log, THREADS * calls, done.get());
+        assertEquals(log, 1, enters(log, "throwinval"));
+        assertEquals(log, 1, unlinks(log, "throwinval"));
+        assertEquals(log, 1, unlinks(log, "throwinval", "aot-throw-test"));
+        assertEquals(log, 0, unlinks(log, "throwinvalcallee"));
     }
 
     static final class Invalidated {

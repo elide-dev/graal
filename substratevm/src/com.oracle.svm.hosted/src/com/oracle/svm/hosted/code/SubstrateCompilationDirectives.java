@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.hosted.code;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -189,8 +190,8 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
     /**
      * Builder-compiled methods whose frames (including all inlined frames) must be deoptimizable.
      * Unlike {@link #deoptForTestingMethods}, a deopt source does not need a deopt target of its
-     * own for correctness of inner frames, and all deopt entries registered for its inlined frames
-     * are kept by {@link #resetDeoptEntries()}.
+     * own for correctness of inner frames, and {@link #resetDeoptEntries()} registers the deopt
+     * entries of its frames again, from its graph as the analysis left it.
      */
     private final Set<AnalysisMethod> deoptSourceMethods = ConcurrentHashMap.newKeySet();
     /**
@@ -198,6 +199,11 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
      * deopt sources they received entries for (used for error reporting).
      */
     private final Map<AnalysisMethod, AnalysisMethod> deoptSourceTargets = new ConcurrentHashMap<>();
+    /**
+     * The entries (encoded bcis) registered on behalf of deopt sources, per deopt target (see
+     * {@link #getDeoptSourceEntries()}).
+     */
+    private final Map<AnalysisMethod, Set<Long>> deoptSourceEntries = new ConcurrentHashMap<>();
     private final Set<AnalysisMethod> deoptInliningExcludes = ConcurrentHashMap.newKeySet();
 
     public static SubstrateCompilationDirectives singleton() {
@@ -244,6 +250,14 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
      * @return whether this was a new frame state seen.
      */
     public boolean registerDeoptEntry(FrameState state, ResolvedJavaMethod method) {
+        return registerDeoptEntry(state, method, false);
+    }
+
+    /**
+     * Registers {@code state} as a deoptimization entry of {@code method}, a deopt target, on behalf
+     * of a deopt source if {@code forDeoptSource} is set (see {@link #registerDeoptSource}).
+     */
+    public boolean registerDeoptEntry(FrameState state, ResolvedJavaMethod method, boolean forDeoptSource) {
         assert deoptInfoModifiable();
         assert state.bci >= 0;
         long encodedBci = FrameInfoEncoder.encodeBci(state.bci, state.getStackState());
@@ -254,6 +268,9 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
 
         sourceFrameInfoMap.compute(encodedBci, (_, v) -> v == null ? DeoptSourceFrameInfo.create(state) : v.mergeStateInfo(state));
 
+        if (forDeoptSource) {
+            deoptSourceEntries.computeIfAbsent(toAnalysisMethod(method), _ -> ConcurrentHashMap.newKeySet()).add(encodedBci);
+        }
         return newEntry;
     }
 
@@ -362,6 +379,23 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
         return deoptEntries;
     }
 
+    /**
+     * The subset of {@link #getDeoptEntries()} registered on behalf of deopt sources: the entries
+     * that the frames of deopt sources need.
+     */
+    public Map<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> getDeoptSourceEntries() {
+        Map<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> result = new HashMap<>();
+        for (var sourceEntries : deoptSourceEntries.entrySet()) {
+            Map<Long, DeoptSourceFrameInfo> entries = deoptEntries.get(sourceEntries.getKey());
+            Map<Long, DeoptSourceFrameInfo> selected = new HashMap<>();
+            for (Long encodedBci : sourceEntries.getValue()) {
+                selected.put(encodedBci, entries.get(encodedBci));
+            }
+            result.put(sourceEntries.getKey(), selected);
+        }
+        return result;
+    }
+
     private static AnalysisMethod toAnalysisMethod(ResolvedJavaMethod method) {
         if (method instanceof AnalysisMethod) {
             return (AnalysisMethod) method;
@@ -405,14 +439,18 @@ public class SubstrateCompilationDirectives implements DeoptSourceMethods {
             assert key != null && value != null : "Unexpected null value " + key + ", " + value;
             newDeoptEntries.put(key, value);
         }
-        // all deopt targets which received entries on behalf of a deopt source cannot be cleared
-        for (AnalysisMethod target : deoptSourceTargets.keySet()) {
-            Map<Long, DeoptSourceFrameInfo> entries = deoptEntries.get(target);
-            if (entries != null) {
-                newDeoptEntries.put(target, entries);
-            }
-        }
         deoptEntries = newDeoptEntries;
+        /*
+         * The entries of the deopt sources are cleared too, and registered again from their graphs
+         * as the analysis left them. The runtime compiled methods register theirs again when they
+         * are compiled. An entry that only an analysis-time graph needed (e.g., the state after a
+         * call that the analysis found never returns, or after a loop over a field that is never
+         * written) has no deoptimization entry point in the deopt target either.
+         */
+        deoptSourceEntries.clear();
+        for (AnalysisMethod source : deoptSourceMethods) {
+            DeoptimizationUtils.registerDeoptEntriesForDeoptSourceAfterAnalysis(source);
+        }
         // all methods which require frame information must have a deoptimization entry
         frameInformationRequired.forEach(m -> {
             assert m.isOriginalMethod();
