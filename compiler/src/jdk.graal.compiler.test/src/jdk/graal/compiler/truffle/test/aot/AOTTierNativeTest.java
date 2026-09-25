@@ -62,6 +62,7 @@ import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.runtime.OptimizedAssumption;
+import com.oracle.truffle.runtime.OptimizedCallTarget;
 import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
@@ -393,6 +394,57 @@ public class AOTTierNativeTest {
             assertEquals("the calls of both contexts count on the same shadow: " + log(), 1, unlinks(log(), "add6", "AOT tier threshold reached"));
             assertEquals(7, f1.execute(1).asInt());
         }
+    }
+
+    /**
+     * The root of "typed" declares an Integer argument in the {@code ExecutionSignature} of its
+     * prepareForAOT. Calls reach the live target, never the shadow, so no call checks arguments
+     * against the shadow's argument profile: the AOT code must not trust these types, and sees the
+     * real type of an argument of another type.
+     */
+    @Test
+    public void aotCodeDoesNotTrustExecutionSignature() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value typed = context.parse(fixture("typed", "typed"));
+            assertEquals("other", typed.execute("x").asString());
+            assertEquals("other", typed.execute(1L).asString());
+            assertEquals("int", typed.execute(1).asString());
+        }
+        String log = log();
+        assertEquals(log, 1, enters(log, "typed"));
+        assertEquals(log, 0, unlinks(log, "typed"));
+    }
+
+    /**
+     * The AOT code of "typedcall" directly calls the live "typedcallee", which was not executed at
+     * build time, so its argument profile was uninitialized when the AOT code was compiled. Here
+     * the callee's own AOT code is unlinked, an interpreted call initializes its profile with an
+     * Integer argument, and the JIT compiles the callee trusting it. The AOT code must still check the arguments it passes against the
+     * callee's profile, and invalidate the JIT code for a String, instead of passing the String to
+     * code that treats it as an Integer.
+     */
+    @Test
+    public void aotCodeProfilesArgumentsOfLiveCallee() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value typedCall = context.parse(fixture("typedcall", "typedcall"));
+            OptimizedCallTarget callee = (OptimizedCallTarget) AOTTestLanguage.lastTypedCallee;
+            assertNotNull("the \"typedcall\" fixture was parsed during pre-initialization", callee);
+            context.enter();
+            try {
+                /* Interpreted after the unlink, so the call initializes the callee's profile. */
+                callee.unlinkAOT("test");
+                assertEquals("int", callee.call(1));
+                assertTrue("the JIT compiled typedcallee", callee.compile(true));
+                assertTrue(callee.isValid());
+            } finally {
+                context.leave();
+            }
+            assertEquals("other", typedCall.execute("x").asString());
+            assertFalse("the String argument invalidated the JIT code of typedcallee", callee.isValid());
+        }
+        assertTrue(log(), log().contains("[aot] enter typedcall"));
     }
 
     /** AOT code of "call" calls its live callee, which runs in the interpreter. */

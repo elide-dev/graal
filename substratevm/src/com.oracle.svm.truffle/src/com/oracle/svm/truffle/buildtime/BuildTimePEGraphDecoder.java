@@ -32,6 +32,8 @@ import com.oracle.graal.pointsto.flow.AnalysisParsedGraph;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
+import com.oracle.svm.shared.util.VMError;
+import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.bytecode.BytecodeProvider;
 import jdk.graal.compiler.core.common.PermanentBailoutException;
@@ -62,6 +64,9 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
      * {@code BuildTimePartialEvaluator.partiallyEvaluateAt}.
      */
     private final Map<ResolvedJavaMethod, EncodedGraph> rootGraphs;
+    /** {@code OptimizedCallTarget.profileArguments} and {@code profileIndirectArguments}. */
+    private final ResolvedJavaMethod profileArguments;
+    private final ResolvedJavaMethod profileIndirectArguments;
 
     BuildTimePEGraphDecoder(BigBang bb, Map<ResolvedJavaMethod, EncodedGraph> rootGraphs, StructuredGraph graph, CoreProviders providers, LoopExplosionPlugin loopExplosionPlugin, InvocationPlugins invocationPlugins,
                     InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin, NodePlugin[] nodePlugins, SourceLanguagePositionProvider sourceLanguagePosition,
@@ -71,6 +76,30 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
                         specialCallTargetCache, invocationPluginsCache, false, false);
         this.bb = bb;
         this.rootGraphs = rootGraphs;
+        try {
+            this.profileArguments = bb.getMetaAccess().lookupJavaMethod(OptimizedCallTarget.class.getDeclaredMethod("profileArguments", Object[].class));
+            this.profileIndirectArguments = bb.getMetaAccess().lookupJavaMethod(OptimizedCallTarget.class.getDeclaredMethod("profileIndirectArguments", Object[].class));
+        } catch (NoSuchMethodException e) {
+            throw VMError.shouldNotReachHere(e);
+        }
+    }
+
+    /**
+     * The argument profile of a callee that was not executed at build time is still
+     * uninitialized, and partial evaluation folds it: {@code callDirect} then profiles no
+     * arguments in compiled code. JIT callers are usually compiled only after they called the
+     * callee in the interpreter, but every call site in AOT tier code is compiled before: once
+     * interpreted callers initialize the callee's profile and the JIT compiles the callee trusting
+     * it, calls from AOT tier code would pass arguments of other types unchecked. So AOT tier code
+     * profiles the arguments of every direct call as indirect calls do, behind a boundary, which
+     * reads the current profile and invalidates it on a mismatch.
+     */
+    @Override
+    protected MethodCallTargetNode trySimplifyCallTarget(PEMethodScope methodScope, InvokeData invokeData, MethodCallTargetNode callTarget) {
+        if (callTarget.targetMethod().equals(profileArguments)) {
+            callTarget.setTargetMethod(profileIndirectArguments);
+        }
+        return super.trySimplifyCallTarget(methodScope, invokeData, callTarget);
     }
 
     private static AnalysisMethod runtimeVariant(ResolvedJavaMethod method) {
