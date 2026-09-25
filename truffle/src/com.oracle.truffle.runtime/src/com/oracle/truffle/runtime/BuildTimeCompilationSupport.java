@@ -96,6 +96,15 @@ public final class BuildTimeCompilationSupport {
     }
 
     /**
+     * The context object of the language context {@code polyglotLanguageContext}, as context
+     * references return it: AOT tier code folds it at build time, so the run time checks that
+     * patching the pre-initialized context kept it.
+     */
+    public static Object getLanguageContextObject(Object polyglotLanguageContext) {
+        return OptimizedRuntimeAccessor.ENGINE.getLanguageContextObject(polyglotLanguageContext);
+    }
+
+    /**
      * Hosted only: select call targets of the pre-initialized engine for build-time compilation:
      * those of its claimed shared layers and, without code sharing, those of the pre-initialized
      * context ({@link #isBoundPreinitialization()}). Each root is considered once, in engine

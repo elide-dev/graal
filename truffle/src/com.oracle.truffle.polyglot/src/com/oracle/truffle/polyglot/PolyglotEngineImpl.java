@@ -2252,6 +2252,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
                 synchronized (this.lock) {
                     addContext(context);
                 }
+                RUNTIME.onPreinitializedContextPatched(this.runtimeData);
             } else {
                 context.closeImpl(false);
                 config.fileSystemConfig = oldFileSystemConfig;

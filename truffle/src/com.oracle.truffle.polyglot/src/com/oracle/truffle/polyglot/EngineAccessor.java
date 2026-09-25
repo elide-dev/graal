@@ -1939,6 +1939,11 @@ final class EngineAccessor extends Accessor {
         }
 
         @Override
+        public Object getLanguageContextObject(Object polyglotLanguageContext) {
+            return ((PolyglotLanguageContext) polyglotLanguageContext).getContextImpl();
+        }
+
+        @Override
         public Object getStaticObjectClassLoaders(Object polyglotLanguageInstance, Class<?> referenceClass) {
             return ((PolyglotLanguageInstance) polyglotLanguageInstance).staticObjectClassLoaders.get(referenceClass);
         }

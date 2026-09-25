@@ -811,6 +811,14 @@ public abstract class OptimizedTruffleRuntime implements TruffleRuntime, Truffle
 
     public abstract BackgroundCompileQueue getCompileQueue();
 
+    /**
+     * Called after the pre-initialized context of {@code engine} was patched successfully, before
+     * the context is used. The AOT tier links the code whose state folded at build time is
+     * unchanged by patching.
+     */
+    protected void onPreinitializedContextPatched(@SuppressWarnings("unused") EngineData engine) {
+    }
+
     @SuppressWarnings("unused")
     protected void onEngineCreated(EngineData engine) {
     }

@@ -232,13 +232,16 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     public static volatile boolean multipleContexts;
 
     /**
-     * The context: its {@link #patched} state changes when a pre-initialized context is patched, the
-     * way languages update context state then, without invalidating anything. Code compiled at build
-     * time must see the patched value ("patchstate", {@link PatchStateRoot}).
+     * The context: its {@link #state} changes when a pre-initialized context is patched, the way
+     * languages update context state then, without invalidating anything. Code compiled at build
+     * time must see the patched value ("patchstate", {@link PatchStateRoot}). Not a default value at
+     * build time, which Truffle would not fold.
      */
     static final class AOTTestContext {
         Env env;
-        @CompilationFinal boolean patched;
+        @CompilationFinal String state = "unpatched";
+        /** Set when the context is created; patching leaves it unchanged ("ctxstable"). */
+        @CompilationFinal int stable = 41;
 
         AOTTestContext(Env env) {
             this.env = env;
@@ -272,7 +275,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         awaitingPatch = false;
         AOTTestContext testContext = (AOTTestContext) context;
         testContext.env = newEnv;
-        testContext.patched = true;
+        testContext.state = "patched";
         return true;
     }
 
@@ -361,6 +364,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new ConstantRoot(language, "patchprobe", language.awaitingPatch ? 1 : 0);
         } else if (trimmed.equals("patchstate")) {
             root = new PatchStateRoot(language);
+        } else if (trimmed.equals("ctxstable")) {
+            root = new StableStateRoot(language);
         } else if (trimmed.equals("loop")) {
             root = new LoopRoot(language);
         } else if (trimmed.equals("recurse")) {
@@ -1106,7 +1111,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * "patchprobe": returns 1 if it was parsed by a language instance that awaits the patch of its
      * pre-initialized context, and 0 otherwise.
      */
-    /** "patchstate": whether its context was patched ({@link AOTTestContext#patched}). */
+    /** "patchstate": whether its context was patched ({@link AOTTestContext#state}). */
     public static final class PatchStateRoot extends RootNode {
         PatchStateRoot(TruffleLanguage<?> language) {
             super(language);
@@ -1114,7 +1119,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
 
         @Override
         public Object execute(VirtualFrame frame) {
-            return ((AOTTestContext) CONTEXT.get(this)).patched ? "patched" : "unpatched";
+            return ((AOTTestContext) CONTEXT.get(this)).state;
         }
 
         @Override
@@ -1130,6 +1135,33 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "patchstate";
+        }
+    }
+
+    /** "ctxstable": context state that patching leaves unchanged ({@link AOTTestContext#stable}) plus 1. */
+    public static final class StableStateRoot extends RootNode {
+        StableStateRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return ((AOTTestContext) CONTEXT.get(this)).stable + 1;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "ctxstable";
         }
     }
 

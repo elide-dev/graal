@@ -52,6 +52,7 @@ import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.core.stack.StackOverflowCheck;
 import com.oracle.svm.core.stack.SubstrateStackIntrospection;
 import com.oracle.svm.truffle.TruffleSupport;
+import com.oracle.svm.truffle.buildtime.AOTInstalledCode;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.impl.AbstractFastThreadLocal;
@@ -137,6 +138,11 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
         truffleCompiler = null;
         engineOptions = null;
         initializeEngineCacheSupport(new EngineCacheSupport.Disabled());
+    }
+
+    @Override
+    protected void onPreinitializedContextPatched(EngineData engine) {
+        AOTInstalledCode.linkAfterPreinitializedContextPatch();
     }
 
     @Override

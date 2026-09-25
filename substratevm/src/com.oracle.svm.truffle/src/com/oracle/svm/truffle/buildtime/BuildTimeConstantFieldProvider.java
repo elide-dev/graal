@@ -24,15 +24,19 @@
  */
 package com.oracle.svm.truffle.buildtime;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 import com.oracle.svm.shared.util.VMError;
+import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.core.common.spi.ConstantFieldProvider;
 import jdk.graal.compiler.nodes.spi.CanonicalizerTool;
+import jdk.graal.compiler.options.OptionValues;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -61,11 +65,18 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * Without code sharing ({@link BuildTimeCompilationSupport#isBoundPreinitialization()}), the
  * compiled call targets belong to the pre-initialized context, whose language contexts are patched
  * at run time before any of its code runs. Patching can change context state, which the image's JIT
- * only ever sees patched. So a mutable instance field (not {@code final}) is not folded if patching
- * can change it ({@link #isPatchable}): a field of a language class other than an AST node, or of
- * one of the {@linkplain #PATCHED_POLYGLOT_CLASSES polyglot classes} that patching updates,
- * including the single-context constants ({@code WeakAssumedValue}). The compiled code then reads
- * the context and its state when it runs.
+ * only ever sees patched. So a mutable instance field (not {@code final}) that patching can change
+ * ({@link #patchState}) is handled apart:
+ * <ul>
+ * <li>A field of one of the {@linkplain #PATCHED_POLYGLOT_CLASSES polyglot classes} that patching
+ * always updates, such as the environment of a language context, is not folded.</li>
+ * <li>A field of a language class other than an AST node, and a single-context constant
+ * ({@code WeakAssumedValue}, which patching updates to the same context), is folded and
+ * {@linkplain #startRecording() recorded}. The code is linked at run time only if every recorded
+ * field still has its folded value once the context is patched ({@code AOTCodeTable}). A stable
+ * array such a field holds is folded as a plain constant, so that its elements are read when the
+ * code runs.</li>
+ * </ul>
  */
 final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
     private final ConstantFieldProvider delegate;
@@ -75,6 +86,78 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
     private final boolean bound;
     private final MetaAccessProvider metaAccess;
     private final ResolvedJavaType nodeType;
+    private final ResolvedJavaField weakAssumedValueProfile;
+
+    /**
+     * A folded field that patching can change: {@code field} of {@code receiver} was {@code value}.
+     * Without a {@code field}, the context object of the language context {@code receiver} was
+     * {@code value} ({@link #foldLanguageContextObject}).
+     */
+    record Fold(JavaConstant receiver, ResolvedJavaField field, JavaConstant value) {
+    }
+
+    /**
+     * Folds the context object of the constant language context {@code languageContext}, and records
+     * it, if the current thread records ({@link #startRecording()}). Returns {@code null} otherwise.
+     * The object is read as {@code PolyglotLanguageContext.getContextImpl()} does, through the
+     * environment ({@code Env.context}), with the constant reflection of the partial evaluation, so
+     * that it is a constant of the analysis.
+     */
+    static JavaConstant foldLanguageContextObject(JavaConstant languageContext, MetaAccessProvider metaAccess, ConstantReflectionProvider constantReflection) {
+        List<Fold> folds = RECORDING.get();
+        if (folds == null || languageContext.isNull()) {
+            return null;
+        }
+        ResolvedJavaField envField;
+        ResolvedJavaField contextField;
+        ResolvedJavaField unsetField;
+        try {
+            envField = metaAccess.lookupJavaField(Class.forName("com.oracle.truffle.polyglot.PolyglotLanguageContext").getDeclaredField("env"));
+            contextField = metaAccess.lookupJavaField(TruffleLanguage.Env.class.getDeclaredField("context"));
+            unsetField = metaAccess.lookupJavaField(TruffleLanguage.Env.class.getDeclaredField("UNSET_CONTEXT"));
+        } catch (ReflectiveOperationException e) {
+            throw VMError.shouldNotReachHere(e);
+        }
+        JavaConstant env = constantReflection.readFieldValue(envField, languageContext);
+        if (env == null || env.isNull()) {
+            return null;
+        }
+        JavaConstant value = constantReflection.readFieldValue(contextField, env);
+        if (value == null || value.isNull() || Boolean.TRUE.equals(constantReflection.constantEquals(value, constantReflection.readFieldValue(unsetField, null)))) {
+            return null;
+        }
+        folds.add(new Fold(languageContext, null, value));
+        return value;
+    }
+
+    /** The folds of the partial evaluation that the current thread runs, if it records them. */
+    private static final ThreadLocal<List<Fold>> RECORDING = new ThreadLocal<>();
+
+    /**
+     * Records the patchable fields ({@link #patchState}) that the partial evaluation the current
+     * thread runs next folds, until {@link #stopRecording()}. Without a recording, such fields are
+     * not folded.
+     */
+    static void startRecording() {
+        RECORDING.set(new ArrayList<>());
+    }
+
+    /** Stops recording ({@link #startRecording()}) and returns the recorded folds. */
+    static List<Fold> stopRecording() {
+        List<Fold> folds = RECORDING.get();
+        RECORDING.remove();
+        return folds == null ? List.of() : folds;
+    }
+
+    /** How patching a pre-initialized context can affect a field. */
+    private enum PatchState {
+        /** Patching never changes it. */
+        UNCHANGED,
+        /** Patching updates it: never folded. */
+        UPDATED,
+        /** Patching can change it: folded and recorded. */
+        VERIFIED
+    }
 
     BuildTimeConstantFieldProvider(ConstantFieldProvider delegate, MetaAccessProvider metaAccess, ConstantReflectionProvider constantReflection) {
         this.delegate = delegate;
@@ -89,6 +172,11 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
         this.bound = BuildTimeCompilationSupport.isBoundPreinitialization();
         this.metaAccess = metaAccess;
         this.nodeType = metaAccess.lookupJavaType(Node.class);
+        try {
+            this.weakAssumedValueProfile = metaAccess.lookupJavaField(Class.forName("com.oracle.truffle.polyglot.WeakAssumedValue").getDeclaredField("profile"));
+        } catch (ReflectiveOperationException e) {
+            throw VMError.shouldNotReachHere(e);
+        }
     }
 
     @Override
@@ -99,37 +187,99 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
         if (field.equals(returnProfile) && !tool.getReceiver().isNull()) {
             return tool.foldConstant(JavaConstant.NULL_POINTER);
         }
-        if (bound && !field.isStatic() && !field.isFinal() && isPatchable(field, tool.getReceiver())) {
-            return null;
+        if (bound && !field.isStatic() && !field.isFinal()) {
+            switch (patchState(field, tool.getReceiver())) {
+                case UPDATED:
+                    return null;
+                case VERIFIED:
+                    return foldAndRecord(field, tool);
+                default:
+                    break;
+            }
         }
         return delegate.readConstantField(field, tool);
     }
 
+    private <T> T foldAndRecord(ResolvedJavaField field, ConstantFieldTool<T> tool) {
+        List<Fold> folds = RECORDING.get();
+        if (folds == null) {
+            return null;
+        }
+        JavaConstant value = tool.readValue();
+        if (value == null || (field.equals(weakAssumedValueProfile) && value.isNull())) {
+            /* An unset single-context constant is set at run time: never speculate on it. */
+            return null;
+        }
+        T result = delegate.readConstantField(field, new PlainConstantTool<>(tool));
+        if (result != null) {
+            folds.add(new Fold(tool.getReceiver(), field, value));
+        }
+        return result;
+    }
+
+    /** Folds stable arrays as plain constants, so that their elements are not folded. */
+    private record PlainConstantTool<T>(ConstantFieldTool<T> tool) implements ConstantFieldTool<T> {
+        @Override
+        public OptionValues getOptions() {
+            return tool.getOptions();
+        }
+
+        @Override
+        public JavaConstant readValue() {
+            return tool.readValue();
+        }
+
+        @Override
+        public JavaConstant getReceiver() {
+            return tool.getReceiver();
+        }
+
+        @Override
+        public Object getReason() {
+            return tool.getReason();
+        }
+
+        @Override
+        public T foldConstant(JavaConstant ret) {
+            return tool.foldConstant(ret);
+        }
+
+        @Override
+        public T foldStableArray(JavaConstant ret, int stableDimensions, boolean isDefaultStable) {
+            return tool.foldConstant(ret);
+        }
+    }
+
     /**
-     * Whether patching a pre-initialized context can change {@code field} of {@code receiver}: its
-     * holder is not an AST node, and is either a language class or one of the
-     * {@link #PATCHED_POLYGLOT_CLASSES}.
+     * How patching a pre-initialized context can affect the mutable instance {@code field} of
+     * {@code receiver}. Fields of AST nodes and of the Truffle framework are unchanged, except for
+     * the {@link #PATCHED_POLYGLOT_CLASSES}, which patching updates, and the single-context
+     * constants, which it can change. Fields of language classes can change.
      */
-    private boolean isPatchable(ResolvedJavaField field, JavaConstant receiver) {
+    private PatchState patchState(ResolvedJavaField field, JavaConstant receiver) {
         if (receiver == null || receiver.isNull()) {
-            return false;
+            return PatchState.UNCHANGED;
         }
         ResolvedJavaType type = metaAccess.lookupJavaType(receiver);
         if (type == null || nodeType.isAssignableFrom(type)) {
-            return false;
+            return PatchState.UNCHANGED;
+        }
+        if (field.equals(weakAssumedValueProfile)) {
+            return PatchState.VERIFIED;
         }
         String holder = field.getDeclaringClass().toJavaName();
         if (holder.startsWith("com.oracle.truffle.polyglot.")) {
-            return PATCHED_POLYGLOT_CLASSES.contains(holder);
+            return PATCHED_POLYGLOT_CLASSES.contains(holder) ? PatchState.UPDATED : PatchState.UNCHANGED;
         }
-        return !(holder.startsWith("com.oracle.truffle.api.") || holder.startsWith("com.oracle.truffle.runtime.") || holder.startsWith("com.oracle.truffle.object."));
+        boolean framework = holder.startsWith("com.oracle.truffle.api.") || holder.startsWith("com.oracle.truffle.runtime.") || holder.startsWith("com.oracle.truffle.object.");
+        return framework ? PatchState.UNCHANGED : PatchState.VERIFIED;
     }
 
     /**
      * The classes of the polyglot implementation whose mutable state patching a context updates:
      * the context, its language contexts, configuration and threads, its limits, the engine (whose
-     * options and host language are patched), and the single-context constants. The structure that
-     * context lookups fold, such as sharing layers and language instances, is never patched.
+     * options and host language are patched). The structure that context lookups fold, such as
+     * sharing layers and language instances, is never patched.
      */
     private static final Set<String> PATCHED_POLYGLOT_CLASSES = Set.of(
                     "com.oracle.truffle.polyglot.PolyglotContextImpl",
@@ -137,8 +287,7 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
                     "com.oracle.truffle.polyglot.PolyglotContextConfig",
                     "com.oracle.truffle.polyglot.PolyglotThreadInfo",
                     "com.oracle.truffle.polyglot.PolyglotLimits",
-                    "com.oracle.truffle.polyglot.PolyglotEngineImpl",
-                    "com.oracle.truffle.polyglot.WeakAssumedValue");
+                    "com.oracle.truffle.polyglot.PolyglotEngineImpl");
 
     @Override
     public boolean maybeFinal(ResolvedJavaField field) {
