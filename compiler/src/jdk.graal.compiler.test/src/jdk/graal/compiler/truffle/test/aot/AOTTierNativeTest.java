@@ -35,7 +35,9 @@ import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.guest
 import static jdk.graal.compiler.truffle.test.aot.AOTTierNativeTestSupport.unlinks;
 
 import java.io.ByteArrayOutputStream;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -48,6 +50,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.oracle.truffle.api.ThreadLocalAction;
 import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
@@ -455,6 +458,101 @@ public class AOTTierNativeTest {
         }
         assertTrue(log(), log().contains("[aot] enter spin"));
         assertTrue(log(), log().contains("[aot] unlink spin: aot-spin-test"));
+    }
+
+    /**
+     * Invalidation deoptimizes an activation of AOT code whose thread is stopped at a Truffle
+     * safepoint poll in it: a thread-local action holds the thread of "pollspin" at the poll in its
+     * loop while the assumption the code folds is invalidated.
+     */
+    @Test
+    public void invalidationDeoptimizesActivationParkedAtTruffleSafepoint() throws InterruptedException {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value spin = context.parse(fixture("pollspin", "pollspin"));
+            AtomicReference<Object> result = new AtomicReference<>();
+            Thread spinner = new Thread(() -> {
+                try {
+                    result.set(spin.execute().asLong());
+                } catch (Throwable t) {
+                    result.set(t);
+                }
+            });
+            spinner.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (!AOTTestLanguage.PollSpinRoot.started && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            assertTrue("pollspin started", AOTTestLanguage.PollSpinRoot.started);
+            assertTrue("pollspin runs in AOT code", AOTTestLanguage.PollSpinRoot.startedInCompiledCode);
+            CountDownLatch parked = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            context.enter();
+            try {
+                AOTTestLanguage.submitThreadLocal(spinner, new ThreadLocalAction(false, false) {
+                    @Override
+                    protected void perform(Access access) {
+                        parked.countDown();
+                        try {
+                            release.await(30, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            throw new AssertionError(e);
+                        }
+                    }
+                });
+            } finally {
+                context.leave();
+            }
+            try {
+                assertTrue("pollspin stopped at the safepoint poll", parked.await(30, TimeUnit.SECONDS));
+                AOTTestLanguage.invalidatePollStable();
+            } finally {
+                release.countDown();
+            }
+            spinner.join(TimeUnit.SECONDS.toMillis(30));
+            /* Not deoptimized: end the loop, so that the test fails rather than hangs. */
+            AOTTestLanguage.PollSpinRoot.stop = true;
+            spinner.join(TimeUnit.SECONDS.toMillis(30));
+            assertEquals("result of pollspin (-1: deoptimized; otherwise iterations until stopped)", -1L, result.get());
+        }
+        assertEquals(log(), 1, enters(log(), "pollspin"));
+        assertEquals(log(), 1, unlinks(log(), "pollspin", "aot-poll-test"));
+    }
+
+    /**
+     * Interrupting a context stops its guest code running in a loop of AOT tier code: the code
+     * polls Truffle safepoints like runtime compiled code.
+     */
+    @Test
+    public void interruptStopsLoopInAOTCode() throws Exception {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value loop = context.parse(fixture("loop", "loop"));
+            AtomicReference<Object> result = new AtomicReference<>();
+            Thread looper = new Thread(() -> {
+                try {
+                    result.set(loop.execute().asLong());
+                } catch (Throwable t) {
+                    result.set(t);
+                }
+            });
+            looper.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (!AOTTestLanguage.LoopRoot.started && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            assertTrue("loop started", AOTTestLanguage.LoopRoot.started);
+            assertTrue("loop runs in AOT code", AOTTestLanguage.LoopRoot.startedInCompiledCode);
+            try {
+                context.interrupt(Duration.ofSeconds(30));
+            } finally {
+                /* Not interrupted: end the loop, so that the test fails rather than hangs. */
+                AOTTestLanguage.LoopRoot.stop = true;
+                looper.join(TimeUnit.SECONDS.toMillis(30));
+            }
+            assertTrue(String.valueOf(result.get()), result.get() instanceof PolyglotException e && e.isInterrupted());
+        }
+        assertEquals(log(), 1, enters(log(), "loop"));
     }
 
 }

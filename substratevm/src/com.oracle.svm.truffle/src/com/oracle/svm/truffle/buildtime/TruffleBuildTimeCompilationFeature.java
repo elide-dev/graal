@@ -82,12 +82,14 @@ import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.graph.Node;
+import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.GraphDecoder;
 import jdk.graal.compiler.nodes.GraphEncoder;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import jdk.graal.compiler.phases.common.GuardLoweringPhase;
+import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.truffle.EconomyPartialEvaluatorConfiguration;
 import jdk.graal.compiler.truffle.KnownTruffleTypes;
 import jdk.graal.compiler.truffle.PartialEvaluatorConfiguration;
@@ -99,6 +101,7 @@ import jdk.graal.compiler.truffle.nodes.SpeculativeExceptionAnchorNode;
 import jdk.graal.compiler.truffle.nodes.TruffleAssumption;
 import jdk.graal.compiler.truffle.nodes.TruffleSafepointNode;
 import jdk.graal.compiler.truffle.nodes.frame.ForceMaterializeNode;
+import jdk.graal.compiler.truffle.phases.TruffleSafepointInsertionPhase;
 import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.MetaAccessProvider;
@@ -306,6 +309,15 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             }
             removeSpeculativeExceptionAnchors(graph);
             new GuardLoweringPhase().apply(graph, providers);
+            /*
+             * Partial evaluation drops the explicit TruffleSafepoint.poll calls: Truffle
+             * compilations insert their polls in the mid tier instead (TruffleCompilerPhases), at
+             * loops, returns and calls. The hosted compilation of the AOT tier code does not run
+             * the Truffle tiers, so the polls are inserted here, while the graph is still the
+             * Truffle compilation of the shadow. Without them, thread-local actions, cancellation
+             * and interrupts never reach AOT tier code.
+             */
+            insertTruffleSafepoints(graph);
             int nodes = graph.getNodeCount();
             if (budget > 0 && nodes > budget) {
                 unlink(method, rootName, "over budget (" + nodes + " > " + budget + ")");
@@ -332,6 +344,24 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             skip(name, t);
             unlink(method, name, null);
             return null;
+        }
+    }
+
+    private void insertTruffleSafepoints(StructuredGraph graph) {
+        Providers peProviders = compiler.partialEvaluator().getProviders();
+        new TruffleSafepointInsertionPhase(compiler.partialEvaluator().getTypes(), peProviders).apply(graph);
+        /*
+         * The phase types the location of a poll as a RootNode (exact), while the analysis expects
+         * an object constant to have the exact stamp of its value.
+         */
+        for (TruffleSafepointNode poll : graph.getNodes().filter(TruffleSafepointNode.class)) {
+            ConstantNode location = poll.location();
+            if (location.isAlive()) {
+                ConstantNode exact = ConstantNode.forConstant(location.asJavaConstant(), peProviders.getMetaAccess(), graph);
+                if (exact != location) {
+                    location.replaceAtUsagesAndDelete(exact);
+                }
+            }
         }
     }
 
