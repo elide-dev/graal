@@ -59,6 +59,7 @@ import static com.oracle.truffle.api.strings.TStringGuards.isValid;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.Fallback;
@@ -215,6 +216,7 @@ public final class TruffleStringIterator {
         }
     }
 
+    @GenerateAOT
     abstract static class InternalNextNode extends AbstractInternalNode {
 
         final int execute(Node node, TruffleStringIterator it, Encoding encoding) {
