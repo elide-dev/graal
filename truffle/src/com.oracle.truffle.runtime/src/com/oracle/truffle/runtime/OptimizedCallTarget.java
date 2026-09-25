@@ -1242,17 +1242,36 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      */
     public final void unlinkAOT(CharSequence reason) {
         CompilerAsserts.neverPartOfCompilation();
+        if (unlinkAOTQuietly(reason)) {
+            traceUnlinkAOT(reason);
+        }
+    }
+
+    /**
+     * Like {@link #unlinkAOT(CharSequence)}, but without tracing, for callers that must not log,
+     * e.g., a VM operation at a safepoint, where no synchronization is allowed. Returns whether the
+     * code was linked until now, in which case the caller traces with
+     * {@link #traceUnlinkAOT(CharSequence)} once it can.
+     */
+    public final boolean unlinkAOTQuietly(CharSequence reason) {
         if (aotCode == null) {
             // Fast path for calls that race past the threshold after the code was unlinked.
-            return;
+            return false;
         }
         AOTCode code = AOT_CODE_UPDATER.getAndSet(this, null);
         if (code != null) {
             code.unlink(reason);
-            if (engine.traceAOT) {
-                String name = rootNode.getName();
-                log("[aot] unlink " + (name != null ? name : rootNode.toString()) + ": " + reason);
-            }
+            return true;
+        }
+        return false;
+    }
+
+    /** Traces that {@link #unlinkAOTQuietly(CharSequence)} unlinked the code. */
+    public final void traceUnlinkAOT(CharSequence reason) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (engine.traceAOT) {
+            String name = rootNode.getName();
+            log("[aot] unlink " + (name != null ? name : rootNode.toString()) + ": " + reason);
         }
     }
 
