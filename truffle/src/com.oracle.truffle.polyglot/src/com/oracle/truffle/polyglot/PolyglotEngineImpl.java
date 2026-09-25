@@ -254,6 +254,13 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
     /** Parse results of build-time sources; strong so they survive into the image heap. */
     final List<CallTarget> preinitializedCallTargets = new ArrayList<>();
 
+    /**
+     * The build-time sources of {@link #preinitializedCallTargets}. The source cache references
+     * its keys weakly, so without these, the entries would be dropped and parsing an equal source
+     * at run time would not find the pre-initialized call targets.
+     */
+    final List<Source> preinitializedSources = new ArrayList<>();
+
     private final ReferenceQueue<Source> deadSourcesQueue = new ReferenceQueue<>();
 
     private boolean runtimeInitialized;

@@ -1213,7 +1213,8 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         if (code != null) {
             code.unlink(reason);
             if (engine.traceAOT) {
-                log("[aot] unlink " + this + ": " + reason);
+                String name = rootNode.getName();
+                log("[aot] unlink " + (name != null ? name : rootNode.toString()) + ": " + reason);
             }
         }
     }
