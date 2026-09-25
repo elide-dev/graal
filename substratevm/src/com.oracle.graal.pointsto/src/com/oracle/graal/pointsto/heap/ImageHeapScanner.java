@@ -134,6 +134,14 @@ public abstract class ImageHeapScanner {
         this.sealed = true;
     }
 
+    /**
+     * Whether the shadow heap is sealed: it no longer changes, and the image heap is written from
+     * it.
+     */
+    public boolean isSealed() {
+        return sealed;
+    }
+
     public void scanEmbeddedRoot(JavaConstant root, BytecodePosition position) {
         if (isNonNullObjectConstant(root)) {
             EmbeddedRootScan reason = new EmbeddedRootScan(position, root);
