@@ -568,6 +568,9 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
 
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
     public final Object callIndirect(Node location, Object... args) {
+        if (aotShadow) {
+            return callSourceOfAOTShadow(location, args);
+        }
         /*
          * Indirect calls should not invalidate existing compilations of the callee, and the callee
          * should still be able to use profiled arguments until an incompatible argument is passed.
@@ -590,6 +593,9 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
     public final Object callDirect(Node location, Object... args) {
         CompilerAsserts.partialEvaluationConstant(this);
+        if (aotShadow) {
+            return callSourceOfAOTShadow(location, args);
+        }
         try {
             profileArguments(args);
             Object result = doInvoke(args);
@@ -601,6 +607,21 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
             // this is needed to keep the values from being cleared as non-live locals
             Reference.reachabilityFence(location);
         }
+    }
+
+    /**
+     * A call to an AOT shadow, e.g., by a root that calls itself through {@code getCallTarget()} in
+     * the shadow's AST, is a call to the live target: a shadow is never compiled or linked itself,
+     * it only provides the AST of the live target's AOT tier code. The call goes through the live
+     * target's own entry, so that the live target profiles its arguments before any of its
+     * compiled code can rely on its argument profile. {@link #aotShadow} is a PE constant, so this
+     * folds away for all other constant targets.
+     * <p>
+     * Calls inlined by partial evaluation ({@link #callInlined}) are not redirected: they run the
+     * shadow's AST as part of the caller's code, and never enter the live target's code.
+     */
+    private Object callSourceOfAOTShadow(Node location, Object[] args) {
+        return sourceCallTarget.callIndirect(location, args);
     }
 
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
