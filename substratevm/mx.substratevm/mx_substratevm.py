@@ -619,15 +619,16 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
         '-Dpolyglot.image-build-time.PreinitializeSources=' + sources,
         '-Dpolyglot.image-build-time.AOTCompile=true',
-        # Invalidates an assumption of the "buildinval" root after it was compiled, and one of "lateinval" after the image
-        # heap snapshot was sealed.
-        '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
+        # AOTTestBuildTimeInvalidationFeature invalidates an assumption of the "buildinval" root after it was compiled, and
+        # one of "lateinval" after the image heap snapshot was sealed. AOTTestPreinitializedSourcesFeature registers the
+        # "add7" source with a MIME type (org.graalvm.polyglot.PreinitializedSources).
+        '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature,jdk.graal.compiler.truffle.test.aot.AOTTestPreinitializedSourcesFeature',
     ]
     # The final state of each root in the build summary, which has no other roots: all fixtures are compiled, except these.
     # "call", "throwcall", "throwinval", "typedcall" and "callapi" also create the roots "callee", "thrower",
     # "throwinvalcallee", "typedcallee" and "callapithrower". The engine's
     # RootNode.Constant root has no guest language, so it is not in the summary.
-    expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee', 'typedcallee', 'callapithrower']}
+    expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee', 'typedcallee', 'callapithrower', 'add7']}
     expected_summary.update({
         'refuse': 'skipped root refused AOT (cloneForAOT or prepareForAOT)',
         'callee': 'skipped executed at build time',

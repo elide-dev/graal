@@ -169,6 +169,22 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * "add7" was registered with a MIME type by {@link AOTTestPreinitializedSourcesFeature}
+     * (finding I5): a source with the same characters and name but no MIME type is not equal, so it
+     * is parsed again and has no AOT code; an equal source runs the AOT code from its first call.
+     */
+    @Test
+    public void registeredSourceWithMimeTypeEntersAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            assertEquals(9, context.parse(Source.newBuilder(AOTTestLanguage.ID, "add:7", "add7.aotm").buildLiteral()).execute(2).asInt());
+            assertEquals(log(), 0, enters(log(), "add7"));
+            assertEquals(9, context.parse(AOTTierNativeTestSupport.registeredAdd7()).execute(2).asInt());
+        }
+        assertEquals(log(), 1, enters(log(), "add7"));
+    }
+
+    /**
      * "recurse" calls itself through {@code getCallTarget()}, which in the compiled shadow is the
      * shadow target: such calls must be dispatched to the live target, i.e., to its AOT code. So all
      * six calls of {@code recurse(5)} run compiled; if the recursive calls ran the shadow in the

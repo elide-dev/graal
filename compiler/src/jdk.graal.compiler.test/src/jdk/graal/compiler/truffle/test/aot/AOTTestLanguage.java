@@ -86,11 +86,15 @@ import com.oracle.truffle.api.source.SourceSection;
  * "assumeloop" ({@link AssumeLoopRoot}), "jitstatic:a|b" ({@link StaticAssumeRoot}), "jitfield:a|b"
  * ({@link FieldAssumeRoot}), "patchprobe" ({@link ConstantRoot}) and "throwinval" ({@link ThrowAssumeRoot}).
  */
-@TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
+@TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED, //
+                characterMimeTypes = {AOTTestLanguage.MIME_TYPE, AOTTestLanguage.MODULE_MIME_TYPE}, defaultMimeType = AOTTestLanguage.MIME_TYPE)
 @ProvidedTags(StandardTags.StatementTag.class)
 public final class AOTTestLanguage extends TruffleLanguage<Object> {
     /* Not "AOTTestLanguage": that id is taken by the AOTTutorial language in truffle-test. */
     public static final String ID = "AOTTierTestLanguage";
+    public static final String MIME_TYPE = "application/x-aottier";
+    /** The MIME type of the source {@link AOTTestPreinitializedSourcesFeature} registers. */
+    public static final String MODULE_MIME_TYPE = "application/x-aottier-module";
 
     private static final LanguageReference<AOTTestLanguage> REFERENCE = LanguageReference.create(AOTTestLanguage.class);
     private static final ContextReference<Object> CONTEXT = ContextReference.create(AOTTestLanguage.class);

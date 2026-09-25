@@ -5,6 +5,7 @@ This changelog summarizes major changes between GraalVM SDK versions. The main f
 ## Version 25.4
 * GR-63447: Added `HostAccess.Builder#allowPublicAccess(Predicate<Member>)` to selectively expose public host members without explicitly naming them upfront.
 * GR-72910: Added `Feature.DuringSetupAccess#registerBuildTimeBootstrapIndy` and `Feature.DuringSetupAccess#registerBuildTimeBootstrapCondy`, allowing frameworks to register invokedynamic and constant-dynamic bootstrap methods for execution at image build time.
+* Added `PreinitializedSources.register(Source...)` to register sources that context pre-initialization parses while a native image is built, e.g., from `Feature.duringSetup`. A context of the image that parses an equal source uses the pre-initialized call target and, with the Truffle AOT tier, its build-time compiled code. Unlike the `polyglot.image-build-time.PreinitializeSources` system property, a registered source can carry a MIME type, path or URI.
 
 ## Version 25.3.4
 * GR-76904: Isolated polyglot contexts now warn when host access is enabled without host method scoping. The warning can be disabled with the `engine.WarnMethodScoping=false` option.

@@ -460,6 +460,14 @@ public abstract class AbstractPolyglotImpl {
 
     public abstract void resetPreInitializedEngine();
 
+    /**
+     * Registers the source {@code sourceReceiver} to be parsed by context pre-initialization. See
+     * {@code org.graalvm.polyglot.PreinitializedSources}.
+     */
+    public void registerPreinitializedSource(Object sourceReceiver) {
+        throw new UnsupportedOperationException("Context pre-initialization is not supported by this polyglot implementation.");
+    }
+
     public abstract Object buildSource(String language, Object origin, URI uri, String name, String mimeType, Object content, boolean interactive, boolean internal, boolean cached, Charset encoding,
                     URL url,
                     String path, Map<String, String> options)
