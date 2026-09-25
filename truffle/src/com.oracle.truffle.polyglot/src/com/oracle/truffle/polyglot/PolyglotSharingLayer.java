@@ -216,6 +216,17 @@ final class PolyglotSharingLayer {
             }
         } else {
             // layer was used before and is sharable
+            if (s.instances[PolyglotEngineImpl.HOST_LANGUAGE_INDEX] == null) {
+                /*
+                 * The layer of a context pre-initialized with PreInitContextHostLanguage has no
+                 * host instance until that context is patched, which another thread may be doing
+                 * right now: the layer cannot be shared before.
+                 */
+                if (engine.getEngineOptionValues().get(PolyglotEngineOptions.TraceCodeSharing)) {
+                    traceClaimLayer(false, s, context, requestingLanguages, s.previousLanguageOptions);
+                }
+                return false;
+            }
             previousLanguageOptions = s.previousLanguageOptions;
 
             if (!isContextPolicyCompatible(s.contextPolicy, newPolicy)) {
@@ -330,14 +341,7 @@ final class PolyglotSharingLayer {
             return null;
         }
 
-        Set<PolyglotLanguage> usedLanguages = new LinkedHashSet<>();
-        for (PolyglotLanguageInstance instance : s.instances) {
-            if (instance != null && !instance.language.isHost()) {
-                usedLanguages.add(instance.language);
-            }
-        }
-
-        Map<PolyglotLanguage, OptionValuesImpl> newLanguageOptions = collectLanguageOptions(config, usedLanguages);
+        Map<PolyglotLanguage, OptionValuesImpl> newLanguageOptions = collectUsedLanguageOptions(s, config);
         // we eagerly check options to avoid that patching later on fails.
         if (!areLanguageOptionsCompatible(s, s.previousLanguageOptions, newLanguageOptions)) {
 
@@ -356,6 +360,31 @@ final class PolyglotSharingLayer {
         // a context can only be used once.
         s.preInitializedContext = null;
         return preinitContext;
+    }
+
+    private Map<PolyglotLanguage, OptionValuesImpl> collectUsedLanguageOptions(Shared s, PolyglotContextConfig config) {
+        Set<PolyglotLanguage> usedLanguages = new LinkedHashSet<>();
+        for (PolyglotLanguageInstance instance : s.instances) {
+            if (instance != null && !instance.language.isHost()) {
+                usedLanguages.add(instance.language);
+            }
+        }
+        return collectLanguageOptions(config, usedLanguages);
+    }
+
+    /**
+     * Whether a context with {@code config} may use a context pre-initialized in this layer, if it
+     * is a shared layer: the code of a shared layer is only shared by contexts with compatible
+     * language options, like {@link #loadPreinitializedContext} checks for a context
+     * pre-initialized in the layer itself.
+     */
+    boolean isCompatibleWithPreinitializedContext(PolyglotContextConfig config) {
+        assert Thread.holdsLock(engine.lock);
+        Shared s = this.shared;
+        if (s == null || s.contextPolicy != ContextPolicy.SHARED) {
+            return true;
+        }
+        return areLanguageOptionsCompatible(s, s.previousLanguageOptions, collectUsedLanguageOptions(s, config));
     }
 
     public void freeSharingLayer(PolyglotContextImpl context) {
