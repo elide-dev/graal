@@ -39,6 +39,7 @@ import org.graalvm.polyglot.Context;
 import org.junit.Test;
 
 import com.oracle.truffle.runtime.OptimizedCallTarget;
+import com.oracle.truffle.runtime.OptimizedDirectCallNode;
 
 import jdk.graal.compiler.truffle.test.TestWithPolyglotOptions;
 
@@ -85,6 +86,23 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertFalse(live.wasExecuted());
         live.compile(true);
         assertTrue("live AST must stay uninitialized", ((AOTTestLanguage.AddRoot) live.getRootNode()).isUninitialized());
+    }
+
+    /**
+     * A direct call node for the shadow, e.g., one the shadow's AST creates for its own
+     * {@code getCallTarget()}, calls the live target: a call of a shadow is a call of its live
+     * target. So splitting never clones a shadow, only the live target.
+     */
+    @Test
+    public void directCallNodeForShadowCallsLiveTarget() {
+        OptimizedCallTarget live = parse("add:1");
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        AOTTestLanguage.CallRoot caller = new AOTTestLanguage.CallRoot(AOTTestLanguage.get(), shadow);
+        OptimizedDirectCallNode call = (OptimizedDirectCallNode) caller.call;
+        assertSame(live, call.getCallTarget());
+        assertEquals(3, caller.getCallTarget().call(2));
+        assertTrue(live.wasExecuted());
+        assertFalse(shadow.wasExecuted());
     }
 
     @Test
