@@ -77,8 +77,8 @@ import com.oracle.truffle.api.source.SourceSection;
  * (see {@link SpinRoot}). The other sources are described with their roots: "throwcall"
  * ({@link ThrowCallRoot}), "deopt" ({@link DeoptRoot}), "drecurse" ({@link DirectRecurseRoot}),
  * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot}),
- * "assumeloop" ({@link AssumeLoopRoot}), "jitstatic:a|b" ({@link StaticAssumeRoot}) and "jitfield:a|b"
- * ({@link FieldAssumeRoot}).
+ * "assumeloop" ({@link AssumeLoopRoot}), "jitstatic:a|b" ({@link StaticAssumeRoot}), "jitfield:a|b"
+ * ({@link FieldAssumeRoot}) and "throwinval" ({@link ThrowAssumeRoot}).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
 @ProvidedTags(StandardTags.StatementTag.class)
@@ -134,6 +134,14 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     /** Test hooks: the assumptions of the "jitfield:a" and "jitfield:b" roots, in instance fields. */
     static final Assumption JIT_FIELD_A = Truffle.getRuntime().createAssumption("aot-jit-field-a");
     static final Assumption JIT_FIELD_B = Truffle.getRuntime().createAssumption("aot-jit-field-b");
+
+    /** Test hook: the assumption the "throwinval" root depends on. */
+    static final Assumption THROW_STABLE = Truffle.getRuntime().createAssumption("aot-throw-test");
+
+    /** Invalidates {@link #THROW_STABLE}. */
+    public static void invalidateThrowStable() {
+        THROW_STABLE.invalidate();
+    }
 
     /** Invalidates {@link #POLL_STABLE}. */
     public static void invalidatePollStable() {
@@ -230,6 +238,9 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             /* The callee is not executed: it is compiled at build time too. */
             ThrowRoot callee = new ThrowRoot(language, "thrower", source == null ? null : source.createSection(0, "throw".length()));
             root = new ThrowCallRoot(language, callee.getCallTarget(), section);
+        } else if (trimmed.equals("throwinval")) {
+            ThrowRoot callee = new ThrowRoot(language, "throwinvalcallee", source == null ? null : source.createSection(0, "throw".length()));
+            root = new ThrowAssumeRoot(language, callee.getCallTarget(), THROW_STABLE, section);
         } else if (trimmed.equals("deopt")) {
             root = new DeoptRoot(language, section);
         } else if (trimmed.equals("drecurse")) {
@@ -554,6 +565,52 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "throwcall";
+        }
+    }
+
+    /**
+     * "throwinval": like {@link ThrowCallRoot}, calls a callee "throwinvalcallee" that throws, but
+     * its compiled code depends on {@link #THROW_STABLE}, so invalidating it can deoptimize an
+     * activation while the exception crosses its call site or root.
+     */
+    public static final class ThrowAssumeRoot extends RootNode {
+        private final Assumption assumption;
+        private final SourceSection section;
+        @Child DirectCallNode call;
+
+        ThrowAssumeRoot(TruffleLanguage<?> language, CallTarget callee, Assumption assumption, SourceSection section) {
+            super(language);
+            this.assumption = assumption;
+            this.section = section;
+            this.call = DirectCallNode.create(callee);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            if (!assumption.isValid()) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+            }
+            return call.call(frame.getArguments());
+        }
+
+        @Override
+        public SourceSection getSourceSection() {
+            return section;
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "throwinval";
         }
     }
 

@@ -50,12 +50,14 @@ import com.oracle.svm.core.graal.nodes.LoweredDeadEndNode;
 import com.oracle.svm.core.graal.snippets.DeoptTester;
 import com.oracle.svm.core.graal.stackvalue.StackValueNode;
 import com.oracle.svm.guest.staging.core.heap.RestrictHeapAccess;
+import com.oracle.svm.shared.option.HostedOptionValues;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.HostedUniverse;
 import com.oracle.svm.util.GuestAnnotationAccess;
 
 import jdk.graal.compiler.code.CompilationResult;
+import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.iterators.NodePredicate;
 import jdk.graal.compiler.graph.iterators.NodePredicates;
@@ -435,8 +437,8 @@ public class DeoptimizationUtils {
     /**
      * Registers every frame state of a deopt source's graph, including the states of inlined
      * frames, as a deoptimization entry of the {@link SubstrateCompilationDirectives#DEOPT_TARGET_METHOD}
-     * variant of the frame's method. The entries are kept across
-     * {@link SubstrateCompilationDirectives#resetDeoptEntries()}.
+     * variant of the frame's method. {@link SubstrateCompilationDirectives#resetDeoptEntries()}
+     * registers them again after analysis ({@link #registerDeoptEntriesForDeoptSourceAfterAnalysis}).
      * <p>
      * This does not link the {@code D} variants: it only upgrades the flows graphs of those that
      * are already linked. They must be reachable independently, see the precondition of
@@ -452,7 +454,7 @@ public class DeoptimizationUtils {
                             AnalysisMethod target = ((PointsToAnalysisMethod) deoptEntryMethod).getOrCreateMethodVariant(DEOPT_TARGET_METHOD);
                             SubstrateCompilationDirectives.singleton().recordDeoptSourceTarget(target, aMethod);
                             return target;
-                        });
+                        }, true);
 
         /*
          * If new frame states are found, then redo the type flow.
@@ -464,9 +466,37 @@ public class DeoptimizationUtils {
     }
 
     /**
+     * Registers the entries of the deopt source {@code aMethod} again after analysis, from its
+     * graph as the analysis left it (strengthened), like the runtime compiled methods register
+     * theirs again when they are compiled. A state of the analysis-time graph that the
+     * strengthening removed is in neither the code of the source nor, in general, its deopt
+     * targets.
+     */
+    static void registerDeoptEntriesForDeoptSourceAfterAnalysis(AnalysisMethod aMethod) {
+        DebugContext debug = DebugContext.disabled(HostedOptionValues.singleton().get());
+        StructuredGraph graph = aMethod.decodeAnalyzedGraph(debug, null);
+        if (graph == null) {
+            /* Not analyzed, so not compiled either. */
+            return;
+        }
+        registerDeoptEntries(graph, true, deoptEntryMethod -> {
+            AnalysisMethod target = ((AnalysisMethod) deoptEntryMethod).getMethodVariant(DEOPT_TARGET_METHOD);
+            VMError.guarantee(target != null, "New deopt target method seen after analysis: %s, in deopt source %s", deoptEntryMethod, aMethod);
+            return target;
+        }, true);
+    }
+
+    /**
      * @return the DeoptTarget methods which had new frame registered.
      */
     public static Iterable<ResolvedJavaMethod> registerDeoptEntries(StructuredGraph graph, boolean isRoot, DeoptTargetRetriever deoptRetriever) {
+        return registerDeoptEntries(graph, isRoot, deoptRetriever, false);
+    }
+
+    /**
+     * @param forDeoptSource whether {@code graph} is the graph of a deopt source
+     */
+    private static Iterable<ResolvedJavaMethod> registerDeoptEntries(StructuredGraph graph, boolean isRoot, DeoptTargetRetriever deoptRetriever, boolean forDeoptSource) {
         EconomicSet<ResolvedJavaMethod> changedMethods = EconomicSet.create();
         for (FrameState frameState : graph.getNodes(FrameState.TYPE)) {
             if (frameState.hasExactlyOneUsage()) {
@@ -499,7 +529,7 @@ public class DeoptimizationUtils {
             for (FrameState inlineState = frameState; inlineState != null; inlineState = inlineState.outerFrameState()) {
                 if (inlineState.bci >= 0) {
                     ResolvedJavaMethod method = deoptRetriever.getDeoptTarget(inlineState.getMethod());
-                    if (SubstrateCompilationDirectives.singleton().registerDeoptEntry(inlineState, method)) {
+                    if (SubstrateCompilationDirectives.singleton().registerDeoptEntry(inlineState, method, forDeoptSource)) {
                         changedMethods.add(method);
                     }
                 }
@@ -533,7 +563,7 @@ public class DeoptimizationUtils {
             if (stateDuring != null) {
                 assert stateDuring.getStackState() == FrameState.StackState.AfterPop : stateDuring;
                 ResolvedJavaMethod method = deoptRetriever.getDeoptTarget(stateDuring.getMethod());
-                if (SubstrateCompilationDirectives.singleton().registerDeoptEntry(stateDuring, method)) {
+                if (SubstrateCompilationDirectives.singleton().registerDeoptEntry(stateDuring, method, forDeoptSource)) {
                     changedMethods.add(method);
                 }
             }

@@ -528,13 +528,16 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call'),
                        ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin'), ('add5', 'add:5'), ('add6', 'add:6'),
                        ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
-                       ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop')]:
+                       ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
         fixtures[name] = path
     sources = ','.join('AOTTierTestLanguage:' + p for p in fixtures.values())
-    build_args = extra_build_args + svm_experimental_options(['-H:-SupportCompileInIsolates', '-H:+TruffleAOTPrintSummary']) + _truffle_test_image_args_without_preinitialization() + [
+    image_options = ['-H:-SupportCompileInIsolates', '-H:+TruffleAOTPrintSummary',
+                     # Fails the build if a deoptimization target lacks an entry point that AOT tier code needs.
+                     '-H:+VerifyDeoptSourceEntryPoints']
+    build_args = extra_build_args + svm_experimental_options(image_options) + _truffle_test_image_args_without_preinitialization() + [
         '-Dpolyglot.image-build-time.PreinitializeContexts=AOTTierTestLanguage',
         '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
         '-Dpolyglot.image-build-time.PreinitializeSources=' + sources,

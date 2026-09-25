@@ -141,6 +141,10 @@ public abstract class NativeImageCodeCache {
     public static class Options {
         @Option(help = "Verify that all possible deoptimization entry points have been properly compiled and registered in the metadata")//
         public static final HostedOptionKey<Boolean> VerifyDeoptimizationEntryPoints = new HostedOptionKey<>(false);
+
+        @Option(help = "Verify that the deoptimization entry points needed by the frames of deoptimization sources (image code that can deoptimize, e.g., Truffle AOT tier code) " +
+                        "have been properly compiled and registered in the metadata. Implied by VerifyDeoptimizationEntryPoints.")//
+        public static final HostedOptionKey<Boolean> VerifyDeoptSourceEntryPoints = new HostedOptionKey<>(false);
     }
 
     private int codeAreaSize = -1;
@@ -642,7 +646,9 @@ public abstract class NativeImageCodeCache {
              * Missing deoptimization entry points lead to hard-to-debug transient failures, so we
              * want the verification on all the time and not just when assertions are on.
              */
-            verifyDeoptEntries(imageCodeInfo, hostedConstantAccess);
+            verifyDeoptEntries(imageCodeInfo, hostedConstantAccess, SubstrateCompilationDirectives.singleton().getDeoptEntries());
+        } else if (Options.VerifyDeoptSourceEntryPoints.getValue()) {
+            verifyDeoptEntries(imageCodeInfo, hostedConstantAccess, SubstrateCompilationDirectives.singleton().getDeoptSourceEntries());
         }
 
         assert verifyMethods(debug, hUniverse, codeInfoEncoder, imageCodeInfo, hostedConstantAccess);
@@ -668,9 +674,9 @@ public abstract class NativeImageCodeCache {
         codeInfoEncoder.addMethod(method, compilation, method.getCodeAddressOffset(), codeSizeFor(method));
     }
 
-    private void verifyDeoptEntries(CodeInfo codeInfo, ConstantAccess constantAccess) {
+    private void verifyDeoptEntries(CodeInfo codeInfo, ConstantAccess constantAccess, Map<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> entries) {
         boolean hasError = false;
-        List<Entry<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>>> deoptEntries = new ArrayList<>(SubstrateCompilationDirectives.singleton().getDeoptEntries().entrySet());
+        List<Entry<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>>> deoptEntries = new ArrayList<>(entries.entrySet());
         deoptEntries.sort(Comparator.comparing(e -> e.getKey().format("%H.%n(%p)")));
 
         for (Entry<AnalysisMethod, Map<Long, DeoptSourceFrameInfo>> entry : deoptEntries) {
