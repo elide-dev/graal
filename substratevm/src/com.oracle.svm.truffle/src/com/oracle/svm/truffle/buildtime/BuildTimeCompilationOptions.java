@@ -41,8 +41,8 @@ public final class BuildTimeCompilationOptions {
      * Also enables {@code VerifyDeoptSourceEntryPoints}: a failed verification fails the build,
      * which only this option allows the AOT tier to do.
      */
-    @Option(help = "Fail the image build if a root of the pre-initialized engine is not compiled at build time, unless polyglot.image-build-time.AOTCompileFilter excludes it. " +
-                    "Enables VerifyDeoptSourceEntryPoints.")//
+    @Option(help = "Fail the image build if a root of the pre-initialized engine is not compiled at build time, unless polyglot.image-build-time.AOTCompileFilter excludes it " +
+                    "or it was executed at build time. Enables VerifyDeoptSourceEntryPoints.")//
     public static final HostedOptionKey<Boolean> TruffleAOTFailOnError = new HostedOptionKey<>(false) {
         @Override
         protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, Boolean oldValue, Boolean newValue) {

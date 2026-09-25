@@ -60,6 +60,18 @@ public final class BuildTimeCompilationSupport {
     public record Rejection(String rootName, String reason) {
     }
 
+    /**
+     * The {@link Rejection#reason() reason} of a root that
+     * {@code polyglot.image-build-time.AOTCompileFilter} excludes.
+     */
+    public static final String FILTERED = "filtered";
+
+    /**
+     * The {@link Rejection#reason() reason} of a root that was executed while the engine was
+     * pre-initialized: its live AST is specialized already, so it is not eligible by design.
+     */
+    public static final String EXECUTED_AT_BUILD_TIME = "executed at build time";
+
     public record Selection(List<Pair> selected, List<Rejection> rejected) {
     }
 
@@ -88,9 +100,9 @@ public final class BuildTimeCompilationSupport {
             }
             String name = root.getName() == null ? root.toString() : root.getName();
             if (filter != null && !filter.matcher(name).matches()) {
-                rejected.add(new Rejection(name, "filtered"));
+                rejected.add(new Rejection(name, FILTERED));
             } else if (target.wasExecuted()) {
-                rejected.add(new Rejection(name, "executed at build time"));
+                rejected.add(new Rejection(name, EXECUTED_AT_BUILD_TIME));
             } else {
                 OptimizedCallTarget shadow = target.createAOTShadow();
                 if (shadow == null) {
