@@ -642,10 +642,13 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         mx.abort('The Truffle AOT tier test image failed to build')
     errors = _check_truffle_aot_summary(build_output, expected_summary)
 
-    # A root that is not compiled fails the build with -H:+TruffleAOTFailOnError: "refuse" refuses AOT.
+    # A root that is not compiled fails the build with -H:+TruffleAOTFailOnError: "refuse" refuses AOT. Roots executed at
+    # build time do not.
     fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError'])
     fail_output = []
     expected_error = "Truffle AOT tier: root 'refuse' was not compiled: root refused AOT (cloneForAOT or prepareForAOT)"
+    # "callee" was executed at build time: not eligible by design, so not an error.
+    unexpected_error = "Truffle AOT tier: root 'callee' was not compiled"
     try:
         native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(fail_args),
                         native_image_wrapper=_capturing_image_build(fail_output))
@@ -653,6 +656,8 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         mx.log('TruffleAOTFailOnError failed the build as expected')
         if not any(expected_error in line for line in fail_output):
             errors.append(f'expected the build output of -H:+TruffleAOTFailOnError to contain: {expected_error}')
+        if any(unexpected_error in line for line in fail_output):
+            errors.append(f'expected the build output of -H:+TruffleAOTFailOnError not to contain: {unexpected_error}')
     else:
         errors.append('expected -H:+TruffleAOTFailOnError to fail the build because of the refusing root')
     if errors:

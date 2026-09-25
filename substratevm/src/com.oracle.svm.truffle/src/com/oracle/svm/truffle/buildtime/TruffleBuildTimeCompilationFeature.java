@@ -125,8 +125,9 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * (compiled, although an assumption it relies on was invalidated after the image heap snapshot was
  * sealed). The {@linkplain BuildTimeCompilationOptions#TruffleAOTPrintSummary summary} prints one
  * line per root with its final state, and with
- * {@link BuildTimeCompilationOptions#TruffleAOTFailOnError} a skipped root that the filter did not
- * exclude fails the build.
+ * {@link BuildTimeCompilationOptions#TruffleAOTFailOnError} a skipped root fails the build, unless
+ * it is not eligible by design: excluded by the filter, or executed at build time
+ * ({@link #isFailure}).
  */
 @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public final class TruffleBuildTimeCompilationFeature implements InternalFeature {
@@ -160,13 +161,6 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private final List<AOTRoot> roots = new ArrayList<>();
     /** Whether the summary was printed. Guarded by {@code this}. */
     private boolean summaryPrinted;
-
-    /**
-     * The reason of a root that {@code polyglot.image-build-time.AOTCompileFilter} excludes (see
-     * {@link BuildTimeCompilationSupport#selectPreinitialized}): the only skipped root that is not
-     * an error with {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}.
-     */
-    private static final String FILTERED = "filtered";
 
     /**
      * A root of the selection and what became of it. The fields other than {@link #name} and
@@ -342,6 +336,10 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      */
     StructuredGraph partiallyEvaluate(BuildTimeCompiledMethod method, DebugContext debug, AnalysisMethod aMethod, HostedProviders providers) {
         String name = method.root.name;
+        if (isRejected(method.root)) {
+            /* Skipped when it was registered: its live target is not linked. */
+            return null;
+        }
         try {
             StructuredGraph rootGraph = method.buildKitGraph(debug, aMethod, providers, null, profiledPERoot, method.shadow);
             EncodedGraph encodedRoot = GraphEncoder.encodeSingleGraph(rootGraph, AnalysisParsedGraph.HOST_ARCHITECTURE);
@@ -548,8 +546,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             }
         }
         VMError.guarantee(root != null, "AOT tier code of no root: %s", code);
-        if (code.isUnlinked() || root.kept != null) {
-            /* Dropped or kept already, for another of its assumptions. */
+        if (code.isUnlinked() || root.kept != null || root.rejection != null) {
+            /* Dropped or kept already, for another of its assumptions, or skipped. */
             return;
         }
         if (heapScanner.isSealed()) {
@@ -559,9 +557,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
              * assumption valid. That is consistent, so the code is kept.
              */
             root.kept = "assumption invalidated after heap snapshot: " + reason;
-            if (summaryPrinted) {
-                /* Only possible while the image is written or later. */
-                summary(summaryLine(root));
+            if (summaryPrinted && BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
+                /*
+                 * Only possible while the image is written or later. Not a summary line: the
+                 * summary has one line per root, and this one is still compiled in the image.
+                 */
+                LogUtils.info("Truffle AOT tier: kept %s: %s", root.name, root.kept);
             }
             return;
         }
@@ -640,8 +641,9 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     }
 
     /**
-     * With {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}, fails the build if a root that
-     * the filter did not exclude is skipped, listing all of them, after printing the summary.
+     * With {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}, fails the build if a root is
+     * skipped for a reason that {@link #isFailure} counts, listing all of them, after printing the
+     * summary. Roots excluded by the filter or executed at build time do not fail it.
      */
     private void failOnError() {
         if (!BuildTimeCompilationOptions.TruffleAOTFailOnError.getValue()) {
@@ -649,7 +651,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         }
         List<String> failures = new ArrayList<>();
         for (BuildTimeCompilationSupport.Rejection r : rejections()) {
-            if (!FILTERED.equals(r.reason())) {
+            if (isFailure(r)) {
                 failures.add("Truffle AOT tier: root '" + r.rootName() + "' was not compiled: " + r.reason());
             }
         }
@@ -657,6 +659,17 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             printSummary();
             throw UserError.abort(failures);
         }
+    }
+
+    /**
+     * Whether the skipped root {@code r} fails the build with
+     * {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}. Not the roots that are not
+     * eligible by design: those that {@code polyglot.image-build-time.AOTCompileFilter} excludes,
+     * and those executed at build time, whose live AST pre-initialization specialized (see
+     * {@link BuildTimeCompilationSupport#selectPreinitialized}).
+     */
+    private static boolean isFailure(BuildTimeCompilationSupport.Rejection r) {
+        return !BuildTimeCompilationSupport.FILTERED.equals(r.reason()) && !BuildTimeCompilationSupport.EXECUTED_AT_BUILD_TIME.equals(r.reason());
     }
 
     /**
@@ -711,6 +724,10 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         if (root.rejection == null) {
             root.rejection = reason;
         }
+    }
+
+    private synchronized boolean isRejected(AOTRoot root) {
+        return root.rejection != null;
     }
 
     private synchronized void compiled(AOTRoot root, String statistics) {
