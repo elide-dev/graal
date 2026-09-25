@@ -649,6 +649,21 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         mx.abort('The Truffle AOT tier test image failed to build')
     errors = _check_truffle_aot_summary(build_output, expected_summary)
 
+    # Without code sharing, the AOT code belongs to the pre-initialized context itself, which the first context of the
+    # image run adopts and patches ("bound" pre-initialization). "patchstate" reads context state that patching changes.
+    bound_fixtures = {'add1': fixtures['add1'], 'patchstate': os.path.join(tmp, 'patchstate.aot')}
+    with open(bound_fixtures['patchstate'], 'w', encoding='utf-8') as f:
+        f.write('patchstate')
+    bound_args = [a for a in build_args if not a.startswith(('-Dpolyglot.image-build-time.PreinitializeCodeSharing=', '-Dpolyglot.image-build-time.PreinitializeSources=', '--features='))]
+    bound_args += ['-Dpolyglot.image-build-time.PreinitializeSources=' + ','.join('AOTTierTestLanguage:' + p for p in bound_fixtures.values())]
+    bound_output = []
+    try:
+        native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierBoundPreinitNativeTest'] + truffle_args(bound_args) + (run_args or []),
+                        native_image_wrapper=_capturing_image_build(bound_output))
+    except _NativeImageBuildFailed:
+        mx.abort('The Truffle AOT tier test image without code sharing failed to build')
+    errors += _check_truffle_aot_summary(bound_output, {name: 'compiled' for name in bound_fixtures})
+
     # A root that is not compiled fails the build with -H:+TruffleAOTFailOnError: "refuse" refuses AOT. Roots executed at
     # build time do not.
     fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError'])

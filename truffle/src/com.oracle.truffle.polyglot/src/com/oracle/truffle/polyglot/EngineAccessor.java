@@ -2341,32 +2341,44 @@ final class EngineAccessor extends Accessor {
         }
 
         @Override
-        public List<RootNode> getPreinitializedSharedRoots() {
+        public List<RootNode> getPreinitializedRoots() {
             PolyglotEngineImpl engine = PolyglotImpl.getPreInitializedEngine();
             if (engine == null) {
                 return List.of();
             }
+            /*
+             * Without code sharing, the pre-initialized engine is bound: the layer of its context is
+             * the one whose code the context of the image that adopts it uses.
+             */
+            PolyglotContextImpl context = engine.boundEngine ? engine.getPreInitializedContext() : null;
+            PolyglotSharingLayer contextLayer = context == null ? null : context.layer;
             LinkedHashSet<RootNode> roots = new LinkedHashSet<>();
             synchronized (engine.lock) {
                 for (PolyglotSharingLayer layer : engine.sharedLayers) {
-                    if (!layer.isClaimed() || layer.getContextPolicy() != TruffleLanguage.ContextPolicy.SHARED) {
-                        continue;
+                    if (layer.isClaimed() && layer.getContextPolicy() == TruffleLanguage.ContextPolicy.SHARED) {
+                        addLayerRoots(layer, roots);
                     }
-                    forEachLoadedRootNode(layer, root -> {
-                        if (layer.equals(NODES.getSharingLayer(root))) {
-                            roots.add(root);
-                        }
-                    });
+                }
+                if (contextLayer != null && contextLayer.isClaimed()) {
+                    addLayerRoots(contextLayer, roots);
                 }
             }
             for (CallTarget target : engine.preinitializedCallTargets) {
                 RootNode root = ((RootCallTarget) target).getRootNode();
                 PolyglotSharingLayer layer = (PolyglotSharingLayer) NODES.getSharingLayer(root);
-                if (layer != null && layer.isClaimed() && layer.getContextPolicy() == TruffleLanguage.ContextPolicy.SHARED) {
+                if (layer != null && layer.isClaimed() && (layer.getContextPolicy() == TruffleLanguage.ContextPolicy.SHARED || layer.equals(contextLayer))) {
                     roots.add(root);
                 }
             }
             return new ArrayList<>(roots);
+        }
+
+        private void addLayerRoots(PolyglotSharingLayer layer, Set<RootNode> roots) {
+            forEachLoadedRootNode(layer, root -> {
+                if (layer.equals(NODES.getSharingLayer(root))) {
+                    roots.add(root);
+                }
+            });
         }
 
         @Override

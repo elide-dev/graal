@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.Option;
@@ -223,12 +224,38 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      */
     private volatile boolean awaitingPatch;
 
+    /**
+     * Test hook: whether the language was told that it will have several contexts
+     * ({@link #initializeMultipleContexts()}). Without code sharing at build time, the context that
+     * adopts the pre-initialized one must stay single-context.
+     */
+    public static volatile boolean multipleContexts;
+
+    /**
+     * The context: its {@link #patched} state changes when a pre-initialized context is patched, the
+     * way languages update context state then, without invalidating anything. Code compiled at build
+     * time must see the patched value ("patchstate", {@link PatchStateRoot}).
+     */
+    static final class AOTTestContext {
+        Env env;
+        @CompilationFinal boolean patched;
+
+        AOTTestContext(Env env) {
+            this.env = env;
+        }
+    }
+
     @Override
     protected Object createContext(Env env) {
         if (ImageInfo.inImageBuildtimeCode()) {
             awaitingPatch = true;
         }
-        return env;
+        return new AOTTestContext(env);
+    }
+
+    @Override
+    protected void initializeMultipleContexts() {
+        multipleContexts = true;
     }
 
     @Override
@@ -243,6 +270,9 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             }
         }
         awaitingPatch = false;
+        AOTTestContext testContext = (AOTTestContext) context;
+        testContext.env = newEnv;
+        testContext.patched = true;
         return true;
     }
 
@@ -272,7 +302,7 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * entered in it.
      */
     public static void submitThreadLocal(Thread thread, ThreadLocalAction action) {
-        ((Env) CONTEXT.get(null)).submitThreadLocal(new Thread[]{thread}, action);
+        ((AOTTestContext) CONTEXT.get(null)).env.submitThreadLocal(new Thread[]{thread}, action);
     }
 
     /** The language of the current context; the caller must be entered in a context. */
@@ -329,6 +359,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new FieldAssumeRoot(language, trimmed.endsWith("b") ? JIT_FIELD_B : JIT_FIELD_A);
         } else if (trimmed.equals("patchprobe")) {
             root = new ConstantRoot(language, "patchprobe", language.awaitingPatch ? 1 : 0);
+        } else if (trimmed.equals("patchstate")) {
+            root = new PatchStateRoot(language);
         } else if (trimmed.equals("loop")) {
             root = new LoopRoot(language);
         } else if (trimmed.equals("recurse")) {
@@ -1074,6 +1106,33 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * "patchprobe": returns 1 if it was parsed by a language instance that awaits the patch of its
      * pre-initialized context, and 0 otherwise.
      */
+    /** "patchstate": whether its context was patched ({@link AOTTestContext#patched}). */
+    public static final class PatchStateRoot extends RootNode {
+        PatchStateRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return ((AOTTestContext) CONTEXT.get(this)).patched ? "patched" : "unpatched";
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "patchstate";
+        }
+    }
+
     public static final class ConstantRoot extends RootNode {
         private final String name;
         private final int value;

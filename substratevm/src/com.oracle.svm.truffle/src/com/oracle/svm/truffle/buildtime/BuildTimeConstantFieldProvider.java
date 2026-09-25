@@ -24,7 +24,11 @@
  */
 package com.oracle.svm.truffle.buildtime;
 
+import java.util.Set;
+
 import com.oracle.svm.shared.util.VMError;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.core.common.spi.ConstantFieldProvider;
@@ -34,6 +38,7 @@ import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
  * The constant field provider of build-time partial evaluation: that of the Truffle partial
@@ -52,12 +57,24 @@ import jdk.vm.ci.meta.ResolvedJavaField;
  * its type depends on its assumption, and would be unlinked the first time the target returns
  * another type. An unset profile makes compiled code neither cast the result nor profile it, which
  * is always correct.
+ * <p>
+ * Without code sharing ({@link BuildTimeCompilationSupport#isBoundPreinitialization()}), the
+ * compiled call targets belong to the pre-initialized context, whose language contexts are patched
+ * at run time before any of its code runs. Patching can change context state, which the image's JIT
+ * only ever sees patched. So a mutable instance field (not {@code final}) is not folded if patching
+ * can change it ({@link #isPatchable}): a field of a language class other than an AST node, or of
+ * one of the {@linkplain #PATCHED_POLYGLOT_CLASSES polyglot classes} that patching updates,
+ * including the single-context constants ({@code WeakAssumedValue}). The compiled code then reads
+ * the context and its state when it runs.
  */
 final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
     private final ConstantFieldProvider delegate;
     private final ResolvedJavaField exceptionProfile;
     private final ResolvedJavaField returnProfile;
     private final JavaConstant generic;
+    private final boolean bound;
+    private final MetaAccessProvider metaAccess;
+    private final ResolvedJavaType nodeType;
 
     BuildTimeConstantFieldProvider(ConstantFieldProvider delegate, MetaAccessProvider metaAccess, ConstantReflectionProvider constantReflection) {
         this.delegate = delegate;
@@ -69,6 +86,9 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
             throw VMError.shouldNotReachHere(e);
         }
         VMError.guarantee(generic != null && generic.getJavaKind().getStackKind() == JavaKind.Int, "unexpected value of PROFILE_GENERIC: %s", generic);
+        this.bound = BuildTimeCompilationSupport.isBoundPreinitialization();
+        this.metaAccess = metaAccess;
+        this.nodeType = metaAccess.lookupJavaType(Node.class);
     }
 
     @Override
@@ -79,8 +99,46 @@ final class BuildTimeConstantFieldProvider implements ConstantFieldProvider {
         if (field.equals(returnProfile) && !tool.getReceiver().isNull()) {
             return tool.foldConstant(JavaConstant.NULL_POINTER);
         }
+        if (bound && !field.isStatic() && !field.isFinal() && isPatchable(field, tool.getReceiver())) {
+            return null;
+        }
         return delegate.readConstantField(field, tool);
     }
+
+    /**
+     * Whether patching a pre-initialized context can change {@code field} of {@code receiver}: its
+     * holder is not an AST node, and is either a language class or one of the
+     * {@link #PATCHED_POLYGLOT_CLASSES}.
+     */
+    private boolean isPatchable(ResolvedJavaField field, JavaConstant receiver) {
+        if (receiver == null || receiver.isNull()) {
+            return false;
+        }
+        ResolvedJavaType type = metaAccess.lookupJavaType(receiver);
+        if (type == null || nodeType.isAssignableFrom(type)) {
+            return false;
+        }
+        String holder = field.getDeclaringClass().toJavaName();
+        if (holder.startsWith("com.oracle.truffle.polyglot.")) {
+            return PATCHED_POLYGLOT_CLASSES.contains(holder);
+        }
+        return !(holder.startsWith("com.oracle.truffle.api.") || holder.startsWith("com.oracle.truffle.runtime.") || holder.startsWith("com.oracle.truffle.object."));
+    }
+
+    /**
+     * The classes of the polyglot implementation whose mutable state patching a context updates:
+     * the context, its language contexts, configuration and threads, its limits, the engine (whose
+     * options and host language are patched), and the single-context constants. The structure that
+     * context lookups fold, such as sharing layers and language instances, is never patched.
+     */
+    private static final Set<String> PATCHED_POLYGLOT_CLASSES = Set.of(
+                    "com.oracle.truffle.polyglot.PolyglotContextImpl",
+                    "com.oracle.truffle.polyglot.PolyglotLanguageContext",
+                    "com.oracle.truffle.polyglot.PolyglotContextConfig",
+                    "com.oracle.truffle.polyglot.PolyglotThreadInfo",
+                    "com.oracle.truffle.polyglot.PolyglotLimits",
+                    "com.oracle.truffle.polyglot.PolyglotEngineImpl",
+                    "com.oracle.truffle.polyglot.WeakAssumedValue");
 
     @Override
     public boolean maybeFinal(ResolvedJavaField field) {

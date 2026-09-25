@@ -60,8 +60,14 @@ public class BuildTimeSelectionTest {
     }
 
     private static BuildTimeCompilationSupport.Selection preinit(String languageId, String sources, String filter) throws Exception {
+        return preinit(languageId, sources, filter, true);
+    }
+
+    private static BuildTimeCompilationSupport.Selection preinit(String languageId, String sources, String filter, boolean codeSharing) throws Exception {
         System.setProperty("polyglot.image-build-time.PreinitializeContexts", languageId);
-        System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        if (codeSharing) {
+            System.setProperty("polyglot.image-build-time.PreinitializeCodeSharing", "true");
+        }
         System.setProperty("polyglot.image-build-time.PreinitializeSources", sources);
         System.setProperty("polyglot.image-build-time.AOTCompile", "true");
         System.setProperty("polyglot.image-build-time.AOTCompileFilter", filter);
@@ -109,6 +115,21 @@ public class BuildTimeSelectionTest {
         var selection = preinit(files("add:1", "refuse"), "");
         assertEquals(List.of("add1"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
         assertEquals(List.of(new BuildTimeCompilationSupport.Rejection("refuse", "root refused AOT (cloneForAOT or prepareForAOT)")), selection.rejected());
+    }
+
+    /**
+     * Without code sharing, the roots of the pre-initialized context are selected, and its language
+     * stays single-context, so the context that adopts it at run time keeps single-context
+     * compilation.
+     */
+    @Test
+    public void boundPreinitializationSelectsContextRoots() throws Exception {
+        AOTTestLanguage.multipleContexts = false;
+        var selection = preinit(AOTTestLanguage.ID, files("add:1", "refuse"), "", false);
+        assertTrue(BuildTimeCompilationSupport.isBoundPreinitialization());
+        assertEquals(List.of("add1"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
+        assertEquals(List.of(new BuildTimeCompilationSupport.Rejection("refuse", "root refused AOT (cloneForAOT or prepareForAOT)")), selection.rejected());
+        assertFalse("the language of a pre-initialized context without code sharing must stay single-context", AOTTestLanguage.multipleContexts);
     }
 
     @Test
