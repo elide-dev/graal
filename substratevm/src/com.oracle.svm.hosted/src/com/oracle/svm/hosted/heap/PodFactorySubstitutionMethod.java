@@ -36,53 +36,28 @@ import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.HostedProviders;
 import com.oracle.svm.core.deopt.DeoptTest;
-import com.oracle.svm.core.graal.nodes.DeoptEntryBeginNode;
-import com.oracle.svm.core.graal.nodes.DeoptEntryNode;
-import com.oracle.svm.core.graal.nodes.DeoptProxyAnchorNode;
-import com.oracle.svm.core.graal.nodes.LoweredDeadEndNode;
 import com.oracle.svm.core.graal.nodes.NewPodInstanceNode;
 import com.oracle.svm.core.graal.nodes.TestDeoptimizeNode;
 import com.oracle.svm.core.heap.Pod;
 import com.oracle.svm.core.heap.Pod.RuntimeSupport.PodFactory;
 import com.oracle.svm.hosted.annotation.CustomSubstitutionMethod;
+import com.oracle.svm.hosted.code.DeoptSourceGraphKit;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
-import com.oracle.svm.hosted.nodes.DeoptProxyNode;
 import com.oracle.svm.hosted.phases.HostedGraphKit;
-import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.util.GuestAnnotationAccess;
 
 import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.GraalError;
-import jdk.graal.compiler.graph.NodeSourcePosition;
 import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
 import jdk.graal.compiler.nodes.ConstantNode;
-import jdk.graal.compiler.nodes.FixedNode;
-import jdk.graal.compiler.nodes.FixedWithNextNode;
-import jdk.graal.compiler.nodes.FrameState;
-import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.PiNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
-import jdk.graal.compiler.nodes.UnreachableBeginNode;
-import jdk.graal.compiler.nodes.UnwindNode;
 import jdk.graal.compiler.nodes.ValueNode;
-import jdk.graal.compiler.nodes.java.ExceptionObjectNode;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 final class PodFactorySubstitutionMethod extends CustomSubstitutionMethod {
-
-    private static class DeoptInfoProvider {
-        final MethodVariant method;
-
-        DeoptInfoProvider(MethodVariant method) {
-            this.method = method;
-        }
-
-        boolean isDeoptEntry(int bci, FrameState.StackState stackState) {
-            return SubstrateCompilationDirectives.singleton().isDeoptEntry(method, bci, stackState);
-        }
-    }
 
     PodFactorySubstitutionMethod(ResolvedJavaMethod original) {
         super(original);
@@ -101,9 +76,9 @@ final class PodFactorySubstitutionMethod extends CustomSubstitutionMethod {
     @Override
     public StructuredGraph buildGraph(DebugContext debug, AnalysisMethod method, HostedProviders providers, Purpose purpose) {
         HostedGraphKit kit = new HostedGraphKit(debug, providers, method);
-        DeoptInfoProvider deoptInfo = null;
+        DeoptSourceGraphKit.DeoptInfoProvider deoptInfo = null;
         if (SubstrateCompilationDirectives.isDeoptTarget(method)) {
-            deoptInfo = new DeoptInfoProvider(method);
+            deoptInfo = new DeoptSourceGraphKit.DeoptInfoProvider(method);
         }
 
         AnalysisType factoryType = method.getDeclaringClass();
@@ -117,7 +92,7 @@ final class PodFactorySubstitutionMethod extends CustomSubstitutionMethod {
          * allocated instance in a local and load it after each step during which a deopt can occur.
          */
         int instanceLocal = kit.getFrameState().localsSize() - 1; // reserved when generating class
-        int nextDeoptIndex = startMethod(kit, deoptInfo, 0);
+        int nextDeoptIndex = DeoptSourceGraphKit.startMethod(kit, deoptInfo, 0);
         instantiatePod(kit, factoryType, podConcreteType, instanceLocal);
         if (GuestAnnotationAccess.isAnnotationPresent(this, DeoptTest.class)) {
             if (!SubstrateCompilationDirectives.isDeoptTarget(method)) {
@@ -145,23 +120,6 @@ final class PodFactorySubstitutionMethod extends CustomSubstitutionMethod {
         throw new GraalError("Matching constructor not found: %s", getSignature());
     }
 
-    private static boolean shouldInsertDeoptEntry(DeoptInfoProvider deoptInfo, int bci, FrameState.StackState stackState) {
-        if (deoptInfo != null) {
-            return deoptInfo.isDeoptEntry(bci, stackState);
-        }
-        return false;
-    }
-
-    private static int startMethod(HostedGraphKit kit, DeoptInfoProvider deoptInfo, int nextDeoptIndex) {
-        if (deoptInfo != null) {
-            FrameState initialState = kit.getGraph().start().stateAfter();
-            if (shouldInsertDeoptEntry(deoptInfo, initialState.bci, FrameState.StackState.BeforePop)) {
-                return appendDeoptWithExceptionUnwind(kit, initialState, initialState.bci, nextDeoptIndex, DeoptEntryNode.create());
-            }
-        }
-        return nextDeoptIndex;
-    }
-
     private static void instantiatePod(HostedGraphKit kit, AnalysisType factoryType, AnalysisType podConcreteType, int instanceLocal) {
         AnalysisType podType = kit.getMetaAccess().lookupJavaType(Pod.class);
         ValueNode receiver = kit.loadLocal(0, JavaKind.Object);
@@ -177,102 +135,12 @@ final class PodFactorySubstitutionMethod extends CustomSubstitutionMethod {
         return kit.append(PiNode.create(kit.createLoadField(object, field), StampFactory.objectNonNull()));
     }
 
-    private static int invokeConstructor(HostedGraphKit kit, DeoptInfoProvider deoptInfo, int nextDeoptIndex, AnalysisMethod targetCtor, int instanceLocal) {
+    private static int invokeConstructor(HostedGraphKit kit, DeoptSourceGraphKit.DeoptInfoProvider deoptInfo, int nextDeoptIndex, AnalysisMethod targetCtor, int instanceLocal) {
         ValueNode instance = kit.loadLocal(instanceLocal, JavaKind.Object);
         ValueNode[] originalArgs = kit.getInitialArguments().toArray(ValueNode.EMPTY_ARRAY);
         ValueNode[] invokeArgs = Arrays.copyOf(originalArgs, originalArgs.length);
         invokeArgs[0] = instance;
-        return invokeWithDeoptAndExceptionUnwind(kit, deoptInfo, nextDeoptIndex, targetCtor, InvokeKind.Special, invokeArgs);
-    }
-
-    /** @see com.oracle.svm.hosted.phases.SharedGraphBuilderPhase */
-    private static int invokeWithDeoptAndExceptionUnwind(HostedGraphKit kit, DeoptInfoProvider deoptInfo, int initialNextDeoptIndex, AnalysisMethod target, InvokeKind invokeKind,
-                    ValueNode... args) {
-        int bci = kit.bci();
-        InvokeWithExceptionNode invoke = kit.startInvokeWithException(target, invokeKind, kit.getFrameState(), bci, args);
-        invoke.setNodeSourcePosition(NodeSourcePosition.placeholder(kit.getGraph().method(), bci));
-        kit.exceptionPart();
-        ExceptionObjectNode exception = kit.exceptionObject();
-
-        if (deoptInfo == null) {
-            kit.append(new UnwindNode(exception));
-            kit.endInvokeWithException();
-            return initialNextDeoptIndex;
-        }
-
-        int nextDeoptIndex = initialNextDeoptIndex;
-
-        if (shouldInsertDeoptEntry(deoptInfo, bci, FrameState.StackState.Rethrow)) {
-            // Exception during invoke
-
-            var exceptionDeopt = kit.add(DeoptEntryNode.create(invoke.bci()));
-            exceptionDeopt.setStateAfter(exception.stateAfter().duplicate());
-            var exceptionDeoptBegin = kit.add(new DeoptEntryBeginNode());
-            int exceptionDeoptIndex = nextDeoptIndex++;
-            ValueNode exceptionProxy = createDeoptProxy(kit, exceptionDeoptIndex, exceptionDeopt, exception);
-            var unwind = kit.append(new UnwindNode(exceptionProxy));
-            exception.setNext(exceptionDeopt);
-            exceptionDeopt.setNext(exceptionDeoptBegin);
-            exceptionDeoptBegin.setNext(unwind);
-
-            var exceptionDeoptExceptionEdge = kit.add(new UnreachableBeginNode());
-            exceptionDeoptExceptionEdge.setNext(kit.add(new LoweredDeadEndNode()));
-            exceptionDeopt.setExceptionEdge(exceptionDeoptExceptionEdge);
-        } else {
-            kit.append(new UnwindNode(exception));
-        }
-
-        boolean needDeoptEntry = shouldInsertDeoptEntry(deoptInfo, invoke.stateAfter().bci, FrameState.StackState.BeforePop);
-        boolean needDeoptProxy = shouldInsertDeoptEntry(deoptInfo, bci, FrameState.StackState.AfterPop);
-        if (needDeoptEntry || needDeoptProxy) {
-            kit.noExceptionPart();
-            if (needDeoptEntry) {
-                // Deopt entry after invoke without exception
-                nextDeoptIndex = appendDeoptWithExceptionUnwind(kit, invoke.stateAfter(), invoke.stateAfter().bci, nextDeoptIndex, DeoptEntryNode.create(invoke.bci()));
-            } else {
-                // Only a proxy is needed
-                nextDeoptIndex = appendDeoptProxyAnchorNode(kit, invoke.stateAfter(), nextDeoptIndex, invoke.bci());
-            }
-        }
-        kit.endInvokeWithException();
-
-        return nextDeoptIndex;
-    }
-
-    /** @see com.oracle.svm.hosted.phases.SharedGraphBuilderPhase */
-    private static int appendDeoptWithExceptionUnwind(HostedGraphKit kit, FrameState state, int exceptionBci, int nextDeoptIndex, DeoptEntryNode deoptEntryNode) {
-        var entry = kit.add(deoptEntryNode);
-        entry.setStateAfter(state.duplicate());
-        var begin = kit.append(new DeoptEntryBeginNode());
-        ((FixedWithNextNode) begin.predecessor()).setNext(entry);
-        entry.setNext(begin);
-
-        ExceptionObjectNode exception = kit.add(new ExceptionObjectNode(kit.getMetaAccess()));
-        entry.setExceptionEdge(exception);
-        var exState = kit.getFrameState().copy();
-        exState.clearStack();
-        exState.push(JavaKind.Object, exception);
-        exState.setRethrowException(true);
-        exception.setStateAfter(exState.create(exceptionBci, exception));
-        exception.setNext(kit.add(new UnwindNode(exception)));
-
-        // Ensure later nodes see values from potential deoptimization
-        kit.getFrameState().insertProxies(value -> createDeoptProxy(kit, nextDeoptIndex, entry, value));
-        return nextDeoptIndex + 1;
-    }
-
-    /** @see com.oracle.svm.hosted.phases.SharedGraphBuilderPhase */
-    private static int appendDeoptProxyAnchorNode(HostedGraphKit kit, FrameState state, int nextDeoptIndex, int invokeBci) {
-        var anchor = kit.append(new DeoptProxyAnchorNode(invokeBci));
-        anchor.setStateAfter(state.duplicate());
-
-        // Ensure later nodes see values from potential deoptimization
-        kit.getFrameState().insertProxies(value -> createDeoptProxy(kit, nextDeoptIndex, anchor, value));
-        return nextDeoptIndex + 1;
-    }
-
-    private static ValueNode createDeoptProxy(HostedGraphKit kit, int nextDeoptIndex, FixedNode deoptTarget, ValueNode value) {
-        return kit.getGraph().addOrUniqueWithInputs(DeoptProxyNode.create(value, deoptTarget, nextDeoptIndex));
+        return DeoptSourceGraphKit.invokeWithDeoptAndExceptionUnwind(kit, deoptInfo, nextDeoptIndex, targetCtor, InvokeKind.Special, invokeArgs);
     }
 
     private static boolean parameterTypesMatch(AnalysisMethod method, AnalysisMethod ctor) {
