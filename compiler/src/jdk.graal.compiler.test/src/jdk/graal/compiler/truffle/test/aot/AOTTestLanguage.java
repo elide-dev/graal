@@ -75,7 +75,8 @@ import com.oracle.truffle.api.source.SourceSection;
  * callee that is executed while parsing (so, during pre-initialization, it is a live, initialized
  * target); "assume" returns 1 while the assumption {@link #STABLE} is valid, and 2 afterwards;
  * "buildinval" depends on {@link #BUILD_STABLE}, which the test image invalidates during the build
- * ({@link AOTTestBuildTimeInvalidationFeature}); "spin" loops until its assumption is found invalid
+ * ({@link AOTTestBuildTimeInvalidationFeature}); "lateinval" depends on {@link #LATE_STABLE}, which
+ * the test image invalidates after the image heap snapshot was sealed; "spin" loops until its assumption is found invalid
  * (see {@link SpinRoot}). The other sources are described with their roots: "throwcall"
  * ({@link ThrowCallRoot}), "deopt" ({@link DeoptRoot}), "drecurse" ({@link DirectRecurseRoot}),
  * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot}),
@@ -116,6 +117,13 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
      * build after the root was compiled ({@link AOTTestBuildTimeInvalidationFeature}).
      */
     static final Assumption BUILD_STABLE = Truffle.getRuntime().createAssumption("aot-build-test");
+
+    /**
+     * Test hook: the assumption the "lateinval" root depends on, invalidated during the image build
+     * after the image heap snapshot was sealed ({@link AOTTestBuildTimeInvalidationFeature}), so
+     * the image has it valid.
+     */
+    static final Assumption LATE_STABLE = Truffle.getRuntime().createAssumption("aot-late-test");
 
     /** Test hook: the assumption the "spin" root depends on. */
     static final Assumption SPIN_STABLE = Truffle.getRuntime().createAssumption("aot-spin-test");
@@ -168,6 +176,11 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
     /** Invalidates {@link #BUILD_STABLE}. */
     public static void invalidateBuildStable() {
         BUILD_STABLE.invalidate();
+    }
+
+    /** Invalidates {@link #LATE_STABLE}. */
+    public static void invalidateLateStable() {
+        LATE_STABLE.invalidate();
     }
 
     /**
@@ -297,6 +310,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new AssumeRoot(language, "assume", STABLE, 1, 2);
         } else if (trimmed.equals("buildinval")) {
             root = new AssumeRoot(language, "buildinval", BUILD_STABLE, 7, 7);
+        } else if (trimmed.equals("lateinval")) {
+            root = new AssumeRoot(language, "lateinval", LATE_STABLE, 8, 8);
         } else if (trimmed.equals("spin")) {
             root = new SpinRoot(language);
         } else if (trimmed.equals("call")) {

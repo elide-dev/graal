@@ -62,6 +62,8 @@ import jdk.vm.ci.meta.Signature;
  */
 final class BuildTimeCompiledMethod extends NonBytecodeMethod {
     final TruffleBuildTimeCompilationFeature feature;
+    /** The root of the selection this method compiles. */
+    final TruffleBuildTimeCompilationFeature.AOTRoot root;
     final OptimizedCallTarget live;
     final OptimizedCallTarget shadow;
     /** The analysis method of this method; set right after creation. */
@@ -75,9 +77,11 @@ final class BuildTimeCompiledMethod extends NonBytecodeMethod {
      */
     volatile List<Assumptions.Assumption> assumptions = List.of();
 
-    BuildTimeCompiledMethod(TruffleBuildTimeCompilationFeature feature, OptimizedCallTarget live, OptimizedCallTarget shadow, ResolvedJavaType holder, Signature signature, ConstantPool cp) {
+    BuildTimeCompiledMethod(TruffleBuildTimeCompilationFeature feature, TruffleBuildTimeCompilationFeature.AOTRoot root, OptimizedCallTarget live, OptimizedCallTarget shadow,
+                    ResolvedJavaType holder, Signature signature, ConstantPool cp) {
         super("aot_" + live.id + "_" + sanitize(live.getRootNode().getName()), true, holder, signature, cp);
         this.feature = feature;
+        this.root = root;
         this.live = live;
         this.shadow = shadow;
     }

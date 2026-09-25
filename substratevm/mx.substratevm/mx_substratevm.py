@@ -520,15 +520,89 @@ def _truffle_test_image_args_without_preinitialization():
     return ['--exclude-config', '.*/truffle-test.jar', properties_path] + args
 
 
+class _NativeImageBuildFailed(Exception):
+    """An image build of native_unittest failed (see _capturing_image_build)."""
+
+
+def _capturing_image_build(lines):
+    """
+    A native_image_wrapper for native_unittest: the image builds echo their output and also append it to `lines`, line by
+    line, and a failing build raises _NativeImageBuildFailed instead of aborting mx.
+    """
+    def wrap(native_image):
+        def build(args, **kwargs):
+            def collect(line):
+                line = line.rstrip('\r\n')
+                lines.append(line)
+                mx.log(line)
+            image = native_image(args, out=collect, err=collect, nonZeroIsFatal=False, **kwargs)
+            # The image is built into a new directory, so it only exists if this build succeeded.
+            if not exists(image) and not exists(image + '.exe'):
+                raise _NativeImageBuildFailed(image)
+            return image
+        return build
+    return wrap
+
+
+_TRUFFLE_AOT_SUMMARY_PREFIX = '[truffle-aot] '
+
+
+def _check_truffle_aot_summary(output, expected):
+    """
+    Checks the `[truffle-aot]` build summary in the build output `output`: it has one line per root, and for each root
+    of `expected` (root name -> expected line, without the prefix and the root name), the expected line. For a compiled
+    root, the expected line is 'compiled', which matches any compilation statistics. Returns the errors.
+    """
+    compiled = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+$')
+    kept = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+(: .*)$')
+    errors = []
+    lines = {}
+    for line in output:
+        if not line.startswith(_TRUFFLE_AOT_SUMMARY_PREFIX):
+            continue
+        status, _, rest = line[len(_TRUFFLE_AOT_SUMMARY_PREFIX):].partition(' ')
+        name = re.match(r'[^ :]*', rest).group(0)
+        if status not in ('compiled', 'skipped', 'kept') or not name:
+            errors.append(f'unexpected Truffle AOT tier summary line: {line}')
+        elif name in lines:
+            errors.append(f'root {name} is in the Truffle AOT tier summary more than once: {lines[name]} and {line}')
+        else:
+            lines[name] = line
+    for name, expected_line in expected.items():
+        line = lines.get(name)
+        if line is None:
+            errors.append(f'root {name} is not in the Truffle AOT tier summary, expected: {expected_line}')
+            continue
+        status, _, rest = line[len(_TRUFFLE_AOT_SUMMARY_PREFIX):].partition(' ')
+        details = rest[len(name):]
+        expected_status, _, expected_details = expected_line.partition(' ')
+        if expected_status != status:
+            ok = False
+        elif status == 'compiled':
+            ok = compiled.match(details) is not None
+        elif status == 'kept':
+            match = kept.match(details)
+            ok = match is not None and match.group(1) == ': ' + expected_details
+        else:
+            ok = details == ': ' + expected_details
+        if not ok:
+            errors.append(f'root {name}: expected "{expected_line}" in the Truffle AOT tier summary, found: {line}')
+    return errors
+
+
 def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
-    """Builds a test image that compiles pre-initialized Truffle call targets at build time (the AOT tier) and runs AOTTierNativeTest."""
+    """
+    Builds a test image that compiles pre-initialized Truffle call targets at build time (the AOT tier), checks its
+    build summary, and runs the AOT tier native tests. Then checks that -H:+TruffleAOTFailOnError fails the build.
+    """
     extra_build_args = extra_build_args or []
     fixtures = {}
     tmp = tempfile.mkdtemp(prefix='truffle-aot-')
     for name, code in [('add1', 'add:1'), ('add2', 'add:2'), ('add3', 'add:3'), ('refuse', 'refuse'), ('throw', 'throw'), ('recurse', 'recurse'), ('call', 'call'),
                        ('add4', 'add:4'), ('assume', 'assume'), ('buildinval', 'buildinval'), ('spin', 'spin'), ('add5', 'add:5'), ('add6', 'add:6'),
                        ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
-                       ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval')]:
+                       ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval'),
+                       ('lateinval', 'lateinval')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
@@ -542,15 +616,47 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
         '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
         '-Dpolyglot.image-build-time.PreinitializeSources=' + sources,
         '-Dpolyglot.image-build-time.AOTCompile=true',
-        # Invalidates an assumption of the "buildinval" root after it was compiled.
+        # Invalidates an assumption of the "buildinval" root after it was compiled, and one of "lateinval" after the image
+        # heap snapshot was sealed.
         '--features=jdk.graal.compiler.truffle.test.aot.AOTTestBuildTimeInvalidationFeature',
     ]
+    # The final state of each root in the build summary: all fixtures are compiled, except these. "call", "throwcall" and
+    # "throwinval" also create the roots "callee", "thrower" and "throwinvalcallee".
+    expected_summary = {name: 'compiled' for name in list(fixtures) + ['thrower', 'throwinvalcallee']}
+    expected_summary.update({
+        'refuse': 'skipped root refused AOT (cloneForAOT or prepareForAOT)',
+        'callee': 'skipped executed at build time',
+        'buildinval': 'skipped assumption invalidated during build: aot-build-test',
+        'lateinval': 'kept assumption invalidated after heap snapshot: aot-late-test',
+    })
     # Each test class runs in an image run of its own (of the same image): only the first engine of a run that can use the
     # pre-initialized context adopts the pre-initialized engine, and some classes need that engine to have other options.
     test_classes = ['jdk.graal.compiler.truffle.test.aot.' + c for c in ['AOTTierNativeTest', 'AOTTierThresholdOneNativeTest', 'AOTTierConcurrencyNativeTest',
                                                                            'AOTTierDeepRecursionNativeTest', 'AOTTierPreinitRefusedNativeTest',
                                                                            'AOTTierIncompatibleOptionsNativeTest', 'AOTTierBoundEngineNativeTest', 'AOTTierPatchNativeTest']]
-    native_unittest(test_classes + ['--test-classes-per-run', '1'] + truffle_args(build_args) + (run_args or []))
+    build_output = []
+    try:
+        native_unittest(test_classes + ['--test-classes-per-run', '1'] + truffle_args(build_args) + (run_args or []),
+                        native_image_wrapper=_capturing_image_build(build_output))
+    except _NativeImageBuildFailed:
+        mx.abort('The Truffle AOT tier test image failed to build')
+    errors = _check_truffle_aot_summary(build_output, expected_summary)
+
+    # A root that is not compiled fails the build with -H:+TruffleAOTFailOnError: "refuse" refuses AOT.
+    fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError'])
+    fail_output = []
+    expected_error = "Truffle AOT tier: root 'refuse' was not compiled: root refused AOT (cloneForAOT or prepareForAOT)"
+    try:
+        native_unittest(['jdk.graal.compiler.truffle.test.aot.AOTTierNativeTest'] + truffle_args(fail_args),
+                        native_image_wrapper=_capturing_image_build(fail_output))
+    except _NativeImageBuildFailed:
+        mx.log('TruffleAOTFailOnError failed the build as expected')
+        if not any(expected_error in line for line in fail_output):
+            errors.append(f'expected the build output of -H:+TruffleAOTFailOnError to contain: {expected_error}')
+    else:
+        errors.append('expected -H:+TruffleAOTFailOnError to fail the build because of the refusing root')
+    if errors:
+        mx.abort('Truffle AOT tier native tests failed:\n' + '\n'.join(errors))
 
 
 @mx.command(suite.name, 'truffle-aot-native-tests', '[image-builder-args...]')
@@ -3788,8 +3894,11 @@ def _debug_args():
     return []
 
 @mx.command(suite.name, 'native-unittest')
-def native_unittest(args):
-    """Builds a native image of JUnit tests and runs them."""
+def native_unittest(args, native_image_wrapper=None):
+    """
+    Builds a native image of JUnit tests and runs them.
+    If given, `native_image_wrapper` is applied to the function that builds the images, and the result builds them instead.
+    """
     arg_list = list(args)
     # Decide whether to include the SVM test feature injections based on the selectors provided.
     # If no selectors were provided, native-unittest will default to SVM tests, so include features.
@@ -3806,7 +3915,9 @@ def native_unittest(args):
     else:
         merged_args = arg_list + computed
     # Important: keep user-provided selectors/args order intact.
-    native_image_context_run(_native_unittest, merged_args)
+    def run(native_image, func_args):
+        _native_unittest(native_image_wrapper(native_image) if native_image_wrapper else native_image, func_args)
+    native_image_context_run(run, merged_args)
 
 @mx.command(suite, 'javac-image', '[image-options]')
 def javac_image(args):

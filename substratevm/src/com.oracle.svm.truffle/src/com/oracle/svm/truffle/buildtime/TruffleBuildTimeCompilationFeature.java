@@ -29,12 +29,10 @@ import static com.oracle.svm.common.meta.MethodVariant.ORIGINAL_METHOD;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import org.graalvm.nativeimage.ImageSingletons;
@@ -122,6 +120,13 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * and these registrations are in the image heap, so that invalidating one of them at run time
  * invalidates the code. An assumption invalidated during the build drops the code instead
  * ({@link #dropAtBuildTime}).
+ * <p>
+ * Each root of the selection ends up compiled, skipped (not compiled, or its code dropped), or kept
+ * (compiled, although an assumption it relies on was invalidated after the image heap snapshot was
+ * sealed). The {@linkplain BuildTimeCompilationOptions#TruffleAOTPrintSummary summary} prints one
+ * line per root with its final state, and with
+ * {@link BuildTimeCompilationOptions#TruffleAOTFailOnError} a skipped root that the filter did not
+ * exclude fails the build.
  */
 @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public final class TruffleBuildTimeCompilationFeature implements InternalFeature {
@@ -148,15 +153,53 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     /** The fields of an OptimizedAssumption that registering a dependency changes. */
     private List<ResolvedJavaField> assumptionDependencyFields;
 
-    /** The AOT tier methods, in selection order. */
-    private final List<BuildTimeCompiledMethod> methods = new ArrayList<>();
     /**
-     * The methods whose root was skipped when its graph was built, or whose code was dropped
-     * because an assumption was invalidated during the build: never linked, and not in the table.
+     * The roots of the selection, in a deterministic order: the rejected ones, then the selected
+     * ones, each in selection order. Only changed in {@link #beforeAnalysis}.
      */
-    private final Set<BuildTimeCompiledMethod> skipped = ConcurrentHashMap.newKeySet();
-    /** Every root that is not compiled, or whose code is dropped, with the reason. */
-    private final List<BuildTimeCompilationSupport.Rejection> rejections = Collections.synchronizedList(new ArrayList<>());
+    private final List<AOTRoot> roots = new ArrayList<>();
+    /** Whether the summary was printed. Guarded by {@code this}. */
+    private boolean summaryPrinted;
+
+    /**
+     * The reason of a root that {@code polyglot.image-build-time.AOTCompileFilter} excludes (see
+     * {@link BuildTimeCompilationSupport#selectPreinitialized}): the only skipped root that is not
+     * an error with {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}.
+     */
+    private static final String FILTERED = "filtered";
+
+    /**
+     * A root of the selection and what became of it. The fields other than {@link #name} and
+     * {@link #method} are guarded by the feature.
+     */
+    static final class AOTRoot {
+        final String name;
+        /**
+         * The AOT tier method of a selected root, once it is registered as an analysis root: from
+         * then on it is compiled, and its entry must be immutable, whether or not the target ends
+         * up linked to it. Only set in {@link #beforeAnalysis}.
+         */
+        BuildTimeCompiledMethod method;
+        /**
+         * Why the root is not compiled, or its code was dropped, or {@code null}. A skipped method
+         * is never linked, and is not in the {@link AOTCodeTable} unless it was dropped after the
+         * table was built.
+         */
+        private String rejection;
+        /** The partial evaluation statistics, once the root is partially evaluated. */
+        private String compiled;
+        /** The compiled method and its code size, once it is installed. */
+        private String installed;
+        /**
+         * Why the code is kept although an assumption it relies on was invalidated during the build,
+         * or {@code null}.
+         */
+        private String kept;
+
+        AOTRoot(String name) {
+            this.name = name;
+        }
+    }
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
@@ -189,7 +232,9 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         /* TruffleFeature.beforeAnalysis, which runs first, pre-initialized the engine. */
         selection = BuildTimeCompilationSupport.selectPreinitialized();
         for (BuildTimeCompilationSupport.Rejection r : selection.rejected()) {
-            reject(r.rootName(), r.reason());
+            AOTRoot root = new AOTRoot(r.rootName());
+            root.rejection = r.reason();
+            roots.add(root);
         }
         if (selection.selected().isEmpty()) {
             return;
@@ -224,20 +269,22 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         ConstantPool constantPool = holder.getDeclaredConstructors(false)[0].getConstantPool();
         ResolvedSignature<ResolvedJavaType> signature = ResolvedSignature.fromMethodType(MethodType.methodType(Object.class, OptimizedCallTarget.class, Object[].class), originalMetaAccess);
         for (BuildTimeCompilationSupport.Pair pair : selection.selected()) {
-            String name = "<unnamed root>";
+            /* The selection named the root already. */
+            AOTRoot root = new AOTRoot(AOTInstalledCode.rootName(pair.live()));
+            roots.add(root);
             try {
-                name = AOTInstalledCode.rootName(pair.live());
-                register(access, pair, name, holder, signature, constantPool);
+                register(access, pair, root, holder, signature, constantPool);
             } catch (OutOfMemoryError e) {
                 throw e;
             } catch (Throwable t) {
-                skip(name, t);
+                reject(root, failure(root.name, t));
             }
         }
     }
 
-    private void register(BeforeAnalysisAccessImpl access, BuildTimeCompilationSupport.Pair pair, String name, ResolvedJavaType holder, ResolvedSignature<ResolvedJavaType> signature,
+    private void register(BeforeAnalysisAccessImpl access, BuildTimeCompilationSupport.Pair pair, AOTRoot root, ResolvedJavaType holder, ResolvedSignature<ResolvedJavaType> signature,
                     ConstantPool constantPool) {
+        String name = root.name;
         OptimizedCallTarget shadow = pair.shadow();
         VMError.guarantee(shadow.isAOTShadow(), "only AOT shadows are compiled at build time: %s", shadow);
         /*
@@ -246,12 +293,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
          * afterwards.
          */
         if (!compiler.asCompilable(shadow).prepareForCompilation(true, 1, false)) {
-            reject(name, "not ready for compilation");
+            reject(root, "not ready for compilation");
             return;
         }
         shadow.getNonTrivialNodeCount();
 
-        BuildTimeCompiledMethod method = new BuildTimeCompiledMethod(this, pair.live(), shadow, holder, signature, constantPool);
+        BuildTimeCompiledMethod method = new BuildTimeCompiledMethod(this, root, pair.live(), shadow, holder, signature, constantPool);
         AnalysisMethod aMethod = access.getUniverse().lookup(method);
         method.analysisMethod = aMethod;
         method.code = new AOTInstalledCode(pair.live(), new AOTEntry(new MethodPointer(aMethod)));
@@ -263,13 +310,13 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
          * Known from now on: the method is compiled and its entry, which its graph references, must
          * be immutable, whether or not the target ends up linked to it.
          */
-        methods.add(method);
+        root.method = method;
         /* Link last: the live target must only reference a method that is compiled. */
         try {
             BuildTimeCompilationSupport.attach(pair.live(), method.code);
             heapScanner.rescanField(pair.live(), aotCodeField, new OtherReason("Truffle AOT tier code of " + name));
         } catch (Throwable t) {
-            skipped.add(method);
+            /* Skipped by the caller, which records the rejection. */
             BuildTimeCompilationSupport.attach(pair.live(), null);
             throw t;
         }
@@ -294,17 +341,15 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      * live target is unlinked again.
      */
     StructuredGraph partiallyEvaluate(BuildTimeCompiledMethod method, DebugContext debug, AnalysisMethod aMethod, HostedProviders providers) {
-        String name = "<unnamed root>";
+        String name = method.root.name;
         try {
-            name = AOTInstalledCode.rootName(method.live);
-            String rootName = name;
             StructuredGraph rootGraph = method.buildKitGraph(debug, aMethod, providers, null, profiledPERoot, method.shadow);
             EncodedGraph encodedRoot = GraphEncoder.encodeSingleGraph(rootGraph, AnalysisParsedGraph.HOST_ARCHITECTURE);
             String[] bailout = new String[1];
             StructuredGraph graph = compiler.partialEvaluator().partiallyEvaluateAt(method.shadow, aMethod, encodedRoot,
                             () -> compiler.partialEvaluateForBuildTime(compiler.asCompilable(method.shadow), debug, reason -> bailout[0] = reason));
             if (graph == null) {
-                unlink(method, rootName, String.valueOf(bailout[0]));
+                unlink(method, String.valueOf(bailout[0]));
                 return null;
             }
             removeSpeculativeExceptionAnchors(graph);
@@ -320,29 +365,28 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             insertTruffleSafepoints(graph);
             int nodes = graph.getNodeCount();
             if (budget > 0 && nodes > budget) {
-                unlink(method, rootName, "over budget (" + nodes + " > " + budget + ")");
+                unlink(method, "over budget (" + nodes + " > " + budget + ")");
                 return null;
             }
             StructuredGraph result = toHostedGraph(graph, aMethod, debug);
             Class<?> unsupported = findUnsupportedNode(result);
             if (unsupported != null) {
-                unlink(method, rootName, "unsupported node " + unsupported.getName());
+                unlink(method, "unsupported node " + unsupported.getName());
                 return null;
             }
             method.assumptions = graph.getAssumptions() == null ? List.of() : List.of(graph.getAssumptions().toArray());
             /* Last: nothing may skip the root after its code became a dependency. */
-            String invalid = registerAssumptionDependencies(method, providers, rootName);
+            String invalid = registerAssumptionDependencies(method, providers, name);
             if (invalid != null) {
-                unlink(method, rootName, invalid);
+                unlink(method, invalid);
                 return null;
             }
-            summary("compiled " + name + " nodes=" + nodes + " assumptions=" + method.assumptions.size());
+            compiled(method.root, "nodes=" + nodes + " assumptions=" + method.assumptions.size());
             return result;
         } catch (OutOfMemoryError e) {
             throw e;
         } catch (Throwable t) {
-            skip(name, t);
-            unlink(method, name, null);
+            unlink(method, failure(name, t));
             return null;
         }
     }
@@ -481,13 +525,15 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      * <ul>
      * <li>During the analysis, the target is unlinked and rescanned, and the method is excluded
      * from the {@link AOTCodeTable}.</li>
-     * <li>After the analysis, and until the image heap is laid out, the scanner does not accept
+     * <li>After the analysis, and until the heap snapshot is sealed, the scanner does not accept
      * rescans any more; the heap snapshot verification after compilation and before the heap
-     * layout patches the snapshot with the unlinked target and the invalidated assumption instead.
-     * Until the table is built (after compilation), the method is excluded from it; after that, it
-     * stays in it, unlinked, so it is never entered.</li>
-     * <li>After the heap layout, the image heap is written from the snapshot, which still has the
-     * valid assumption and the linked code that relies on it: consistent, so the code is kept.</li>
+     * layout, which then seals the snapshot, patches the snapshot with the unlinked target and the
+     * invalidated assumption instead. Until the table is built (after compilation), the method is
+     * excluded from it; after that, it stays in it, unlinked, so it is never entered.</li>
+     * <li>After the final heap snapshot verification, which seals the snapshot (before the heap
+     * layout), the image heap is written from the snapshot, which still has the valid assumption
+     * and the linked code that relies on it: consistent, so the code is kept, and the root is
+     * reported as kept rather than skipped.</li>
      * </ul>
      */
     static void dropAtBuildTime(AOTInstalledCode code, CharSequence reason) {
@@ -495,57 +541,73 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     }
 
     private synchronized void drop(AOTInstalledCode code, CharSequence reason) {
-        if (code.isUnlinked()) {
-            /* Dropped already, for another of its assumptions. */
-            return;
-        }
-        String name = AOTInstalledCode.rootName(code.live);
-        String why = "assumption invalidated during build: " + reason;
-        if (BuildPhaseProvider.isHeapLayoutFinished()) {
-            reject(name, why + " (after the heap layout: the image keeps the code, with the assumption valid)");
-            return;
-        }
-        for (BuildTimeCompiledMethod method : methods) {
-            if (method.code == code) {
-                skipped.add(method);
+        AOTRoot root = null;
+        for (AOTRoot r : roots) {
+            if (r.method != null && r.method.code == code) {
+                root = r;
             }
         }
+        VMError.guarantee(root != null, "AOT tier code of no root: %s", code);
+        if (code.isUnlinked() || root.kept != null) {
+            /* Dropped or kept already, for another of its assumptions. */
+            return;
+        }
+        if (heapScanner.isSealed()) {
+            /*
+             * The last heap snapshot verification, which would have patched the snapshot, is over:
+             * the image heap is written from the sealed snapshot, with the code linked and the
+             * assumption valid. That is consistent, so the code is kept.
+             */
+            root.kept = "assumption invalidated after heap snapshot: " + reason;
+            if (summaryPrinted) {
+                /* Only possible while the image is written or later. */
+                summary(summaryLine(root));
+            }
+            return;
+        }
+        String why = "assumption invalidated during build: " + reason;
         code.unlink(why);
         BuildTimeCompilationSupport.attach(code.live, null);
         if (!BuildPhaseProvider.isAnalysisFinished()) {
-            OtherReason rescanReason = new OtherReason("Truffle AOT tier code of " + name + " dropped");
+            OtherReason rescanReason = new OtherReason("Truffle AOT tier code of " + root.name + " dropped");
             heapScanner.rescanField(code.live, aotCodeField, rescanReason);
             heapScanner.rescanField(code, unlinkedField, rescanReason);
         }
-        reject(name, why);
+        reject(root, why);
     }
 
-    /** Unlinks the AOT code of a skipped root, before the image heap is written. */
-    private void unlink(BuildTimeCompiledMethod method, String name, String reason) {
-        if (reason != null) {
-            reject(name, reason);
-        }
-        skipped.add(method);
+    /** Skips the root of {@code method} and unlinks its AOT code, before the image heap is written. */
+    private void unlink(BuildTimeCompiledMethod method, String reason) {
+        reject(method.root, reason);
         BuildTimeCompilationSupport.attach(method.live, null);
-        heapScanner.rescanField(method.live, aotCodeField, new OtherReason("Truffle AOT tier code of " + name + " unlinked"));
+        heapScanner.rescanField(method.live, aotCodeField, new OtherReason("Truffle AOT tier code of " + method.root.name + " unlinked"));
+    }
+
+    @Override
+    public void afterAnalysis(AfterAnalysisAccess access) {
+        /* Every root is partially evaluated: the analysis parsed its method. */
+        failOnError();
     }
 
     @Override
     public void beforeCompilation(BeforeCompilationAccess a) {
         BeforeCompilationAccessImpl access = (BeforeCompilationAccessImpl) a;
-        for (BuildTimeCompiledMethod method : methods) {
-            /* Objects that hold relocatable pointers must be immutable. */
-            access.registerAsImmutable(method.code.entry);
+        for (AOTRoot root : roots) {
+            if (root.method != null) {
+                /* Objects that hold relocatable pointers must be immutable. */
+                access.registerAsImmutable(root.method.code.entry);
+            }
         }
     }
 
     @Override
-    public void afterCompilation(AfterCompilationAccess a) {
+    public synchronized void afterCompilation(AfterCompilationAccess a) {
         AfterCompilationAccessImpl access = (AfterCompilationAccessImpl) a;
         Map<HostedMethod, CompileQueue.CompileTask> compilations = access.getCompilations();
         List<PlacedCode> placed = new ArrayList<>();
-        for (BuildTimeCompiledMethod method : methods) {
-            if (skipped.contains(method)) {
+        for (AOTRoot root : roots) {
+            BuildTimeCompiledMethod method = root.method;
+            if (method == null || root.rejection != null) {
                 continue;
             }
             HostedMethod hMethod = access.getUniverse().lookup(method.analysisMethod);
@@ -553,7 +615,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
             VMError.guarantee(task != null && task.result != null && hMethod.isCodeAddressOffsetValid(), "AOT tier method not compiled: %s", hMethod);
             method.code.entry.codeSize = task.result.getTargetCodeSize();
             placed.add(new PlacedCode(hMethod.getCodeAddressOffset(), method.code));
-            summary("installed " + AOTInstalledCode.rootName(method.live) + " as " + hMethod.getName() + " codeSize=" + method.code.entry.codeSize);
+            root.installed = "as " + hMethod.getName() + " codeSize=" + method.code.entry.codeSize;
         }
         /*
          * Sorted by the offset in the code section: the relocated entry points have the same order
@@ -566,6 +628,72 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     private record PlacedCode(int offset, AOTInstalledCode code) {
     }
 
+    /**
+     * The image heap is final (the snapshot was sealed before the heap layout), so every root is
+     * in its final state: an assumption invalidated from now on no longer drops code.
+     */
+    @Override
+    public void beforeImageWrite(BeforeImageWriteAccess access) {
+        printSummary();
+        /* A root whose code was dropped after the analysis. */
+        failOnError();
+    }
+
+    /**
+     * With {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}, fails the build if a root that
+     * the filter did not exclude is skipped, listing all of them, after printing the summary.
+     */
+    private void failOnError() {
+        if (!BuildTimeCompilationOptions.TruffleAOTFailOnError.getValue()) {
+            return;
+        }
+        List<String> failures = new ArrayList<>();
+        for (BuildTimeCompilationSupport.Rejection r : rejections()) {
+            if (!FILTERED.equals(r.reason())) {
+                failures.add("Truffle AOT tier: root '" + r.rootName() + "' was not compiled: " + r.reason());
+            }
+        }
+        if (!failures.isEmpty()) {
+            printSummary();
+            throw UserError.abort(failures);
+        }
+    }
+
+    /**
+     * Prints the summary, once: a line per root, in {@link #roots} order, with its final state
+     * ({@link #summaryLine}). An abort after the analysis prints it before the roots are installed.
+     */
+    private synchronized void printSummary() {
+        if (summaryPrinted) {
+            return;
+        }
+        summaryPrinted = true;
+        for (AOTRoot root : roots) {
+            summary(summaryLine(root));
+        }
+    }
+
+    /**
+     * {@code skipped <name>: <reason>}, {@code compiled <name> <statistics>}, or
+     * {@code kept <name> <statistics>: <reason>}.
+     */
+    private static String summaryLine(AOTRoot root) {
+        if (root.rejection != null) {
+            return "skipped " + root.name + ": " + root.rejection;
+        }
+        StringBuilder line = new StringBuilder(root.kept != null ? "kept " : "compiled ").append(root.name);
+        if (root.compiled != null) {
+            line.append(' ').append(root.compiled);
+        }
+        if (root.installed != null) {
+            line.append(' ').append(root.installed);
+        }
+        if (root.kept != null) {
+            line.append(": ").append(root.kept);
+        }
+        return line.toString();
+    }
+
     private static int parseBudget() {
         String value = System.getProperty(AOT_COMPILE_BUDGET, "0").strip();
         try {
@@ -575,32 +703,46 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         }
     }
 
-    /** Records that the root {@code name} is not compiled, or its code dropped, and why. */
-    private void reject(String name, String reason) {
-        rejections.add(new BuildTimeCompilationSupport.Rejection(name, reason));
-        summary("skipped " + name + ": " + reason);
-    }
-
-    /** The roots that are not compiled, or whose code is dropped, with the reason. */
-    List<BuildTimeCompilationSupport.Rejection> rejections() {
-        synchronized (rejections) {
-            return List.copyOf(rejections);
+    /**
+     * Records that {@code root} is not compiled, or its code dropped, and why. The first reason is
+     * the final one: nothing compiles a skipped root again.
+     */
+    private synchronized void reject(AOTRoot root, String reason) {
+        if (root.rejection == null) {
+            root.rejection = reason;
         }
     }
 
-    private void skip(String name, Throwable t) {
-        /*
-         * A failure to compile one root never fails the build by itself; whether skipped roots
-         * are errors is decided by TruffleAOTFailOnError.
-         */
-        rejections.add(new BuildTimeCompilationSupport.Rejection(name, String.valueOf(t)));
+    private synchronized void compiled(AOTRoot root, String statistics) {
+        root.compiled = statistics;
+    }
+
+    /**
+     * The roots that are not compiled, or whose code is dropped, with the reason, in
+     * {@link #roots} order: what the summary reports as skipped.
+     */
+    synchronized List<BuildTimeCompilationSupport.Rejection> rejections() {
+        List<BuildTimeCompilationSupport.Rejection> result = new ArrayList<>();
+        for (AOTRoot root : roots) {
+            if (root.rejection != null) {
+                result.add(new BuildTimeCompilationSupport.Rejection(root.name, root.rejection));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Reports the unexpected failure {@code t} to compile the root {@code name}, and returns it as
+     * the reason to skip the root. It never fails the build by itself; whether skipped roots are
+     * errors is decided by TruffleAOTFailOnError.
+     */
+    private static String failure(String name, Throwable t) {
+        /* Reported even without the summary, which prints the reason later. */
+        LogUtils.warning("Truffle build-time compilation skipped %s: %s", name, t);
         if (BuildTimeCompilationOptions.TruffleAOTPrintSummary.getValue()) {
-            summary("skipped " + name + ": " + t);
             t.printStackTrace(System.out);
-        } else {
-            /* Unexpected failures are reported even without the summary. */
-            LogUtils.warning("Truffle build-time compilation skipped %s: %s", name, t);
         }
+        return String.valueOf(t);
     }
 
     /**
