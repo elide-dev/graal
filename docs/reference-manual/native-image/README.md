@@ -346,6 +346,9 @@ Native Image can also interop with native languages through a custom API.
 Using this API, you can specify custom native entry points into your Java application and build it into a native shared library.
 To learn more, see [Interoperability with Native Code](InteropWithNativeCode.md).
 
+If your application embeds a Truffle language, Native Image can compile ahead-of-time prepared call targets of a pre-initialized context at build time, so that code runs without prior interpretation from the first call.
+To learn more, see [Truffle Build-Time Compilation](TruffleBuildTimeCompilation.md).
+
 ### Further Reading
 
 This getting started guide is intended for new users or those with little experience of using Native Image.

@@ -37,3 +37,39 @@ Use the following documented and executable Truffle language as inspiration for 
 [AOT Tutorial](https://github.com/oracle/graal/blob/master/truffle/src/com.oracle.truffle.api.dsl.test/src/com/oracle/truffle/api/dsl/test/examples/AOTTutorial.java)
 
 The example is executable as mx unittest using `mx unittest AOTTutorial`.
+
+## AOT Tier
+
+The AOT tier compiles AOT-prepared *shadow* copies of shared call targets at Native Image build time.
+A shadow is a clone of a call target's root node that is prepared and compiled before the target has ever run, while the live root node stays untouched.
+At run time the AOT-compiled shadow code runs from the very first call, so an application skips the interpreter for that call target.
+The runtime counts calls and loop iterations against `engine.AOTTierThreshold` and, once the threshold is reached, unlinks the AOT code and hands the call target over to the interpreter, which then warms up towards the just-in-time (JIT) compiler as usual.
+
+For example, an engine option controls when the hand-over happens:
+
+```shell
+--engine.AOTTierThreshold=5000
+```
+
+### Preparing a Language for the AOT Tier
+
+A root node takes part in the AOT tier only if it is cloneable: it must return `true` from [RootNode.isCloningAllowed()](https://www.graalvm.org/truffle/javadoc/com/oracle/truffle/api/nodes/RootNode.html#isCloningAllowed--), or support [RootNode.cloneUninitialized()](https://www.graalvm.org/truffle/javadoc/com/oracle/truffle/api/nodes/RootNode.html#cloneUninitialized--).
+It must also implement [RootNode.prepareForAOT()](https://www.graalvm.org/truffle/javadoc/com/oracle/truffle/api/nodes/RootNode.html#prepareForAOT--), the same method the [Language Support](#language-support) section above describes.
+Nodes annotated with `@GenerateAOT` are prepared automatically through `AOTSupport.prepareForAOT`.
+
+A root node overrides [RootNode.cloneForAOT()](https://www.graalvm.org/truffle/javadoc/com/oracle/truffle/api/nodes/RootNode.html#cloneForAOT--) when the default uninitialized copy would share mutable speculative state with the live root node, for example frame-slot kinds held in a shared `FrameDescriptor`:
+
+```java
+@Override
+protected RootNode cloneForAOT() {
+    FunctionRootNode copy = (FunctionRootNode) cloneUninitialized();
+    copy.frameDescriptor = frameDescriptor.copy();
+    return copy;
+}
+```
+
+Returning `null` from `cloneForAOT()` opts the root node out of the AOT tier.
+The runtime calls `cloneForAOT()` only for a call target that has never executed.
+
+The live abstract syntax tree (AST) is never prepared for AOT at build time.
+AOT preparation state is sticky, and preparing the live AST would lower its JIT peak performance once it eventually warms up.
