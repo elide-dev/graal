@@ -113,6 +113,13 @@ final class PolyglotSharingLayer {
         volatile Object bytecodeData;
 
         int claimedCount;
+        /**
+         * Whether a context was pre-initialized in this layer and not patched yet (see
+         * {@link PolyglotContextImpl#patch}). Until then, the language instances of the layer have
+         * their pre-initialization state, and the layer is not shared with other contexts. A
+         * layer whose patch failed stays so. Guarded by the engine lock.
+         */
+        boolean patchPending;
         @CompilationFinal PolyglotInstructionTracers instructionTracers;
 
         private Shared(PolyglotEngineImpl engine,
@@ -216,11 +223,10 @@ final class PolyglotSharingLayer {
             }
         } else {
             // layer was used before and is sharable
-            if (s.instances[PolyglotEngineImpl.HOST_LANGUAGE_INDEX] == null) {
+            if (s.patchPending) {
                 /*
-                 * The layer of a context pre-initialized with PreInitContextHostLanguage has no
-                 * host instance until that context is patched, which another thread may be doing
-                 * right now: the layer cannot be shared before.
+                 * The pre-initialized context of the layer is not patched yet, which another thread
+                 * may be doing right now: the layer cannot be shared before the patch completed.
                  */
                 if (engine.getEngineOptionValues().get(PolyglotEngineOptions.TraceCodeSharing)) {
                     traceClaimLayer(false, s, context, requestingLanguages, s.previousLanguageOptions);
@@ -404,6 +410,24 @@ final class PolyglotSharingLayer {
         assert hostLanguage == null : "host language allocated twice";
         this.hostLanguage = language.createInstance(this);
         return hostLanguage;
+    }
+
+    /** Marks the layer of a context that was just pre-initialized, see {@link Shared#patchPending}. */
+    void markPatchPending() {
+        assert Thread.holdsLock(engine.lock);
+        Shared s = this.shared;
+        if (s != null) {
+            s.patchPending = true;
+        }
+    }
+
+    /** Marks the layer of a pre-initialized context that was patched successfully. */
+    void markPatched() {
+        assert Thread.holdsLock(engine.lock);
+        Shared s = this.shared;
+        if (s != null) {
+            s.patchPending = false;
+        }
     }
 
     PolyglotLanguageInstance patchHostLanguage(PolyglotLanguage language) {

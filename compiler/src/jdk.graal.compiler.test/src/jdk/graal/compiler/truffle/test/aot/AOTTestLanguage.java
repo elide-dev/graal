@@ -32,6 +32,8 @@ import org.graalvm.options.OptionValues;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -78,7 +80,7 @@ import com.oracle.truffle.api.source.SourceSection;
  * ({@link ThrowCallRoot}), "deopt" ({@link DeoptRoot}), "drecurse" ({@link DirectRecurseRoot}),
  * "branch" ({@link BranchRoot}), "pollspin" ({@link PollSpinRoot}), "instr..." ({@link StatementRoot}),
  * "assumeloop" ({@link AssumeLoopRoot}), "jitstatic:a|b" ({@link StaticAssumeRoot}), "jitfield:a|b"
- * ({@link FieldAssumeRoot}) and "throwinval" ({@link ThrowAssumeRoot}).
+ * ({@link FieldAssumeRoot}), "patchprobe" ({@link ConstantRoot}) and "throwinval" ({@link ThrowAssumeRoot}).
  */
 @TruffleLanguage.Registration(id = AOTTestLanguage.ID, name = AOTTestLanguage.ID, contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
 @ProvidedTags(StandardTags.StatementTag.class)
@@ -168,13 +170,39 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         BUILD_STABLE.invalidate();
     }
 
+    /**
+     * Test hooks: if set, the patch of the pre-initialized context counts down
+     * {@link #patchEntered} and waits for {@link #patchRelease} before it patches this language.
+     */
+    static volatile CountDownLatch patchEntered;
+    static volatile CountDownLatch patchRelease;
+
+    /**
+     * Whether this language instance is used by a context pre-initialized at image build time that
+     * is not patched yet: then its state is the build-time state (see "patchprobe").
+     */
+    private volatile boolean awaitingPatch;
+
     @Override
     protected Object createContext(Env env) {
+        if (ImageInfo.inImageBuildtimeCode()) {
+            awaitingPatch = true;
+        }
         return env;
     }
 
     @Override
     protected boolean patchContext(Object context, Env newEnv) {
+        CountDownLatch release = patchRelease;
+        if (release != null) {
+            patchEntered.countDown();
+            try {
+                release.await(1, TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        }
+        awaitingPatch = false;
         return true;
     }
 
@@ -259,6 +287,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new StaticAssumeRoot(language, trimmed.endsWith("b"));
         } else if (trimmed.equals("jitfield:a") || trimmed.equals("jitfield:b")) {
             root = new FieldAssumeRoot(language, trimmed.endsWith("b") ? JIT_FIELD_B : JIT_FIELD_A);
+        } else if (trimmed.equals("patchprobe")) {
+            root = new ConstantRoot(language, "patchprobe", language.awaitingPatch ? 1 : 0);
         } else if (trimmed.equals("loop")) {
             root = new LoopRoot(language);
         } else if (trimmed.equals("recurse")) {
@@ -973,6 +1003,31 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "assumeloop";
+        }
+    }
+
+    /**
+     * "patchprobe": returns 1 if it was parsed by a language instance that awaits the patch of its
+     * pre-initialized context, and 0 otherwise.
+     */
+    public static final class ConstantRoot extends RootNode {
+        private final String name;
+        private final int value;
+
+        ConstantRoot(TruffleLanguage<?> language, String name, int value) {
+            super(language);
+            this.name = name;
+            this.value = value;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return value;
+        }
+
+        @Override
+        public String getName() {
+            return name;
         }
     }
 
