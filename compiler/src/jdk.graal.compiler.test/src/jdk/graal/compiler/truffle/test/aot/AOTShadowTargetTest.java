@@ -27,6 +27,7 @@ package jdk.graal.compiler.truffle.test.aot;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
@@ -159,4 +160,31 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertTrue("a guest exception must not invalidate the shadow's code", shadow.isValid());
     }
 
+    /**
+     * Profiles in node fields of the shadow's AST are replaced by disabled copies, so that the
+     * shadow's compiled code survives every profiled path. The live AST keeps its own, still
+     * uninitialized, profiles.
+     */
+    @Test
+    public void shadowProfilesAreDisabledCopies() {
+        OptimizedCallTarget live = parse("branch");
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        AOTTestLanguage.BranchRoot liveRoot = (AOTTestLanguage.BranchRoot) live.getRootNode();
+        AOTTestLanguage.BranchRoot shadowRoot = (AOTTestLanguage.BranchRoot) shadow.getRootNode();
+        assertNotSame(liveRoot.big, shadowRoot.big);
+        assertNotSame(liveRoot.negative, shadowRoot.negative);
+        assertTrue(liveRoot.big.toString(), liveRoot.big.toString().contains("wasTrue=false, wasFalse=false"));
+        assertTrue(liveRoot.negative.toString(), liveRoot.negative.toString().contains("UNINITIALIZED"));
+        assertTrue(shadowRoot.big.toString(), shadowRoot.big.toString().contains("wasTrue=true, wasFalse=true"));
+        assertTrue(shadowRoot.negative.toString(), shadowRoot.negative.toString().contains("VISITED"));
+
+        live.setAOTCode(reason -> {
+        });
+        shadow.compile(false);
+        assertTrue(shadow.isValid());
+        assertEquals(2, enterShadowCode(shadow, 1));
+        assertEquals(3, enterShadowCode(shadow, -3));
+        assertEquals(2000, enterShadowCode(shadow, 2000));
+        assertTrue("a profiled path must not invalidate the shadow's code", shadow.isValid());
+    }
 }

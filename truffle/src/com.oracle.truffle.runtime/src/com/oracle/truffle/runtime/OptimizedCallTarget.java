@@ -83,6 +83,7 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.api.nodes.NodeVisitor;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.profiles.Profile;
 import com.oracle.truffle.compiler.TruffleCompilable;
 import com.oracle.truffle.runtime.OptimizedBlockNode.PartialBlockRootNode;
 import com.oracle.truffle.runtime.OptimizedRuntimeOptions.ExceptionAction;
@@ -1217,9 +1218,17 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      * The shadow is compiled without ever being executed, so a profile that is still uninitialized
      * when it is compiled folds into an invalidating deoptimization: the first time the code takes
      * the profiled path, e.g., on the first guest exception, it would permanently unlink the AOT
-     * tier code of the live target. So the shadow's exception profiles start in their generic
-     * state instead: the exception profile of the shadow target, and the exception profiles of the
-     * call nodes in the shadow's AST.
+     * tier code of the live target. So the shadow's profiles start in their generic state instead:
+     * <ul>
+     * <li>the exception profile of the shadow target;
+     * <li>the exception profiles of the call nodes in the shadow's AST;
+     * <li>every {@link Profile} in a (non-inlined) {@link com.oracle.truffle.api.nodes.NodeCloneable}
+     * field of a node of the shadow's AST, replaced by a disabled copy: the copy of the AST may
+     * share profile instances with the live AST, which must not change, or with any other AST.
+     * </ul>
+     * Profiles that are not referenced by such a field, e.g., inlined profiles, are the
+     * responsibility of the root's {@link RootNode#prepareForAOT() prepareForAOT} (the DSL already
+     * disables the profiles of its cached values when it prepares a node for AOT).
      */
     private void startProfilesGenericForAOT() {
         assert aotShadow;
@@ -1232,6 +1241,7 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
             }
             return true;
         });
+        OptimizedRuntimeAccessor.NODES.replaceCloneableFieldValues(rootNode, value -> value instanceof Profile, copy -> ((Profile) copy).disable());
     }
 
     /**

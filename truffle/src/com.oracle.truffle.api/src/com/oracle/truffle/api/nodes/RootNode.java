@@ -412,6 +412,17 @@ public abstract class RootNode extends ExecutableNode {
      * mutate state shared that way (for example frame-slot kinds in a shared {@link FrameDescriptor}):
      * preparing or executing the returned tree must never change state observable by this root. Return
      * {@code null} if this root must not be compiled ahead of time.
+     * <p>
+     * The copy is compiled without ever being executed, so speculative state that is still
+     * uninitialized when it is compiled deoptimizes and invalidates the compiled code the first
+     * time it is used, which permanently unlinks that code. The runtime therefore starts some
+     * profiles of the copy in their generic state, after {@link #prepareForAOT()}: the exception
+     * profiles of its call target and call nodes, and every {@link NodeCloneable} profile
+     * referenced by a field of one of its nodes, which it replaces by a disabled copy (so profile
+     * instances that the copy shares with this root are not changed). The DSL disables the profiles
+     * of cached values when it prepares a node for AOT. Any other such state of the copy, for
+     * example inlined profiles or {@code CompilationFinal} fields initialized on the first
+     * execution, must be initialized by {@link #prepareForAOT()}.
      *
      * @since 25.4
      */

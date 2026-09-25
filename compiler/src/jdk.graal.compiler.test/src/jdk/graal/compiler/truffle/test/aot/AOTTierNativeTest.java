@@ -291,6 +291,27 @@ public class AOTTierNativeTest {
         }
     }
 
+    /**
+     * The profiles of "branch" are its own (not the DSL's), uninitialized when the AOT code was
+     * compiled: taking any profiled path does not unlink the code, because the shadow's profiles
+     * start disabled.
+     */
+    @Test
+    public void uninitializedProfilesDoNotUnlinkAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        int compiledBefore = AOTTestLanguage.BranchRoot.compiledExecutions;
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value branch = context.parse(fixture("branch", "branch"));
+            assertEquals(2, branch.execute(1).asInt());
+            assertEquals(3, branch.execute(-3).asInt());
+            assertEquals(2000, branch.execute(2000).asInt());
+            assertEquals(8, branch.execute(7).asInt());
+        }
+        assertEquals(log(), 1, enters(log(), "branch"));
+        assertEquals(log(), 0, unlinks(log(), "branch"));
+        assertEquals("executions of branch in compiled code", 4, AOTTestLanguage.BranchRoot.compiledExecutions - compiledBefore);
+    }
+
     /** AOT code of "call" calls its live callee, which runs in the interpreter. */
     @Test
     public void aotCodeCallsLiveCallee() {
