@@ -60,9 +60,10 @@ public final class AOTInstalledCode implements AOTCode, SubstrateInstalledCode, 
     private volatile boolean unlinked;
     /**
      * Whether AOT code of {@link #live} was entered. Only ever set, under the lock of this code
-     * ({@link #firstEnter()}), after the first entry was processed.
+     * ({@link #firstEnter()}), after the first entry was processed. Volatile: a thread that sees it
+     * set without taking the lock ({@link #enter}) must also see the live target initialized.
      */
-    private boolean entered;
+    private volatile boolean entered;
 
     /**
      * Whether this image contains the AOT tier, i.e., was built with
