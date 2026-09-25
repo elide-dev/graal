@@ -39,7 +39,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
@@ -51,6 +54,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.oracle.truffle.api.ThreadLocalAction;
+import com.oracle.truffle.api.instrumentation.EventBinding;
+import com.oracle.truffle.api.instrumentation.EventContext;
+import com.oracle.truffle.api.instrumentation.ExecutionEventListener;
+import com.oracle.truffle.api.instrumentation.Instrumenter;
+import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
+import com.oracle.truffle.api.instrumentation.StandardTags;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
@@ -84,7 +94,12 @@ public class AOTTierNativeTest {
 
     private static synchronized Engine engine() {
         if (engine == null) {
-            engine = AOTTierNativeTestSupport.traceEngine(LOG, "engine.AOTTierThreshold", String.valueOf(AOT_TIER_THRESHOLD));
+            /*
+             * Compilation is synchronous and traced, so that the hand-over to the JIT is
+             * observable. No other test calls a fixture often enough to compile it.
+             */
+            engine = AOTTierNativeTestSupport.traceEngine(LOG, "engine.AOTTierThreshold", String.valueOf(AOT_TIER_THRESHOLD), "engine.BackgroundCompilation", "false",
+                            "engine.TraceCompilation", "true");
         }
         return engine;
     }
@@ -295,6 +310,22 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * "drecurse" calls itself through a direct call node of its (live) call target: every
+     * recursive call enters the AOT code again.
+     */
+    @Test
+    public void directSelfRecursionEntersAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        int compiledBefore = AOTTestLanguage.DirectRecurseRoot.compiledExecutions;
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            assertEquals(5, context.parse(fixture("drecurse", "drecurse")).execute(5).asInt());
+        }
+        assertEquals(log(), 1, enters(log(), "drecurse"));
+        assertEquals(log(), 0, unlinks(log(), "drecurse"));
+        assertEquals("executions of drecurse in compiled code", 6, AOTTestLanguage.DirectRecurseRoot.compiledExecutions - compiledBefore);
+    }
+
+    /**
      * The profiles of "branch" are its own (not the DSL's), uninitialized when the AOT code was
      * compiled: taking any profiled path does not unlink the code, because the shadow's profiles
      * start disabled.
@@ -313,6 +344,54 @@ public class AOTTierNativeTest {
         assertEquals(log(), 1, enters(log(), "branch"));
         assertEquals(log(), 0, unlinks(log(), "branch"));
         assertEquals("executions of branch in compiled code", 4, AOTTestLanguage.BranchRoot.compiledExecutions - compiledBefore);
+    }
+
+    /**
+     * The AOT code of "add5" is unlinked at the threshold; then the live target runs in the
+     * interpreter until the JIT compiles it.
+     */
+    @Test
+    public void thresholdUnlinksThenJITTakesOver() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value add5 = context.parse(fixture("add5", "add:5"));
+            for (int i = 0; i < 2000; i++) {
+                assertEquals(i + 5, add5.execute(i).asInt());
+            }
+        }
+        String log = log();
+        assertEquals(log, 1, enters(log, "add5"));
+        assertEquals(log, 1, unlinks(log, "add5", "AOT tier threshold reached"));
+        /* TraceCompilation names the target by its root's toString(). */
+        Matcher jit = Pattern.compile("opt done .*AOTTestLanguage\\.AddRoot@.*\\|Tier 1\\|").matcher(log);
+        assertTrue(log, jit.find());
+        assertTrue("the JIT compiled add5 after its AOT code was unlinked: " + log, log.indexOf("[aot] unlink add5") < jit.start());
+    }
+
+    /**
+     * Two contexts on the engine share the call target of "add6", and so its AOT code and the
+     * shadow's call count: the threshold unlinks the code once both contexts together called it
+     * often enough.
+     */
+    @Test
+    public void twoContextsShareAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context c1 = Context.newBuilder().engine(engine()).build(); Context c2 = Context.newBuilder().engine(engine()).build()) {
+            Value f1 = c1.parse(fixture("add6", "add:6"));
+            Value f2 = c2.parse(fixture("add6", "add:6"));
+            int half = AOT_TIER_THRESHOLD / 2;
+            for (int i = 0; i < half; i++) {
+                assertEquals(i + 6, f1.execute(i).asInt());
+            }
+            for (int i = half; i < AOT_TIER_THRESHOLD - 1; i++) {
+                assertEquals(i + 6, f2.execute(i).asInt());
+            }
+            assertEquals(log(), 0, unlinks(log(), "add6"));
+            assertEquals(AOT_TIER_THRESHOLD + 5, f2.execute(AOT_TIER_THRESHOLD - 1).asInt());
+            assertEquals("one shared call target, entered once: " + log(), 1, enters(log(), "add6"));
+            assertEquals("the calls of both contexts count on the same shadow: " + log(), 1, unlinks(log(), "add6", "AOT tier threshold reached"));
+            assertEquals(7, f1.execute(1).asInt());
+        }
     }
 
     /** AOT code of "call" calls its live callee, which runs in the interpreter. */
@@ -555,4 +634,80 @@ public class AOTTierNativeTest {
         assertEquals(log(), 1, enters(log(), "loop"));
     }
 
+    private static Instrumenter instrumenter() {
+        return engine().getInstruments().get(AOTTestInstrument.ID).lookup(Instrumenter.class);
+    }
+
+    /** Counts the statements of the source named {@code sourceName} that start executing. */
+    private static EventBinding<?> countStatements(String sourceName, AtomicInteger count) {
+        SourceSectionFilter filter = SourceSectionFilter.newBuilder().tagIs(StandardTags.StatementTag.class).sourceIs(s -> s.getName().equals(sourceName)).build();
+        return instrumenter().attachExecutionEventListener(filter, new ExecutionEventListener() {
+            @Override
+            public void onEnter(EventContext c, VirtualFrame frame) {
+                count.incrementAndGet();
+            }
+
+            @Override
+            public void onReturnValue(EventContext c, VirtualFrame frame, Object result) {
+            }
+
+            @Override
+            public void onReturnExceptional(EventContext c, VirtualFrame frame, Throwable exception) {
+            }
+        });
+    }
+
+    /**
+     * The reason of the unlink when instrumentation is attached: the shadow is a loaded root that
+     * was initialized (for AOT) at build time, so instrumentation inserts its wrappers into the
+     * shadow's AST too. That invalidates the shadow's valid-root assumption, which the AOT tier
+     * code depends on: the code is invalidated (unlinked, its activations deoptimized).
+     */
+    private static final String INSTRUMENTED = "validRootAssumption Insert instrumentation wrapper node.";
+
+    /**
+     * AOT tier code runs the shadow's AST. Instrumentation attached at run time to a target that
+     * ran in AOT code invalidates the code (see {@link #INSTRUMENTED}): the next call runs the
+     * instrumented live AST.
+     */
+    @Test
+    public void instrumentationAttachedAtRunTimeUnlinksAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value instr = context.parse(fixture("instr", "instr"));
+            assertEquals(101, instr.execute(1).asInt());
+            assertEquals(log(), 1, enters(log(), "instr"));
+            AtomicInteger statements = new AtomicInteger();
+            EventBinding<?> binding = countStatements("instr.aot", statements);
+            try {
+                assertEquals(log(), 1, unlinks(log(), "instr", INSTRUMENTED));
+                assertEquals(102, instr.execute(2).asInt());
+                assertEquals(103, instr.execute(3).asInt());
+                assertEquals("statements seen by the instrumentation", 2, statements.get());
+            } finally {
+                binding.dispose();
+            }
+        }
+    }
+
+    /**
+     * Instrumentation attached before the first call of a target applies to that first call: it
+     * invalidates the AOT code when it is attached (see {@link #INSTRUMENTED}), so the code is
+     * never entered.
+     */
+    @Test
+    public void instrumentationAttachedBeforeFirstCallUnlinksAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        AtomicInteger statements = new AtomicInteger();
+        EventBinding<?> binding = countStatements("instrfirst.aot", statements);
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value instr = context.parse(fixture("instrfirst", "instrfirst"));
+            assertEquals(101, instr.execute(1).asInt());
+            assertEquals("statements seen by the instrumentation", 1, statements.get());
+            assertEquals(log(), 0, enters(log(), "instrfirst"));
+            assertEquals(log(), 1, unlinks(log(), "instrfirst", INSTRUMENTED));
+        } finally {
+            binding.dispose();
+        }
+    }
 }
