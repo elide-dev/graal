@@ -85,8 +85,20 @@ public final class BuildTimeCompilationSupport {
     }
 
     /**
-     * Hosted only: select shared call targets of the pre-initialized engine for build-time
-     * compilation. The roots of the claimed shared layers are considered once each, in engine
+     * Hosted only: whether the engine is pre-initialized without code sharing
+     * ({@code polyglot.image-build-time.PreinitializeCodeSharing} is not set). Then the call targets
+     * compiled at build time are those of the pre-initialized context, which only the engine that
+     * adopts it at run time uses, and whose language contexts are patched before any of its code
+     * runs; build-time partial evaluation must not fold context state that patching can change.
+     */
+    public static boolean isBoundPreinitialization() {
+        return !Boolean.getBoolean("polyglot.image-build-time.PreinitializeCodeSharing");
+    }
+
+    /**
+     * Hosted only: select call targets of the pre-initialized engine for build-time compilation:
+     * those of its claimed shared layers and, without code sharing, those of the pre-initialized
+     * context ({@link #isBoundPreinitialization()}). Each root is considered once, in engine
      * order:
      * <ul>
      * <li>AOT shadows, splits, and roots without a guest language
@@ -108,14 +120,11 @@ public final class BuildTimeCompilationSupport {
         if (!Boolean.getBoolean("polyglot.image-build-time.AOTCompile")) {
             return new Selection(List.of(), List.of());
         }
-        if (!Boolean.getBoolean("polyglot.image-build-time.PreinitializeCodeSharing")) {
-            throw new IllegalStateException("AOTCompile requires PreinitializeCodeSharing");
-        }
         Pattern filter = globToPattern(System.getProperty("polyglot.image-build-time.AOTCompileFilter", ""));
         List<Pair> selected = new ArrayList<>();
         List<Rejection> rejected = new ArrayList<>();
         Map<OptimizedCallTarget, Boolean> seen = new LinkedHashMap<>();
-        for (RootNode root : OptimizedRuntimeAccessor.ENGINE.getPreinitializedSharedRoots()) {
+        for (RootNode root : OptimizedRuntimeAccessor.ENGINE.getPreinitializedRoots()) {
             OptimizedCallTarget target = (OptimizedCallTarget) root.getCallTarget();
             if (target.isAOTShadow() || target.isSplit() || root.getLanguageInfo() == null || seen.putIfAbsent(target, Boolean.TRUE) != null) {
                 continue;
