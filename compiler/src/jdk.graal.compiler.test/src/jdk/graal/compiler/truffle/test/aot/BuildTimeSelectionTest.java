@@ -31,6 +31,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -40,6 +42,7 @@ import org.junit.After;
 import org.junit.Test;
 
 import com.oracle.truffle.api.frame.FrameSlotKind;
+import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.runtime.BuildTimeCompilationSupport;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 
@@ -47,7 +50,7 @@ public class BuildTimeSelectionTest {
 
     @After
     public void clear() throws Exception {
-        for (String p : List.of("PreinitializeCodeSharing", "PreinitializeSources", "AOTCompile", "AOTCompileFilter", "PreinitializeContexts")) {
+        for (String p : List.of("PreinitializeCodeSharing", "PreinitializeSources", "AOTCompile", "AOTCompileFilter", "AOTCompileTotalBudget", "PreinitializeContexts")) {
             System.clearProperty("polyglot.image-build-time." + p);
         }
         resetPreInitializedEngine();
@@ -130,6 +133,31 @@ public class BuildTimeSelectionTest {
         assertEquals(List.of("add1"), selection.selected().stream().map(p -> p.live().getRootNode().getName()).toList());
         assertEquals(List.of(new BuildTimeCompilationSupport.Rejection("refuse", "root refused AOT (cloneForAOT or prepareForAOT)")), selection.rejected());
         assertFalse("the language of a pre-initialized context without code sharing must stay single-context", AOTTestLanguage.multipleContexts);
+    }
+
+    /**
+     * With {@code AOTCompileTotalBudget}, the roots are kept by priority while their AOT shadows fit
+     * in the budget together: with equal (no) known call sites, the smaller ones first. The others
+     * are rejected as over the total budget.
+     */
+    @Test
+    public void totalBudgetKeepsSmallerRootsThatFit() throws Exception {
+        String sources = files("add:1", "branch", "strcat", "inlined", "loop", "instr");
+        Map<String, Integer> costs = new LinkedHashMap<>();
+        for (var pair : preinit(sources, "").selected()) {
+            costs.put(pair.live().getRootNode().getName(), NodeUtil.countNodes(pair.shadow().getRootNode()));
+        }
+        /* Without known call sites: by size, then by name, while the roots fit. */
+        List<String> byPriority = costs.keySet().stream().sorted(Comparator.comparingInt((String name) -> costs.get(name)).thenComparing(name -> name)).toList();
+        int budget = costs.get(byPriority.get(0)) + costs.get(byPriority.get(1)) + costs.get(byPriority.get(2));
+        clear();
+        System.setProperty("polyglot.image-build-time.AOTCompileTotalBudget", String.valueOf(budget));
+        var selection = preinit(sources, "");
+        List<String> selected = selection.selected().stream().map(p -> p.live().getRootNode().getName()).sorted().toList();
+        assertEquals(costs.toString(), byPriority.subList(0, 3).stream().sorted().toList(), selected);
+        for (String name : byPriority.subList(3, byPriority.size())) {
+            assertTrue(selection.rejected().toString(), selection.rejected().contains(new BuildTimeCompilationSupport.Rejection(name, BuildTimeCompilationSupport.OVER_TOTAL_BUDGET)));
+        }
     }
 
     @Test

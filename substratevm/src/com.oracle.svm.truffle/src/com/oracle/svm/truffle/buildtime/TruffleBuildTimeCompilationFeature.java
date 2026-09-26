@@ -757,7 +757,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
     /**
      * With {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}, fails the build if a root is
      * skipped for a reason that {@link #isFailure} counts, listing all of them, after printing the
-     * summary. Roots excluded by the filter or executed at build time do not fail it.
+     * summary. Roots excluded by the filter or the total budget, or executed at build time, do not
+     * fail it.
      */
     private void failOnError() {
         List<String> violations = limitViolations();
@@ -785,7 +786,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      * {@link BuildTimeCompilationSupport#selectPreinitialized}).
      */
     private static boolean isFailure(BuildTimeCompilationSupport.Rejection r) {
-        return !BuildTimeCompilationSupport.FILTERED.equals(r.reason()) && !BuildTimeCompilationSupport.EXECUTED_AT_BUILD_TIME.equals(r.reason());
+        return !BuildTimeCompilationSupport.FILTERED.equals(r.reason()) && !BuildTimeCompilationSupport.EXECUTED_AT_BUILD_TIME.equals(r.reason()) &&
+                        !BuildTimeCompilationSupport.OVER_TOTAL_BUDGET.equals(r.reason());
     }
 
     /**

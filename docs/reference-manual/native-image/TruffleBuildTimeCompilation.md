@@ -26,6 +26,7 @@ Enable the AOT tier with the following system properties, passed to `native-imag
 | `-Dpolyglot.image-build-time.AOTCompile=true` | build | Selects and compiles AOT-preparable shared call targets at build time. Requires `PreinitializeCodeSharing`. |
 | `-Dpolyglot.image-build-time.AOTCompileFilter=<glob>,...` | build | A glob over root names (`*` and `?` as wildcards, comma-separated alternatives) that selects which call targets are compiled. An empty value selects all roots. |
 | `-Dpolyglot.image-build-time.AOTCompileBudget=<n>` | build | The maximum partial-evaluation graph size, in nodes, per compiled root. `0` means unlimited. |
+| `-Dpolyglot.image-build-time.AOTCompileTotalBudget=<n>` | build | The maximum total size, in AST nodes before partial evaluation, of all compiled roots together. Roots are kept by priority while they fit: those with more known call sites first, then smaller ones, then by name. The others are skipped as `over total budget`. `0` means unlimited. |
 | `engine.AOTTierThreshold` | run time | The number of calls and loop iterations after which a call target's AOT code is unlinked. It is checked when the call target is called. `0`, the default, uses the value of `FirstTierCompilationThreshold`. |
 | `engine.TraceAOT` | run time, internal | Traces the AOT code of call targets: when it is first entered, unlinked, and deoptimized. See [Diagnostics](#diagnostics). |
 | `-H:+TruffleAOTPrintSummary` | hosted | Prints a per-root build summary. |
@@ -117,7 +118,7 @@ Pass `-H:+TruffleAOTPrintSummary` to print one line per selected root during the
 
 The name after `as` is the name of the compiled method in the native executable, `aot_<id>_<root name>`.
 `nodes` is the size of the root's graph after partial evaluation, and `allocs` is the number of allocation sites in its code (see [Size limits](#size-limits)).
-A `skipped` line reports a root that was not compiled and why, for example `filtered` (excluded by `AOTCompileFilter`), `executed at build time` (the root ran during pre-initialization, so its live AST is already specialized), a partial-evaluation bailout, an over-budget graph, an unsupported node, or an exception thrown by the language while it prepared the root.
+A `skipped` line reports a root that was not compiled and why, for example `filtered` (excluded by `AOTCompileFilter`), `over total budget` (left out by `AOTCompileTotalBudget`), `executed at build time` (the root ran during pre-initialization, so its live AST is already specialized), a partial-evaluation bailout, an over-budget graph, an unsupported node, or an exception thrown by the language while it prepared the root.
 A `kept` line reports a root whose backing assumption was invalidated only after the build's heap snapshot was already sealed; the image keeps the compiled code and the assumption as still valid, and this is not a build failure.
 
 Pass `-H:+TruffleAOTFailOnError` to turn every remaining skipped root into a build failure, printed as one line per root:
@@ -126,7 +127,7 @@ Pass `-H:+TruffleAOTFailOnError` to turn every remaining skipped root into a bui
 Truffle AOT tier: root 'myFunction' was not compiled: <reason>
 ```
 
-`-H:+TruffleAOTFailOnError` never counts roots that were filtered out or executed at build time as failures, since those are excluded by design.
+`-H:+TruffleAOTFailOnError` never counts roots that were filtered out, left out by the total budget, or executed at build time as failures, since those are excluded by design.
 It also enables `-H:+VerifyDeoptSourceEntryPoints`, which fails the build if the AOT tier code is missing a deoptimization entry point that it needs.
 
 A few checks fail the build even without `-H:+TruffleAOTFailOnError`, because they detect an internal error of the AOT tier rather than a problem of the language: a deoptimization target of AOT code that is not reachable, and a compilation of AOT code that fails after the analysis.

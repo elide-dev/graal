@@ -41,11 +41,15 @@
 package com.oracle.truffle.runtime;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
+import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.api.nodes.RootNode;
 
 /**
@@ -77,6 +81,12 @@ public final class BuildTimeCompilationSupport {
      * created, followed by the exception.
      */
     public static final String SHADOW_FAILED = "cannot create AOT shadow";
+
+    /**
+     * The reason of a root left out by {@code polyglot.image-build-time.AOTCompileTotalBudget}: an
+     * exclusion by design, like {@link #FILTERED}.
+     */
+    public static final String OVER_TOTAL_BUDGET = "over total budget";
 
     public record Selection(List<Pair> selected, List<Rejection> rejected) {
     }
@@ -122,7 +132,9 @@ public final class BuildTimeCompilationSupport {
      * <li>A root whose AOT shadow cannot be created is rejected with the exception that prevented
      * it, e.g., one thrown by the language's {@code cloneForAOT} or {@code prepareForAOT}: a bug in
      * one root must not fail the image build.</li>
-     * <li>Every other root is selected, with its AOT shadow.</li>
+     * <li>Every other root is selected, with its AOT shadow, unless
+     * {@code polyglot.image-build-time.AOTCompileTotalBudget} is exceeded: see
+     * {@link #applyTotalBudget}.</li>
      * </ul>
      */
     public static Selection selectPreinitialized() {
@@ -160,7 +172,51 @@ public final class BuildTimeCompilationSupport {
                 }
             }
         }
+        applyTotalBudget(selected, rejected);
         return new Selection(List.copyOf(selected), List.copyOf(rejected));
+    }
+
+    /**
+     * With {@code polyglot.image-build-time.AOTCompileTotalBudget} (a number of nodes, 0 or unset:
+     * unlimited), keeps the selected roots whose AOT shadows fit in the budget together, measured
+     * by the size of their ASTs before partial evaluation, which is known here, deterministically,
+     * unlike the size of their compilations. Roots are considered by priority: those with more
+     * known call sites first, then smaller ones, then by name; each root that does not fit in what
+     * is left is rejected as {@link #OVER_TOTAL_BUDGET}, and later, smaller ones may still fit.
+     */
+    private static void applyTotalBudget(List<Pair> selected, List<Rejection> rejected) {
+        String value = System.getProperty("polyglot.image-build-time.AOTCompileTotalBudget", "0").strip();
+        long budget;
+        try {
+            budget = value.isEmpty() ? 0 : Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for polyglot.image-build-time.AOTCompileTotalBudget, expected a number of nodes: " + value);
+        }
+        if (budget <= 0) {
+            return;
+        }
+        Map<Pair, Integer> costs = new LinkedHashMap<>();
+        for (Pair pair : selected) {
+            costs.put(pair, NodeUtil.countNodes(pair.shadow().getRootNode()));
+        }
+        List<Pair> byPriority = new ArrayList<>(selected);
+        byPriority.sort(Comparator.comparingInt((Pair p) -> -p.live().getKnownCallSiteCount()).thenComparingInt(costs::get).thenComparing(p -> nameOf(p.live().getRootNode())));
+        long left = budget;
+        Set<Pair> kept = new HashSet<>();
+        for (Pair pair : byPriority) {
+            int cost = costs.get(pair);
+            if (cost <= left) {
+                left -= cost;
+                kept.add(pair);
+            } else {
+                rejected.add(new Rejection(nameOf(pair.live().getRootNode()), OVER_TOTAL_BUDGET));
+            }
+        }
+        selected.retainAll(kept);
+    }
+
+    private static String nameOf(RootNode root) {
+        return root.getName() == null ? root.toString() : root.getName();
     }
 
     /**
