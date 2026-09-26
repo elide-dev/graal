@@ -741,6 +741,81 @@ def truffle_aot_native_tests(args):
     truffle_aot_tier_native_tests(args)
 
 
+# The functions of the GraalJS fixture, com.oracle.truffle.js.test.aot.JSAOTTierFixture.FUNCTIONS: each must be compiled.
+_JS_AOT_FIXTURE_FUNCTIONS = ['firstObjects', 'arith', 'compare', 'loops', 'makeCounter', 'increment', 'current', 'useCounter', 'add', 'calls', 'plus', 'Point',
+                             'newPoint', 'properties', 'argumentsSum', 'forIn', 'forOf', 'destructure', 'thrower', 'tryCatch', 'template', 'kind']
+
+
+def truffle_aot_tier_js_native_tests(extra_build_args=None, run_args=None):
+    """
+    Builds a test image that pre-initializes a GraalJS context with code sharing, js.lazy-translation and a registered
+    fixture source (com.oracle.truffle.js.test.aot.JSAOTTierFixtureFeature), and compiles its call targets at build
+    time (the AOT tier). Checks that the build compiled every function of the fixture, and runs JSAOTTierNativeTest,
+    which calls them on an explicit engine that adopts the pre-initialized engine and checks that their AOT code is
+    entered and never unlinked or deoptimized. Needs the graal-js suite (--dynamicimports /graal-js).
+    """
+    if mx.suite('graal-js', fatalIfMissing=False) is None:
+        mx.abort('The GraalJS Truffle AOT tier native tests need the graal-js suite: run them with --dynamicimports /graal-js')
+    image_options = ['-H:-SupportCompileInIsolates', '-H:+TruffleAOTPrintSummary', '-H:+VerifyDeoptSourceEntryPoints']
+    build_args = ['--macro:truffle', '--add-exports=java.base/jdk.internal.module=ALL-UNNAMED'] + (extra_build_args or []) + svm_experimental_options(image_options) + [
+        '-Dpolyglot.image-build-time.PreinitializeContexts=js',
+        '-Dpolyglot.image-build-time.PreinitializeCodeSharing=true',
+        '-Dpolyglot.image-build-time.AOTCompile=true',
+        # As the embedder (and the test's contexts) configure it: context options must be compatible to use the
+        # pre-initialized context.
+        '-Dpolyglot.js.lazy-translation=true',
+        # Prints the first node that is not preparable of each refused function.
+        '-Dpolyglot.image-build-time.js.TraceAOTRefusal=true',
+        '--features=com.oracle.truffle.js.test.aot.JSAOTTierFixtureFeature',
+    ]
+    build_output = []
+    test_failed = False
+    try:
+        native_unittest(['com.oracle.truffle.js.test.aot.JSAOTTierNativeTest', '--build-args'] + build_args + ['--run-args', '--very-verbose'] + (run_args or []),
+                        native_image_wrapper=_capturing_image_build(build_output))
+    except _NativeImageBuildFailed:
+        mx.abort('The GraalJS Truffle AOT tier test image failed to build')
+    except SystemExit:
+        # The test (or the build, before any summary) failed; report it together with the build summary.
+        test_failed = True
+
+    errors = []
+    statuses = collections.defaultdict(list)
+    for line in build_output:
+        if line.startswith(_TRUFFLE_AOT_SUMMARY_PREFIX):
+            status, _, rest = line[len(_TRUFFLE_AOT_SUMMARY_PREFIX):].partition(' ')
+            statuses[re.match(r'[^ :]*', rest).group(0)].append((status, line))
+    refusals = [line for line in build_output if line.startswith('[js-aot] refused ')]
+    for name in _JS_AOT_FIXTURE_FUNCTIONS:
+        if not statuses.get(name):
+            errors.append(f'fixture function {name} is not in the Truffle AOT tier summary')
+        for status, line in statuses.get(name, []):
+            if status != 'compiled':
+                refusal = [r for r in refusals if r.startswith(f'[js-aot] refused {name}: ')]
+                errors.append(f'fixture function {name} was not compiled: {line}' + (f' ({refusal[0]})' if refusal else ''))
+    others = collections.Counter(status for name, lines in statuses.items() if name not in _JS_AOT_FIXTURE_FUNCTIONS for status, _ in lines)
+    mx.log(f'[truffle-aot-js] other roots of the pre-initialized context: {dict(others)}')
+    _log_truffle_aot_js_fixture_sizes(build_output)
+    if test_failed:
+        errors.append('JSAOTTierNativeTest failed (see above)')
+    if errors:
+        mx.abort('GraalJS Truffle AOT tier native tests failed:\n' + '\n'.join(errors))
+
+
+def _log_truffle_aot_js_fixture_sizes(output):
+    """Logs the node and allocation counts of the compiled roots of the GraalJS fixture."""
+    for line in output:
+        m = re.match(re.escape(_TRUFFLE_AOT_SUMMARY_PREFIX) + r'(?:compiled|kept) (\S+) nodes=(\d+) allocs=(\d+) ', line)
+        if m and m.group(1) in _JS_AOT_FIXTURE_FUNCTIONS:
+            mx.log(f'[truffle-aot-size] {m.group(1)} nodes={m.group(2)} allocs={m.group(3)}')
+
+
+@mx.command(suite.name, 'truffle-aot-js-native-tests', '[image-builder-args...]')
+def truffle_aot_js_native_tests(args):
+    """Builds and runs the GraalJS Truffle AOT tier native test (needs --dynamicimports /graal-js); arguments are passed to the image builder."""
+    truffle_aot_tier_js_native_tests(args)
+
+
 def svm_gate_body(args, tasks):
     with Task('module build demo', tasks, tags=[GraalTags.hellomodule]) as t:
         if t:
