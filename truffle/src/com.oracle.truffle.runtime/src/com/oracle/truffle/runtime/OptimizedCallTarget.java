@@ -232,6 +232,12 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      */
     @CompilationFinal private boolean aotShadow;
     /**
+     * Valid until the first AOT shadow is created: until then, no call can reach a shadow, and the
+     * redirection of indirect calls of shadows ({@link #callIndirect}) folds away, so that it costs
+     * nothing where the AOT tier is not used. Only invalidated at image build time or by tests.
+     */
+    private static final Assumption NO_AOT_SHADOWS = Assumption.create("no AOT shadows");
+    /**
      * Build-time compiled code of this (live) target, or {@code null} if it has none or it was
      * unlinked. See {@link #unlinkAOT(CharSequence)}.
      */
@@ -573,21 +579,26 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
 
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
     public final Object callIndirect(Node location, Object... args) {
-        /*
-         * A call to an AOT shadow is a call to its live target (see callSourceOfAOTShadow). The
-         * target is selected here rather than by calling the live target's callIndirect: partial
-         * evaluation inlines this method, and for a target that is not a PE constant, the call
-         * would inline this method again, recursively. The live target is never a shadow.
-         */
-        OptimizedCallTarget target = aotShadow ? sourceCallTarget : this;
+        if (!NO_AOT_SHADOWS.isValid() && aotShadow) {
+            /*
+             * A call to an AOT shadow is a call to its live target (see callSourceOfAOTShadow). For
+             * a target that is not a PE constant, aotShadow does not fold: behind a boundary, so
+             * that partial evaluation does not inline callIndirect again, recursively.
+             */
+            try {
+                return callSourceOfAOTShadowIndirect(location, args);
+            } finally {
+                Reference.reachabilityFence(location);
+            }
+        }
         /*
          * Indirect calls should not invalidate existing compilations of the callee, and the callee
          * should still be able to use profiled arguments until an incompatible argument is passed.
          * So we profile arguments for indirect calls too, but behind a truffle boundary.
          */
-        target.profileIndirectArguments(args);
+        profileIndirectArguments(args);
         try {
-            return target.doInvoke(args);
+            return doInvoke(args);
         } finally {
             // this is needed to keep the values from being cleared as non-live locals
             Reference.reachabilityFence(location);
@@ -639,6 +650,12 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
      */
     private Object callSourceOfAOTShadow(Node location, Object[] args) {
         return sourceCallTarget.callIndirect(location, args);
+    }
+
+    /** {@link #callSourceOfAOTShadow}, for {@link #callIndirect}. */
+    @TruffleBoundary(transferToInterpreterOnException = false)
+    private Object callSourceOfAOTShadowIndirect(Node location, Object[] args) {
+        return callSourceOfAOTShadow(location, args);
     }
 
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
@@ -1219,6 +1236,7 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         } finally {
             CREATING_AOT_SHADOW.remove();
         }
+        NO_AOT_SHADOWS.invalidate();
         shadow.aotShadow = true;
         boolean prepared;
         boolean descriptorChanged = false;
