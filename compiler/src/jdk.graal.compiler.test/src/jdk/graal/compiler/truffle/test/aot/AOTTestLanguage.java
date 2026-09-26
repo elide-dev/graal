@@ -371,6 +371,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new StringConcatRoot(language);
         } else if (trimmed.equals("inlined")) {
             root = new InlinedNodeRoot(language);
+        } else if (trimmed.equals("langref")) {
+            root = new LanguageReferenceRoot(language);
         } else if (trimmed.equals("patchstate")) {
             root = new PatchStateRoot(language);
         } else if (trimmed.equals("ctxstable")) {
@@ -490,6 +492,37 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         @Override
         public String getName() {
             return "inlined";
+        }
+    }
+
+    /**
+     * "langref": returns its argument. Its {@link #prepareForAOT()} looks up its language through a
+     * {@link LanguageReference}, like cached initializers of DSL nodes do: an AOT shadow is
+     * prepared at image build time outside of any context, where it must resolve through the root.
+     */
+    public static final class LanguageReferenceRoot extends RootNode {
+        LanguageReferenceRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return frame.getArguments()[0];
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            return REFERENCE.get(this) == getLanguage(AOTTestLanguage.class) ? ExecutionSignature.GENERIC : null;
+        }
+
+        @Override
+        public String getName() {
+            return "langref";
         }
     }
 
@@ -1237,10 +1270,6 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
         }
     }
 
-    /**
-     * "patchprobe": returns 1 if it was parsed by a language instance that awaits the patch of its
-     * pre-initialized context, and 0 otherwise.
-     */
     /** "patchstate": whether its context was patched ({@link AOTTestContext#state}). */
     public static final class PatchStateRoot extends RootNode {
         PatchStateRoot(TruffleLanguage<?> language) {

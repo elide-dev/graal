@@ -284,7 +284,29 @@ final class PolyglotFastThreadLocals {
                 return instance.spi;
             }
         }
-        return (TruffleLanguage<Object>) IMPL.fastGet(index, languageClass, true, false);
+        TruffleLanguage<Object> language = (TruffleLanguage<Object>) IMPL.fastGet(index, languageClass, true, false);
+        if (language == null && CompilerDirectives.inInterpreter() && IMPL.get() == null) {
+            return getLanguageOutsideContext(node, index);
+        }
+        return language;
+    }
+
+    /**
+     * The language instance of the sharing layer of {@code node}'s root, if no polyglot context is
+     * entered: the AST of an AOT shadow is prepared at image build time outside of any context
+     * (see {@code OptimizedCallTarget.createAOTShadow}), and its nodes may still look up their
+     * language, e.g., in cached initializers. A language instance does not depend on the context,
+     * unlike a context reference, which has no such fallback.
+     */
+    private static TruffleLanguage<Object> getLanguageOutsideContext(Node node, int index) {
+        CompilerAsserts.neverPartOfCompilation();
+        RootNode root = node == null ? null : node.getRootNode();
+        PolyglotSharingLayer layer = root == null ? null : (PolyglotSharingLayer) EngineAccessor.NODES.getSharingLayer(root);
+        if (layer == null) {
+            return null;
+        }
+        PolyglotLanguageInstance instance = layer.getInstance(layer.engine.languages[resolveLanguageIndex(index)]);
+        return instance == null ? null : instance.spi;
     }
 
     public static Object getLanguageContext(Node node, int index) {
@@ -550,7 +572,7 @@ final class PolyglotFastThreadLocals {
 
         @Override
         public TruffleLanguage<Object> get(Node node) {
-            assert assertValidGet(index, LANGUAGE_SPI_OFFSET, languageClass, languageClass);
+            assert (IMPL.get() == null && getLanguageOutsideContext(node, index) != null) || assertValidGet(index, LANGUAGE_SPI_OFFSET, languageClass, languageClass);
             return getLanguage(node, index, languageClass);
         }
 

@@ -57,8 +57,11 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         return parse(code, true);
     }
 
+    /** The context of the last {@link #parse}, entered until the test ends. */
+    private Context context;
+
     private OptimizedCallTarget parse(String code, boolean multiTier) {
-        Context context = setupContext(newContextBuilder().option("engine.BackgroundCompilation", "false").option("engine.MultiTier", String.valueOf(multiTier)) //
+        context = setupContext(newContextBuilder().option("engine.BackgroundCompilation", "false").option("engine.MultiTier", String.valueOf(multiTier)) //
                         .option("engine.FirstTierCompilationThreshold", "10").option("engine.SingleTierCompilationThreshold", "10") //
                         .option("engine.AOTTierThreshold", "5"));
         context.initialize(AOTTestLanguage.ID);
@@ -108,6 +111,21 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertEquals(3, caller.getCallTarget().call(2));
         assertTrue(live.wasExecuted());
         assertFalse(shadow.wasExecuted());
+    }
+
+    /**
+     * An AOT shadow is prepared at image build time outside of any context: a language reference
+     * used by its preparation resolves to the language of its root.
+     */
+    @Test
+    public void shadowPreparedOutsideContextResolvesLanguageReference() {
+        OptimizedCallTarget live = parse("langref");
+        context.leave();
+        try {
+            assertNotNull(live.createAOTShadow());
+        } finally {
+            context.enter();
+        }
     }
 
     @Test
