@@ -1305,6 +1305,17 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
         assert aotShadow;
         argumentsProfile = ArgumentsProfile.INVALID;
         returnProfile = ReturnProfile.INVALID;
+        startExecutionProfilesGenericForAOT();
+    }
+
+    /**
+     * Starts the exception profiles of this target and of the call nodes of its AST, and the
+     * {@link Profile profiles} of its AST, in their generic state, like for an AOT shadow (see
+     * {@link #startProfilesGenericForAOT()}): for code compiled before the AST was ever executed.
+     * Used for the shadow and, with {@code engine.CompileAOTOnCreate}, for a live target that is
+     * compiled when it is created, so that such code behaves like the AOT tier code of a shadow.
+     */
+    void startExecutionProfilesGenericForAOT() {
         exceptionProfile = PROFILE_GENERIC;
         rootNode.accept(node -> {
             if (node instanceof OptimizedDirectCallNode directCall) {
