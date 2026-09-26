@@ -29,7 +29,9 @@ Enable the AOT tier with the following system properties, passed to `native-imag
 | `engine.AOTTierThreshold` | run time | The number of calls and loop iterations after which a call target's AOT code is unlinked. It is checked when the call target is called. `0`, the default, uses the value of `FirstTierCompilationThreshold`. |
 | `engine.TraceAOT` | run time, internal | Traces the AOT code of call targets: when it is first entered, unlinked, and deoptimized. See [Diagnostics](#diagnostics). |
 | `-H:+TruffleAOTPrintSummary` | hosted | Prints a per-root build summary. |
-| `-H:+TruffleAOTFailOnError` | hosted | Fails the build if a selected root was not compiled. |
+| `-H:+TruffleAOTFailOnError` | hosted | Fails the build if a selected root was not compiled, or exceeds a size limit below. |
+| `-H:TruffleAOTMaxRootNodes=<n>` | hosted | Reports a compiled root with more than `<n>` nodes after partial evaluation. `0`, the default, means no limit. See [Size limits](#size-limits). |
+| `-H:TruffleAOTMaxRootAllocations=<n>` | hosted | Reports a compiled root that allocates at more than `<n>` sites. `-1`, the default, means no limit. See [Size limits](#size-limits). |
 
 For example, build a native executable with the AOT tier enabled for a JavaScript context:
 
@@ -108,12 +110,13 @@ For a short-running script, the AOT code usually outweighs this; for a long-runn
 Pass `-H:+TruffleAOTPrintSummary` to print one line per selected root during the build, in a deterministic order, for example:
 
 ```
-[truffle-aot] compiled myFunction nodes=42 assumptions=1 as aot_17_myFunction codeSize=512
+[truffle-aot] compiled myFunction nodes=42 allocs=1 assumptions=1 as aot_17_myFunction codeSize=512
 [truffle-aot] skipped otherFunction: filtered
-[truffle-aot] kept thirdFunction nodes=30 assumptions=2 as aot_18_thirdFunction codeSize=384: assumption invalidated after heap snapshot: someAssumption
+[truffle-aot] kept thirdFunction nodes=30 allocs=0 assumptions=2 as aot_18_thirdFunction codeSize=384: assumption invalidated after heap snapshot: someAssumption
 ```
 
 The name after `as` is the name of the compiled method in the native executable, `aot_<id>_<root name>`.
+`nodes` is the size of the root's graph after partial evaluation, and `allocs` is the number of allocation sites in its code (see [Size limits](#size-limits)).
 A `skipped` line reports a root that was not compiled and why, for example `filtered` (excluded by `AOTCompileFilter`), `executed at build time` (the root ran during pre-initialization, so its live AST is already specialized), a partial-evaluation bailout, an over-budget graph, an unsupported node, or an exception thrown by the language while it prepared the root.
 A `kept` line reports a root whose backing assumption was invalidated only after the build's heap snapshot was already sealed; the image keeps the compiled code and the assumption as still valid, and this is not a build failure.
 
@@ -129,6 +132,26 @@ It also enables `-H:+VerifyDeoptSourceEntryPoints`, which fails the build if the
 A few checks fail the build even without `-H:+TruffleAOTFailOnError`, because they detect an internal error of the AOT tier rather than a problem of the language: a deoptimization target of AOT code that is not reachable, and a compilation of AOT code that fails after the analysis.
 The error names the `aot_<id>_<root name>` method.
 To build the native executable anyway, exclude that root with `AOTCompileFilter`, and report the error.
+
+### Size Limits
+
+A root whose code grows unexpectedly large or allocates unexpectedly, for example because a helper was inlined into it, costs image size and run-time performance without failing the build.
+To catch this at build time, set `-H:TruffleAOTMaxRootNodes` and `-H:TruffleAOTMaxRootAllocations`.
+Each compiled root above a limit is reported as a warning, or with `-H:+TruffleAOTFailOnError`, as a build failure:
+
+```
+Truffle AOT tier: root 'myFunction' has 312 nodes, more than -H:TruffleAOTMaxRootNodes=250
+Truffle AOT tier: root 'otherFunction' allocates at 3 sites, more than -H:TruffleAOTMaxRootAllocations=2: Box(int), New(MyObject)x2
+```
+
+An allocation site is one of these in the compiled code, listed by type:
+
+- `New(<class>)` and `NewArray(<element type>)`: an explicit allocation.
+- `Box(<kind>)`: a boxed primitive, for example the result of a root that returns `Object`.
+- `Materialize(<type>)`: an object that escape analysis removed on some paths but has to allocate on others, for example an exception that is thrown or the arguments array of a call.
+
+Allocations inside methods that the compiled code calls, rather than inlines, are not counted.
+For example, `TruffleString` operations are always called.
 
 At run time, `engine.TraceAOT` prints a line the first time each target's AOT code is entered, a line each time the runtime unlinks a call target's AOT code, for example when the `engine.AOTTierThreshold` is reached or an assumption is invalidated, and a line each time invalidating the code deoptimizes its frames:
 

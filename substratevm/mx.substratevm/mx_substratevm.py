@@ -553,8 +553,8 @@ def _check_truffle_aot_summary(output, expected):
     of `expected` (root name -> expected line, without the prefix and the root name), with the expected line. For a
     compiled root, the expected line is 'compiled', which matches any compilation statistics. Returns the errors.
     """
-    compiled = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+$')
-    kept = re.compile(r'^ nodes=\d+ assumptions=\d+ as \S+ codeSize=\d+(: .*)$')
+    compiled = re.compile(r'^ nodes=\d+ allocs=\d+ assumptions=\d+ as \S+ codeSize=\d+$')
+    kept = re.compile(r'^ nodes=\d+ allocs=\d+ assumptions=\d+ as \S+ codeSize=\d+(: .*)$')
     errors = []
     lines = {}
     for line in output:
@@ -592,7 +592,40 @@ def _check_truffle_aot_summary(output, expected):
     return errors
 
 
-_STRCAT_MAX_NODES = 400
+# The size of AOT tier code the test images may compile per root: nodes after partial evaluation, and allocation sites
+# (see TruffleBuildTimeCompilationFeature.allocationSites). A root above its limit fails the tests, to catch node and
+# allocation explosions early. An exception names the root with its limit and the sites that need it. Allocations in
+# callees that stay out of line (e.g., TruffleString operations) are not counted.
+_AOT_MAX_NODES = 250
+_AOT_MAX_NODES_EXCEPTIONS = {}
+_AOT_MAX_ALLOCS = 0
+_AOT_RESULT_BOX = 'Box(int): the result, boxed by the Object return of the root'
+_AOT_THROW = 'Materialize(AOTTestException)x3, Materialize(TruffleStackTrace$LazyStackTrace), Materialize(TruffleStackTrace$TracebackElement): the thrown exception'
+_AOT_MAX_ALLOCS_EXCEPTIONS = {
+    **{name: (1, _AOT_RESULT_BOX) for name in ('assume', 'branch', 'ctxstable', 'deopt', 'instr', 'instrfirst', 'lateinval', 'twoassume')},
+    **{name: (1, 'Box(long): the result, boxed by the Object return of the root') for name in ('assumeloop', 'loop', 'pollspin', 'spin')},
+    **{f'add{i}': (2, 'Box(int), Box(long): the result, boxed by the Object return of the root, as an int or, on overflow, a long') for i in range(1, 8)},
+    **{name: (3, 'Box(int)x2: results; Materialize(Object[]): the arguments of the recursive call') for name in ('recurse', 'drecurse')},
+    **{name: (5, _AOT_THROW) for name in ('throw', 'thrower', 'throwinvalcallee', 'callapithrower')},
+}
+
+
+def _check_truffle_aot_sizes(output):
+    """Checks the node and allocation counts of every compiled root in the `[truffle-aot]` summary of `output`."""
+    errors = []
+    for line in output:
+        m = re.match(re.escape(_TRUFFLE_AOT_SUMMARY_PREFIX) + r'(?:compiled|kept) (\S+) nodes=(\d+) allocs=(\d+) ', line)
+        if not m:
+            continue
+        name, nodes, allocs = m.group(1), int(m.group(2)), int(m.group(3))
+        mx.log(f'[truffle-aot-size] {name} nodes={nodes} allocs={allocs}')
+        max_nodes = _AOT_MAX_NODES_EXCEPTIONS.get(name, (_AOT_MAX_NODES,))[0]
+        max_allocs = _AOT_MAX_ALLOCS_EXCEPTIONS.get(name, (_AOT_MAX_ALLOCS,))[0]
+        if nodes > max_nodes:
+            errors.append(f'root {name} compiles to {nodes} nodes, more than {max_nodes}')
+        if allocs > max_allocs:
+            errors.append(f'root {name} allocates at {allocs} sites, more than {max_allocs}')
+    return errors
 
 
 def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
@@ -651,11 +684,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     except _NativeImageBuildFailed:
         mx.abort('The Truffle AOT tier test image failed to build')
     errors = _check_truffle_aot_summary(build_output, expected_summary)
-    # AOT tier code calls TruffleString operations instead of inlining them, which would add hundreds of nodes per
-    # operation (BuildTimePEGraphDecoder.isOutOfLine).
-    strcat_nodes = [int(m.group(1)) for line in build_output for m in [re.search(r'compiled strcat nodes=(\d+)', line)] if m]
-    if not strcat_nodes or strcat_nodes[0] > _STRCAT_MAX_NODES:
-        errors.append(f'expected "strcat" to compile to at most {_STRCAT_MAX_NODES} nodes, was {strcat_nodes}')
+    # Node and allocation explosions, e.g., "strcat" if TruffleString operations were inlined (1178 nodes instead of
+    # 132, see BuildTimePEGraphDecoder.isOutOfLine).
+    errors += _check_truffle_aot_sizes(build_output)
 
     # Without code sharing, the AOT code belongs to the pre-initialized context itself, which the first context of the
     # image run adopts and patches ("bound" pre-initialization). "patchstate" and "ctxstable" fold context state that
@@ -674,12 +705,16 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     except _NativeImageBuildFailed:
         mx.abort('The Truffle AOT tier test image without code sharing failed to build')
     errors += _check_truffle_aot_summary(bound_output, {name: 'compiled' for name in bound_fixtures})
+    errors += _check_truffle_aot_sizes(bound_output)
 
     # A root that is not compiled fails the build with -H:+TruffleAOTFailOnError: "refuse" refuses AOT. Roots executed at
-    # build time do not.
-    fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError'])
+    # build time do not. So does a root above -H:TruffleAOTMaxRootNodes ("recurse": 198 nodes) or
+    # -H:TruffleAOTMaxRootAllocations ("throw": 5 sites).
+    fail_args = build_args + svm_experimental_options(['-H:+TruffleAOTFailOnError', '-H:TruffleAOTMaxRootNodes=150', '-H:TruffleAOTMaxRootAllocations=4'])
     fail_output = []
-    expected_error = "Truffle AOT tier: root 'refuse' was not compiled: root refused AOT (cloneForAOT or prepareForAOT)"
+    expected_errors = ["Truffle AOT tier: root 'refuse' was not compiled: root refused AOT (cloneForAOT or prepareForAOT)",
+                       "Truffle AOT tier: root 'recurse' has ",
+                       "Truffle AOT tier: root 'throw' allocates at 5 sites, more than -H:TruffleAOTMaxRootAllocations=4: Materialize(AOTTestLanguage$AOTTestException)x3, "]
     # "callee" was executed at build time: not eligible by design, so not an error. The engine's RootNode.Constant root has
     # no guest language, so it is not even selected.
     unexpected_errors = ["Truffle AOT tier: root 'callee' was not compiled", "Truffle AOT tier: root 'RootNode.Constant"]
@@ -688,8 +723,9 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
                         native_image_wrapper=_capturing_image_build(fail_output))
     except _NativeImageBuildFailed:
         mx.log('TruffleAOTFailOnError failed the build as expected')
-        if not any(expected_error in line for line in fail_output):
-            errors.append(f'expected the build output of -H:+TruffleAOTFailOnError to contain: {expected_error}')
+        for expected_error in expected_errors:
+            if not any(expected_error in line for line in fail_output):
+                errors.append(f'expected the build output of -H:+TruffleAOTFailOnError to contain: {expected_error}')
         for unexpected_error in unexpected_errors:
             if any(unexpected_error in line for line in fail_output):
                 errors.append(f'expected the build output of -H:+TruffleAOTFailOnError not to contain: {unexpected_error}')

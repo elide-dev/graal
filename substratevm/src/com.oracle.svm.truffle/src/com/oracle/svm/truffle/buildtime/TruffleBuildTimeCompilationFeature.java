@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 
 import org.graalvm.nativeimage.ImageSingletons;
@@ -68,6 +69,7 @@ import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.ClassUtil;
 import com.oracle.svm.shared.util.LogUtils;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.truffle.TruffleFeature;
@@ -87,7 +89,13 @@ import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.GraphDecoder;
 import jdk.graal.compiler.nodes.GraphEncoder;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.extended.BoxNode;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
+import jdk.graal.compiler.nodes.java.AbstractNewObjectNode;
+import jdk.graal.compiler.nodes.java.NewArrayNode;
+import jdk.graal.compiler.nodes.java.NewInstanceNode;
+import jdk.graal.compiler.nodes.virtual.CommitAllocationNode;
+import jdk.graal.compiler.nodes.virtual.VirtualObjectNode;
 import jdk.graal.compiler.phases.common.GuardLoweringPhase;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.truffle.EconomyPartialEvaluatorConfiguration;
@@ -190,6 +198,11 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         private String rejection;
         /** The partial evaluation statistics, once the root is partially evaluated. */
         private String compiled;
+        /** The node and allocation counts of the partially evaluated graph, see {@link #limitViolations}. */
+        private int nodes;
+        private int allocations;
+        /** What the {@link #allocations} allocate, e.g., {@code Box(Integer), New(Foo)x2}. */
+        private String allocationSites;
         /** The compiled method and its code size, once it is installed. */
         private String installed;
         /**
@@ -382,6 +395,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
              */
             insertTruffleSafepoints(graph);
             int nodes = graph.getNodeCount();
+            Map<String, Integer> sites = allocationSites(graph);
+            int allocations = sites.values().stream().mapToInt(Integer::intValue).sum();
             if (budget > 0 && nodes > budget) {
                 unlink(method, "over budget (" + nodes + " > " + budget + ")");
                 return null;
@@ -407,7 +422,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 heapScanner.rescanField(method.live, aotCodeField, reason);
                 heapScanner.rescanField(method.live, aotInitializedField, reason);
             }
-            compiled(method.root, "nodes=" + nodes + " assumptions=" + method.assumptions.size());
+            compiled(method.root, nodes, allocations, describe(sites), method.assumptions.size());
             return result;
         } catch (OutOfMemoryError e) {
             throw e;
@@ -745,10 +760,12 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
      * summary. Roots excluded by the filter or executed at build time do not fail it.
      */
     private void failOnError() {
+        List<String> violations = limitViolations();
         if (!BuildTimeCompilationOptions.TruffleAOTFailOnError.getValue()) {
+            violations.forEach(v -> LogUtils.warning("%s", v));
             return;
         }
-        List<String> failures = new ArrayList<>();
+        List<String> failures = new ArrayList<>(violations);
         for (BuildTimeCompilationSupport.Rejection r : rejections()) {
             if (isFailure(r)) {
                 failures.add("Truffle AOT tier: root '" + r.rootName() + "' was not compiled: " + r.reason());
@@ -829,8 +846,65 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
         return root.rejection != null;
     }
 
-    private synchronized void compiled(AOTRoot root, String statistics) {
-        root.compiled = statistics;
+    private synchronized void compiled(AOTRoot root, int nodes, int allocations, String allocationSites, int assumptions) {
+        root.nodes = nodes;
+        root.allocations = allocations;
+        root.allocationSites = allocationSites;
+        root.compiled = "nodes=" + nodes + " allocs=" + allocations + " assumptions=" + assumptions;
+    }
+
+    /**
+     * The allocation sites of the partially evaluated {@code graph}, by what they allocate: object
+     * and array allocations, virtual objects that are materialized, and boxings, which remain after
+     * partial escape analysis only where the value escapes.
+     */
+    private static Map<String, Integer> allocationSites(StructuredGraph graph) {
+        Map<String, Integer> sites = new TreeMap<>();
+        for (jdk.graal.compiler.graph.Node node : graph.getNodes()) {
+            if (node instanceof NewInstanceNode n) {
+                sites.merge("New(" + n.instanceClass().toJavaName(false) + ")", 1, Integer::sum);
+            } else if (node instanceof NewArrayNode n) {
+                sites.merge("NewArray(" + n.elementType().toJavaName(false) + ")", 1, Integer::sum);
+            } else if (node instanceof AbstractNewObjectNode n) {
+                sites.merge(ClassUtil.getUnqualifiedName(n.getClass()), 1, Integer::sum);
+            } else if (node instanceof BoxNode n) {
+                sites.merge("Box(" + n.getBoxingKind().getJavaName() + ")", 1, Integer::sum);
+            } else if (node instanceof CommitAllocationNode commit) {
+                for (VirtualObjectNode v : commit.getVirtualObjects()) {
+                    sites.merge("Materialize(" + v.type().toJavaName(false) + ")", 1, Integer::sum);
+                }
+            }
+        }
+        return sites;
+    }
+
+    private static String describe(Map<String, Integer> sites) {
+        StringBuilder sb = new StringBuilder();
+        sites.forEach((site, count) -> sb.append(sb.isEmpty() ? "" : ", ").append(site).append(count > 1 ? "x" + count : ""));
+        return sb.toString();
+    }
+
+    /**
+     * The compiled roots that exceed {@link BuildTimeCompilationOptions#TruffleAOTMaxRootNodes} or
+     * {@link BuildTimeCompilationOptions#TruffleAOTMaxRootAllocations}, as messages.
+     */
+    private synchronized List<String> limitViolations() {
+        int maxNodes = BuildTimeCompilationOptions.TruffleAOTMaxRootNodes.getValue();
+        int maxAllocations = BuildTimeCompilationOptions.TruffleAOTMaxRootAllocations.getValue();
+        List<String> violations = new ArrayList<>();
+        for (AOTRoot root : roots) {
+            if (root.compiled == null || root.rejection != null) {
+                continue;
+            }
+            if (maxNodes > 0 && root.nodes > maxNodes) {
+                violations.add("Truffle AOT tier: root '" + root.name + "' has " + root.nodes + " nodes, more than -H:TruffleAOTMaxRootNodes=" + maxNodes);
+            }
+            if (maxAllocations >= 0 && root.allocations > maxAllocations) {
+                violations.add("Truffle AOT tier: root '" + root.name + "' allocates at " + root.allocations + " sites, more than -H:TruffleAOTMaxRootAllocations=" + maxAllocations + ": " +
+                                root.allocationSites);
+            }
+        }
+        return violations;
     }
 
     /**
