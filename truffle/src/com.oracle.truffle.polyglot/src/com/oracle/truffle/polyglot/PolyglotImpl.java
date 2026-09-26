@@ -182,6 +182,22 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
         }
     }
 
+    /**
+     * Takes the pre-initialized engine for a new engine, if it may use it: the engine of a context
+     * created without an explicit engine ({@code boundEngine}) always may; an explicitly created
+     * engine only with {@code engine.ExplicitEngineUsesPreInitializedContext}.
+     */
+    private PolyglotEngineImpl takePreInitializedEngine(boolean boundEngine, OptionValuesImpl engineOptions) {
+        PolyglotEngineImpl preInitialized = preInitializedEngineRef.get();
+        if (preInitialized == null) {
+            return null;
+        }
+        if (!boundEngine && !engineOptions.get(PolyglotEngineOptions.ExplicitEngineUsesPreInitializedContext)) {
+            return null;
+        }
+        return preInitializedEngineRef.compareAndSet(preInitialized, null) ? preInitialized : null;
+    }
+
     PolyglotEngineImpl getPreinitializedEngine() {
         return preInitializedEngineRef.get();
     }
@@ -373,7 +389,7 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
              */
             if (impl == null && !hostLanguageOnly && !EngineAccessor.RUNTIME.isStoreEnabled(engineOptions) &&
                             engineOptions.get(PolyglotEngineOptions.UsePreInitializedContext)) {
-                impl = preInitializedEngineRef.getAndSet(null);
+                impl = takePreInitializedEngine(boundEngine, engineOptions);
             }
 
             if (impl != null) {

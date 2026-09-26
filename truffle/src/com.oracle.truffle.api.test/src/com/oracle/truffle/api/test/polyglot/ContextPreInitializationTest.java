@@ -946,6 +946,29 @@ public class ContextPreInitializationTest {
         assertEquals(2, secondLangCtx.disposeThreadCount);       // Close initializes thread
     }
 
+    /**
+     * An explicitly created engine uses the pre-initialized context only with
+     * {@code engine.ExplicitEngineUsesPreInitializedContext}.
+     */
+    @Test
+    public void testExplicitEngineUsesPreInitializedContextWhenEnabled() throws Exception {
+        setPatchable(FIRST);
+        doContextPreinitialize(FIRST);
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        final CountingContext firstLangCtx = findContext(FIRST, contexts);
+        assertNotNull(firstLangCtx);
+        try (Engine engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.ExplicitEngineUsesPreInitializedContext", "true").build();
+                        Context ctx = Context.newBuilder().engine(engine).build()) {
+            Value res = ctx.eval(Source.create(FIRST, "test"));
+            assertEquals("test", res.asString());
+            contexts = new ArrayList<>(emittedContexts);
+            assertEquals(1, contexts.size());
+            assertEquals(1, firstLangCtx.createContextCount);
+            assertEquals(1, firstLangCtx.patchContextCount);
+        }
+    }
+
     @Test
     public void testTemporaryEngine() throws Exception {
         setPatchable(FIRST);
