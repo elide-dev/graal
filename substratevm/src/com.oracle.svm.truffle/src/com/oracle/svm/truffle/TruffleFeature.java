@@ -164,6 +164,8 @@ import com.oracle.svm.truffle.api.SubstrateThreadLocalHandshakeSnippets;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompiler;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
 import com.oracle.svm.truffle.api.SubstrateTruffleUniverseFactory;
+import com.oracle.svm.truffle.buildtime.BuildTimeCompilationOptions;
+import com.oracle.svm.truffle.buildtime.TruffleBuildTimeCompilationFeature;
 import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.OriginalClassProvider;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -361,6 +363,23 @@ public class TruffleFeature implements InternalFeature {
         }
 
         ImageSingletons.lookup(TruffleBaseFeature.class).setGraalGraphObjectReplacer(RuntimeCompilationFeature.singleton().getObjectReplacer());
+        checkAOTTierRegistered();
+    }
+
+    /**
+     * Without {@link TruffleBuildTimeCompilationFeature}, {@code AOTCompile} compiles nothing, for
+     * example with a {@code truffle-runtime} jar that does not register it. Warns, or with
+     * {@link BuildTimeCompilationOptions#TruffleAOTFailOnError}, fails the build.
+     */
+    private static void checkAOTTierRegistered() {
+        if (Boolean.getBoolean("polyglot.image-build-time.AOTCompile") && !ImageSingletons.contains(TruffleBuildTimeCompilationFeature.class)) {
+            String message = "polyglot.image-build-time.AOTCompile is set, but the Truffle AOT tier is not enabled, so no call target is compiled at build time. " +
+                            "Add --features=" + TruffleBuildTimeCompilationFeature.class.getName() + ".";
+            if (BuildTimeCompilationOptions.TruffleAOTFailOnError.getValue()) {
+                throw UserError.abort("%s", message);
+            }
+            LogUtils.warning("%s", message);
+        }
     }
 
     private void registerNeverPartOfCompilation(InvocationPlugins plugins) {
