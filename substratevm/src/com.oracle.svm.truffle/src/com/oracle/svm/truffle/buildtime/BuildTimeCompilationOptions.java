@@ -53,6 +53,15 @@ public final class BuildTimeCompilationOptions {
         }
     };
 
+    @Option(help = "Report a root whose AOT tier code has more nodes after partial evaluation than this (0: no limit). " +
+                    "With TruffleAOTFailOnError, such a root fails the image build.")//
+    public static final HostedOptionKey<Integer> TruffleAOTMaxRootNodes = new HostedOptionKey<>(0);
+
+    @Option(help = "Report a root whose AOT tier code allocates at more sites than this: object and array allocations, " +
+                    "materialized virtual objects and boxings that remain after partial evaluation (-1: no limit). " +
+                    "With TruffleAOTFailOnError, such a root fails the image build.")//
+    public static final HostedOptionKey<Integer> TruffleAOTMaxRootAllocations = new HostedOptionKey<>(-1);
+
     private BuildTimeCompilationOptions() {
     }
 }

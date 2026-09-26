@@ -185,7 +185,8 @@ Unlinking is per call target and permanent. Image code is never freed.
 **Failures and diagnostics.**
 - PE bailouts, `CompilerAsserts` violations, budget overruns and unsupported nodes skip the root with a reason. They never fail the build.
 - `-H:+TruffleAOTFailOnError` turns skips into build errors (CI).
-- `-H:+TruffleAOTPrintSummary` prints per root: compiled or skipped (reason), graph size, code size, and assumptions.
+- `-H:+TruffleAOTPrintSummary` prints per root: compiled or skipped (reason), graph size, allocation sites, code size, and assumptions.
+- `-H:TruffleAOTMaxRootNodes` and `-H:TruffleAOTMaxRootAllocations` report node and allocation explosions; the native test harness enforces per-root ceilings (`_AOT_MAX_NODES`, `_AOT_MAX_ALLOCS` and their exceptions in `mx_substratevm.py`).
 
 ### 5.5 GraalJS proof slice (`graaljs`, PR 2)
 
@@ -237,6 +238,8 @@ Unlinking is per call target and permanent. Image code is never freed.
 | `engine.TraceAOT` | run time | Trace AOT enter / unlink / invalidate |
 | `-H:+TruffleAOTPrintSummary` | hosted | Per-root build summary |
 | `-H:+TruffleAOTFailOnError` | hosted | Skipped roots fail the build |
+| `-H:TruffleAOTMaxRootNodes=<n>` | hosted | Reports roots above `<n>` nodes after PE (fails the build with `FailOnError`) |
+| `-H:TruffleAOTMaxRootAllocations=<n>` | hosted | Reports roots above `<n>` allocation sites (fails the build with `FailOnError`) |
 | `js.aot-materialize-call-targets` | JS internal | Eager call targets during AOT pre-init |
 
 ## 7. Testing (`graal` PR)
