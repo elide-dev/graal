@@ -602,7 +602,7 @@ _AOT_MAX_ALLOCS = 0
 _AOT_RESULT_BOX = 'Box(int): the result, boxed by the Object return of the root'
 _AOT_THROW = 'Materialize(AOTTestException)x3, Materialize(TruffleStackTrace$LazyStackTrace), Materialize(TruffleStackTrace$TracebackElement): the thrown exception'
 _AOT_MAX_ALLOCS_EXCEPTIONS = {
-    **{name: (1, _AOT_RESULT_BOX) for name in ('assume', 'branch', 'ctxstable', 'deopt', 'instr', 'instrfirst', 'lateinval', 'twoassume')},
+    **{name: (1, _AOT_RESULT_BOX) for name in ('assume', 'branch', 'ctxstable', 'deopt', 'instr', 'instrfirst', 'lateinval', 'twoassume', 'inlined')},
     **{name: (1, 'Box(long): the result, boxed by the Object return of the root') for name in ('assumeloop', 'loop', 'pollspin', 'spin')},
     **{f'add{i}': (2, 'Box(int), Box(long): the result, boxed by the Object return of the root, as an int or, on overflow, a long') for i in range(1, 8)},
     **{name: (3, 'Box(int)x2: results; Materialize(Object[]): the arguments of the recursive call') for name in ('recurse', 'drecurse')},
@@ -641,7 +641,7 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
                        ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
                        ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval'),
                        ('lateinval', 'lateinval'), ('typed', 'typed'), ('typedcall', 'typedcall'),
-                       ('twoassume', 'twoassume'), ('callapi', 'callapi'), ('retcall', 'retcall'), ('strcat', 'strcat')]:
+                       ('twoassume', 'twoassume'), ('callapi', 'callapi'), ('retcall', 'retcall'), ('strcat', 'strcat'), ('inlined', 'inlined')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)

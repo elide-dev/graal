@@ -48,8 +48,11 @@ import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.dsl.AOTSupport;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateAOT;
+import com.oracle.truffle.api.dsl.GenerateCached;
+import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.Introspectable;
 import com.oracle.truffle.api.dsl.Introspection;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -366,6 +369,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new ConstantRoot(language, "patchprobe", language.awaitingPatch ? 1 : 0);
         } else if (trimmed.equals("strcat")) {
             root = new StringConcatRoot(language);
+        } else if (trimmed.equals("inlined")) {
+            root = new InlinedNodeRoot(language);
         } else if (trimmed.equals("patchstate")) {
             root = new PatchStateRoot(language);
         } else if (trimmed.equals("ctxstable")) {
@@ -413,6 +418,79 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             throw new IllegalArgumentException(trimmed);
         }
         return root.getCallTarget();
+    }
+
+    /**
+     * An inlined node whose cached specialization, excluded from AOT preparation, has a cache of up
+     * to three entries: its generated code loops over the cache if the specialization state says
+     * it is active. In AOT tier code, the state must fold for the loop to be removed.
+     */
+    @GenerateInline
+    @GenerateCached(false)
+    @GenerateAOT
+    public abstract static class InlinedIncrementNode extends Node {
+        abstract int execute(Node node, Object value);
+
+        @Specialization(guards = "value == cachedValue", limit = "3")
+        @GenerateAOT.Exclude
+        static int doCached(int value, @Cached("value") int cachedValue) {
+            return cachedValue + 1;
+        }
+
+        @Specialization(replaces = "doCached")
+        static int doInt(int value) {
+            return value + 1;
+        }
+
+        @Specialization
+        static int doString(@SuppressWarnings("unused") String value) {
+            return 0;
+        }
+    }
+
+    /** Owns an {@link InlinedIncrementNode}, prepared for AOT. */
+    @GenerateAOT
+    public abstract static class InlinedOwnerNode extends Node {
+        abstract int execute(Object value);
+
+        @Specialization
+        static int doExecute(Object value, @Bind Node node, @Cached InlinedIncrementNode increment) {
+            return increment.execute(node, value);
+        }
+    }
+
+    /**
+     * "inlined": increments its int argument through an inlined node (0 for a string). The
+     * fields of inlined nodes are read with {@code Unsafe} in a native image, and must fold in AOT
+     * tier code like field reads.
+     */
+    public static final class InlinedNodeRoot extends RootNode {
+        @Child InlinedOwnerNode owner = AOTTestLanguageFactory.InlinedOwnerNodeGen.create();
+
+        InlinedNodeRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return owner.execute(frame.getArguments()[0]);
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            AOTSupport.prepareForAOT(this);
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "inlined";
+        }
     }
 
     /** Concatenates two Java strings as TruffleStrings: TruffleString operations, prepared for AOT. */

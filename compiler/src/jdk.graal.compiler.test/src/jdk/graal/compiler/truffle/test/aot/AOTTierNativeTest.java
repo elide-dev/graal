@@ -185,6 +185,23 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * "inlined" runs an inlined node, whose fields AOT tier code folds: it runs from the first call
+     * and stays linked, for ints and for other values.
+     */
+    @Test
+    public void inlinedNodesRunInAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value inlined = context.parse(fixture("inlined", "inlined"));
+            assertEquals(2, inlined.execute(1).asInt());
+            assertEquals(0, inlined.execute("s").asInt());
+            assertEquals(43, inlined.execute(42).asInt());
+        }
+        assertEquals(log(), 1, enters(log(), "inlined"));
+        assertEquals(log(), 0, unlinks(log(), "inlined"));
+    }
+
+    /**
      * "retcallee" returned an Integer at build time, so its return profile is typed. AOT code of
      * "retcall" must not fold that profile (finding m1 of the re-review): if it did, it would depend
      * on the profile's assumption, and the first String the callee returns would unlink it.

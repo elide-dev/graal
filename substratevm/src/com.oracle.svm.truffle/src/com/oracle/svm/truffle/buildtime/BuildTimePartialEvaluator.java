@@ -32,8 +32,10 @@ import java.util.function.Supplier;
 import org.graalvm.collections.EconomicMap;
 
 import com.oracle.graal.pointsto.BigBang;
+import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
+import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.truffle.api.SubstrateKnownTruffleTypes;
 import com.oracle.svm.truffle.api.SubstratePartialEvaluator;
@@ -61,6 +63,7 @@ import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugins.Registration;
 import jdk.graal.compiler.nodes.graphbuilderconf.NodePlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.ParameterPlugin;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
+import jdk.graal.compiler.nodes.util.ConstantFoldUtil;
 import jdk.graal.compiler.phases.OptimisticOptimizations;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.replacements.PEGraphDecoder;
@@ -211,6 +214,59 @@ final class BuildTimePartialEvaluator extends PartialEvaluator {
         super.registerGraphBuilderInvocationPlugins(invocationPlugins, canDelayIntrinsification);
         SubstrateTruffleGraphBuilderPlugins.registerInvocationPlugins(invocationPlugins, canDelayIntrinsification, (SubstrateKnownTruffleTypes) getTypes());
         registerLanguageContextObjectPlugin(invocationPlugins);
+        registerInlinedFieldPlugins(invocationPlugins);
+    }
+
+    /**
+     * Folds the reads of the fields of inlined DSL nodes ({@code InlineSupport}), e.g., their
+     * specialization state, like reads of the fields themselves. In a native image, an inlined
+     * field reads its field with {@code Unsafe} at an offset that is only computed once the hosted
+     * universe is built, after the build-time partial evaluation: the read would not fold, so that
+     * AOT tier code would include every specialization of every inlined node, and partial
+     * evaluation would not terminate the explosion of their cache loops. A read of a constant
+     * field of a constant node is replaced by the value of the field instead, folded by the
+     * {@link BuildTimeConstantFieldProvider} with the same rules as a field read.
+     */
+    private void registerInlinedFieldPlugins(InvocationPlugins invocationPlugins) {
+        Registration r = new Registration(invocationPlugins, INLINE_SUPPORT_UNSAFE_FIELD);
+        for (JavaKind kind : new JavaKind[]{JavaKind.Boolean, JavaKind.Byte, JavaKind.Short, JavaKind.Char, JavaKind.Int, JavaKind.Float, JavaKind.Long, JavaKind.Double, JavaKind.Object}) {
+            String accessor = "get" + Character.toUpperCase(kind.getJavaName().charAt(0)) + kind.getJavaName().substring(1);
+            r.register(new InvocationPlugin(kind == JavaKind.Object ? "getObject" : accessor, InvocationPlugin.Receiver.class, Object.class) {
+                @Override
+                public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode node) {
+                    ValueNode inlinedField = receiver.get(false);
+                    if (!inlinedField.isJavaConstant() || !node.isJavaConstant() || node.asJavaConstant().isNull()) {
+                        return false;
+                    }
+                    ResolvedJavaField field = inlinedFieldOf(b, inlinedField.asJavaConstant());
+                    if (field == null || field.getJavaKind() != kind || !field.getDeclaringClass().isAssignableFrom(b.getMetaAccess().lookupJavaType(node.asJavaConstant()))) {
+                        return false;
+                    }
+                    ConstantNode value = ConstantFoldUtil.tryConstantFold(b.getConstantFieldProvider(), b.getConstantReflection(), b.getMetaAccess(), field, node.asJavaConstant(),
+                                    b.getOptions(), b.getGraph().currentNodeSourcePosition());
+                    if (value == null) {
+                        return false;
+                    }
+                    b.addPush(kind, value);
+                    return true;
+                }
+            });
+        }
+    }
+
+    private static final String INLINE_SUPPORT_UNSAFE_FIELD = "com.oracle.truffle.api.dsl.InlineSupport$UnsafeField";
+
+    /** The Java field that the {@code InlineSupport} field {@code inlinedField} reads. */
+    private ResolvedJavaField inlinedFieldOf(GraphBuilderContext b, JavaConstant inlinedField) {
+        JavaConstant hosted = inlinedField instanceof ImageHeapConstant imageHeapConstant ? imageHeapConstant.getHostedObject() : inlinedField;
+        Object hostField = hosted == null ? null : bb.getUniverse().getHostedValuesProvider().asObject(Object.class, hosted);
+        if (hostField == null) {
+            return null;
+        }
+        Class<?> unsafeField = ReflectionUtil.lookupClass(INLINE_SUPPORT_UNSAFE_FIELD);
+        Class<?> declaringClass = ReflectionUtil.readField(unsafeField, "declaringClass", hostField);
+        String name = ReflectionUtil.readField(unsafeField, "name", hostField);
+        return b.getMetaAccess().lookupJavaField(ReflectionUtil.lookupField(declaringClass, name));
     }
 
     /**
