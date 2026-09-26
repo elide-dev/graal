@@ -38,6 +38,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.polyglot.Context;
 import org.junit.Test;
 
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 import com.oracle.truffle.runtime.OptimizedDirectCallNode;
 
@@ -131,6 +136,40 @@ public class AOTShadowTargetTest extends TestWithPolyglotOptions {
         assertEquals("calls of the shadow run the live target", 2, live.getCallCount());
         assertEquals("the shadow itself is not called", 0, shadow.getCallCount());
         assertFalse("the live AST runs in the interpreter", ((AOTTestLanguage.AddRoot) live.getRootNode()).isUninitialized());
+    }
+
+    /** Calls {@code arguments[0]} with {@code arguments[1]}, a target that is not a PE constant. */
+    private static final class IndirectCallerRoot extends RootNode {
+        @Child IndirectCallNode call = IndirectCallNode.create();
+
+        IndirectCallerRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return call.call((CallTarget) arguments[0], arguments[1]);
+        }
+    }
+
+    /**
+     * Code that calls a target that is not a PE constant compiles, and its calls of a shadow run the
+     * live target. The redirection to the live target used to inline {@code callIndirect}
+     * recursively, so that partial evaluation bailed out ("Too deep inlining").
+     */
+    @Test
+    public void indirectCallOfNonConstantShadowCompilesAndCallsLiveTarget() {
+        OptimizedCallTarget live = parse("add:1");
+        OptimizedCallTarget shadow = live.createAOTShadow();
+        OptimizedCallTarget caller = (OptimizedCallTarget) new IndirectCallerRoot(AOTTestLanguage.get()).getCallTarget();
+        assertEquals(2, caller.call(shadow, 1));
+        caller.compile(true);
+        assertTrue("the caller must compile", caller.isValidLastTier());
+        assertEquals(3, caller.call(shadow, 2));
+        assertTrue("still compiled after calling the shadow", caller.isValidLastTier());
+        assertEquals("calls of the shadow run the live target", 2, live.getCallCount());
+        assertEquals("the shadow itself is not called", 0, shadow.getCallCount());
     }
 
     @Test
