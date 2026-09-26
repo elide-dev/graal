@@ -81,6 +81,11 @@ final class ImageBuildTimeOptions {
     @Option(name = AOT_COMPILE_BUDGET_NAME, category = OptionCategory.EXPERT, help = "Maximum partial-evaluation graph size (nodes) per build-time compiled root (0: unlimited).")//
     static final OptionKey<String> AOTCompileBudget = new OptionKey<>("0");
 
+    static final String AOT_COMPILE_TOTAL_BUDGET_NAME = "AOTCompileTotalBudget";
+    @Option(name = AOT_COMPILE_TOTAL_BUDGET_NAME, category = OptionCategory.EXPERT, help = "Maximum total AST size (nodes) of the build-time compiled roots, kept by priority: " + //
+                    "more known call sites first, then smaller roots (0: unlimited).")//
+    static final OptionKey<String> AOTCompileTotalBudget = new OptionKey<>("0");
+
     static String get(String optionName) {
         String property = getPropertyName(optionName);
         return System.getProperty(property, "");
