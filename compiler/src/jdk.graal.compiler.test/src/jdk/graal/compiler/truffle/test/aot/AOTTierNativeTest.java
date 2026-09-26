@@ -169,6 +169,22 @@ public class AOTTierNativeTest {
     }
 
     /**
+     * "strcat" concatenates with TruffleString operations, which its AOT tier code calls instead of
+     * inlining: it runs from the first call and stays linked.
+     */
+    @Test
+    public void truffleStringOperationsRunInAOTCode() {
+        TruffleTestAssumptions.assumeAOT();
+        try (Context context = Context.newBuilder().engine(engine()).build()) {
+            Value strcat = context.parse(fixture("strcat", "strcat"));
+            assertEquals("abcd", strcat.execute("ab", "cd").asString());
+            assertEquals("x\u00e9", strcat.execute("x", "\u00e9").asString());
+        }
+        assertEquals(log(), 1, enters(log(), "strcat"));
+        assertEquals(log(), 0, unlinks(log(), "strcat"));
+    }
+
+    /**
      * "retcallee" returned an Integer at build time, so its return profile is typed. AOT code of
      * "retcall" must not fold that profile (finding m1 of the re-review): if it did, it would depend
      * on the profile's assumption, and the first String the callee returns would unlink it.

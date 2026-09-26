@@ -134,7 +134,22 @@ final class BuildTimePEGraphDecoder extends PEGraphDecoder {
         if (callTarget.invokeKind().isDirect() && !isRuntimeCompilationCandidate(callTarget.targetMethod())) {
             return null;
         }
+        if (isOutOfLine(callTarget.targetMethod())) {
+            return null;
+        }
         return super.tryInline(methodScope, loopScope, invokeData, callTarget);
+    }
+
+    /**
+     * Methods that AOT tier code calls instead of inlining: those of TruffleString. A string
+     * operation inlines hundreds of nodes (a concatenation about 400, a number to string conversion
+     * about 1000), and a language node that uses several of them multiplies that in every function
+     * that uses the node, while AOT tier code only runs until the regular tiers take over, which
+     * inline them as usual. Called, a string operation runs in its image-compiled method, where it
+     * still specializes without deoptimizing anything.
+     */
+    private static boolean isOutOfLine(ResolvedJavaMethod method) {
+        return method.getDeclaringClass().toJavaName().startsWith("com.oracle.truffle.api.strings.");
     }
 
     /**
