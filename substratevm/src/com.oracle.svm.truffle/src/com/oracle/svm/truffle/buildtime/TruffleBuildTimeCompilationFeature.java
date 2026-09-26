@@ -855,8 +855,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
 
     /**
      * The allocation sites of the partially evaluated {@code graph}, by what they allocate: object
-     * and array allocations, virtual objects that are materialized, and boxings, which remain after
-     * partial escape analysis only where the value escapes.
+     * and array allocations, virtual objects that are materialized, and boxings (except of booleans
+     * and bytes), which remain after partial escape analysis only where the value escapes.
      */
     private static Map<String, Integer> allocationSites(StructuredGraph graph) {
         Map<String, Integer> sites = new TreeMap<>();
@@ -867,7 +867,8 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
                 sites.merge("NewArray(" + n.elementType().toJavaName(false) + ")", 1, Integer::sum);
             } else if (node instanceof AbstractNewObjectNode n) {
                 sites.merge(ClassUtil.getUnqualifiedName(n.getClass()), 1, Integer::sum);
-            } else if (node instanceof BoxNode n) {
+            } else if (node instanceof BoxNode n && n.getBoxingKind() != JavaKind.Boolean && n.getBoxingKind() != JavaKind.Byte) {
+                /* Boxing a boolean or a byte returns a cached box: it never allocates. */
                 sites.merge("Box(" + n.getBoxingKind().getJavaName() + ")", 1, Integer::sum);
             } else if (node instanceof CommitAllocationNode commit) {
                 for (VirtualObjectNode v : commit.getVirtualObjects()) {

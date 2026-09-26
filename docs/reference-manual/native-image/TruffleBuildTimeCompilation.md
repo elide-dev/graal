@@ -147,7 +147,7 @@ Truffle AOT tier: root 'otherFunction' allocates at 3 sites, more than -H:Truffl
 An allocation site is one of these in the compiled code, listed by type:
 
 - `New(<class>)` and `NewArray(<element type>)`: an explicit allocation.
-- `Box(<kind>)`: a boxed primitive, for example the result of a root that returns `Object`.
+- `Box(<kind>)`: a boxed primitive, for example the result of a root that returns `Object`. Boxing a `boolean` or a `byte` returns a cached box, so it is not counted.
 - `Materialize(<type>)`: an object that escape analysis removed on some paths but has to allocate on others, for example an exception that is thrown or the arguments array of a call.
 
 Allocations inside methods that the compiled code calls, rather than inlines, are not counted.
