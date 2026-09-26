@@ -592,6 +592,9 @@ def _check_truffle_aot_summary(output, expected):
     return errors
 
 
+_STRCAT_MAX_NODES = 400
+
+
 def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     """
     Builds a test image that compiles pre-initialized Truffle call targets at build time (the AOT tier), checks its
@@ -605,7 +608,7 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
                        ('throwcall', 'throwcall'), ('deopt', 'deopt'), ('drecurse', 'drecurse'), ('branch', 'branch'), ('pollspin', 'pollspin'),
                        ('instr', 'instr'), ('instrfirst', 'instrfirst'), ('assumeloop', 'assumeloop'), ('loop', 'loop'), ('throwinval', 'throwinval'),
                        ('lateinval', 'lateinval'), ('typed', 'typed'), ('typedcall', 'typedcall'),
-                       ('twoassume', 'twoassume'), ('callapi', 'callapi'), ('retcall', 'retcall')]:
+                       ('twoassume', 'twoassume'), ('callapi', 'callapi'), ('retcall', 'retcall'), ('strcat', 'strcat')]:
         path = os.path.join(tmp, name + '.aot')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(code)
@@ -648,6 +651,11 @@ def truffle_aot_tier_native_tests(extra_build_args=None, run_args=None):
     except _NativeImageBuildFailed:
         mx.abort('The Truffle AOT tier test image failed to build')
     errors = _check_truffle_aot_summary(build_output, expected_summary)
+    # AOT tier code calls TruffleString operations instead of inlining them, which would add hundreds of nodes per
+    # operation (BuildTimePEGraphDecoder.isOutOfLine).
+    strcat_nodes = [int(m.group(1)) for line in build_output for m in [re.search(r'compiled strcat nodes=(\d+)', line)] if m]
+    if not strcat_nodes or strcat_nodes[0] > _STRCAT_MAX_NODES:
+        errors.append(f'expected "strcat" to compile to at most {_STRCAT_MAX_NODES} nodes, was {strcat_nodes}')
 
     # Without code sharing, the AOT code belongs to the pre-initialized context itself, which the first context of the
     # image run adopts and patches ("bound" pre-initialization). "patchstate" and "ctxstable" fold context state that

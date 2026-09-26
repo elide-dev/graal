@@ -48,6 +48,7 @@ import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.dsl.AOTSupport;
+import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.Introspectable;
 import com.oracle.truffle.api.dsl.Introspection;
@@ -71,6 +72,7 @@ import com.oracle.truffle.api.profiles.BranchProfile;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
+import com.oracle.truffle.api.strings.TruffleString;
 
 /**
  * Test language for the AOT tier. A source "add:N" parses to a root computing {@code arg0 + N}
@@ -362,6 +364,8 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             root = new FieldAssumeRoot(language, trimmed.endsWith("b") ? JIT_FIELD_B : JIT_FIELD_A);
         } else if (trimmed.equals("patchprobe")) {
             root = new ConstantRoot(language, "patchprobe", language.awaitingPatch ? 1 : 0);
+        } else if (trimmed.equals("strcat")) {
+            root = new StringConcatRoot(language);
         } else if (trimmed.equals("patchstate")) {
             root = new PatchStateRoot(language);
         } else if (trimmed.equals("ctxstable")) {
@@ -409,6 +413,54 @@ public final class AOTTestLanguage extends TruffleLanguage<Object> {
             throw new IllegalArgumentException(trimmed);
         }
         return root.getCallTarget();
+    }
+
+    /** Concatenates two Java strings as TruffleStrings: TruffleString operations, prepared for AOT. */
+    @GenerateAOT
+    public abstract static class StringConcatNode extends Node {
+        abstract Object execute(Object left, Object right);
+
+        @Specialization
+        static TruffleString doConcat(String left, String right,
+                        @Cached TruffleString.FromJavaStringNode fromLeft,
+                        @Cached TruffleString.FromJavaStringNode fromRight,
+                        @Cached TruffleString.ConcatNode concat) {
+            return concat.execute(fromLeft.execute(left, TruffleString.Encoding.UTF_16), fromRight.execute(right, TruffleString.Encoding.UTF_16), TruffleString.Encoding.UTF_16, true);
+        }
+    }
+
+    /**
+     * "strcat": concatenates its two string arguments with TruffleString operations. AOT tier code
+     * calls them instead of inlining them (see the build summary size check in
+     * {@code mx_substratevm.truffle_aot_tier_native_tests}).
+     */
+    public static final class StringConcatRoot extends RootNode {
+        @Child StringConcatNode concat = AOTTestLanguageFactory.StringConcatNodeGen.create();
+
+        StringConcatRoot(TruffleLanguage<?> language) {
+            super(language);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return concat.execute(frame.getArguments()[0], frame.getArguments()[1]);
+        }
+
+        @Override
+        public boolean isCloningAllowed() {
+            return true;
+        }
+
+        @Override
+        protected ExecutionSignature prepareForAOT() {
+            AOTSupport.prepareForAOT(this);
+            return ExecutionSignature.GENERIC;
+        }
+
+        @Override
+        public String getName() {
+            return "strcat";
+        }
     }
 
     /*
