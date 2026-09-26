@@ -573,25 +573,21 @@ public abstract class OptimizedCallTarget implements TruffleCompilable, RootCall
 
     // Note: {@code PartialEvaluator} looks up this method by name and signature.
     public final Object callIndirect(Node location, Object... args) {
-        if (aotShadow) {
-            try {
-                return callSourceOfAOTShadow(location, args);
-            } finally {
-                /*
-                 * As below: the frame of this method provides the call node of the caller when
-                 * frames are iterated.
-                 */
-                Reference.reachabilityFence(location);
-            }
-        }
+        /*
+         * A call to an AOT shadow is a call to its live target (see callSourceOfAOTShadow). The
+         * target is selected here rather than by calling the live target's callIndirect: partial
+         * evaluation inlines this method, and for a target that is not a PE constant, the call
+         * would inline this method again, recursively. The live target is never a shadow.
+         */
+        OptimizedCallTarget target = aotShadow ? sourceCallTarget : this;
         /*
          * Indirect calls should not invalidate existing compilations of the callee, and the callee
          * should still be able to use profiled arguments until an incompatible argument is passed.
          * So we profile arguments for indirect calls too, but behind a truffle boundary.
          */
-        profileIndirectArguments(args);
+        target.profileIndirectArguments(args);
         try {
-            return doInvoke(args);
+            return target.doInvoke(args);
         } finally {
             // this is needed to keep the values from being cleared as non-live locals
             Reference.reachabilityFence(location);
