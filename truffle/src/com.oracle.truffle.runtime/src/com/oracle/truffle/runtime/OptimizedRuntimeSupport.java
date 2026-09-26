@@ -139,6 +139,7 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
         }
         if (target.engine.compileAOTOnCreate) {
             if (target.prepareForAOT()) {
+                target.startExecutionProfilesGenericForAOT();
                 target.compile(true);
             }
         }
