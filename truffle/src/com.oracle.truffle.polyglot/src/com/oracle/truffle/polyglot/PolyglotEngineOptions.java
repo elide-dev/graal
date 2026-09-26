@@ -143,6 +143,10 @@ final class PolyglotEngineOptions {
                     "Use pre-initialized context when it's available (default: true).", usageSyntax = "true|false")//
     static final OptionKey<Boolean> UsePreInitializedContext = new OptionKey<>(true);
 
+    @Option(category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = "" +
+                    "Let an explicitly created engine use the pre-initialized context, which is otherwise reserved for the engine of a context created without an explicit engine (default: false).", usageSyntax = "true|false")//
+    static final OptionKey<Boolean> ExplicitEngineUsesPreInitializedContext = new OptionKey<>(false);
+
     @Option(category = OptionCategory.EXPERT, stability = OptionStability.EXPERIMENTAL, help = "" +
                     "On property accesses, the Static Object Model does not perform shape checks and uses unsafe casts", usageSyntax = "true|false")//
     static final OptionKey<Boolean> RelaxStaticObjectSafetyChecks = new OptionKey<>(false);
