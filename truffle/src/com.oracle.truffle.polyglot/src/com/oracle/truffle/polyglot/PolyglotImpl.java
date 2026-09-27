@@ -56,6 +56,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -146,6 +147,17 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     final PolyglotLanguageDispatch languageDispatch = new PolyglotLanguageDispatch(this);
 
     private final AtomicReference<PolyglotEngineImpl> preInitializedEngineRef = new AtomicReference<>();
+
+    private final Object preinitializedSourcesLock = new Object();
+
+    /**
+     * Sources registered with {@code org.graalvm.polyglot.PreinitializedSources}, parsed by context
+     * pre-initialization, which clears them. Reset in the image, so that sources registered in a
+     * build that does not pre-initialize are not in the image heap either. Guarded by
+     * {@link #preinitializedSourcesLock}.
+     */
+    private List<Source> registeredPreinitializedSources = new ArrayList<>();
+    private boolean engineWasPreInitialized; // guarded by preinitializedSourcesLock
 
     private final Map<Class<?>, PolyglotValueDispatch> primitiveValues = new HashMap<>();
     Object hostNull; // effectively final
@@ -796,6 +808,9 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     @SuppressWarnings("unchecked")
     public void preInitializeEngine() {
+        synchronized (preinitializedSourcesLock) {
+            engineWasPreInitialized = true;
+        }
         PolyglotEngineImpl engine = createDefaultEngine(new PreInitContextHostLanguage());
         Object apiEngine = getAPIAccess().newEngine(engineDispatch, engine, false);
         try {
@@ -811,6 +826,10 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
             engine.logHandler = null;
         }
         preInitializedEngineRef.set(engine);
+        synchronized (preinitializedSourcesLock) {
+            // parsed and kept alive by the engine (preinitializedSources)
+            registeredPreinitializedSources = new ArrayList<>();
+        }
     }
 
     /*
@@ -844,6 +863,32 @@ public final class PolyglotImpl extends AbstractPolyglotImpl {
     @Override
     public void resetPreInitializedEngine() {
         preInitializedEngineRef.set(null);
+        synchronized (preinitializedSourcesLock) {
+            registeredPreinitializedSources = new ArrayList<>();
+            engineWasPreInitialized = false;
+        }
+    }
+
+    @Override
+    public void registerPreinitializedSources(Object[] sourceReceivers) {
+        if (ImageInfo.inImageRuntimeCode()) {
+            throw new IllegalStateException("Sources for context pre-initialization can only be registered while a native image is built.");
+        }
+        synchronized (preinitializedSourcesLock) {
+            if (engineWasPreInitialized) {
+                throw new IllegalStateException("Cannot register sources for context pre-initialization: the contexts were already pre-initialized. " +
+                                "Register sources before, e.g., in Feature.duringSetup.");
+            }
+            for (Object sourceReceiver : sourceReceivers) {
+                registeredPreinitializedSources.add((Source) sourceReceiver);
+            }
+        }
+    }
+
+    List<Source> getRegisteredPreinitializedSources() {
+        synchronized (preinitializedSourcesLock) {
+            return List.copyOf(registeredPreinitializedSources);
+        }
     }
 
     /**

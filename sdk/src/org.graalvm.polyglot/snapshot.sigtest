@@ -461,6 +461,10 @@ meth public org.graalvm.polyglot.SourceSection getSourceLocation()
 supr java.lang.Object
 hfds impl
 
+CLSS public final org.graalvm.polyglot.PreinitializedSources
+meth public !varargs static void register(org.graalvm.polyglot.Source[])
+supr java.lang.Object
+
 CLSS public final org.graalvm.polyglot.ResourceLimitEvent
 meth public java.lang.String toString()
 meth public org.graalvm.polyglot.Context getContext()
