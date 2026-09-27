@@ -54,6 +54,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -138,6 +139,7 @@ import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.test.GCUtils;
 import com.oracle.truffle.api.test.ReflectionUtils;
 import com.oracle.truffle.api.test.TestAPIAccessor;
 import com.oracle.truffle.api.test.polyglot.InternalResourceTest.TemporaryResourceCacheRoot;
@@ -744,6 +746,38 @@ public class ContextPreInitializationTest {
         } finally {
             System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         }
+    }
+
+    /*
+     * A source that a language parses itself during pre-initialization, and references nowhere,
+     * stays in the image: an equal source parsed later reuses its call target.
+     */
+    @Test
+    public void testLanguageSourceParsedDuringPreinitializationIsRetained() throws Exception {
+        setPatchable(SHARED);
+        AtomicReference<WeakReference<com.oracle.truffle.api.source.Source>> parsed = new AtomicReference<>();
+        BaseLanguage.registerAction(ContextPreInitializationTestSharedLanguage.class, ActionKind.ON_INITIALIZE_CONTEXT, (env) -> {
+            if (env.isPreInitialization()) {
+                com.oracle.truffle.api.source.Source source = internalSharedSource();
+                env.parsePublic(source);
+                parsed.set(new WeakReference<>(source));
+            }
+        });
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize(SHARED);
+        assertEquals(List.of("internal source"), BaseLanguage.parsedSources);
+        GCUtils.assertNotGc("a source parsed during pre-initialization must stay in the image", parsed.get());
+        BaseLanguage.registerAction(ContextPreInitializationTestSharedLanguage.class, ActionKind.ON_EXECUTE, (env) -> {
+            env.parsePublic(internalSharedSource());
+        });
+        try (Context ctx = Context.create()) {
+            ctx.eval(Source.create(SHARED, "test"));
+        }
+        assertEquals("an equal source parsed at run time must reuse the pre-initialized call target", 1, Collections.frequency(BaseLanguage.parsedSources, "internal source"));
+    }
+
+    private static com.oracle.truffle.api.source.Source internalSharedSource() {
+        return com.oracle.truffle.api.source.Source.newBuilder(SHARED, "internal source", "internal.shared").internal(true).build();
     }
 
     @Test

@@ -81,7 +81,13 @@ final class PolyglotSourceCache {
         CallTarget target;
         if (source.isCached()) {
             Cache strong = this.strongCache;
-            boolean useStrong = context.getEngine().storeEngine;
+            /*
+             * Sources parsed while the engine is pre-initialized, including those a language parses
+             * itself, are held strongly: otherwise one that nothing else references would be
+             * dropped from the image, and an equal source parsed at run time parsed again.
+             */
+            PolyglotEngineImpl engine = context.getEngine();
+            boolean useStrong = engine.storeEngine || engine.inEnginePreInitialization;
             if (useStrong || !strong.isEmpty()) {
                 target = strong.lookup(origin, context, source, argumentNames, useStrong);
                 if (target != null) {
