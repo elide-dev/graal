@@ -346,6 +346,9 @@ Native Image can also interop with native languages through a custom API.
 Using this API, you can specify custom native entry points into your Java application and build it into a native shared library.
 To learn more, see [Interoperability with Native Code](InteropWithNativeCode.md).
 
+If your application embeds a Graal Language, Native Image can pre-initialize a polyglot context at build time and parse sources of your application with it, so that the first context skips parsing them at run time.
+To learn more, see [Parsing Sources During Context Pre-Initialization](TruffleContextPreinitializationSources.md).
+
 ### Further Reading
 
 This getting started guide is intended for new users or those with little experience of using Native Image.
