@@ -51,6 +51,7 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -3903,19 +3904,60 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                 context.initializeContextLocals();
             }
 
-            if (!languagesToPreinitialize.isEmpty()) {
+            String sourcesOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME);
+            if (!languagesToPreinitialize.isEmpty() || !sourcesOption.isEmpty()) {
                 Object[] prev = context.engine.enter(context);
                 try {
+                    Set<String> patchedLanguageIds = new HashSet<>();
                     for (PolyglotLanguage language : languagesToPreinitialize) {
                         assert language.engine == engine : "invalid language";
 
                         if (overridesPatchContext(language.getId())) {
                             context.getContextInitialized(language, null);
+                            patchedLanguageIds.add(language.getId());
                             LOG.log(Level.FINE, "Pre-initialized context for language: {0}", language.getId());
                         } else {
                             if (emitWarning) {
                                 LOG.log(Level.WARNING, "Language {0} cannot be pre-initialized as it does not override TruffleLanguage.patchContext method.", language.getId());
                             }
+                        }
+                    }
+
+                    if (!sourcesOption.isEmpty()) {
+                        for (String entry : sourcesOption.split(",")) {
+                            int colon = entry.indexOf(':');
+                            String languageId = colon > 0 ? entry.substring(0, colon) : null;
+                            PolyglotLanguage language = languageId == null ? null : engine.idToLanguage.get(languageId);
+                            if (language == null || colon == entry.length() - 1) {
+                                throw new IllegalArgumentException(
+                                                "Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': expected <language>:<path> with an installed language.");
+                            }
+                            if (!patchedLanguageIds.contains(languageId)) {
+                                if (!languagesToPreinitialize.contains(language)) {
+                                    throw new IllegalArgumentException("Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': language '" + languageId +
+                                                    "' is not pre-initialized; add it to " + ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME + ".");
+                                } else {
+                                    throw new IllegalArgumentException("Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': language '" + languageId +
+                                                    "' does not support context patching (TruffleLanguage.patchContext).");
+                                }
+                            }
+                            Path path = Path.of(entry.substring(colon + 1));
+                            Source source;
+                            try {
+                                /*
+                                 * An embedder source, like those the embedder parses (see
+                                 * PolyglotImpl.buildSource), so that parsing an equal source at
+                                 * run time finds the pre-initialized call target.
+                                 */
+                                Source.SourceBuilder builder = Source.newBuilder(languageId, Files.readString(path), path.getFileName().toString());
+                                EngineAccessor.SOURCE.setEmbedderSource(builder, true);
+                                source = builder.build();
+                            } catch (IOException e) {
+                                throw new IllegalArgumentException("Cannot read " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': " + e.getMessage(), e);
+                            }
+                            PolyglotLanguageContext languageContext = context.getContextInitialized(language, null);
+                            languageContext.parseCached(ParseOrigin.EMBEDDING, null, source, null);
+                            engine.preinitializedSources.add(source);
                         }
                     }
 

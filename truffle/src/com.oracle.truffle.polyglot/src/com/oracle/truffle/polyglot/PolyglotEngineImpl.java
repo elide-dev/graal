@@ -251,6 +251,13 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
 
     final List<PolyglotSharingLayer> sharedLayers = new ArrayList<>();
 
+    /**
+     * The sources parsed during context pre-initialization. The source cache references its keys
+     * weakly, so without these, its entries, and with them the call targets parsed at build time,
+     * would be dropped, and parsing an equal source at run time would not find them.
+     */
+    final List<Source> preinitializedSources = new ArrayList<>();
+
     private final ReferenceQueue<Source> deadSourcesQueue = new ReferenceQueue<>();
 
     private boolean runtimeInitialized;

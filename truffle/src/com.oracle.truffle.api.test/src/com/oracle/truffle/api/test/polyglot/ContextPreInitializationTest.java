@@ -53,6 +53,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -656,6 +657,88 @@ public class ContextPreInitializationTest {
             } finally {
                 ctx.leave();
             }
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesParseOnly() throws Exception {
+        Path file = Files.createTempFile("preinit", ".shared");
+        Files.writeString(file, "test source");
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", SHARED + ":" + file);
+        try {
+            BaseLanguage.parsedSources.clear();
+            BaseLanguage.executed.set(0);
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+            Files.delete(file);
+        }
+        assertEquals(List.of("test source"), BaseLanguage.parsedSources);
+        assertEquals("pre-initialization must never execute build-time sources", 0, BaseLanguage.executed.get());
+        try (Context ctx = Context.create()) {
+            Source equal = Source.newBuilder(SHARED, "test source", file.getFileName().toString()).build();
+            assertEquals("test source", ctx.eval(equal).asString());
+            assertEquals("an equal source must use the pre-initialized call target", List.of("test source"), BaseLanguage.parsedSources);
+            assertEquals("test source", ctx.eval(Source.newBuilder(SHARED, "test source", "other.shared").build()).asString());
+            assertEquals("a source with another name is not equal and is parsed again", List.of("test source", "test source"), BaseLanguage.parsedSources);
+        }
+    }
+
+    /*
+     * An explicitly created engine that uses the pre-initialized context, with
+     * engine.ExplicitEngineUsesPreInitializedContext, also uses the call targets of the sources
+     * parsed during pre-initialization.
+     */
+    @Test
+    public void testPreinitializeSourcesExplicitEngine() throws Exception {
+        Path file = Files.createTempFile("preinit", ".shared");
+        Files.writeString(file, "test source");
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", SHARED + ":" + file);
+        try {
+            BaseLanguage.parsedSources.clear();
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+            Files.delete(file);
+        }
+        assertEquals(List.of("test source"), BaseLanguage.parsedSources);
+        CountingContext preinit = findContext(SHARED, emittedContexts);
+        assertNotNull(preinit);
+        try (Engine engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.ExplicitEngineUsesPreInitializedContext", "true").build();
+                        Context ctx = Context.newBuilder().engine(engine).build()) {
+            Source equal = Source.newBuilder(SHARED, "test source", file.getFileName().toString()).build();
+            assertEquals("test source", ctx.eval(equal).asString());
+            assertEquals(1, preinit.patchContextCount);
+            assertEquals("an equal source must use the pre-initialized call target", List.of("test source"), BaseLanguage.parsedSources);
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesUnknownLanguage() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", "nosuchlanguage:/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("nosuchlanguage:/x"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesLanguageNotPreinitialized() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", FIRST + ":/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains(FIRST + ":/x"));
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("PreinitializeContexts"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         }
     }
 
@@ -2904,6 +2987,7 @@ public class ContextPreInitializationTest {
 
     private static void resetSystemPropertiesOptions() {
         System.clearProperty("polyglot.image-build-time.PreinitializeContexts");
+        System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         System.clearProperty(SYS_OPTION1_KEY);
         System.clearProperty(SYS_OPTION2_KEY);
     }
@@ -3047,6 +3131,9 @@ public class ContextPreInitializationTest {
 
     abstract static class BaseLanguage extends TruffleLanguage<CountingContext> {
 
+        static final List<String> parsedSources = Collections.synchronizedList(new ArrayList<>());
+        static final AtomicInteger executed = new AtomicInteger();
+
         static Map<Pair<Class<? extends BaseLanguage>, ActionKind>, Function<TruffleLanguage.Env, Object>> actions = new HashMap<>();
 
         static void registerAction(Class<? extends BaseLanguage> languageClass, ActionKind kind, Consumer<TruffleLanguage.Env> action) {
@@ -3131,9 +3218,11 @@ public class ContextPreInitializationTest {
         @Override
         protected CallTarget parse(TruffleLanguage.ParsingRequest request) throws Exception {
             final CharSequence result = request.getSource().getCharacters();
+            parsedSources.add(result.toString());
             return new RootNode(this) {
                 @Override
                 public Object execute(VirtualFrame frame) {
+                    executed.incrementAndGet();
                     executeImpl(getContextReference0().get(this));
                     return result;
                 }
