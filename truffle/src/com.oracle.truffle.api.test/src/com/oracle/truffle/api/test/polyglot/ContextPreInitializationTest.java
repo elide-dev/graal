@@ -46,6 +46,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -53,6 +54,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.ref.WeakReference;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -96,6 +99,7 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.PolyglotAccess;
 import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.PreinitializedSources;
 import org.graalvm.polyglot.SandboxPolicy;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
@@ -135,6 +139,7 @@ import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.test.GCUtils;
 import com.oracle.truffle.api.test.ReflectionUtils;
 import com.oracle.truffle.api.test.TestAPIAccessor;
 import com.oracle.truffle.api.test.polyglot.InternalResourceTest.TemporaryResourceCacheRoot;
@@ -146,6 +151,8 @@ public class ContextPreInitializationTest {
     static final String SECOND = "ContextPreInitializationSecond";
     static final String INTERNAL = "ContextPreInitializationInternal";
     static final String SHARED = "ContextPreInitializationShared";
+    static final String SHARED_MIME_TYPE = "text/x-contextpreinitializationshared";
+    static final String SHARED_MODULE_MIME_TYPE = "text/x-contextpreinitializationshared-module";
     static final String CONSTRAINED = "ContextPreInitializationConstrained";
 
     private static final AtomicInteger NEXT_ORDER_INDEX = new AtomicInteger();
@@ -660,6 +667,182 @@ public class ContextPreInitializationTest {
     }
 
     @Test
+    public void testPreinitializeSourcesParseOnly() throws Exception {
+        Path file = Files.createTempFile("preinit", ".shared");
+        Files.writeString(file, "test source");
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", SHARED + ":" + file);
+        try {
+            BaseLanguage.parsedSources.clear();
+            BaseLanguage.executed.set(0);
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+            Files.delete(file);
+        }
+        assertEquals(List.of("test source"), BaseLanguage.parsedSources);
+        assertEquals("pre-initialization must never execute build-time sources", 0, BaseLanguage.executed.get());
+        try (Context ctx = Context.create()) {
+            Source equal = Source.newBuilder(SHARED, "test source", file.getFileName().toString()).build();
+            assertEquals("test source", ctx.eval(equal).asString());
+            assertEquals("an equal source must use the pre-initialized call target", List.of("test source"), BaseLanguage.parsedSources);
+            assertEquals("test source", ctx.eval(Source.newBuilder(SHARED, "test source", "other.shared").build()).asString());
+            assertEquals("a source with another name is not equal and is parsed again", List.of("test source", "test source"), BaseLanguage.parsedSources);
+        }
+    }
+
+    /*
+     * An explicitly created engine that uses the pre-initialized context, with
+     * engine.ExplicitEngineUsesPreInitializedContext, also uses the call targets of the sources
+     * parsed during pre-initialization.
+     */
+    @Test
+    public void testPreinitializeSourcesExplicitEngine() throws Exception {
+        Path file = Files.createTempFile("preinit", ".shared");
+        Files.writeString(file, "test source");
+        setPatchable(SHARED);
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", SHARED + ":" + file);
+        try {
+            BaseLanguage.parsedSources.clear();
+            doContextPreinitialize(SHARED);
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+            Files.delete(file);
+        }
+        assertEquals(List.of("test source"), BaseLanguage.parsedSources);
+        CountingContext preinit = findContext(SHARED, emittedContexts);
+        assertNotNull(preinit);
+        try (Engine engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.ExplicitEngineUsesPreInitializedContext", "true").build();
+                        Context ctx = Context.newBuilder().engine(engine).build()) {
+            Source equal = Source.newBuilder(SHARED, "test source", file.getFileName().toString()).build();
+            assertEquals("test source", ctx.eval(equal).asString());
+            assertEquals(1, preinit.patchContextCount);
+            assertEquals("an equal source must use the pre-initialized call target", List.of("test source"), BaseLanguage.parsedSources);
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesUnknownLanguage() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", "nosuchlanguage:/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("nosuchlanguage:/x"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+        }
+    }
+
+    @Test
+    public void testPreinitializeSourcesLanguageNotPreinitialized() throws Exception {
+        System.setProperty("polyglot.image-build-time.PreinitializeSources", FIRST + ":/x");
+        try {
+            doContextPreinitialize(SHARED);
+            fail("expected IllegalArgumentException");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains(FIRST + ":/x"));
+            assertTrue(e.getCause().getMessage(), e.getCause().getMessage().contains("PreinitializeContexts"));
+        } finally {
+            System.clearProperty("polyglot.image-build-time.PreinitializeSources");
+        }
+    }
+
+    /*
+     * A source that a language parses itself during pre-initialization, and references nowhere,
+     * stays in the image: an equal source parsed later reuses its call target.
+     */
+    @Test
+    public void testLanguageSourceParsedDuringPreinitializationIsRetained() throws Exception {
+        setPatchable(SHARED);
+        AtomicReference<WeakReference<com.oracle.truffle.api.source.Source>> parsed = new AtomicReference<>();
+        BaseLanguage.registerAction(ContextPreInitializationTestSharedLanguage.class, ActionKind.ON_INITIALIZE_CONTEXT, (env) -> {
+            if (env.isPreInitialization()) {
+                com.oracle.truffle.api.source.Source source = internalSharedSource();
+                env.parsePublic(source);
+                parsed.set(new WeakReference<>(source));
+            }
+        });
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize(SHARED);
+        assertEquals(List.of("internal source"), BaseLanguage.parsedSources);
+        GCUtils.assertNotGc("a source parsed during pre-initialization must stay in the image", parsed.get());
+        BaseLanguage.registerAction(ContextPreInitializationTestSharedLanguage.class, ActionKind.ON_EXECUTE, (env) -> {
+            env.parsePublic(internalSharedSource());
+        });
+        try (Context ctx = Context.create()) {
+            ctx.eval(Source.create(SHARED, "test"));
+        }
+        assertEquals("an equal source parsed at run time must reuse the pre-initialized call target", 1, Collections.frequency(BaseLanguage.parsedSources, "internal source"));
+    }
+
+    private static com.oracle.truffle.api.source.Source internalSharedSource() {
+        return com.oracle.truffle.api.source.Source.newBuilder(SHARED, "internal source", "internal.shared").internal(true).build();
+    }
+
+    @Test
+    public void testRegisteredPreinitializedSource() throws Exception {
+        setPatchable(SHARED);
+        Source source = Source.newBuilder(SHARED, "registered module", "module.shared").mimeType(SHARED_MODULE_MIME_TYPE).build();
+        BaseLanguage.parsedSources.clear();
+        BaseLanguage.executed.set(0);
+        PreinitializedSources.register(source);
+        doContextPreinitialize(SHARED);
+        assertEquals(List.of("registered module"), BaseLanguage.parsedSources);
+        assertEquals("pre-initialization must never execute registered sources", 0, BaseLanguage.executed.get());
+        try (Context ctx = Context.create()) {
+            Source equal = Source.newBuilder(SHARED, "registered module", "module.shared").mimeType(SHARED_MODULE_MIME_TYPE).build();
+            assertEquals("registered module", ctx.eval(equal).asString());
+            assertEquals("an equal source must use the pre-initialized call target", List.of("registered module"), BaseLanguage.parsedSources);
+            assertEquals("registered module", ctx.eval(Source.newBuilder(SHARED, "registered module", "module.shared").build()).asString());
+            assertEquals("a source with another MIME type is not equal and is parsed again", List.of("registered module", "registered module"), BaseLanguage.parsedSources);
+        }
+    }
+
+    @Test
+    public void testRegisterPreinitializedSourceAfterPreInitialization() throws Exception {
+        setPatchable(SHARED);
+        doContextPreinitialize(SHARED);
+        try {
+            PreinitializedSources.register(Source.create(SHARED, "too late"));
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("already pre-initialized"));
+        }
+    }
+
+    /*
+     * Registering is a hint: a library may register sources from its own feature, and an image
+     * that does not pre-initialize the language must still build.
+     */
+    @Test
+    public void testRegisteredPreinitializedSourceLanguageNotPreinitialized() throws Exception {
+        setPatchable(SHARED, FIRST);
+        PreinitializedSources.register(Source.newBuilder(FIRST, "first source", "first.src").build(), Source.create(SHARED, "shared source"));
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize(SHARED);
+        assertEquals("the source of the language that is not pre-initialized is skipped", List.of("shared source"), BaseLanguage.parsedSources);
+    }
+
+    @Test
+    public void testRegisteredPreinitializedSourceNoLanguagePreinitialized() throws Exception {
+        setPatchable(SHARED);
+        PreinitializedSources.register(Source.create(SHARED, "shared source"));
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize();
+        assertEquals(List.of(), BaseLanguage.parsedSources);
+    }
+
+    @Test
+    public void testRegisterPreinitializedSourcesAllOrNone() throws Exception {
+        setPatchable(SHARED);
+        assertThrows(NullPointerException.class, () -> PreinitializedSources.register(Source.create(SHARED, "shared source"), null));
+        BaseLanguage.parsedSources.clear();
+        doContextPreinitialize(SHARED);
+        assertEquals("a failed register call registers no source", List.of(), BaseLanguage.parsedSources);
+    }
+
+    @Test
     public void testDependentLanguagePreInitializationSuccessfulPatch() throws Exception {
         setPatchable(SECOND, FIRST, INTERNAL);
         ContextPreInitializationTestSecondLanguage.callDependentLanguageInCreate = true;
@@ -944,6 +1127,29 @@ public class ContextPreInitializationTest {
         assertEquals(1, secondLangCtx.disposeContextCount);
         assertEquals(2, secondLangCtx.initializeThreadCount);    // Close initializes thread
         assertEquals(2, secondLangCtx.disposeThreadCount);       // Close initializes thread
+    }
+
+    /**
+     * An explicitly created engine uses the pre-initialized context only with
+     * {@code engine.ExplicitEngineUsesPreInitializedContext}.
+     */
+    @Test
+    public void testExplicitEngineUsesPreInitializedContextWhenEnabled() throws Exception {
+        setPatchable(FIRST);
+        doContextPreinitialize(FIRST);
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        final CountingContext firstLangCtx = findContext(FIRST, contexts);
+        assertNotNull(firstLangCtx);
+        try (Engine engine = Engine.newBuilder().allowExperimentalOptions(true).option("engine.ExplicitEngineUsesPreInitializedContext", "true").build();
+                        Context ctx = Context.newBuilder().engine(engine).build()) {
+            Value res = ctx.eval(Source.create(FIRST, "test"));
+            assertEquals("test", res.asString());
+            contexts = new ArrayList<>(emittedContexts);
+            assertEquals(1, contexts.size());
+            assertEquals(1, firstLangCtx.createContextCount);
+            assertEquals(1, firstLangCtx.patchContextCount);
+        }
     }
 
     @Test
@@ -2881,6 +3087,7 @@ public class ContextPreInitializationTest {
 
     private static void resetSystemPropertiesOptions() {
         System.clearProperty("polyglot.image-build-time.PreinitializeContexts");
+        System.clearProperty("polyglot.image-build-time.PreinitializeSources");
         System.clearProperty(SYS_OPTION1_KEY);
         System.clearProperty(SYS_OPTION2_KEY);
     }
@@ -3024,6 +3231,9 @@ public class ContextPreInitializationTest {
 
     abstract static class BaseLanguage extends TruffleLanguage<CountingContext> {
 
+        static final List<String> parsedSources = Collections.synchronizedList(new ArrayList<>());
+        static final AtomicInteger executed = new AtomicInteger();
+
         static Map<Pair<Class<? extends BaseLanguage>, ActionKind>, Function<TruffleLanguage.Env, Object>> actions = new HashMap<>();
 
         static void registerAction(Class<? extends BaseLanguage> languageClass, ActionKind kind, Consumer<TruffleLanguage.Env> action) {
@@ -3108,9 +3318,11 @@ public class ContextPreInitializationTest {
         @Override
         protected CallTarget parse(TruffleLanguage.ParsingRequest request) throws Exception {
             final CharSequence result = request.getSource().getCharacters();
+            parsedSources.add(result.toString());
             return new RootNode(this) {
                 @Override
                 public Object execute(VirtualFrame frame) {
+                    executed.incrementAndGet();
                     executeImpl(getContextReference0().get(this));
                     return result;
                 }
@@ -3364,7 +3576,8 @@ public class ContextPreInitializationTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = SHARED, name = SHARED, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
+    @TruffleLanguage.Registration(id = SHARED, name = SHARED, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED, //
+                    characterMimeTypes = {SHARED_MIME_TYPE, SHARED_MODULE_MIME_TYPE}, defaultMimeType = SHARED_MIME_TYPE)
     public static final class ContextPreInitializationTestSharedLanguage extends BaseLanguage {
         @Option(category = OptionCategory.USER, stability = OptionStability.STABLE, help = "Option 1") //
         public static final OptionKey<Boolean> Option1 = new OptionKey<>(false);

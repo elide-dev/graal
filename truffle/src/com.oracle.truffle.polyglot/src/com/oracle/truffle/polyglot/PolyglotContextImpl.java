@@ -51,6 +51,7 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -3877,6 +3878,73 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         }
     }
 
+    /**
+     * The sources context pre-initialization parses: the entries of the
+     * {@code PreinitializeSources} image build time option, then the sources registered with
+     * {@code org.graalvm.polyglot.PreinitializedSources}.
+     */
+    private static List<Source> collectPreinitializedSources(PolyglotEngineImpl engine, Set<PolyglotLanguage> languagesToPreinitialize) {
+        List<Source> sources = new ArrayList<>();
+        String sourcesOption = ImageBuildTimeOptions.get(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME);
+        if (!sourcesOption.isEmpty()) {
+            for (String entry : sourcesOption.split(",")) {
+                int colon = entry.indexOf(':');
+                String languageId = colon > 0 ? entry.substring(0, colon) : null;
+                PolyglotLanguage language = languageId == null ? null : engine.idToLanguage.get(languageId);
+                if (language == null || colon == entry.length() - 1) {
+                    throw new IllegalArgumentException(
+                                    "Invalid " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': expected <language>:<path> with an installed language.");
+                }
+                checkPreinitializedSourceLanguage(ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "'", language, languagesToPreinitialize);
+                Path path = Path.of(entry.substring(colon + 1));
+                try {
+                    /*
+                     * An embedder source, like those the embedder parses (see
+                     * PolyglotImpl.buildSource), so that parsing an equal source at run time finds
+                     * the pre-initialized call target.
+                     */
+                    Source.SourceBuilder builder = Source.newBuilder(languageId, Files.readString(path), path.getFileName().toString());
+                    EngineAccessor.SOURCE.setEmbedderSource(builder, true);
+                    sources.add(builder.build());
+                } catch (IOException e) {
+                    throw new IllegalArgumentException("Cannot read " + ImageBuildTimeOptions.PREINITIALIZE_SOURCES_NAME + " entry '" + entry + "': " + e.getMessage(), e);
+                }
+            }
+        }
+        for (Source source : engine.getImpl().getRegisteredPreinitializedSources()) {
+            String entry = "pre-initialized source '" + source.getLanguage() + ":" + (source.getPath() != null ? source.getPath() : source.getName()) + "'";
+            PolyglotLanguage language = engine.idToLanguage.get(source.getLanguage());
+            if (language == null || !languagesToPreinitialize.contains(language)) {
+                /*
+                 * Registering is a hint that libraries may give from their own features: an image
+                 * that does not pre-initialize the language, or does not contain it, skips the
+                 * source rather than failing to build. Warn if pre-initialization was requested,
+                 * so a missing language in PreinitializeContexts does not go unnoticed.
+                 */
+                engine.getEngineLogger().log(languagesToPreinitialize.isEmpty() ? Level.FINE : Level.WARNING, "Skipping registered {0}: language ''{1}'' is not pre-initialized; add it to {2} to parse it.",
+                                new Object[]{entry, source.getLanguage(), ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME});
+                continue;
+            }
+            checkPreinitializedSourceLanguage(entry, language, languagesToPreinitialize);
+            sources.add(source);
+        }
+        return sources;
+    }
+
+    /**
+     * Checks that {@code language} is pre-initialized and patched, so that the pre-initialized
+     * context parses {@code entry} in a context an image context adopts.
+     */
+    private static void checkPreinitializedSourceLanguage(String entry, PolyglotLanguage language, Set<PolyglotLanguage> languagesToPreinitialize) {
+        if (!languagesToPreinitialize.contains(language)) {
+            throw new IllegalArgumentException("Invalid " + entry + ": language '" + language.getId() +
+                            "' is not pre-initialized; add it to " + ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME + ".");
+        } else if (!overridesPatchContext(language.getId())) {
+            throw new IllegalArgumentException("Invalid " + entry + ": language '" + language.getId() +
+                            "' does not support context patching (TruffleLanguage.patchContext).");
+        }
+    }
+
     static PolyglotContextImpl preinitialize(final PolyglotEngineImpl engine, final PreinitConfig preinitConfig, PolyglotSharingLayer sharableLayer, Set<PolyglotLanguage> languagesToPreinitialize,
                     boolean emitWarning) {
         String tmpDir = System.getProperty("java.io.tmpdir");
@@ -3903,7 +3971,8 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                 context.initializeContextLocals();
             }
 
-            if (!languagesToPreinitialize.isEmpty()) {
+            List<Source> preinitializedSources = collectPreinitializedSources(engine, languagesToPreinitialize);
+            if (!languagesToPreinitialize.isEmpty() || !preinitializedSources.isEmpty()) {
                 Object[] prev = context.engine.enter(context);
                 try {
                     for (PolyglotLanguage language : languagesToPreinitialize) {
@@ -3917,6 +3986,13 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                                 LOG.log(Level.WARNING, "Language {0} cannot be pre-initialized as it does not override TruffleLanguage.patchContext method.", language.getId());
                             }
                         }
+                    }
+
+                    for (Source source : preinitializedSources) {
+                        PolyglotLanguage language = engine.idToLanguage.get(source.getLanguage());
+                        PolyglotLanguageContext languageContext = context.getContextInitialized(language, null);
+                        languageContext.parseCached(ParseOrigin.EMBEDDING, null, source, null);
+                        engine.preinitializedSources.add(source);
                     }
 
                 } finally {

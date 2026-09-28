@@ -61,6 +61,10 @@ final class ImageBuildTimeOptions {
     @Option(name = DISABLE_PRIVILEGES_NAME, category = OptionCategory.EXPERT, help = "Disable Context privileges so the related code can be excluded from the image.")//
     static final OptionKey<String> DisablePrivileges = new OptionKey<>("");
 
+    static final String PREINITIALIZE_SOURCES_NAME = "PreinitializeSources";
+    @Option(name = PREINITIALIZE_SOURCES_NAME, category = OptionCategory.EXPERT, help = "Comma separated list of <language>:<path> sources that context pre-initialization parses, but never executes.")//
+    static final OptionKey<String> PreinitializeSources = new OptionKey<>("");
+
     static String get(String optionName) {
         String property = getPropertyName(optionName);
         return System.getProperty(property, "");

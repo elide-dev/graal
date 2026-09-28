@@ -1661,6 +1661,17 @@ final class Target_com_oracle_truffle_polyglot_LanguageCache {
     private String languageHome;
 }
 
+@TargetClass(className = "com.oracle.truffle.polyglot.PolyglotImpl", onlyWith = TruffleBaseFeature.IsEnabled.class)
+final class Target_com_oracle_truffle_polyglot_PolyglotImpl {
+
+    /*
+     * Pre-initialization parses and clears the registered sources, but an image that does not
+     * pre-initialize would otherwise keep them. Sources cannot be registered at image run time.
+     */
+    @Alias @RecomputeFieldValue(kind = Kind.Reset) //
+    private List<?> registeredPreinitializedSources;
+}
+
 @TargetClass(className = "com.oracle.truffle.polyglot.PolyglotEngineImpl", onlyWith = TruffleBaseFeature.IsEnabled.class)
 final class Target_com_oracle_truffle_polyglot_PolyglotEngineImpl {
     @Substitute

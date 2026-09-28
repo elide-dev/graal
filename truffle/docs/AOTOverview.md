@@ -24,6 +24,9 @@ In addition, languages need to be careful not to bind any host-specific data or 
 
 For more information see [TruffleLanguage.patchContext](https://www.graalvm.org/truffle/javadoc/com/oracle/truffle/api/TruffleLanguage.html#patchContext-C-com.oracle.truffle.api.TruffleLanguage.Env-) javadoc.
 
+Context pre-initialization can also parse, but never execute, sources of the application, so that a context that uses the pre-initialized context and parses an equal source at run time does not parse it again.
+See [Parsing Sources During Context Pre-Initialization](../../docs/reference-manual/native-image/TruffleContextPreinitializationSources.md) for how to list or register such sources.
+
 
 ### Code sharing within the same Isolate/Process
 
