@@ -4,6 +4,7 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 * (GR-79366) Add auxiliary images: a mechanism for persisting runtime-allocated objects and runtime-compiled code, and loading them in later executions of the same native image.
+* JDWP support (`-H:+JDWP`) and other features that route calls through the PLT/GOT can now be combined with runtime compilation, for example, for Truffle languages.
 
 ## GraalVM 25.4 (Internal Version 25.4.4)
 * (GR-75824) When native executables are built with `-H:+StrictRuntimeJavaOptions`, runtime assertion options (for example, `-ea`, `-da`, `-esa`, and `-dsa`) are supported and configure the assertion status of runtime-loaded classes and runtime-initialized image classes. They do not affect build-time-initialized classes whose assertion status is *only* configured by `native-image -ea ...`.

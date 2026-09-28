@@ -50,6 +50,7 @@ import jdk.graal.compiler.graph.NodeInputList;
 import jdk.graal.compiler.nodes.CallTargetNode;
 import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.FixedNode;
+import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.IndirectCallTargetNode;
 import jdk.graal.compiler.nodes.InvokeNode;
 import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
@@ -88,7 +89,13 @@ public final class PLTGOTNonSnippetLowerings {
                         CallingConvention.Type callType, CallTargetNode.InvokeKind invokeKind, SharedMethod callee, FixedNode node) {
             SharedMethod caller = (SharedMethod) graph.method();
             if (methodAddressResolutionSupport.shouldCallViaPLTGOT(caller, callee)) {
-                ValueNode heapBaseNode = graph.addOrUnique(ReadReservedRegister.createReadHeapBaseNode(graph));
+                ValueNode heapBaseNode = ReadReservedRegister.createReadHeapBaseNode(graph);
+                if (heapBaseNode instanceof FixedWithNextNode fixedHeapBaseNode) {
+                    /* Deoptimization targets must read reserved registers at a fixed position. */
+                    graph.addBeforeFixed(node, graph.add(fixedHeapBaseNode));
+                } else {
+                    heapBaseNode = graph.addOrUnique(heapBaseNode);
+                }
                 int targetGOTEntry = gotEntryAllocator.getMethodGOTEntry(callee);
                 ValueNode offsetNode = ConstantNode.forIntegerKind(SubstrateTarget.getWordKind(), GOTAccess.getGOTEntryOffsetFromHeapRegister(targetGOTEntry), graph);
                 OffsetAddressNode offsetAddressNode = graph.unique(new OffsetAddressNode(heapBaseNode, offsetNode));

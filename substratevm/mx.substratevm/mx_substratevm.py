@@ -481,6 +481,21 @@ def truffle_unittest_task(extra_build_args=None):
                            ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true'])
         native_unittest(tests + truffle_args(test_build_args))
 
+    _truffle_runtime_compilation_test(extra_build_args)
+    # Runtime compilation must also work when AOT calls are routed through the PLT/GOT. Then
+    # runtime-compiled code reaches PLT stubs via vtables.
+    _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
+        '-H:+EnablePLTGOT',
+        '--features=com.oracle.svm.hosted.pltgot.IdentityMethodAddressResolverFeature',
+    ]))
+    # JDWP support enables the PLT/GOT and requires frame information for all methods, which must
+    # not force deoptimization targets for runtime compilation. Its startup hook must also allow
+    # the isolates used for runtime compilation.
+    _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options(['-H:+JDWP']))
+
+
+def _truffle_runtime_compilation_test(extra_build_args):
+    """Runs an SL test with immediate compilation and checks that runtime-compiled code was installed."""
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as logfile:
         logfile_name = logfile.name
     success = False

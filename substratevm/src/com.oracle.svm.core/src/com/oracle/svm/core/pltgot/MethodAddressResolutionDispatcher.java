@@ -24,41 +24,48 @@
  */
 package com.oracle.svm.core.pltgot;
 
-import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.core.thread.JavaSpinLockUtils;
+import org.graalvm.nativeimage.c.struct.SizeOf;
+import org.graalvm.nativeimage.c.type.CIntPointer;
 
-import jdk.internal.misc.Unsafe;
+import com.oracle.svm.core.thread.NativeSpinLockUtils;
+import com.oracle.svm.guest.staging.c.CGlobalData;
+import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
+import com.oracle.svm.shared.Uninterruptible;
 
 public class MethodAddressResolutionDispatcher {
-    private static final MethodAddressResolutionDispatcher dispatcher = new MethodAddressResolutionDispatcher();
-    private static final long LOCK_OFFSET = Unsafe.getUnsafe().objectFieldOffset(MethodAddressResolutionDispatcher.class, "lock");
-
-    @SuppressWarnings("unused")//
-    private volatile int lock;
-    private int activeResolverInstances = 0;
+    /*
+     * The GOT and its memory protection are shared by all isolates of the process (see
+     * GOTHeapSupport). The lock and the number of active resolvers must therefore also be
+     * process-wide, otherwise one isolate could make the GOT read-only while another isolate is
+     * still resolving a method, e.g., the isolates used for runtime compilation.
+     */
+    private static final CGlobalData<CIntPointer> LOCK = CGlobalDataFactory.createBytes(() -> SizeOf.get(CIntPointer.class));
+    private static final CGlobalData<CIntPointer> ACTIVE_RESOLVER_INSTANCES = CGlobalDataFactory.createBytes(() -> SizeOf.get(CIntPointer.class));
 
     @Uninterruptible(reason = "PLT/GOT method address resolution doesn't support interruptible code paths.")
     protected static long resolveMethodAddress(long gotEntry) {
+        CIntPointer lock = LOCK.get();
+        CIntPointer activeResolverInstances = ACTIVE_RESOLVER_INSTANCES.get();
+        NativeSpinLockUtils.lockNoTransition(lock);
         try {
-            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
-            if (dispatcher.activeResolverInstances == 0) {
+            if (activeResolverInstances.read() == 0) {
                 GOTHeapSupport.get().makeGOTWritable();
             }
-            dispatcher.activeResolverInstances++;
+            activeResolverInstances.write(activeResolverInstances.read() + 1);
         } finally {
-            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
+            NativeSpinLockUtils.unlock(lock);
         }
 
         long resolvedMethodAddress = PLTGOTConfiguration.singleton().getMethodAddressResolver().resolveMethodWithGOTEntry(gotEntry);
 
+        NativeSpinLockUtils.lockNoTransition(lock);
         try {
-            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
-            if (dispatcher.activeResolverInstances == 1) {
+            if (activeResolverInstances.read() == 1) {
                 GOTHeapSupport.get().makeGOTReadOnly();
             }
-            dispatcher.activeResolverInstances--;
+            activeResolverInstances.write(activeResolverInstances.read() - 1);
         } finally {
-            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
+            NativeSpinLockUtils.unlock(lock);
         }
         return resolvedMethodAddress;
     }

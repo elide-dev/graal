@@ -172,13 +172,15 @@ public class SubstrateCompilationDirectives {
 
     private final Set<AnalysisMethod> forcedCompilations = ConcurrentHashMap.newKeySet();
     private final Set<AnalysisMethod> frameInformationRequired = ConcurrentHashMap.newKeySet();
+    private final Set<AnalysisMethod> frameInformationRequiredViaDeoptTarget = ConcurrentHashMap.newKeySet();
 
     /**
      * Contains a map for each {@link #DEOPT_TARGET_METHOD} of all encoded BCIs where a
      * deoptimization entrypoint must be present. Whenever this map is present for a method, then
      * the deopt target method must be emitted in the machine code. Note even if the map for a
      * method has no entries, the method still must be emitted in machine code, as this indicates
-     * {@link #registerFrameInformationRequired} has been called for this method.
+     * {@link #registerFrameInformationRequired(AnalysisMethod, AnalysisMethod)} has been called for
+     * this method.
      *
      * Note also this map is recreated after analysis, via calling {@link #resetDeoptEntries}, to
      * ensure the deoptimization entrypoints needed is minimal.
@@ -210,6 +212,7 @@ public class SubstrateCompilationDirectives {
     public void registerFrameInformationRequired(AnalysisMethod frameMethod, AnalysisMethod deoptMethod) {
         assert deoptInfoModifiable();
         frameInformationRequired.add(frameMethod);
+        frameInformationRequiredViaDeoptTarget.add(frameMethod);
         /*
          * Frame information is matched using the deoptimization entry point of a method. So in
          * addition to requiring frame information, we also need to mark the method as a
@@ -219,12 +222,27 @@ public class SubstrateCompilationDirectives {
         deoptEntries.computeIfAbsent(deoptMethod, _ -> new ConcurrentHashMap<>());
     }
 
+    /**
+     * Requires full frame information in the AOT-compiled code of {@code method}, without
+     * requiring a deoptimization target for it. See
+     * {@link #registerFrameInformationRequired(AnalysisMethod, AnalysisMethod)} for methods whose
+     * frame information is matched via their deoptimization entry point.
+     */
     public void registerFrameInformationRequired(AnalysisMethod method) {
         frameInformationRequired.add(method);
     }
 
     public boolean isFrameInformationRequired(ResolvedJavaMethod method) {
         return frameInformationRequired.contains(toAnalysisMethod(method));
+    }
+
+    /**
+     * Returns whether frame information of {@code method} is matched via its deoptimization entry
+     * point, which requires a deoptimization target for the method. This is the case only for
+     * methods registered via {@link #registerFrameInformationRequired(AnalysisMethod, AnalysisMethod)}.
+     */
+    public boolean isFrameInformationRequiredViaDeoptTarget(ResolvedJavaMethod method) {
+        return frameInformationRequiredViaDeoptTarget.contains(toAnalysisMethod(method));
     }
 
     /**
@@ -324,8 +342,8 @@ public class SubstrateCompilationDirectives {
             newDeoptEntries.put(key, value);
         }
         deoptEntries = newDeoptEntries;
-        // all methods which require frame information must have a deoptimization entry
-        frameInformationRequired.forEach(m -> {
+        // all methods whose frame information is matched via a deopt target must have one
+        frameInformationRequiredViaDeoptTarget.forEach(m -> {
             assert m.isOriginalMethod();
             var deoptMethod = m.getMethodVariant(DEOPT_TARGET_METHOD);
             assert deoptMethod != null;
