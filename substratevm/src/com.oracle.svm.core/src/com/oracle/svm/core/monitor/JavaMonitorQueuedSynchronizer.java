@@ -432,6 +432,14 @@ public abstract class JavaMonitorQueuedSynchronizer {
         boolean first = false;
         Node pred = null; // predecessor of node when enqueued
         long recheckNanos = -1;
+        /*
+         * Entering a monitor is not interruptible, but a pending interrupt makes park return
+         * immediately. So clear the interrupt status while waiting (otherwise, the thread would
+         * spin, and a virtual thread would never unmount, which can starve the carrier threads that
+         * the owner or the successor of the monitor needs), and restore it once the monitor is
+         * acquired (see AbstractQueuedLongSynchronizer.cancelAcquire for uninterruptible acquires).
+         */
+        boolean interrupted = false;
         if (JavaThreads.isCurrentThreadVirtualAndPinned()) {
             /*
              * Do not park indefinitely and instead periodically retry acquiring the monitor. This
@@ -464,6 +472,7 @@ public abstract class JavaMonitorQueuedSynchronizer {
                     }
                 } catch (Throwable ex) {
                     cancelAcquire(node);
+                    restoreInterrupt(interrupted);
                     throw ex;
                 }
                 if (acquired) {
@@ -473,18 +482,21 @@ public abstract class JavaMonitorQueuedSynchronizer {
                         pred.next = null;
                         node.waiter = null;
                     }
+                    restoreInterrupt(interrupted);
                     return 1;
                 }
             }
             Node t;
             if ((t = tail) == null) { // initialize queue
                 if (tryInitializeHead() == null) {
+                    restoreInterrupt(interrupted);
                     return acquireOnOOME(arg);
                 }
             } else if (node == null) { // allocate; retry before enqueue
                 try {
                     node = new ExclusiveNode();
                 } catch (OutOfMemoryError oome) {
+                    restoreInterrupt(interrupted);
                     return acquireOnOOME(arg);
                 }
             } else if (pred == null) { // try to enqueue
@@ -510,16 +522,25 @@ public abstract class JavaMonitorQueuedSynchronizer {
                         LockSupport.parkNanos(this, recheckNanos);
                         if (tryAcquire(arg)) {
                             cancelAcquire(node);
+                            restoreInterrupt(interrupted);
                             return 1;
                         }
                         recheckNanos = Math.min(recheckNanos << 3, 1_000_000_000);
                     }
+                    interrupted |= Thread.interrupted();
                 } catch (Error | RuntimeException ex) {
                     cancelAcquire(node); // cancel & rethrow
+                    restoreInterrupt(interrupted);
                     throw ex;
                 }
                 node.clearStatus();
             }
+        }
+    }
+
+    private static void restoreInterrupt(boolean interrupted) {
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 
