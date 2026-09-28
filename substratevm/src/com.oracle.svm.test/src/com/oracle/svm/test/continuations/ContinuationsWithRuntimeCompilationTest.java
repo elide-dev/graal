@@ -75,6 +75,7 @@ import com.oracle.svm.shared.util.ModuleSupport;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.test.NativeImageBuildArgs;
 
+import jdk.internal.vm.Continuation;
 import jdk.vm.ci.code.InstalledCode;
 
 /**
@@ -482,6 +483,51 @@ public class ContinuationsWithRuntimeCompilationTest {
         resumeAndJoinSuccessfully(run);
         assertEquals(expected(2), run.result.get());
         assertTrue("a thawed StoredContinuation must release its tethers", StoredContinuationAccess.getCodeTethers(stored) == null);
+    }
+
+    @Test
+    public void stackWalkerKeepsCodeAliveWhenTheWalkedContinuationResumes() throws Exception {
+        /*
+         * A StackWalker of a yielded continuation walks its StoredContinuation frame by frame. If
+         * the continuation resumes in the meantime, the StoredContinuation releases the tethers of
+         * its code, so the walker must hold them itself: otherwise, the code of the (stale) frames
+         * that remain to be walked could be invalidated and freed.
+         */
+        AtomicLong jitIp = new AtomicLong();
+        Hooks.beforeYield = () -> jitIp.set(findRuntimeCompiledFrameIP().rawValue());
+        VirtualRun run = startOnVirtualThread(compiled(), 8);
+        awaitParked(run);
+        Continuation cont = (Continuation) continuationOf(run.thread);
+
+        AtomicBoolean resumed = new AtomicBoolean();
+        AtomicBoolean codeAliveDuringWalk = new AtomicBoolean();
+        AtomicBoolean walkedRuntimeCompiledFrame = new AtomicBoolean();
+        AtomicReference<Throwable> resumeFailure = new AtomicReference<>();
+        cont.stackWalker().forEach(frame -> {
+            if (!resumed.getAndSet(true)) {
+                try {
+                    resumeAndJoinSuccessfully(run); // the frames that remain to be walked are now stale
+                } catch (Throwable t) {
+                    resumeFailure.set(t);
+                }
+                compiled().invalidate();
+                for (int i = 0; i < 3; i++) {
+                    System.gc();
+                }
+                codeAliveDuringWalk.set(isInRuntimeCodeCache(WordFactory.pointer(jitIp.get())));
+            }
+            walkedRuntimeCompiledFrame.compareAndSet(false, frame.getClassName().endsWith("JitSubject") && frame.getMethodName().equals("compute"));
+        });
+        assertEquals(null, resumeFailure.get());
+        assertEquals(expected(8), run.result.get());
+        assertTrue("the walker must keep the code of the frames it still has to walk alive", codeAliveDuringWalk.get());
+        assertTrue("the stale runtime-compiled frame must still be walked", walkedRuntimeCompiledFrame.get());
+
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+        }
+        assertTrue("the code must be freed once the walk is over", !isInRuntimeCodeCache(WordFactory.pointer(jitIp.get())));
+        Reference.reachabilityFence(run);
     }
 
     @Uninterruptible(reason = "Test helper: reads the tether of the code at an IP.")

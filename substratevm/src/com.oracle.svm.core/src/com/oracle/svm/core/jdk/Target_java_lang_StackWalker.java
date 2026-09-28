@@ -65,6 +65,7 @@ import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.deopt.VirtualFrame;
 import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
 import com.oracle.svm.core.heap.StoredContinuation;
+import com.oracle.svm.core.heap.StoredContinuationAccess;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.interpreter.InterpreterFrameSourceInfo;
 import com.oracle.svm.core.interpreter.InterpreterSupport;
@@ -87,6 +88,7 @@ import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.BasedOnJDKClass;
 import com.oracle.svm.shared.util.VMError;
 
+import jdk.graal.compiler.nodes.extended.MembarNode;
 import jdk.internal.reflect.ConstructorAccessor;
 import jdk.internal.reflect.MethodAccessor;
 
@@ -328,6 +330,12 @@ final class Target_java_lang_StackWalker {
         private boolean initialized;
         private Target_jdk_internal_vm_Continuation continuation;
         private StoredContinuation stored;
+        /**
+         * The code tethers of {@link #stored}, which keep the code of its runtime-compiled frames
+         * alive during the walk, even if the continuation resumes (which releases the tethers of
+         * {@link #stored}) and its code is invalidated in the meantime.
+         */
+        @SuppressWarnings("unused") private Object[] storedCodeTethers;
         private final InterpretedFrameData interpretedFrameData = new InterpretedFrameData();
 
         ContinuationSpliterator(JavaStackWalk walk, IsolateThread walkerThread, Target_jdk_internal_vm_ContinuationScope contScope, Target_jdk_internal_vm_Continuation continuation) {
@@ -354,10 +362,11 @@ final class Target_java_lang_StackWalker {
 
                 /*
                  * Store the StoredContinuation object in a field to avoid problems in case that the
-                 * continuation continues execution in another thread in the meanwhile.
+                 * continuation continues execution in another thread in the meanwhile. Read it only
+                 * once per continuation: if the continuation resumes and yields again, it has a
+                 * different StoredContinuation, whose frames do not match the walk's state.
                  */
-                stored = ContinuationInternals.getStoredContinuation(continuation);
-                if (stored == null) {
+                if (!initialized && !captureStoredContinuation()) {
                     return false;
                 }
 
@@ -370,10 +379,33 @@ final class Target_java_lang_StackWalker {
                      */
                     continuation = continuation.getParent();
                     initialized = false;
+                    stored = null;
+                    storedCodeTethers = null;
                 }
             } while (continuation != null);
 
             return false;
+        }
+
+        /**
+         * Reads the tethers before checking that the frames were not thawed yet, see
+         * {@link StoredContinuationAccess#markThawed}.
+         */
+        @Uninterruptible(reason = "Prevent GC while in this method.")
+        private boolean captureStoredContinuation() {
+            StoredContinuation s = ContinuationInternals.getStoredContinuation(continuation);
+            if (s == null) {
+                return false;
+            }
+            Object[] tethers = StoredContinuationAccess.getCodeTethers(s);
+            MembarNode.memoryBarrier(MembarNode.FenceKind.LOAD_ACQUIRE);
+            if (!StoredContinuationAccess.isInitialized(s)) {
+                /* The continuation resumed in the meantime: its frames are stale. */
+                return false;
+            }
+            stored = s;
+            storedCodeTethers = tethers;
+            return true;
         }
 
         @Uninterruptible(reason = "Prevent GC while in this method.")
@@ -396,7 +428,10 @@ final class Target_java_lang_StackWalker {
 
             JavaFrame frame = getCurrentFrame();
             UntetheredCodeInfo untetheredInfo = frame.getIPCodeInfo();
-            /* Runtime-compiled frames are fine: the tether keeps their CodeInfo alive during the query. */
+            /*
+             * Runtime-compiled frames are fine: storedCodeTethers keeps their code alive between
+             * frames, and the tether keeps their CodeInfo alive during the query.
+             */
             Object tether = CodeInfoAccess.acquireTether(untetheredInfo);
             try {
                 CodeInfo info = CodeInfoAccess.convert(untetheredInfo, tether);
@@ -414,6 +449,7 @@ final class Target_java_lang_StackWalker {
             super.invalidate();
             continuation = null;
             stored = null;
+            storedCodeTethers = null;
         }
 
         @Override
