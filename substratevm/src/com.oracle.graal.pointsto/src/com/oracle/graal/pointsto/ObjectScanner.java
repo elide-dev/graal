@@ -470,6 +470,15 @@ public class ObjectScanner {
             AnalysisType type = bb.getMetaAccess().lookupJavaType(entry.constant);
             type.registerAsReachable(entry.reason);
 
+            if (entry.constant instanceof ImageHeapConstant heapConstant && heapConstant.getHostedObject() == null) {
+                /*
+                 * The object scanner processes hosted values. An image heap constant that is not
+                 * backed by a hosted object, e.g., one that an object-to-constant replacer produced
+                 * for a hosted array element, has no hosted fields or elements to scan.
+                 */
+                return;
+            }
+
             if (type.isInstanceClass()) {
                 /* Scan constant's instance fields. */
                 for (ResolvedJavaField javaField : type.getInstanceFields(true)) {

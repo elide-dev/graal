@@ -414,7 +414,7 @@ public abstract class NativeImageCodeCache {
             if (object == null) {
                 return isCompressedReference ? CompressedNullConstant.COMPRESSED_NULL : JavaConstant.NULL_POINTER;
             }
-            JavaConstant constant = snippetReflection.forObject(object);
+            JavaConstant constant = (object instanceof UnbackedObjectConstants.Placeholder placeholder) ? placeholder.constant() : snippetReflection.forObject(object);
             if (constant instanceof CompressibleConstant compressible && isCompressedReference != compressible.isCompressed()) {
                 return isCompressedReference ? compressible.compress() : compressible.uncompress();
             }

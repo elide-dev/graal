@@ -488,6 +488,10 @@ def truffle_unittest_task(extra_build_args=None):
     # not force deoptimization targets for runtime compilation. Its startup hook must also allow
     # the isolates used for runtime compilation.
     _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options(['-H:+JDWP']))
+    # JDWP keeps frame information for all methods, including image heap constants that are not
+    # backed by a hosted object (e.g., from simulated class initialization, here in Guava classes
+    # on the class path). The builder verifies that they are encoded (with builder assertions).
+    native_unittest(['com.oracle.truffle.api.test.polyglot.LoomTest'] + truffle_args(extra_build_args + svm_experimental_options(['-H:+JDWP'])))
 
 
 def _truffle_runtime_compilation_test(extra_build_args):
