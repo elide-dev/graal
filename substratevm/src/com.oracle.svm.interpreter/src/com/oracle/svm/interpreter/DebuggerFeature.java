@@ -410,17 +410,28 @@ public class DebuggerFeature implements InternalFeature {
     }
 
     private static AnalysisMethod getAnalysisMethodAt(ConstantPool constantPool, int targetMethodCPI, int bytecode) {
-        JavaMethod targetMethod = constantPool.lookupMethod(targetMethodCPI, bytecode);
-        /*
-         * SVM optimizes away javac's INVOKDYNAMIC-based String concatenation e.g.
-         * MH.makeConcatWithConstants(...) . The CP method entry remains unresolved.
-         *
-         * Only reachable call sites should have its method and appendix included in the image, for
-         * now, ALL INVOKEDYNAMIC call sites of reachable methods are included.
-         */
-        if (targetMethod instanceof UnresolvedJavaMethod) {
-            constantPool.loadReferencedType(targetMethodCPI, bytecode);
+        JavaMethod targetMethod;
+        try {
             targetMethod = constantPool.lookupMethod(targetMethodCPI, bytecode);
+            /*
+             * SVM optimizes away javac's INVOKDYNAMIC-based String concatenation e.g.
+             * MH.makeConcatWithConstants(...) . The CP method entry remains unresolved.
+             *
+             * Only reachable call sites should have its method and appendix included in the image,
+             * for now, ALL INVOKEDYNAMIC call sites of reachable methods are included.
+             */
+            if (targetMethod instanceof UnresolvedJavaMethod) {
+                constantPool.loadReferencedType(targetMethodCPI, bytecode);
+                targetMethod = constantPool.lookupMethod(targetMethodCPI, bytecode);
+            }
+        } catch (LinkageError e) {
+            /*
+             * The call site cannot be linked in the host VM, e.g., because the target is not
+             * accessible from the calling class (IllegalAccessError). Like other unresolvable
+             * call sites, the call will fail at run time if the interpreter reaches it.
+             */
+            InterpreterUtil.log("[getAnalysisMethodAt] cannot link call site %s in %s: %s", targetMethodCPI, constantPool, e);
+            return null;
         }
         if (targetMethod instanceof AnalysisMethod analysisMethod) {
             return analysisMethod;
@@ -725,11 +736,12 @@ public class DebuggerFeature implements InternalFeature {
                             NativeImageHeap.ObjectInfo info = null;
                             if (ref instanceof Class) {
                                 DynamicHub hub = classToHub.get(ref);
-                                info = heap.getObjectInfo(hub);
+                                /* A class without a hub in the image heap is not in the image. */
+                                info = (hub != null) ? heap.getObjectInfo(hub) : null;
                             } else if (ref instanceof ImageHeapConstant imageHeapConstant) {
                                 info = heap.getConstantInfo(imageHeapConstant);
                             } else {
-                                info = heap.getObjectInfo(ref);
+                                info = heap.getObjectInfoIfPresent(ref);
                             }
 
                             if (info == null) {

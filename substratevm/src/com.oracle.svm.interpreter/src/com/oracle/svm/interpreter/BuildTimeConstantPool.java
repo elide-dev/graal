@@ -243,7 +243,7 @@ final class BuildTimeConstantPool {
                         JavaMethod calleeOriginalJavaMethod = null;
                         try {
                             calleeOriginalJavaMethod = originalConstantPool.lookupMethod(originalCPI, bytecode);
-                        } catch (UnsupportedFeatureException | UserError.UserException e) {
+                        } catch (UnsupportedFeatureException | UserError.UserException | LinkageError e) {
                             // ignore
                         }
                         if (calleeOriginalJavaMethod != null) {
@@ -372,7 +372,7 @@ final class BuildTimeConstantPool {
                         JavaField originalJavaField = null;
                         try {
                             originalJavaField = originalConstantPool.lookupField(originalCPI, originalMethod, bytecode);
-                        } catch (UnsupportedFeatureException e) {
+                        } catch (UnsupportedFeatureException | LinkageError e) {
                             // ignore
                         }
                         // GR-44571: Somehow obtain an unresolved field to print useful error
@@ -394,7 +394,7 @@ final class BuildTimeConstantPool {
                         JavaType originalJavaType = null;
                         try {
                             originalJavaType = originalConstantPool.lookupType(originalCPI, bytecode);
-                        } catch (UnsupportedFeatureException | AnalysisError.TypeNotFoundError e) {
+                        } catch (UnsupportedFeatureException | AnalysisError.TypeNotFoundError | LinkageError e) {
                             // GR-44571: Type has not been seen during analysis (e.g. path
                             // has not been reached).
                             // Will patch the CPI with 0.
@@ -424,7 +424,7 @@ final class BuildTimeConstantPool {
                         int newCPI = 0;
                         try {
                             originalJavaMethod = originalConstantPool.lookupMethod(originalCPI, bytecode);
-                        } catch (UnsupportedFeatureException | UserError.UserException e) {
+                        } catch (UnsupportedFeatureException | UserError.UserException | LinkageError e) {
                             // ignore
                         }
                         // GR-44571: Somehow obtain an unresolved method to print useful
