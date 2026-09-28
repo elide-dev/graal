@@ -104,15 +104,6 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Check free disk space
-        run: |
-          # A GraalVM build with GraalJS, GraalPy and GraalWasm needs about 30 GB of work space.
-          avail_kb=$(df -Pk . | awk 'NR==2 {print $4}')
-          echo "free: $((avail_kb / 1024 / 1024)) GB on $(df -Pk . | awk 'NR==2 {print $1}') (runner ${RUNNER_NAME})"
-          if [ "${avail_kb}" -lt $((30 * 1024 * 1024)) ]; then
-            echo "::error::runner ${RUNNER_NAME} has less than 30 GB free"
-            exit 1
-          fi
       - name: Allow long paths (Windows)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
@@ -132,6 +123,16 @@ jobs:
           repository: ${{ env.GRAALPYTHON_REPOSITORY }}
           ref: ${{ env.GRAALPYTHON_REF }}
           path: graalpython
+      - name: Check free disk space
+        run: |
+          # Checked after the checkouts, whose git clean removes a previous run's build output.
+          # A GraalVM build with GraalJS, GraalPy and GraalWasm needs about 30 GB of work space.
+          avail_kb=$(df -Pk . | awk 'NR==2 {print $4}')
+          echo "free: $((avail_kb / 1024 / 1024)) GB on $(df -Pk . | awk 'NR==2 {print $1}') (runner ${RUNNER_NAME})"
+          if [ "${avail_kb}" -lt $((30 * 1024 * 1024)) ]; then
+            echo "::error::runner ${RUNNER_NAME} has less than 30 GB free"
+            exit 1
+          fi
       # mx needs Python 3.8+. The self-hosted runners come with one; setup-python installs into
       # hosted-runner paths (e.g. /Users/runner on macOS), so it is only a fallback.
       - name: Check Python
@@ -278,6 +279,14 @@ jobs:
           path: out/maven
           if-no-files-found: error
           retention-days: 7
+
+      # The runners are persistent: remove this run's checkouts, build output and JDK, which
+      # take tens of GB, so they do not fill the runner for other jobs.
+      - name: Clean up
+        if: always()
+        run: |
+          rm -rf graal graaljs graalpython mx out smoke labsjdk build-dist.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-*
+          df -Pk . | awk 'NR==2 {printf "free after cleanup: %d GB\n", $4 / 1024 / 1024}'
 
   publish:
     name: Publish to maven.elide.dev
