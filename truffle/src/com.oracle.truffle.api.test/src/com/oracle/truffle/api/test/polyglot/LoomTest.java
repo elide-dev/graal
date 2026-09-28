@@ -44,6 +44,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.oracle.truffle.api.TruffleOptions;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 import org.junit.Assume;
@@ -57,7 +58,7 @@ public class LoomTest extends AbstractPolyglotTest {
 
     @Test
     public void testEmbedderVirtualThread() throws Throwable {
-        Assume.assumeTrue(canCreateVirtualThreads());
+        Assume.assumeTrue(canCreateVirtualThreads() || nativeContinuationBackedVirtualThreads());
 
         var log = new ByteArrayOutputStream();
         AbstractPolyglotTest.runInVirtualThread(() -> {
@@ -67,7 +68,7 @@ public class LoomTest extends AbstractPolyglotTest {
             }
         });
 
-        if (isGraalRuntime() && !(TruffleOptions.AOT && continuationBackedVirtualThreads())) {
+        if (isGraalRuntime()) {
             assertTrue(log.toString(), log.toString().startsWith("[engine] WARNING: Using polyglot contexts on Java virtual threads"));
         } else {
             assertEquals("", log.toString());
@@ -76,7 +77,7 @@ public class LoomTest extends AbstractPolyglotTest {
 
     @Test
     public void testManyVirtualThreads() throws Throwable {
-        Assume.assumeTrue(canCreateVirtualThreads() && (!TruffleOptions.AOT || continuationBackedVirtualThreads()));
+        Assume.assumeTrue((canCreateVirtualThreads() && !TruffleOptions.AOT) || nativeContinuationBackedVirtualThreads());
 
         // We want a big number of virtual threads but also to execute this test in reasonable time
         int n = 1000;
@@ -125,9 +126,19 @@ public class LoomTest extends AbstractPolyglotTest {
         }
     }
 
-    private static boolean continuationBackedVirtualThreads() {
-        return "java.lang.VirtualThread".equals(Thread.ofVirtual().unstarted(() -> {
+    /**
+     * Native Image with continuation-backed virtual threads (for example, built with
+     * -H:+VMContinuationsWithRuntimeCompilation). Checked separately from
+     * {@link #canCreateVirtualThreads()}, whose version check fails for snapshot builds, which have
+     * no version number.
+     */
+    private static boolean nativeContinuationBackedVirtualThreads() {
+        boolean result = TruffleOptions.AOT && !TruffleTestAssumptions.isIsolateEncapsulation() && "java.lang.VirtualThread".equals(Thread.ofVirtual().unstarted(() -> {
         }).getClass().getName());
+        // Set by the gate task that builds the image with continuations, so that it cannot
+        // silently skip these tests.
+        assertTrue("continuation-backed virtual threads are required", result || !Boolean.getBoolean("truffle.test.RequireContinuationVirtualThreads"));
+        return result;
     }
 
     private static void await(CountDownLatch latch) {

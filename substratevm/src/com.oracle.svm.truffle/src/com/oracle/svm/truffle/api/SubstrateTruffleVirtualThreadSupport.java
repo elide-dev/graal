@@ -29,35 +29,48 @@ import com.oracle.svm.core.annotate.Inject;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.thread.VirtualThreadMountListener;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
-import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
-import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.truffle.TruffleFeature;
 
-/** Moves Truffle's carrier-local state (context thread local, safepoint state) with virtual threads. */
-@SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class)
+/**
+ * Moves Truffle's carrier-local state (context thread local, safepoint state) with virtual
+ * threads. While a virtual thread is mounted, the carrier's own state is saved in the virtual
+ * thread, because the carrier may itself have entered a context (for example, a custom scheduler
+ * that runs virtual threads on a thread that uses polyglot contexts).
+ */
 public final class SubstrateTruffleVirtualThreadSupport extends VirtualThreadMountListener {
 
     @Override
     public void afterMount(Thread vthread) {
         Target_java_lang_VirtualThread_Truffle t = SubstrateUtil.cast(vthread, Target_java_lang_VirtualThread_Truffle.class);
+        t.carrierContextThreadLocal = SubstrateFastThreadLocal.getCurrentRaw();
+        t.carrierSafepointState = SubstrateThreadLocalHandshake.saveState();
         SubstrateFastThreadLocal.setCurrentRaw(t.truffleContextThreadLocal);
-        SubstrateThreadLocalHandshake.restoreStateAfterMount(t.truffleSafepointState);
+        SubstrateThreadLocalHandshake.restoreState(t.truffleSafepointState);
     }
 
     @Override
     public void beforeYield(Thread vthread) {
         Target_java_lang_VirtualThread_Truffle t = SubstrateUtil.cast(vthread, Target_java_lang_VirtualThread_Truffle.class);
         t.truffleContextThreadLocal = SubstrateFastThreadLocal.getCurrentRaw();
-        t.truffleSafepointState = SubstrateThreadLocalHandshake.saveStateForYield();
+        t.truffleSafepointState = SubstrateThreadLocalHandshake.saveState();
+    }
+
+    @Override
+    public void afterYield(Thread vthread) {
+        /* Consumed by afterMount, or unused if the yield failed; do not keep the context alive. */
+        Target_java_lang_VirtualThread_Truffle t = SubstrateUtil.cast(vthread, Target_java_lang_VirtualThread_Truffle.class);
+        t.truffleContextThreadLocal = null;
+        t.truffleSafepointState = null;
     }
 
     @Override
     public void afterUnmount(Thread vthread) {
-        SubstrateFastThreadLocal.setCurrentRaw(null);
-        SubstrateThreadLocalHandshake.clearStateAfterUnmount();
+        Target_java_lang_VirtualThread_Truffle t = SubstrateUtil.cast(vthread, Target_java_lang_VirtualThread_Truffle.class);
+        SubstrateFastThreadLocal.setCurrentRaw(t.carrierContextThreadLocal);
+        SubstrateThreadLocalHandshake.restoreState(t.carrierSafepointState);
+        t.carrierContextThreadLocal = null;
+        t.carrierSafepointState = null;
     }
 }
 
@@ -65,9 +78,17 @@ public final class SubstrateTruffleVirtualThreadSupport extends VirtualThreadMou
 final class Target_java_lang_VirtualThread_Truffle {
     @Alias volatile Thread carrierThread;
 
+    /** The virtual thread's own state, from beforeYield until it is mounted again. */
     @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset) //
     Object[] truffleContextThreadLocal;
 
     @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset) //
     Object truffleSafepointState;
+
+    /** The carrier's own state while the virtual thread is mounted on it. */
+    @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset) //
+    Object[] carrierContextThreadLocal;
+
+    @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset) //
+    Object carrierSafepointState;
 }
