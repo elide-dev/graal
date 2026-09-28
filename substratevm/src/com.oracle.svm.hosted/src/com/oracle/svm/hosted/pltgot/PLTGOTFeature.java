@@ -42,7 +42,6 @@ import com.oracle.objectfile.ObjectFile;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.feature.InternalFeature;
-import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.meta.SharedMethod;
 import com.oracle.svm.core.pltgot.GOTAccess;
@@ -112,6 +111,10 @@ import jdk.graal.compiler.util.json.JsonWriter;
  * memory across isolates. This means that modifications made to the GOT by one isolate are visible
  * to all other isolates. This mapping is necessary to avoid relocations in the code (we don't want
  * to patch the code at runtime).</li>
+ * <li>Only AOT-compiled code is rewritten to call through the GOT. Code compiled at image run time
+ * (for example, by Truffle) calls AOT methods directly at their image code address and therefore
+ * bypasses method address resolution for direct calls. Its virtual calls still go through the
+ * vtable entries, which point to PLT stubs.</li>
  * <li>Virtual calls now have two levels of indirection instead of one. The vtables contain
  * addresses of PLT stubs corresponding to the virtual methods. A PLT stub either resolves the
  * address of the actual method and writes it to the GOT, or it reads the previously resolved method
@@ -150,7 +153,6 @@ public class PLTGOTFeature implements InternalFeature {
         VMError.guarantee(Platform.includedIn(Platform.LINUX.class) || Platform.includedIn(Platform.DARWIN.class) || Platform.includedIn(Platform.WINDOWS.class),
                         "PLT and GOT is currently only supported on Linux, Darwin and Windows.");
         VMError.guarantee(Platform.includedIn(Platform.AARCH64.class) || Platform.includedIn(Platform.AMD64.class), "PLT and GOT is currently only supported on AArch64 and AMD64.");
-        VMError.guarantee(!RuntimeCompilation.isEnabled(), "PLT and GOT is currently not supported with runtime compilation.");
         VMError.guarantee("lir".equals(SubstrateOptions.CompilerBackend.getValue()), "PLT and GOT cannot work with a custom compiler backend.");
 
         ImageSingletons.add(PLTGOTConfiguration.class, createConfiguration());

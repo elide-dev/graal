@@ -129,6 +129,9 @@ Here are the key limitations to be aware of:
 - Cannot hit breakpoints or stepping events on actively executing compiled methods.
 - Step-out operations only work for interpreter frames, not compiled frames.
 - Can only debug the first isolate of a native image.
+- Code compiled at run time, for example, by the Truffle framework, is not debuggable:
+  - Breakpoints and stepping events are not triggered for methods called directly from, or inlined into, runtime-compiled code.
+  - To reliably hit breakpoints in such methods, disable runtime compilation while debugging, for example, with `--engine.Compilation=false` for Graal Languages.
 - Step-into does not work for target methods of a `MethodHandle` object, for example, lambdas.
 
 These limitations reflect the current state of JDWP debugging support in Native Image.
