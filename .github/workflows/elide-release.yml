@@ -216,26 +216,35 @@ jobs:
         if: runner.os == 'Windows'
         run: ./graal/ci/elide/build-dist.sh "${VERSION}" "${PLATFORM}" "${WS}/out/dist" --package-only | tee build-dist.out
 
-      - name: Smoke test
+      - name: Smoke test (Unix)
+        if: runner.os != 'Windows'
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
-          exe=""
-          [ "${RUNNER_OS}" = "Windows" ] && exe=".exe"
-          ni="${home}/bin/native-image"
-          [ "${RUNNER_OS}" = "Windows" ] && ni="${home}/bin/native-image.cmd"
-          "${home}/bin/java${exe}" --version
-          "${ni}" --version
+          "${home}/bin/java" --version
+          "${home}/bin/native-image" --version
           mkdir -p smoke && cd smoke
           printf 'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }\n' > Hello.java
-          "${home}/bin/javac${exe}" Hello.java
-          if [ "${RUNNER_OS}" = "Windows" ]; then
-            vs=$("/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-            cmd //c "call \"${vs}\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64 && \"$(cygpath -w "${ni}")\" -cp . Hello hello"
-          else
-            "${ni}" -cp . Hello hello
-          fi
-          "./hello${exe}"
+          "${home}/bin/javac" Hello.java
+          "${home}/bin/native-image" -cp . Hello hello
+          ./hello
           ls -la "${WS}/out/dist"
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $gvmHome = $env:GVM_HOME -replace '/', '\'
+          & "$gvmHome\bin\java.exe" --version
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          Set-Location smoke
+          'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }' | Out-File -Encoding ascii Hello.java
+          & "$gvmHome\bin\javac.exe" Hello.java
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
+          cmd /c "call `"$vcvars`" x64 && `"$gvmHome\bin\native-image.cmd`" --version && `"$gvmHome\bin\native-image.cmd`" -cp . Hello hello"
+          if ($LASTEXITCODE -ne 0) { throw "native-image failed ($LASTEXITCODE)" }
+          & .\hello.exe
+          if ($LASTEXITCODE -ne 0) { throw "hello.exe failed ($LASTEXITCODE)" }
+          Get-ChildItem "$env:WS\out\dist"
 
       - name: Set up Maven
         if: matrix.maven
