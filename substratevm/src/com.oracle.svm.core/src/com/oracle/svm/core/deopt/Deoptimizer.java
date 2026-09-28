@@ -33,6 +33,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -54,7 +55,6 @@ import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoQueryResult;
 import com.oracle.svm.core.code.CodeInfoTable;
-import com.oracle.svm.core.code.RuntimeCodeInfoAccess;
 import com.oracle.svm.core.code.FrameInfoDecoder;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueInfo;
@@ -477,81 +477,91 @@ public final class Deoptimizer {
         deoptimizeInRangeOperation(fromIp, toIp, deoptAll, requestingThread);
     }
 
-    /** Deoptimize a specific method on all thread stacks. */
     /**
      * Called by a continuation that just resumed after invalidations happened while it was
      * yielded. Lazily deoptimizes the current thread's frames whose code was invalidated (not merely
      * made non-entrant, as by Truffle tier-up) and that are not yet pending deoptimization.
+     * <p>
+     * Unlike {@link #deoptimizeInRange}, this does not need a safepoint: only the current thread's
+     * own frames (callers of this method) are patched, and a thread's frames can only be patched
+     * by the thread itself or by a VM operation, which cannot run during the uninterruptible
+     * installation. This way, resuming many virtual threads after an invalidation does not cause
+     * one global safepoint per virtual thread.
      */
-    public static void deoptimizeInvalidatedFramesOfCurrentThread() {
-        if (hasUnpatchedInvalidatedFrame()) {
-            new DeoptimizeInvalidatedFramesOperation().enqueue();
-        }
-    }
-
-    public static boolean isInvalidatedRuntimeCode(CodeInfo codeInfo) {
-        if (CodeInfoAccess.isAOTImageCode(codeInfo) || CodeInfoAccess.getState(codeInfo) < CodeInfo.STATE_NON_ENTRANT) {
-            return false;
-        }
-        SubstrateInstalledCode installedCode = RuntimeCodeInfoAccess.getInstalledCode(codeInfo);
-        return installedCode == null || !installedCode.isAlive();
-    }
-
     @NeverInline("Starts a stack walk in the caller frame.")
-    private static boolean hasUnpatchedInvalidatedFrame() {
-        IsolateThread self = CurrentIsolate.getCurrentThread();
-        boolean[] found = new boolean[1];
-        JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), new StackFrameVisitor() {
-            @Override
-            protected boolean visitRegularFrame(Pointer frameSp, CodePointer frameIp, CodeInfo codeInfo) {
-                if (isInvalidatedRuntimeCode(codeInfo) && !checkLazyDeoptimized(self, frameSp)) {
-                    found[0] = true;
-                    return false;
-                }
-                return true;
-            }
-
-            @Override
-            protected boolean visitDeoptimizedFrame(Pointer originalSP, CodePointer deoptStubIP, DeoptimizedFrame deoptimizedFrame) {
-                return true;
-            }
-        });
-        return found[0];
+    public static void deoptimizeInvalidatedFramesOfCurrentThread() {
+        VMError.guarantee(Options.LazyDeoptimization.getValue(), "Continuations with runtime compilation require lazy deoptimization");
+        InvalidatedFramesCollector collector = new InvalidatedFramesCollector(CurrentIsolate.getCurrentThread());
+        JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), collector);
+        if (collector.count > 0) {
+            installLazyDeoptStubsInCurrentThread(collector.sps, collector.stubs, collector.count);
+        }
     }
 
-    private static final class DeoptimizeInvalidatedFramesOperation extends JavaVMOperation {
-        DeoptimizeInvalidatedFramesOperation() {
-            super(VMOperationInfos.get(DeoptimizeInvalidatedFramesOperation.class, "Deoptimize invalidated frames of resumed continuation", SystemEffect.SAFEPOINT));
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static boolean isInvalidatedRuntimeCode(CodeInfo codeInfo) {
+        return !CodeInfoAccess.isAOTImageCode(codeInfo) && CodeInfoAccess.isInvalidated(codeInfo);
+    }
+
+    /**
+     * Collects the stack pointer and the matching lazy deoptimization stub of each frame of
+     * invalidated code. Runs interruptibly: the frames can still be patched concurrently (by a VM
+     * operation at a safepoint), which {@link #installLazyDeoptStubsInCurrentThread} rechecks.
+     */
+    private static final class InvalidatedFramesCollector extends StackFrameVisitor {
+        private final IsolateThread thread;
+        long[] sps = new long[4];
+        long[] stubs = new long[4];
+        int count;
+
+        InvalidatedFramesCollector(IsolateThread thread) {
+            this.thread = thread;
         }
 
         @Override
-        protected void operate() {
-            deoptimizeInvalidatedFramesOperation(queuingThread);
+        protected boolean visitRegularFrame(Pointer frameSp, CodePointer frameIp, CodeInfo codeInfo) {
+            if (isInvalidatedRuntimeCode(codeInfo) && !checkLazyDeoptimized(thread, frameSp)) {
+                CodeInfoQueryResult queryResult = CodeInfoTable.lookupCodeInfoQueryResult(codeInfo, frameIp);
+                CFunctionPointer stub = getLazyDeoptStub(queryResult, frameIp, false);
+                if (count == sps.length) {
+                    sps = Arrays.copyOf(sps, count * 2);
+                    stubs = Arrays.copyOf(stubs, count * 2);
+                }
+                sps[count] = frameSp.rawValue();
+                stubs[count] = stub.rawValue();
+                count++;
+            }
+            return true;
+        }
+
+        @Override
+        protected boolean visitDeoptimizedFrame(Pointer originalSP, CodePointer deoptStubIP, DeoptimizedFrame deoptimizedFrame) {
+            return true;
         }
     }
 
-    @NeverInline("Starting a stack walk in the caller frame.")
-    private static void deoptimizeInvalidatedFramesOperation(IsolateThread targetThread) {
-        VMOperation.guaranteeInProgressAtSafepoint("Deoptimizer.deoptimizeInvalidatedFramesOperation, but not in VMOperation.");
-        StackFrameVisitor visitor = new StackFrameVisitor() {
-            @Override
-            protected boolean visitRegularFrame(Pointer frameSp, CodePointer frameIp, CodeInfo codeInfo) {
-                if (isInvalidatedRuntimeCode(codeInfo)) {
-                    CodeInfoQueryResult queryResult = CodeInfoTable.lookupCodeInfoQueryResult(codeInfo, frameIp);
-                    new Deoptimizer(frameSp, queryResult, targetThread, targetThread).deoptSourceFrameLazily(frameIp, false);
-                }
-                return true;
+    /**
+     * The frames at {@code sps} are callers of {@link #deoptimizeInvalidatedFramesOfCurrentThread}
+     * and therefore still exist. A VM operation may have lazily deoptimized some of them since they
+     * were collected (with lazy deoptimization, only the thread itself deoptimizes its frames
+     * eagerly), so skip those.
+     */
+    @Uninterruptible(reason = "No safepoint (and thus no concurrent deoptimization of these frames) between the check and the patch.")
+    private static void installLazyDeoptStubsInCurrentThread(long[] sps, long[] stubs, int count) {
+        IsolateThread thread = CurrentIsolate.getCurrentThread();
+        for (int i = 0; i < count; i++) {
+            Pointer sp = Word.pointer(sps[i]);
+            if (checkLazyDeoptimized(thread, sp) || checkEagerDeoptimized(thread, sp) != null) {
+                continue;
             }
-
-            @Override
-            protected boolean visitDeoptimizedFrame(Pointer originalSP, CodePointer deoptStubIP, DeoptimizedFrame deoptimizedFrame) {
-                return true;
-            }
-        };
-        if (targetThread == CurrentIsolate.getCurrentThread()) {
-            JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), visitor);
-        } else {
-            JavaStackWalker.walkThread(targetThread, visitor);
+            CodePointer originalReturnAddress = FrameAccess.singleton().readReturnAddress(thread, sp);
+            /*
+             * Unlike installLazyDeoptStubReturnAddress, the thread is not stopped, so write the
+             * original return address first: a stack walk that sees the stub (e.g., by a sampler in
+             * a signal handler) must also find the original return address.
+             */
+            sp.writeWord(0, originalReturnAddress);
+            FrameAccess.singleton().writeReturnAddress(thread, sp, Word.pointer(stubs[i]));
         }
     }
 

@@ -149,6 +149,15 @@ public final class CodeInfoAccess {
         return cast(info).getState();
     }
 
+    /**
+     * Returns true if the code was invalidated, so that its frames must be deoptimized. Code that
+     * was only made non-entrant (for example, by Truffle tier-up) can keep running.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static boolean isInvalidated(CodeInfo info) {
+        return cast(info).getInvalidated();
+    }
+
     public static String stateToString(int codeInfoState) {
         switch (codeInfoState) {
             case CodeInfo.STATE_CREATED:

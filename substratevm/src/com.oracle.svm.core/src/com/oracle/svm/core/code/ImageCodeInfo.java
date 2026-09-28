@@ -417,6 +417,16 @@ public class ImageCodeInfo {
         }
 
         @Override
+        public boolean getInvalidated() {
+            throw VMError.shouldNotReachHere("not supported for image code");
+        }
+
+        @Override
+        public void setInvalidated(boolean value) {
+            throw VMError.shouldNotReachHere("not supported for image code");
+        }
+
+        @Override
         public NonmovableArray<Byte> getCodeConstantsReferenceMapEncoding() {
             throw VMError.shouldNotReachHere("not supported for image code");
         }
