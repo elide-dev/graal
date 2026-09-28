@@ -27,9 +27,8 @@ package com.oracle.svm.test.continuations;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
-import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.junit.Test;
@@ -40,28 +39,66 @@ import com.oracle.svm.test.NativeImageBuildArgs;
 
 @NativeImageBuildArgs({"--features=com.oracle.svm.test.continuations.VirtualThreadMountListenerTest$ListenerFeature"})
 public class VirtualThreadMountListenerTest {
-    static final AtomicInteger MOUNTS = new AtomicInteger();
-    static final AtomicInteger YIELDS = new AtomicInteger();
-    static final AtomicInteger UNMOUNTS = new AtomicInteger();
+    static final int LISTENER_COUNT = 2;
+    /* Indexed by listener id - 1. Kept here, so that the test does not refer to the listener class. */
+    static final AtomicIntegerArray MOUNTS = new AtomicIntegerArray(LISTENER_COUNT);
+    static final AtomicIntegerArray YIELDS = new AtomicIntegerArray(LISTENER_COUNT);
+    static final AtomicIntegerArray AFTER_YIELDS = new AtomicIntegerArray(LISTENER_COUNT);
+    static final AtomicIntegerArray UNMOUNTS = new AtomicIntegerArray(LISTENER_COUNT);
     static volatile boolean wrongThreadSeen;
+    static volatile boolean wrongOrderSeen;
+    /** Id of the listener that was called last, to check the order of the callbacks. */
+    static volatile int lastCalled;
 
     public static final class CountingListener extends VirtualThreadMountListener {
+        final int id;
+
+        CountingListener(int id) {
+            this.id = id;
+        }
+
+        /*
+         * Returns the super type so that verifying ListenerFeature does not load this class before
+         * the feature exports the package of its super class.
+         */
+        static VirtualThreadMountListener create(int id) {
+            return new CountingListener(id);
+        }
+
+        /** Mount callbacks run in registration order, yield and unmount callbacks in reverse. */
+        private void called(boolean registrationOrder) {
+            int expectedPrevious = registrationOrder ? id - 1 : id + 1;
+            int first = registrationOrder ? 1 : LISTENER_COUNT;
+            wrongOrderSeen |= id != first && lastCalled != expectedPrevious;
+            lastCalled = id;
+        }
+
         @Override
         public void afterMount(Thread vthread) {
             wrongThreadSeen |= Thread.currentThread() != vthread;
-            MOUNTS.incrementAndGet();
+            called(true);
+            MOUNTS.incrementAndGet(id - 1);
         }
 
         @Override
         public void beforeYield(Thread vthread) {
             wrongThreadSeen |= Thread.currentThread() != vthread;
-            YIELDS.incrementAndGet();
+            called(false);
+            YIELDS.incrementAndGet(id - 1);
+        }
+
+        @Override
+        public void afterYield(Thread vthread) {
+            wrongThreadSeen |= Thread.currentThread() != vthread;
+            called(true);
+            AFTER_YIELDS.incrementAndGet(id - 1);
         }
 
         @Override
         public void afterUnmount(Thread vthread) {
             wrongThreadSeen |= Thread.currentThread() == vthread || Thread.currentThread().isVirtual();
-            UNMOUNTS.incrementAndGet();
+            called(false);
+            UNMOUNTS.incrementAndGet(id - 1);
         }
     }
 
@@ -73,12 +110,13 @@ public class VirtualThreadMountListenerTest {
         @Override
         public void beforeAnalysis(BeforeAnalysisAccess access) {
             RuntimeClassInitialization.initializeAtBuildTime(CountingListener.class);
-            ImageSingletons.add(VirtualThreadMountListener.class, new CountingListener());
+            VirtualThreadMountListener.register(CountingListener.create(1));
+            VirtualThreadMountListener.register(CountingListener.create(2));
         }
     }
 
     @Test
-    public void listenerSeesEveryMountYieldAndUnmount() throws Exception {
+    public void listenersSeeEveryMountYieldAndUnmountInOrder() throws Exception {
         int yields = 10;
         Thread vt = Thread.ofVirtual().start(() -> {
             for (int i = 0; i < yields; i++) {
@@ -87,8 +125,12 @@ public class VirtualThreadMountListenerTest {
         });
         vt.join();
         assertTrue(!wrongThreadSeen);
-        assertEquals(yields, YIELDS.get());
-        assertEquals(yields + 1, MOUNTS.get());
-        assertEquals(yields + 1, UNMOUNTS.get());
+        assertTrue(!wrongOrderSeen);
+        for (int i = 0; i < LISTENER_COUNT; i++) {
+            assertEquals(yields, YIELDS.get(i));
+            assertEquals(yields, AFTER_YIELDS.get(i));
+            assertEquals(yields + 1, MOUNTS.get(i));
+            assertEquals(yields + 1, UNMOUNTS.get(i));
+        }
     }
 }

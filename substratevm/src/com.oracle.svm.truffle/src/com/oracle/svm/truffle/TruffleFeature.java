@@ -421,7 +421,7 @@ public class TruffleFeature implements InternalFeature {
 
         if (ContinuationSupport.isSupported()) {
             /* Continuation-backed virtual threads: move Truffle's carrier-local state with them. */
-            ImageSingletons.add(VirtualThreadMountListener.class, new SubstrateTruffleVirtualThreadSupport());
+            VirtualThreadMountListener.register(new SubstrateTruffleVirtualThreadSupport());
         }
 
         SubstrateTruffleRuntime truffleRuntime = (SubstrateTruffleRuntime) Truffle.getRuntime();
