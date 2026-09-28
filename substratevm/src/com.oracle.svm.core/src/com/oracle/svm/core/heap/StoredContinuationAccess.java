@@ -261,19 +261,30 @@ public final class StoredContinuationAccess {
     }
 
     /**
-     * Called once the frames of {@code s} have been copied back onto a thread stack. From then on
-     * {@code s} is garbage, but the GC can still visit it (e.g., via a dirty card in the old
-     * generation). With runtime compilation, the code of its frames may be freed and its addresses
-     * reused, so the stale frames must never be walked again.
+     * The tethers of the code of the runtime-compiled frames in {@code s}, or {@code null}. A
+     * concurrent stack walker must read this before checking {@link #isInitialized}, see
+     * {@link #markThawed}.
      */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static Object[] getCodeTethers(StoredContinuation s) {
         return s.codeTethers;
     }
 
+    /**
+     * Called once the frames of {@code s} have been copied back onto a thread stack. From then on
+     * {@code s} is garbage, but the GC can still visit it (e.g., via a dirty card in the old
+     * generation). With runtime compilation, the code of its frames may be freed and its addresses
+     * reused, so the stale frames must never be walked again.
+     * <p>
+     * {@link StoredContinuation#ip} is cleared before {@link StoredContinuation#codeTethers}. So a concurrent walker
+     * (e.g., a {@link StackWalker} of the continuation) that reads the tethers, and then finds that
+     * {@link StoredContinuation#ip} is still set, holds the tethers of all frames it can walk.
+     */
     @Uninterruptible(reason = "Writes the StoredContinuation without GC barriers.")
     public static void markThawed(StoredContinuation s) {
         if (DeoptimizationSupport.enabled() && !Heap.getHeap().isInImageHeap(s)) {
             s.ip = Word.nullPointer();
+            MembarNode.memoryBarrier(MembarNode.FenceKind.STORE_STORE);
             /* The frames are back on a thread stack, where GCImpl.walkStack keeps their code alive. */
             setCodeTethers(s, null);
         }
