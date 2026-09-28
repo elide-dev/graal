@@ -1,0 +1,276 @@
+#
+# Builds Elide's GraalVM fork for every platform Elide ships, and publishes the release to
+# https://maven.elide.dev/gvm-elide/<version>: the Maven artifacts, and a GraalVM distribution per
+# platform under dist/.
+#
+# Triggers:
+#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.4.4-elide.14`, to build and publish.
+#     A tag ending in `-dryrun` builds and smoke-tests only.
+#   - Manual dispatch (once this file is on the default branch).
+#
+# The jobs run on self-hosted runners, so no pull request event triggers this workflow.
+#
+name: Elide GraalVM release
+
+on:
+  push:
+    tags:
+      - "gvm-elide-*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 25.4.4-elide.14"
+        required: true
+        type: string
+      publish:
+        description: "Publish to maven.elide.dev"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elide-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GRAALJS_REPOSITORY: elide-dev/graaljs
+  GRAALJS_REF: elide-25.4.x
+  GRAALPYTHON_REPOSITORY: elide-dev/graalpython
+  GRAALPYTHON_REF: elide-25.4.x
+  R2_BUCKET: elide-maven
+  R2_ROOT: gvm-elide
+  PUBLIC_BASE: https://maven.elide.dev/gvm-elide
+
+jobs:
+  meta:
+    name: Release metadata
+    runs-on: linux-amd64-cipool
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      publish: ${{ steps.meta.outputs.publish }}
+    steps:
+      - id: meta
+        name: Determine version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version=${GITHUB_REF_NAME#gvm-elide-}
+            publish=true
+            if [[ "${version}" == *-dryrun ]]; then
+              version=${version%-dryrun}
+              publish=false
+            fi
+          else
+            version=${INPUT_VERSION}
+            publish=${INPUT_PUBLISH}
+          fi
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-elide\.[0-9]+$ ]]; then
+            echo "::error::invalid release version '${version}'"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "Release ${version}, publish=${publish}" >> "${GITHUB_STEP_SUMMARY}"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runner: linux-amd64-cipool
+            maven: true
+          - platform: linux-aarch64
+            runner: linux-arm64-cipool
+          - platform: macos-aarch64
+            runner: macos-arm64-cipool
+          - platform: windows-amd64
+            runner: windows-amd64-cipool
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      PLATFORM: ${{ matrix.platform }}
+      PYTHONIOENCODING: utf-8
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - name: Checkout graal
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: graal
+      - name: Checkout graaljs
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ env.GRAALJS_REPOSITORY }}
+          ref: ${{ env.GRAALJS_REF }}
+          path: graaljs
+      - name: Checkout graalpython
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ env.GRAALPYTHON_REPOSITORY }}
+          ref: ${{ env.GRAALPYTHON_REF }}
+          path: graalpython
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Record source revisions
+        run: |
+          for r in graal graaljs graalpython; do
+            echo "${r}: $(git -C "${r}" rev-parse HEAD)" | tee -a "${GITHUB_STEP_SUMMARY}"
+          done
+          py=python3; command -v python3 >/dev/null 2>&1 || py=python
+          echo "MX_VERSION=$(${py} -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
+      - name: Checkout mx
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: graalvm/mx
+          ref: ${{ env.MX_VERSION }}
+          path: mx
+      - name: Set up environment
+        run: |
+          ws=$(pwd)
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            ws=$(cygpath -m "${ws}")
+            echo "MX=${ws}/mx/mx.cmd" >> "${GITHUB_ENV}"
+            echo "MX_PYTHON=python" >> "${GITHUB_ENV}"
+          else
+            echo "MX=${ws}/mx/mx" >> "${GITHUB_ENV}"
+            echo "MX_PYTHON=python3" >> "${GITHUB_ENV}"
+          fi
+          echo "WS=${ws}" >> "${GITHUB_ENV}"
+          echo "JAVA_HOME=${ws}/labsjdk" >> "${GITHUB_ENV}"
+          echo "MX_GIT_CACHE=refcache" >> "${GITHUB_ENV}"
+          echo "LANG=en_US.UTF-8" >> "${GITHUB_ENV}"
+      - name: Fetch LabsJDK
+        working-directory: graal
+        run: |
+          mkdir -p "${RUNNER_TEMP}/jdks"
+          "${WS}/mx/mx" --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${JAVA_HOME}"
+          "${JAVA_HOME}/bin/java" -version
+
+      - name: Build GraalVM (Unix)
+        if: runner.os != 'Windows'
+        run: ./graal/ci/elide/build-dist.sh "${VERSION}" "${PLATFORM}" "${WS}/out/dist" | tee build-dist.out
+      - name: Build GraalVM (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "no Visual Studio with the C++ x64 tools found" }
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
+          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --dynamicimports /graal-js,/graalpython,/wasm"
+          cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build && `"$env:MX`" $mxArgs graalvm-home > ..\..\graalvm-home.txt"
+          if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
+          $gvmHome = (Get-Content graalvm-home.txt | Select-Object -Last 1).Trim()
+          "GVM_HOME=$gvmHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Package GraalVM (Windows)
+        if: runner.os == 'Windows'
+        run: ./graal/ci/elide/build-dist.sh "${VERSION}" "${PLATFORM}" "${WS}/out/dist" --package-only | tee build-dist.out
+
+      - name: Smoke test
+        run: |
+          home=$(grep '^home=' build-dist.out | cut -d= -f2-)
+          exe=""
+          [ "${RUNNER_OS}" = "Windows" ] && exe=".exe"
+          ni="${home}/bin/native-image"
+          [ "${RUNNER_OS}" = "Windows" ] && ni="${home}/bin/native-image.cmd"
+          "${home}/bin/java${exe}" --version
+          "${ni}" --version
+          mkdir -p smoke && cd smoke
+          printf 'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }\n' > Hello.java
+          "${home}/bin/javac${exe}" Hello.java
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            vs=$("/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+            cmd //c "call \"${vs}\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64 && \"$(cygpath -w "${ni}")\" -cp . Hello hello"
+          else
+            "${ni}" -cp . Hello hello
+          fi
+          "./hello${exe}"
+          ls -la "${WS}/out/dist"
+
+      - name: Deploy Maven artifacts
+        if: matrix.maven
+        run: ./graal/ci/elide/deploy-maven.sh "${VERSION}" "${WS}/out/maven"
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dist-${{ matrix.platform }}
+          path: out/dist
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload Maven repository
+        if: matrix.maven
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: maven
+          path: out/maven
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to maven.elide.dev
+    needs: [meta, build]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: linux-amd64-cipool
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: Refuse to overwrite a published version
+        shell: bash
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${PUBLIC_BASE}/${VERSION}/org/graalvm/polyglot/polyglot/${VERSION}/polyglot-${VERSION}.pom")
+          if [ "${code}" = "200" ]; then
+            echo "::error::${VERSION} is already published; versions are immutable, pick a new one"
+            exit 1
+          fi
+      - name: Download Maven repository
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: maven
+          path: stage/${{ env.VERSION }}
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: stage/${{ env.VERSION }}/dist
+      - name: List release contents
+        shell: bash
+        run: |
+          ls -la "stage/${VERSION}/dist"
+          echo "$(find "stage/${VERSION}" -name '*.pom' | wc -l) Maven artifacts" | tee -a "${GITHUB_STEP_SUMMARY}"
+          [ "$(ls stage/${VERSION}/dist/*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 distributions"; exit 1; }
+      - name: Upload to R2
+        uses: elide-tools/r2-upload-action@b59314040b32715ae31337cdbb7418582ade7cff  # main
+        with:
+          path: stage/${{ env.VERSION }}
+          target: ${{ env.R2_ROOT }}/${{ env.VERSION }}
+          bucket: ${{ env.R2_BUCKET }}
+          account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      - name: Verify the published release
+        shell: bash
+        run: |
+          cd "stage/${VERSION}/dist"
+          for f in *.sha256; do
+            remote=$(curl -sSfL "${PUBLIC_BASE}/${VERSION}/dist/${f}" | cut -d' ' -f1)
+            local=$(cut -d' ' -f1 "${f}")
+            [ "${remote}" = "${local}" ] || { echo "::error::${f}: published ${remote}, built ${local}"; exit 1; }
+            echo "${PUBLIC_BASE}/${VERSION}/dist/${f%.sha256}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          done
