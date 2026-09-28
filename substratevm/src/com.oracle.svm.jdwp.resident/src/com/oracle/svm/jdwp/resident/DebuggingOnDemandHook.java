@@ -35,16 +35,18 @@ public class DebuggingOnDemandHook implements RuntimeSupport.Hook {
 
     @Override
     public void execute(boolean isFirstIsolate) {
+        String jdwpOptions = JDWPOptions.JDWPOptions.getValue();
+        if (jdwpOptions == null) {
+            /*
+             * Debugger not requested. Note that other isolates, e.g., isolates used for runtime
+             * compilation, can be started without ever requesting a debugger.
+             */
+            return;
+        }
+
         // TODO(peterssen): GR-55057 Support attaching the JDWP debugger to any isolate, not only
         // the first.
         if (isFirstIsolate) {
-
-            String jdwpOptions = JDWPOptions.JDWPOptions.getValue();
-            if (jdwpOptions == null) {
-                // Debugger not requested.
-                return;
-            }
-
             // Options can be added externally via this environment variable. Anything contained in
             // it will get a comma prepended to it (if needed), then it will be added to the end of
             // the JDWP options.

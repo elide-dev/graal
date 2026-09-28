@@ -46,6 +46,7 @@ import org.graalvm.word.Pointer;
 
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.svm.shared.BuildPhaseProvider;
+import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.core.MethodRefHolder;
 import com.oracle.svm.guest.staging.c.CGlobalData;
 import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
@@ -206,8 +207,22 @@ public class DebuggerSupport {
         assert encodedMethods[0] == null;
         for (int i = 1; i < encodedMethods.length; i++) {
             ResolvedJavaMethod method = encodedMethods[i];
-            if (method != null) {
-                InterpreterResolvedJavaMethod interpreterMethod = BuildTimeInterpreterUniverse.singleton().getMethod(method);
+            if (method == null) {
+                continue;
+            }
+            /*
+             * With runtime compilation, the encoded methods also contain other method variants,
+             * e.g., deoptimization targets. They share the bytecode of the original method, so they
+             * map to its interpreter method. The original method takes precedence for the id.
+             */
+            boolean isOriginal = !(method instanceof MethodVariant variant) || variant.isOriginalMethod();
+            ResolvedJavaMethod originalMethod = isOriginal ? method : (ResolvedJavaMethod) ((MethodVariant) method).getMethodVariant(MethodVariant.ORIGINAL_METHOD);
+            InterpreterResolvedJavaMethod interpreterMethod = originalMethod == null ? null : BuildTimeInterpreterUniverse.singleton().getMethod(originalMethod);
+            if (interpreterMethod == null) {
+                VMError.guarantee(!isOriginal, "No interpreter method for %s", method);
+                continue;
+            }
+            if (isOriginal || interpreterMethod.getMethodId() == 0) {
                 interpreterMethod.setMethodId(i);
             }
         }
