@@ -202,7 +202,7 @@ public final class Target_java_lang_VirtualThread {
         // JDK 25 VirtualThread.unmount() calls this with hide == false after switching back to the
         // carrier (yieldContinuation, the only caller with hide == true, is substituted above).
         if (!hide && VirtualThreadMountListener.isRegistered()) {
-            VirtualThreadMountListener.singleton().afterUnmount(asThread(this));
+            VirtualThreadMountListener.notifyAfterUnmount(asThread(this));
         }
     }
 
@@ -277,7 +277,7 @@ public final class Target_java_lang_VirtualThread {
         carrier.setCurrentThread(asThread(this));
 
         if (VirtualThreadMountListener.isRegistered()) {
-            VirtualThreadMountListener.singleton().afterMount(asThread(this));
+            VirtualThreadMountListener.notifyAfterMount(asThread(this));
         }
     }
 
@@ -287,10 +287,15 @@ public final class Target_java_lang_VirtualThread {
          * JDK: notifyJvmtiUnmount(true); try { return Continuation.yield(VTHREAD_SCOPE); } finally
          * { notifyJvmtiMount(false); } -- both JVMTI notifications are no-ops on Native Image.
          */
-        if (VirtualThreadMountListener.isRegistered()) {
-            VirtualThreadMountListener.singleton().beforeYield(asThread(this));
+        if (!VirtualThreadMountListener.isRegistered()) {
+            return Continuation.yield(SubstrateUtil.cast(VTHREAD_SCOPE, ContinuationScope.class));
         }
-        return Continuation.yield(SubstrateUtil.cast(VTHREAD_SCOPE, ContinuationScope.class));
+        VirtualThreadMountListener.notifyBeforeYield(asThread(this));
+        try {
+            return Continuation.yield(SubstrateUtil.cast(VTHREAD_SCOPE, ContinuationScope.class));
+        } finally {
+            VirtualThreadMountListener.notifyAfterYield(asThread(this));
+        }
     }
 
     @Alias

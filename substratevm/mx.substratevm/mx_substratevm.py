@@ -493,6 +493,16 @@ def truffle_unittest_task(extra_build_args=None):
     # on the class path). The builder verifies that they are encoded (with builder assertions).
     native_unittest(['com.oracle.truffle.api.test.polyglot.LoomTest'] + truffle_args(extra_build_args + svm_experimental_options(['-H:+JDWP'])))
 
+    # Continuation-backed virtual threads together with runtime compilation (JIT frames that are
+    # frozen, invalidated while parked, and thawed). The tests fail instead of being skipped if the
+    # image unexpectedly has no continuation support.
+    continuations_build_args = extra_build_args + svm_experimental_options(['-H:+VMContinuationsWithRuntimeCompilation']) + [
+        '--features=jdk.graal.compiler.truffle.test.NativeVirtualThreadTruffleTest$CustomSchedulerFeature',
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+    ]
+    native_unittest(['jdk.graal.compiler.truffle.test.NativeVirtualThreadTruffleTest', 'com.oracle.truffle.api.test.polyglot.LoomTest'] +
+                    truffle_args(continuations_build_args) + ['-Dtruffle.test.RequireContinuationVirtualThreads=true'])
+
 
 def _truffle_runtime_compilation_test(extra_build_args):
     """Runs an SL test with immediate compilation and checks that runtime-compiled code was installed."""

@@ -2829,6 +2829,13 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
                                                         Full VirtualThread support for Native Image together with polyglot contexts will be added in a future release.
                                                         VirtualThread is fully supported with polyglot contexts in JVM mode.
                                                         """);
+                    } else {
+                        getEngineLogger().warning(
+                                        """
+                                                        Using polyglot contexts on Java virtual threads on Native Image is experimental in this release.
+                                                        A virtual thread whose caller frames were accessed in write or materialize mode (some tools and languages depend on that) stays pinned to its carrier thread until those frames return.
+                                                        To disable this warning use the '--engine.WarnVirtualThreadSupport=false' option or the '-Dpolyglot.engine.WarnVirtualThreadSupport=false' system property.
+                                                        """);
                     }
                 }
             }

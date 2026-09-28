@@ -27,15 +27,21 @@ package jdk.graal.compiler.truffle.test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Constructor;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 
 import org.graalvm.nativeimage.ImageInfo;
+import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.polyglot.Context;
 import org.junit.Assume;
 import org.junit.Before;
@@ -140,10 +146,19 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
     @Before
     public void assumeRealVirtualThreads() {
         Assume.assumeTrue("Native Image only", ImageInfo.inImageRuntimeCode());
-        assertEquals("continuations must be enabled (-H:+VMContinuationsWithRuntimeCompilation)",
-                        "java.lang.VirtualThread", Thread.ofVirtual().unstarted(() -> {
-                        }).getClass().getName());
+        boolean continuations = "java.lang.VirtualThread".equals(Thread.ofVirtual().unstarted(() -> {
+        }).getClass().getName());
+        String message = "continuations must be enabled (-H:+VMContinuationsWithRuntimeCompilation)";
+        if (Boolean.getBoolean(REQUIRE_CONTINUATIONS_PROPERTY)) {
+            // Set by the gate task that builds the image with continuations, so that it cannot
+            // silently skip these tests.
+            assertTrue(message, continuations);
+        } else {
+            Assume.assumeTrue(message, continuations);
+        }
     }
+
+    static final String REQUIRE_CONTINUATIONS_PROPERTY = "truffle.test.RequireContinuationVirtualThreads";
 
     /** Uses TestWithSynchronousCompiling's builder (synchronous compilation, low thresholds). */
     Context newContext() {
@@ -277,6 +292,7 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
         }
         ctx.close();
     }
+
     /** Returns 1 while the assumption holds at the point of return, else 2. Parks in between. */
     static final class ParkThenCheckRoot extends RootNode {
         final com.oracle.truffle.api.Assumption assumption;
@@ -438,8 +454,101 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
         assertTrue(failures.size() + " failures, first: " + (failures.isEmpty() ? "" : failures.get(0)), failures.isEmpty());
         ctx.close();
     }
+
+    /**
+     * Registers the JDK-internal constructor for virtual threads with a custom scheduler. Build
+     * with --features=jdk.graal.compiler.truffle.test.NativeVirtualThreadTruffleTest$CustomSchedulerFeature
+     * and --add-opens=java.base/java.lang=ALL-UNNAMED.
+     */
+    public static final class CustomSchedulerFeature implements Feature {
+        @Override
+        public void beforeAnalysis(BeforeAnalysisAccess access) {
+            try {
+                RuntimeReflection.register(virtualThreadBuilderConstructor());
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        }
+    }
+
+    static Constructor<?> virtualThreadBuilderConstructor() throws ReflectiveOperationException {
+        return Class.forName("java.lang.ThreadBuilders$VirtualThreadBuilder").getDeclaredConstructor(Executor.class);
+    }
+
+    static Thread.Builder.OfVirtual ofVirtual(Executor scheduler) {
+        try {
+            Constructor<?> constructor = virtualThreadBuilderConstructor();
+            constructor.setAccessible(true);
+            return (Thread.Builder.OfVirtual) constructor.newInstance(scheduler);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            String message = "virtual threads with a custom scheduler need CustomSchedulerFeature: " + e;
+            if (Boolean.getBoolean(REQUIRE_CONTINUATIONS_PROPERTY)) {
+                throw new AssertionError(message, e);
+            }
+            Assume.assumeTrue(message, false);
+            throw new AssertionError(e);
+        }
+    }
+
+    /**
+     * A carrier that has entered a context itself must get its own context back after running a
+     * virtual thread that entered another one.
+     */
     @Test
-    public void noPlatformThreadWarningWhenContinuationsAreSupported() throws Exception {
+    public void carrierKeepsItsOwnContextWhileRunningVirtualThreads() throws Exception {
+        Context outer = newContext();
+        Context inner = newContext();
+        OptimizedCallTarget target = compiled(inner, ContextAcrossYieldRoot::new);
+        int outerId = contextId(outer);
+        int innerId = contextId(inner);
+
+        LinkedBlockingQueue<Runnable> tasks = new LinkedBlockingQueue<>();
+        Runnable stop = () -> {
+        };
+        AtomicReference<Throwable> carrierFailure = new AtomicReference<>();
+        AtomicInteger tasksRun = new AtomicInteger();
+        Thread carrier = Thread.ofPlatform().start(() -> {
+            outer.enter();
+            try {
+                for (Runnable task = tasks.take(); task != stop; task = tasks.take()) {
+                    task.run(); // mounts the virtual thread, runs it until it yields or ends, unmounts it
+                    tasksRun.incrementAndGet();
+                    assertEquals("the carrier's own context after running a virtual thread", outerId, VTLang.CONTEXT.get(null).id);
+                }
+            } catch (Throwable t) {
+                carrierFailure.set(t);
+            } finally {
+                outer.leave();
+            }
+        });
+
+        AtomicReference<Throwable> vthreadFailure = new AtomicReference<>();
+        Thread vthread = ofVirtual(tasks::add).start(() -> {
+            try {
+                inner.enter();
+                try {
+                    for (int k = 0; k < 10; k++) {
+                        assertEquals(innerId, target.call()); // yields, i.e., unmounts and remounts
+                    }
+                } finally {
+                    inner.leave();
+                }
+            } catch (Throwable t) {
+                vthreadFailure.set(t);
+            }
+        });
+        vthread.join();
+        tasks.add(stop);
+        carrier.join();
+        assertEquals(null, vthreadFailure.get());
+        assertEquals(null, carrierFailure.get());
+        assertTrue("the virtual thread must have yielded", tasksRun.get() > 1);
+        outer.close();
+        inner.close();
+    }
+
+    @Test
+    public void warnsAboutPinningInsteadOfPlatformThreads() throws Exception {
         java.io.ByteArrayOutputStream log = new java.io.ByteArrayOutputStream();
         List<Throwable> failures = runVirtualThreads(1, i -> {
             try (Context c = Context.newBuilder().logHandler(log).allowExperimentalOptions(true).option("engine.WarnVirtualThreadSupport", "true").build()) {
@@ -447,6 +556,8 @@ public class NativeVirtualThreadTruffleTest extends TestWithSynchronousCompiling
             }
         });
         assertTrue(failures.toString(), failures.isEmpty());
-        assertEquals("", log.toString());
+        String warning = log.toString();
+        assertTrue(warning, warning.contains("stays pinned to its carrier thread"));
+        assertTrue(warning, !warning.contains("one platform thread per VirtualThread"));
     }
 }

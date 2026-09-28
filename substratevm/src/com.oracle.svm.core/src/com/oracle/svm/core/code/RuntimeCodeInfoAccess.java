@@ -62,6 +62,12 @@ public final class RuntimeCodeInfoAccess {
         return CodeInfoAccess.getObjectField(info, CodeInfoImpl.INSTALLEDCODE_OBJFIELD);
     }
 
+    /** @see CodeInfoAccess#isInvalidated */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static void markInvalidated(CodeInfo info) {
+        cast(info).setInvalidated(true);
+    }
+
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static NonmovableArray<InstalledCodeObserverHandle> getCodeObserverHandles(CodeInfo info) {
         return cast(info).getCodeObserverHandles();

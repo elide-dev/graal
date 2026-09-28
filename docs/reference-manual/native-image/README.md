@@ -349,6 +349,9 @@ To learn more, see [Interoperability with Native Code](InteropWithNativeCode.md)
 If your application embeds a Graal Language, Native Image can pre-initialize a polyglot context at build time and parse sources of your application with it, so that the first context skips parsing them at run time.
 To learn more, see [Parsing Sources During Context Pre-Initialization](TruffleContextPreinitializationSources.md).
 
+Native executables that compile code at run time, for example, with the Truffle JIT compiler, can also back virtual threads with continuations.
+To learn more, see [Virtual Threads with Runtime Compilation](VirtualThreadsWithRuntimeCompilation.md).
+
 ### Further Reading
 
 This getting started guide is intended for new users or those with little experience of using Native Image.

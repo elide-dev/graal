@@ -3921,7 +3921,8 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                  * source rather than failing to build. Warn if pre-initialization was requested,
                  * so a missing language in PreinitializeContexts does not go unnoticed.
                  */
-                engine.getEngineLogger().log(languagesToPreinitialize.isEmpty() ? Level.FINE : Level.WARNING, "Skipping registered {0}: language ''{1}'' is not pre-initialized; add it to {2} to parse it.",
+                engine.getEngineLogger().log(languagesToPreinitialize.isEmpty() ? Level.FINE : Level.WARNING,
+                                "Skipping registered {0}: language ''{1}'' is not pre-initialized; add it to {2} to parse it.",
                                 new Object[]{entry, source.getLanguage(), ImageBuildTimeOptions.PREINITIALIZE_CONTEXTS_NAME});
                 continue;
             }

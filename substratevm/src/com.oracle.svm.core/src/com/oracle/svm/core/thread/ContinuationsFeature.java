@@ -104,8 +104,9 @@ public class ContinuationsFeature implements InternalFeature {
             supported = hostSupport && deoptCompatible && !SubstrateOptions.useLLVMBackend() && SubstrateControlFlowIntegrity.singleton().continuationsSupported();
             UserError.guarantee(supported || !SubstrateOptions.VMContinuations.hasBeenSet(),
                             "Continuation support has been explicitly enabled with option %s but is not available " +
-                                            "because of the runtime compilation, LLVM backend, or control flow integrity features.",
-                            SubstrateOptions.VMContinuations.getName());
+                                            "because of the runtime compilation, LLVM backend, or control flow integrity features. " +
+                                            "With runtime compilation, continuations can be enabled with option %s.",
+                            SubstrateOptions.VMContinuations.getName(), SubstrateOptions.VMContinuationsWithRuntimeCompilation.getName());
         } else {
             supported = false;
         }

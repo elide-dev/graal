@@ -277,6 +277,16 @@ interface CodeInfoImpl extends CodeInfo {
     @RawField
     void setState(int state);
 
+    /**
+     * Whether the code was invalidated (as opposed to only made non-entrant, e.g., by tier-up).
+     * Set once, before the frames of the code on thread stacks are deoptimized.
+     */
+    @RawField
+    boolean getInvalidated();
+
+    @RawField
+    void setInvalidated(boolean value);
+
     @RawField
     NonmovableArray<Byte> getCodeConstantsReferenceMapEncoding();
 

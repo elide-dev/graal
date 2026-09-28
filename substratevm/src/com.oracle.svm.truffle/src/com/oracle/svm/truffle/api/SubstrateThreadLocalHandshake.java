@@ -179,7 +179,7 @@ public final class SubstrateThreadLocalHandshake extends ThreadLocalHandshake {
 
     /**
      * The caller already set {@code fastPendingSet} on the virtual thread's TruffleSafepointImpl. If
-     * the virtual thread is unmounted, the flag reaches the carrier in restoreStateAfterMount on the
+     * the virtual thread is unmounted, the flag reaches the carrier in restoreState on the
      * next mount. The ThreadsLock keeps the carrier's IsolateThread from being freed during the write.
      */
     private static void setFastPendingOnCarrier(Thread vthread) {
@@ -197,12 +197,15 @@ public final class SubstrateThreadLocalHandshake extends ThreadLocalHandshake {
         }
     }
 
-    static Object saveStateForYield() {
+    static Object saveState() {
         return STATE.get();
     }
 
-    /** See HotSpotThreadLocalHandshake.setPendingFlagForVirtualThread for why the flag is read twice. */
-    static void restoreStateAfterMount(Object savedState) {
+    /**
+     * Installs a saved state in the current thread and recomputes its pending flag. See
+     * HotSpotThreadLocalHandshake.setPendingFlagForVirtualThread for why the flag is read twice.
+     */
+    static void restoreState(Object savedState) {
         TruffleSafepointImpl state = (TruffleSafepointImpl) savedState;
         STATE.set(state);
         IsolateThread self = CurrentIsolate.getCurrentThread();
@@ -216,10 +219,5 @@ public final class SubstrateThreadLocalHandshake extends ThreadLocalHandshake {
         if (!pendingBefore && pendingAfter) {
             PENDING.setVolatile(self, 1);
         }
-    }
-
-    static void clearStateAfterUnmount() {
-        STATE.set(null);
-        PENDING.setVolatile(CurrentIsolate.getCurrentThread(), 0);
     }
 }
