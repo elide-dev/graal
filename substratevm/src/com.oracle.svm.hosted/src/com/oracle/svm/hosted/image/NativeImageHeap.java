@@ -233,6 +233,15 @@ public final class NativeImageHeap implements ImageHeap {
         return objects.get(CompressibleConstant.uncompress(constant));
     }
 
+    /**
+     * Like {@link #getObjectInfo}, but returns {@code null} if the object is not represented by an
+     * image heap constant, e.g., because an object replacer replaces it with {@code null}.
+     */
+    public ObjectInfo getObjectInfoIfPresent(Object obj) {
+        JavaConstant constant = hUniverse.getSnippetReflection().forObject(obj);
+        return constant instanceof ImageHeapConstant ? objects.get(CompressibleConstant.uncompress(constant)) : null;
+    }
+
     public ObjectInfo getConstantInfo(JavaConstant constant) {
         VMError.guarantee(constant instanceof ImageHeapConstant, "Expected an ImageHeapConstant, found %s", constant);
         return objects.get(CompressibleConstant.uncompress(constant));
