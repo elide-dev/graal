@@ -2027,15 +2027,15 @@ public class NativeImage {
     protected static Function<BuildConfiguration, NativeImage> defaultNativeImageProvider = NativeImage::new;
 
     public static void main(String[] args) {
-	buildImage(args, true);
+        buildImage(args, true);
     }
 
     public static int buildImage(String[] args, boolean exit) {
-	int exitCode = performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
-	if (exit) {
-	    System.exit(exitCode);
-	}
-	return exitCode;
+        int exitCode = performBuild(new BuildConfiguration(Arrays.asList(args)), defaultNativeImageProvider);
+        if (exit) {
+            System.exit(exitCode);
+        }
+        return exitCode;
     }
 
     /** Build a {@link BuildConfiguration} from raw driver arguments, for embedding callers. */
@@ -2086,9 +2086,9 @@ public class NativeImage {
             if (config.getBuildArgs().contains("--verbose")) {
                 e.printStackTrace(System.out);
             }
-	    return e.exitCode;
+            return e.exitCode;
         }
-	return ExitStatus.OK.getValue();
+        return ExitStatus.OK.getValue();
     }
 
     private static void build(BuildConfiguration config, Function<BuildConfiguration, NativeImage> nativeImageProvider) {
