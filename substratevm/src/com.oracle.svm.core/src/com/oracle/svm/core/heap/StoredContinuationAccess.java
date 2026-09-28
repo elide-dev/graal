@@ -151,7 +151,13 @@ public final class StoredContinuationAccess {
             if (runtimeFrames > 0) {
                 tethers = new Object[runtimeFrames];
                 int filled = scanFramesForYield(baseSp, sp, ip, tethers);
-                VMError.guarantee(filled == runtimeFrames, "frames changed between scans");
+                if (filled != runtimeFrames) {
+                    /*
+                     * The frames changed during the allocation (not expected: only this thread can
+                     * eagerly deoptimize its frames). Not yielding is always safe.
+                     */
+                    return ContinuationSupport.FREEZE_PINNED_NATIVE;
+                }
             }
         }
 
