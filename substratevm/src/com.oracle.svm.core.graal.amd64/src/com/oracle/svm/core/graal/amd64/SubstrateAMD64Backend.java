@@ -663,7 +663,13 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
 
         public SubstrateAMD64LIRGenerator(LIRKindTool lirKindTool, AMD64ArithmeticLIRGenerator arithmeticLIRGen, MoveFactory moveFactory, Providers providers, LIRGenerationResult lirGenRes) {
             super(lirKindTool, arithmeticLIRGen, null, moveFactory, providers, lirGenRes);
-            this.pltGOTConfiguration = PLTGOTConfiguration.isEnabled() ? PLTGOTConfiguration.singleton() : null;
+            /*
+             * The PLT/GOT configuration is a build-time object: GOT entries are assigned and call
+             * sites are rewritten only for AOT-compiled code. Runtime-compiled code always calls
+             * AOT methods indirectly via their image code address (see shouldEmitOnlyIndirectCalls),
+             * and reaches PLT stubs only through vtable entries, so it must not consult the GOT.
+             */
+            this.pltGOTConfiguration = SubstrateUtil.HOSTED && PLTGOTConfiguration.isEnabled() ? PLTGOTConfiguration.singleton() : null;
         }
 
         @Override
@@ -870,6 +876,7 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
 
         @Override
         public void emitExitMethodAddressResolution(Value ip) {
+            VMError.guarantee(SubstrateUtil.HOSTED, "PLT/GOT method address resolution is only emitted for AOT-compiled code.");
             PLTGOTConfiguration configuration = PLTGOTConfiguration.singleton();
             RegisterValue exitThroughRegisterValue = configuration.getExitMethodAddressResolutionRegister(getRegisterConfig()).asValue(ip.getValueKind());
             emitMove(exitThroughRegisterValue, ip);

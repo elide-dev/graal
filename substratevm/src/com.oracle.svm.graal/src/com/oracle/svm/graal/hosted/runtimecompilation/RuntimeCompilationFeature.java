@@ -1154,7 +1154,7 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
                  */
                 if (registeredRuntimeCompilation) {
                     return List.of(implementation, getStubDeoptVersion(implementation), getFullRuntimeVersion(bb, implementation, invokeFlow));
-                } else if (SubstrateCompilationDirectives.singleton().isFrameInformationRequired(implementation)) {
+                } else if (SubstrateCompilationDirectives.singleton().isFrameInformationRequiredViaDeoptTarget(implementation)) {
                     return List.of(implementation, getFullDeoptVersion(bb, implementation, invokeFlow));
                 } else if (DeoptimizationUtils.canDeoptForTesting(implementation, false, () -> false)) {
                     /*
