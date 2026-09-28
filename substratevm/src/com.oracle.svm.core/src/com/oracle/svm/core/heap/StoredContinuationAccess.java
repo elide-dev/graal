@@ -26,7 +26,9 @@ package com.oracle.svm.core.heap;
 
 import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
+import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.c.struct.RawStructure;
@@ -42,8 +44,11 @@ import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
+import com.oracle.svm.core.code.CodeInvalidationEpoch;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
+import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
+import com.oracle.svm.core.deopt.DeoptimizationSupport;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.graal.nodes.NewStoredContinuationNode;
@@ -136,19 +141,73 @@ public final class StoredContinuationAccess {
     public static int allocateToYield(Target_jdk_internal_vm_Continuation c, Pointer baseSp, Pointer sp, CodePointer ip) {
         assert baseSp.isNonNull() && sp.isNonNull() && ip.isNonNull();
 
+        Object[] tethers = null;
+        if (DeoptimizationSupport.enabled()) {
+            int runtimeFrames = scanFramesForYield(baseSp, sp, ip, null);
+            if (runtimeFrames < 0) {
+                /* A DeoptimizedFrame holds absolute stack addresses and the carrier's IsolateThread. */
+                return ContinuationSupport.FREEZE_PINNED_NATIVE;
+            }
+            if (runtimeFrames > 0) {
+                tethers = new Object[runtimeFrames];
+                int filled = scanFramesForYield(baseSp, sp, ip, tethers);
+                VMError.guarantee(filled == runtimeFrames, "frames changed between scans");
+            }
+        }
+
         int framesSize = UnsignedUtils.safeToInt(baseSp.subtract(sp));
         StoredContinuation instance = allocate(framesSize);
-        fillUninterruptibly(instance, ip, sp, framesSize);
+        long epoch = fillUninterruptibly(instance, ip, sp, framesSize, tethers);
         ContinuationInternals.setStoredContinuation(c, instance);
+        ContinuationInternals.setFrozenCodeInvalidationEpoch(c, epoch);
         return ContinuationSupport.FREEZE_OK;
     }
 
+    /**
+     * Walks the frames of the current thread in {@code [sp, baseSp)} that are about to be frozen.
+     * Returns the number of runtime-compiled frames, or -1 if an eagerly deoptimized frame is
+     * present (such a stack must not be frozen). If {@code tethersOrNull} is non-null, stores
+     * the tether of each runtime-compiled frame's code into it, so that the yielded continuation
+     * keeps that code alive (frames in the heap are not seen by GCImpl.walkStack).
+     */
+    @Uninterruptible(reason = "Walks the current thread's stack and reads CodeInfo tethers.")
+    static int scanFramesForYield(Pointer baseSp, Pointer sp, CodePointer ip, Object[] tethersOrNull) {
+        IsolateThread thread = CurrentIsolate.getCurrentThread();
+        JavaStackWalk walk = StackValue.get(JavaStackWalker.sizeOfJavaStackWalk());
+        JavaStackWalker.initialize(walk, thread, sp, baseSp, ip, Word.nullPointer());
+        int count = 0;
+        while (JavaStackWalker.advance(walk, thread)) {
+            JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
+            if (Deoptimizer.checkEagerDeoptimized(frame) != null) {
+                return -1;
+            }
+            UntetheredCodeInfo untethered = frame.getIPCodeInfo();
+            if (untethered.isNonNull() && !UntetheredCodeInfoAccess.isAOTImageCode(untethered)) {
+                if (tethersOrNull != null) {
+                    Object tether = CodeInfoAccess.acquireTether(untethered);
+                    tethersOrNull[count] = tether;
+                    CodeInfoAccess.releaseTether(untethered, tether);
+                }
+                count++;
+            }
+        }
+        return count;
+    }
+
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance and copying frames.")
-    private static void fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size) {
+    private static long fillUninterruptibly(StoredContinuation stored, CodePointer ip, Pointer sp, int size, Object[] tethers) {
         UnmanagedMemoryUtil.copyWordsForward(sp, getFramesStart(stored), Word.unsigned(size));
         setIP(stored, ip);
         setOriginalCarrierSP(stored, sp);
+        /*
+         * The tethers belong to the StoredContinuation, not to its Continuation: the GC can walk a
+         * garbage StoredContinuation in the old generation (via a dirty card) after a young
+         * collection freed its Continuation, so the code must live exactly as long as this object.
+         */
+        setCodeTethers(stored, tethers);
         afterFill(stored);
+        /* Read inside the uninterruptible copy: no invalidation can happen in between. */
+        return CodeInvalidationEpoch.get();
     }
 
     @Uninterruptible(reason = "Prevent modifications to the stack while initializing instance.")
@@ -174,8 +233,19 @@ public final class StoredContinuationAccess {
         CodePointer ip = ImageSingletons.lookup(ContinuationSupport.class).copyFrames(cont, clone, preparedData);
         setIP(clone, ip);
         setOriginalCarrierSP(clone, StoredContinuationAccess.getOriginalCarrierSP(cont));
+        setCodeTethers(clone, cont.codeTethers);
         afterFill(clone);
         return clone;
+    }
+
+    /**
+     * StoredContinuations are written without GC barriers (they must be effectively immutable for
+     * compiled code). Callers that store a non-null value must call {@link #afterFill} afterwards.
+     */
+    @Uninterruptible(reason = "Prevent that the GC sees a partially initialized StoredContinuation.", callerMustBe = true)
+    private static void setCodeTethers(StoredContinuation s, Object[] tethers) {
+        Pointer field = Word.objectToUntrackedPointer(s).add(Word.unsigned(ContinuationSupport.singleton().getCodeTethersOffset()));
+        ReferenceAccess.singleton().writeObjectAt(field, tethers, true);
     }
 
     @Uninterruptible(reason = "Prevent that the GC sees a partially initialized StoredContinuation.", callerMustBe = true)
@@ -188,6 +258,25 @@ public final class StoredContinuationAccess {
          */
         MembarNode.memoryBarrier(MembarNode.FenceKind.ALLOCATION_INIT, LocationIdentity.INIT_LOCATION);
         cont.ip = ip;
+    }
+
+    /**
+     * Called once the frames of {@code s} have been copied back onto a thread stack. From then on
+     * {@code s} is garbage, but the GC can still visit it (e.g., via a dirty card in the old
+     * generation). With runtime compilation, the code of its frames may be freed and its addresses
+     * reused, so the stale frames must never be walked again.
+     */
+    public static Object[] getCodeTethers(StoredContinuation s) {
+        return s.codeTethers;
+    }
+
+    @Uninterruptible(reason = "Writes the StoredContinuation without GC barriers.")
+    public static void markThawed(StoredContinuation s) {
+        if (DeoptimizationSupport.enabled() && !Heap.getHeap().isInImageHeap(s)) {
+            s.ip = Word.nullPointer();
+            /* The frames are back on a thread stack, where GCImpl.walkStack keeps their code alive. */
+            setCodeTethers(s, null);
+        }
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
@@ -216,7 +305,12 @@ public final class StoredContinuationAccess {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
             VMError.guarantee(!JavaFrames.isEntryPoint(frame), "Entry point frames are not supported");
             VMError.guarantee(!JavaFrames.isUnknownFrame(frame), "Stack walk must not encounter unknown frame");
-            VMError.guarantee(!Deoptimizer.checkIsDeoptimized(frame), "Deoptimized frames are not supported");
+            /*
+             * Frames pending lazy deoptimization are position independent (the original return address
+             * is in the frame's own reserved slot), so they can be frozen and thawed. Eagerly
+             * deoptimized frames cannot: freezing pins instead (see scanFramesForYield).
+             */
+            VMError.guarantee(Deoptimizer.checkEagerDeoptimized(frame) == null, "Eagerly deoptimized frames are not supported in continuations");
 
             UntetheredCodeInfo untetheredCodeInfo = frame.getIPCodeInfo();
             Object tether = CodeInfoAccess.acquireTether(untetheredCodeInfo);
@@ -243,7 +337,12 @@ public final class StoredContinuationAccess {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
             VMError.guarantee(!JavaFrames.isEntryPoint(frame), "Entry point frames are not supported");
             VMError.guarantee(!JavaFrames.isUnknownFrame(frame), "Stack walk must not encounter unknown frame");
-            VMError.guarantee(!Deoptimizer.checkIsDeoptimized(frame), "Deoptimized frames are not supported");
+            /*
+             * Frames pending lazy deoptimization are position independent (the original return address
+             * is in the frame's own reserved slot), so they can be frozen and thawed. Eagerly
+             * deoptimized frames cannot: freezing pins instead (see scanFramesForYield).
+             */
+            VMError.guarantee(Deoptimizer.checkEagerDeoptimized(frame) == null, "Eagerly deoptimized frames are not supported in continuations");
 
             UntetheredCodeInfo untetheredCodeInfo = frame.getIPCodeInfo();
             Object tether = CodeInfoAccess.acquireTether(untetheredCodeInfo);

@@ -54,6 +54,7 @@ import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoQueryResult;
 import com.oracle.svm.core.code.CodeInfoTable;
+import com.oracle.svm.core.code.RuntimeCodeInfoAccess;
 import com.oracle.svm.core.code.FrameInfoDecoder;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueInfo;
@@ -477,6 +478,83 @@ public final class Deoptimizer {
     }
 
     /** Deoptimize a specific method on all thread stacks. */
+    /**
+     * Called by a continuation that just resumed after invalidations happened while it was
+     * yielded. Lazily deoptimizes the current thread's frames whose code was invalidated (not merely
+     * made non-entrant, as by Truffle tier-up) and that are not yet pending deoptimization.
+     */
+    public static void deoptimizeInvalidatedFramesOfCurrentThread() {
+        if (hasUnpatchedInvalidatedFrame()) {
+            new DeoptimizeInvalidatedFramesOperation().enqueue();
+        }
+    }
+
+    public static boolean isInvalidatedRuntimeCode(CodeInfo codeInfo) {
+        if (CodeInfoAccess.isAOTImageCode(codeInfo) || CodeInfoAccess.getState(codeInfo) < CodeInfo.STATE_NON_ENTRANT) {
+            return false;
+        }
+        SubstrateInstalledCode installedCode = RuntimeCodeInfoAccess.getInstalledCode(codeInfo);
+        return installedCode == null || !installedCode.isAlive();
+    }
+
+    @NeverInline("Starts a stack walk in the caller frame.")
+    private static boolean hasUnpatchedInvalidatedFrame() {
+        IsolateThread self = CurrentIsolate.getCurrentThread();
+        boolean[] found = new boolean[1];
+        JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), new StackFrameVisitor() {
+            @Override
+            protected boolean visitRegularFrame(Pointer frameSp, CodePointer frameIp, CodeInfo codeInfo) {
+                if (isInvalidatedRuntimeCode(codeInfo) && !checkLazyDeoptimized(self, frameSp)) {
+                    found[0] = true;
+                    return false;
+                }
+                return true;
+            }
+
+            @Override
+            protected boolean visitDeoptimizedFrame(Pointer originalSP, CodePointer deoptStubIP, DeoptimizedFrame deoptimizedFrame) {
+                return true;
+            }
+        });
+        return found[0];
+    }
+
+    private static final class DeoptimizeInvalidatedFramesOperation extends JavaVMOperation {
+        DeoptimizeInvalidatedFramesOperation() {
+            super(VMOperationInfos.get(DeoptimizeInvalidatedFramesOperation.class, "Deoptimize invalidated frames of resumed continuation", SystemEffect.SAFEPOINT));
+        }
+
+        @Override
+        protected void operate() {
+            deoptimizeInvalidatedFramesOperation(queuingThread);
+        }
+    }
+
+    @NeverInline("Starting a stack walk in the caller frame.")
+    private static void deoptimizeInvalidatedFramesOperation(IsolateThread targetThread) {
+        VMOperation.guaranteeInProgressAtSafepoint("Deoptimizer.deoptimizeInvalidatedFramesOperation, but not in VMOperation.");
+        StackFrameVisitor visitor = new StackFrameVisitor() {
+            @Override
+            protected boolean visitRegularFrame(Pointer frameSp, CodePointer frameIp, CodeInfo codeInfo) {
+                if (isInvalidatedRuntimeCode(codeInfo)) {
+                    CodeInfoQueryResult queryResult = CodeInfoTable.lookupCodeInfoQueryResult(codeInfo, frameIp);
+                    new Deoptimizer(frameSp, queryResult, targetThread, targetThread).deoptSourceFrameLazily(frameIp, false);
+                }
+                return true;
+            }
+
+            @Override
+            protected boolean visitDeoptimizedFrame(Pointer originalSP, CodePointer deoptStubIP, DeoptimizedFrame deoptimizedFrame) {
+                return true;
+            }
+        };
+        if (targetThread == CurrentIsolate.getCurrentThread()) {
+            JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), visitor);
+        } else {
+            JavaStackWalker.walkThread(targetThread, visitor);
+        }
+    }
+
     @NeverInline("Starting a stack walk in the caller frame. " +
                     "Note that we could start the stack frame also further down the stack, because VM operation frames never need deoptimization. " +
                     "But we don't store stack frame information for the first frame we would need to process.")

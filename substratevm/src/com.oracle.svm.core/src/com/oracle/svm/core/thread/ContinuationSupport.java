@@ -50,6 +50,8 @@ import com.oracle.svm.core.stack.JavaStackWalk;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.shared.NeverInline;
+import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
+import com.oracle.svm.shared.BuildPhaseProvider.ReadyForCompilation;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
@@ -73,6 +75,9 @@ public class ContinuationSupport {
     public static final int FREEZE_YIELDING = -2;
 
     private long ipOffset;
+    /* Read by run-time code (not only by snippet lowering), so it must not be folded during analysis. */
+    @UnknownPrimitiveField(availability = ReadyForCompilation.class) //
+    private long codeTethersOffset;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     protected ContinuationSupport() {
@@ -92,6 +97,18 @@ public class ContinuationSupport {
     public long getIPOffset() {
         assert ipOffset != 0;
         return ipOffset;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void setCodeTethersOffset(long value) {
+        assert codeTethersOffset == 0;
+        codeTethersOffset = value;
+    }
+
+    @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public long getCodeTethersOffset() {
+        assert codeTethersOffset != 0;
+        return codeTethersOffset;
     }
 
     public Object prepareCopy(@SuppressWarnings("unused") StoredContinuation storedCont) {
@@ -124,6 +141,7 @@ public class ContinuationSupport {
         // Code must not rely on remaining uninterruptible until after frames were copied.
         CodePointer enterIP = singleton().copyFrames(storedCont, topSP, preparedData);
         patchStackAddressesInCopiedFrames(storedCont, enterIP, topSP);
+        StoredContinuationAccess.markThawed(storedCont);
         KnownIntrinsics.farReturn(FREEZE_OK, topSP, enterIP, false);
     }
 
@@ -167,7 +185,12 @@ public class ContinuationSupport {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
             VMError.guarantee(!JavaFrames.isEntryPoint(frame), "Entry point frames are not supported");
             VMError.guarantee(!JavaFrames.isUnknownFrame(frame), "Stack walk must not encounter unknown frame");
-            VMError.guarantee(!Deoptimizer.checkIsDeoptimized(frame), "Deoptimized frames are not supported");
+            /*
+             * Frames pending lazy deoptimization are position independent (the original return address
+             * is in the frame's own reserved slot), so they can be frozen and thawed. Eagerly
+             * deoptimized frames cannot: freezing pins instead (see scanFramesForYield).
+             */
+            VMError.guarantee(Deoptimizer.checkEagerDeoptimized(frame) == null, "Eagerly deoptimized frames are not supported in continuations");
 
             Pointer callerSP = JavaFrames.getCallerSP(frame);
 

@@ -46,7 +46,9 @@ import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 import com.oracle.svm.core.snippets.SubstrateForeignCallTarget;
 import com.oracle.svm.core.stack.StackOverflowCheck;
+import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.thread.PlatformThreads;
+import com.oracle.svm.core.thread.ThreadsLock;
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocal;
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalFactory;
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalInt;
@@ -163,11 +165,61 @@ public final class SubstrateThreadLocalHandshake extends ThreadLocalHandshake {
              * for contexts that are currently entered on a thread. Being entered implies that the
              * thread is active.
              */
+            if (JavaThreads.isVirtual(t)) {
+                setFastPendingOnCarrier(t);
+                return;
+            }
             assert t.isAlive() : "thread must remain alive while setting fast pending";
             IsolateThread isolateThread = PlatformThreads.getIsolateThreadUnsafe(t);
             VMError.guarantee(isolateThread.isNonNull(), "Java thread must remain alive.");
             PENDING.setVolatile(isolateThread, 1);
         }
 
+    }
+
+    /**
+     * The caller already set {@code fastPendingSet} on the virtual thread's TruffleSafepointImpl. If
+     * the virtual thread is unmounted, the flag reaches the carrier in restoreStateAfterMount on the
+     * next mount. The ThreadsLock keeps the carrier's IsolateThread from being freed during the write.
+     */
+    private static void setFastPendingOnCarrier(Thread vthread) {
+        ThreadsLock.lockRead();
+        try {
+            Thread carrier = SubstrateUtil.cast(vthread, Target_java_lang_VirtualThread_Truffle.class).carrierThread;
+            if (carrier != null) {
+                IsolateThread isolateThread = PlatformThreads.getIsolateThreadUnsafe(carrier);
+                if (isolateThread.isNonNull()) {
+                    PENDING.setVolatile(isolateThread, 1);
+                }
+            }
+        } finally {
+            ThreadsLock.unlockRead();
+        }
+    }
+
+    static Object saveStateForYield() {
+        return STATE.get();
+    }
+
+    /** See HotSpotThreadLocalHandshake.setPendingFlagForVirtualThread for why the flag is read twice. */
+    static void restoreStateAfterMount(Object savedState) {
+        TruffleSafepointImpl state = (TruffleSafepointImpl) savedState;
+        STATE.set(state);
+        IsolateThread self = CurrentIsolate.getCurrentThread();
+        if (state == null) {
+            PENDING.setVolatile(self, 0);
+            return;
+        }
+        boolean pendingBefore = state.isFastPendingSet();
+        PENDING.setVolatile(self, pendingBefore ? 1 : 0);
+        boolean pendingAfter = state.isFastPendingSet();
+        if (!pendingBefore && pendingAfter) {
+            PENDING.setVolatile(self, 1);
+        }
+    }
+
+    static void clearStateAfterUnmount() {
+        STATE.set(null);
+        PENDING.setVolatile(CurrentIsolate.getCurrentThread(), 0);
     }
 }
