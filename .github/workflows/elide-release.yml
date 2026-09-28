@@ -190,6 +190,11 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/jdks"
           "${WS}/mx/mx" --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${JAVA_HOME}"
+          # On macOS, the JDK is a bundle whose home is Contents/Home.
+          if [ -d "${JAVA_HOME}/Contents/Home" ]; then
+            JAVA_HOME="${JAVA_HOME}/Contents/Home"
+            echo "JAVA_HOME=${JAVA_HOME}" >> "${GITHUB_ENV}"
+          fi
           "${JAVA_HOME}/bin/java" -version
 
       - name: Build GraalVM (Unix)
@@ -232,6 +237,19 @@ jobs:
           "./hello${exe}"
           ls -la "${WS}/out/dist"
 
+      - name: Set up Maven
+        if: matrix.maven
+        env:
+          MAVEN_VERSION: 3.9.11
+        run: |
+          # mx maven-deploy runs mvn, which the runners do not have.
+          if ! command -v mvn >/dev/null 2>&1; then
+            base="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+            curl -sSfL -o "${RUNNER_TEMP}/maven.tar.gz" "${base}"
+            echo "$(curl -sSfL "${base}.sha512" | cut -d' ' -f1)  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -
+            tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/maven.tar.gz"
+            echo "${RUNNER_TEMP}/apache-maven-${MAVEN_VERSION}/bin" >> "${GITHUB_PATH}"
+          fi
       - name: Deploy Maven artifacts
         if: matrix.maven
         run: ./graal/ci/elide/deploy-maven.sh "${VERSION}" "${WS}/out/maven"
