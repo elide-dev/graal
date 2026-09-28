@@ -29,6 +29,8 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.c.NonmovableArrays;
+import com.oracle.svm.core.c.NonmovableObjectArray;
 import com.oracle.svm.core.code.InstantReferenceAdjuster;
 
 import jdk.vm.ci.meta.JavaConstant;
@@ -45,5 +47,23 @@ public class HostedInstantReferenceAdjuster extends InstantReferenceAdjuster {
     @Platforms(Platform.HOSTED_ONLY.class)
     protected Object getObject(JavaConstant constant) {
         return snippetReflection.asObject(Object.class, constant);
+    }
+
+    /**
+     * Unbacked image heap constants have no hosted object (asObject would return null): store a
+     * {@link UnbackedObjectConstants.Placeholder} instead, which the image heap replaces with the
+     * constant.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public <T> void setConstantTargetInArray(NonmovableObjectArray<T> array, int index, JavaConstant constant) {
+        UnbackedObjectConstants.Placeholder placeholder = UnbackedObjectConstants.placeholderFor(constant);
+        if (placeholder != null) {
+            NonmovableArrays.setObject(array, index, (T) placeholder);
+        } else {
+            super.setConstantTargetInArray(array, index, constant);
+        }
     }
 }
