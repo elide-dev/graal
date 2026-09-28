@@ -104,6 +104,15 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Check free disk space
+        run: |
+          # A GraalVM build with GraalJS, GraalPy and GraalWasm needs about 30 GB of work space.
+          avail_kb=$(df -Pk . | awk 'NR==2 {print $4}')
+          echo "free: $((avail_kb / 1024 / 1024)) GB on $(df -Pk . | awk 'NR==2 {print $1}') (runner ${RUNNER_NAME})"
+          if [ "${avail_kb}" -lt $((30 * 1024 * 1024)) ]; then
+            echo "::error::runner ${RUNNER_NAME} has less than 30 GB free"
+            exit 1
+          fi
       - name: Allow long paths (Windows)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
@@ -123,7 +132,21 @@ jobs:
           repository: ${{ env.GRAALPYTHON_REPOSITORY }}
           ref: ${{ env.GRAALPYTHON_REF }}
           path: graalpython
+      # mx needs Python 3.8+. The self-hosted runners come with one; setup-python installs into
+      # hosted-runner paths (e.g. /Users/runner on macOS), so it is only a fallback.
+      - name: Check Python
+        id: python
+        run: |
+          for py in python3 python; do
+            if command -v "${py}" >/dev/null 2>&1 && "${py}" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)'; then
+              echo "found=true" >> "${GITHUB_OUTPUT}"
+              "${py}" --version
+              exit 0
+            fi
+          done
+          echo "found=false" >> "${GITHUB_OUTPUT}"
       - name: Set up Python
+        if: steps.python.outputs.found != 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.12"
@@ -154,7 +177,14 @@ jobs:
           echo "WS=${ws}" >> "${GITHUB_ENV}"
           echo "JAVA_HOME=${ws}/labsjdk" >> "${GITHUB_ENV}"
           echo "MX_GIT_CACHE=refcache" >> "${GITHUB_ENV}"
-          echo "LANG=en_US.UTF-8" >> "${GITHUB_ENV}"
+          # A UTF-8 locale, so the JDK writes non-ASCII class file names (svm tests have some).
+          # The self-hosted Linux runners lack en_US.UTF-8; C.UTF-8 is built into glibc.
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            echo "LANG=C.UTF-8" >> "${GITHUB_ENV}"
+            echo "LC_ALL=C.UTF-8" >> "${GITHUB_ENV}"
+          else
+            echo "LANG=en_US.UTF-8" >> "${GITHUB_ENV}"
+          fi
       - name: Fetch LabsJDK
         working-directory: graal
         run: |
