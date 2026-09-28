@@ -465,7 +465,12 @@ public abstract class AbstractPolyglotTest {
      * supported.
      */
     public static boolean canCreateVirtualThreads() {
-        return !(TruffleOptions.AOT && isGraalRuntime() && Version.getCurrent().compareTo(24, 0) < 0) &&
+        /*
+         * A snapshot version has no version number (for example, a native image without a GraalVM
+         * home reports "snapshot"), so it would compare as older than any release.
+         */
+        Version version = Version.getCurrent();
+        return !(TruffleOptions.AOT && isGraalRuntime() && !version.isSnapshot() && version.compareTo(24, 0) < 0) &&
                         !TruffleTestAssumptions.isIsolateEncapsulation();
     }
 
