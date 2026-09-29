@@ -1675,6 +1675,7 @@ suite = {
             "subDir": "src",
             "sourceDirs": ["src"],
             "dependencies": [
+                "com.oracle.svm.core.auximage",
                 "com.oracle.svm.graal",
                 "truffle:TRUFFLE_API",
                 "truffle:TRUFFLE_RUNTIME",
@@ -1697,6 +1698,7 @@ suite = {
             "annotationProcessors": [
                 "compiler:GRAAL_PROCESSOR",
                 "SVM_PROCESSOR",
+                "truffle:TRUFFLE_DSL_PROCESSOR",
             ],
             "workingSets": "SVM",
             "jacoco" : "exclude",
