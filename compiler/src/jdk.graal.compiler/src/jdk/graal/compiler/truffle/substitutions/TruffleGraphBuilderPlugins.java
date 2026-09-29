@@ -1843,6 +1843,10 @@ public class TruffleGraphBuilderPlugins {
             }
 
             ResolvedJavaType expectedType = tool.getConstantReflection().asJavaType(t);
+            if (expectedType == null) {
+                // A class the compiler cannot represent, such as one loaded at run time in an isolated compilation.
+                throw bailout("Could not resolve atomic field updater tclass as a compile-time type.");
+            }
             ResolvedJavaType actualType = receiver.stamp(NodeView.DEFAULT).javaType(tool.getMetaAccess());
             if (!expectedType.isAssignableFrom(actualType)) {
                 throw bailout("Failed atomic field updater resolution. Receiver type " + expectedType.getName() + " does not match actual type " + actualType.getName() +
@@ -1912,6 +1916,10 @@ public class TruffleGraphBuilderPlugins {
             }
 
             ResolvedJavaType expectedType = tool.getConstantReflection().asJavaType(t);
+            if (expectedType == null) {
+                // A class the compiler cannot represent, such as one loaded at run time in an isolated compilation.
+                throw bailout("Could not resolve atomic field updater vclass as a compile-time type.");
+            }
             ResolvedJavaType actualType = value.stamp(NodeView.DEFAULT).javaType(tool.getMetaAccess());
             if (!expectedType.isAssignableFrom(actualType)) {
                 throw bailout("Failed atomic field updater resolution. Value type type " + expectedType.getName() + " does not match actual type " + actualType.getName() +
