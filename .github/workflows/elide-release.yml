@@ -130,6 +130,10 @@ jobs:
           repository: ${{ env.GRAALPYTHON_REPOSITORY }}
           ref: ${{ env.GRAALPYTHON_REF }}
           path: graalpython
+      # The runners are persistent, and a previous run's clean up may not have run: its archives and
+      # natives would otherwise ship with this release.
+      - name: Remove previous output
+        run: rm -rf out smoke build-dist.out graalvm-home.txt
       - name: Check free disk space
         run: |
           # Checked after the checkouts, whose git clean removes a previous run's build output.
