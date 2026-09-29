@@ -332,6 +332,7 @@ public final class Interpreter {
         return execute0(frame, false);
     }
 
+    @AlwaysInline("Keep ordinary interpreter entry around the physical interpreter root")
     public static Object execute(InterpreterResolvedJavaMethod method, Object[] args, boolean forceStayInInterpreter) {
         InterpreterFrame frame = InterpreterFrame.create(method, args);
         checkExecutable(method);
@@ -417,6 +418,7 @@ public final class Interpreter {
         }
     }
 
+    @AlwaysInline("Keep method entry and exit around the physical interpreter root")
     private static Object execute0(InterpreterFrame frame, boolean stayInInterpreter) {
         InterpreterResolvedJavaMethod method = frame.method;
         boolean releaseSynchronizedMethodLock = false;
