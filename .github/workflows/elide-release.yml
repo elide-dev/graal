@@ -44,9 +44,11 @@ env:
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
   # The distribution is a JDK with Native Image, shaped like Oracle GraalVM's: the SDK's Native
-  # Image modules and the Truffle compiler, but no polyglot or Truffle API modules and no
-  # languages, which ship as Maven artifacts. ni-ce alone would include every component.
-  DIST_COMPONENTS: cmp,ni,nic,nil,sdkni,svm,svmt,svmsl,tflc,tflsm
+  # Image modules, the Truffle compiler and libgraal, but no polyglot or Truffle API modules and
+  # no languages, which ship as Maven artifacts. ni-ce alone would include every component, and
+  # no libgraal, so the JVM would compile with jargraal.
+  DIST_COMPONENTS: cmp,lg,ni,nic,nil,sdkni,svm,svmt,svmsl,tflc,tflsm
+  DIST_NATIVE_IMAGES: lib:jvmcicompiler,native-image,lib:native-image-agent,lib:native-image-diagnostics-agent
   # The languages build: the Maven artifacts and each platform's natives.
   LANGUAGE_IMPORTS: /graal-js,/graalpython,/wasm
   NATIVES_DISTS: TRUFFLE_API,TRUFFLE_NFI_LIBFFI,GRAALPYTHON_RESOURCES
@@ -219,7 +221,7 @@ jobs:
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw "no Visual Studio with the C++ x64 tools found" }
           $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
-          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --components=$env:DIST_COMPONENTS"
+          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --components=$env:DIST_COMPONENTS --native-images=$env:DIST_NATIVE_IMAGES --non-rebuildable-images=lib:jvmcicompiler"
           cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build && `"$env:MX`" $mxArgs graalvm-home > ..\..\graalvm-home.txt"
           if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
           $gvmHome = (Get-Content graalvm-home.txt | Select-Object -Last 1).Trim()
@@ -233,6 +235,8 @@ jobs:
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
           "${home}/bin/java" --version
+          # The JVM compiles with libgraal, as Oracle GraalVM's does, not jargraal.
+          "${home}/bin/java" -XX:+PrintFlagsFinal -version | grep -E 'UseJVMCINativeLibrary +=.* true'
           "${home}/bin/native-image" --version
           mkdir -p smoke && cd smoke
           printf 'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }\n' > Hello.java
@@ -246,6 +250,9 @@ jobs:
         run: |
           $gvmHome = $env:GVM_HOME -replace '/', '\'
           & "$gvmHome\bin\java.exe" --version
+          # The JVM compiles with libgraal, as Oracle GraalVM's does, not jargraal.
+          $flags = & "$gvmHome\bin\java.exe" -XX:+PrintFlagsFinal -version | Select-String 'UseJVMCINativeLibrary +=.* true'
+          if (-not $flags) { throw "the JVM does not use libgraal" }
           New-Item -ItemType Directory -Force smoke | Out-Null
           Set-Location smoke
           'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }' | Out-File -Encoding ascii Hello.java
