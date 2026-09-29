@@ -106,8 +106,7 @@ public class SubstrateCardTableBarrierSet extends CardTableBarrierSet {
         IntegerStamp lengthStamp = (IntegerStamp) length.stamp(NodeView.DEFAULT);
         GraalError.guarantee(lengthStamp.getBits() == Integer.SIZE, "unexpected length %s", lengthStamp);
         int lengthBound = NumUtil.safeToInt(lengthStamp.upperBound());
-        SharedType componentType = (SharedType) baseType.getComponentType();
-        UnsignedWord sizeBound = LayoutEncoding.getArrayAllocationSize(componentType.getHub().getLayoutEncoding(), lengthBound);
+        UnsignedWord sizeBound = LayoutEncoding.getArrayAllocationSize(((SharedType) baseType).getHub().getLayoutEncoding(), lengthBound);
         return !GenScavengeAllocationSupport.arrayAllocatedInAlignedChunk(sizeBound);
     }
 }
