@@ -4,7 +4,8 @@
 #   ci/elide/deploy-maven.sh <version> <repo-dir>
 #
 # Run from the workspace that holds the graal, graaljs and graalpython checkouts side by side,
-# after ci/elide/build-dist.sh built them. Needs JAVA_HOME (labsjdk) and MX (the mx launcher).
+# after the release workflow's languages build built them. Needs JAVA_HOME (labsjdk) and MX (the
+# mx launcher).
 # The jars carry this platform's natives only; the publish job merges in the other platforms'
 # (ci/elide/natives.py).
 set -euo pipefail
@@ -12,7 +13,7 @@ set -euo pipefail
 VERSION=${1:?version}
 REPO=${2:?repo-dir}
 WORKSPACE=$(pwd)
-MX_ARGS=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports /graal-js,/graalpython,/wasm)
+MX_ARGS=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS:-/graal-js,/graalpython,/wasm}")
 LICENSES=GPLv2-CPE,UPL,MIT,BSD-new,Apache-2.0,ICU,PSF-License
 SVM_DISTS=SVM,POINTSTO,OBJECTFILE,SVM_DRIVER,NATIVE_IMAGE_BASE,LIBRARY_SUPPORT,SVM_SHARED,SVM_GUEST_STAGING,SVM_CAPNPROTO_RUNTIME,TRUFFLE_RUNTIME_SVM,SVM_CONFIGURE
 
