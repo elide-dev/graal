@@ -4,7 +4,7 @@
 #   ci/elide/build-dist.sh <version> <platform> <out-dir>
 #
 # Run from the workspace that holds the graal, graaljs and graalpython checkouts side by side.
-# Needs JAVA_HOME (labsjdk), MX (the mx launcher), and DIST_COMPONENTS and DIST_NATIVE_IMAGES (the
+# Needs JAVA_HOME (labsjdk), MX (the mx launcher), and DIST_IMPORTS, DIST_COMPONENTS and DIST_NATIVE_IMAGES (the
 # GraalVM components and images the distribution holds; see the release workflow). On Windows, the workflow builds in its own
 # step, with the MSVC environment, and calls this script with --package-only and GVM_HOME set.
 set -euo pipefail
@@ -14,7 +14,8 @@ PLATFORM=${2:?platform}
 OUT=${3:?out-dir}
 PACKAGE_ONLY=${4:-}
 WORKSPACE=$(pwd)
-MX_ARGS=(--java-home "${JAVA_HOME}" --env ni-ce "--components=${DIST_COMPONENTS:?DIST_COMPONENTS}"
+MX_ARGS=(--java-home "${JAVA_HOME}" --env ni-ce "--dynamicimports=${DIST_IMPORTS:?DIST_IMPORTS}"
+  "--components=${DIST_COMPONENTS:?DIST_COMPONENTS}"
   "--native-images=${DIST_NATIVE_IMAGES:?DIST_NATIVE_IMAGES}" --non-rebuildable-images=lib:jvmcicompiler)
 NAME="graalvm-ce-${VERSION}-${PLATFORM}"
 
