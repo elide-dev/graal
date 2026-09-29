@@ -227,6 +227,7 @@ final class PolyglotLanguageContext implements PolyglotImpl.VMObject {
     private Thread creatingThread;
     private volatile boolean created;
     private volatile boolean initialized;
+    private volatile boolean dormant;
     private boolean initializationFailed;
     private volatile Thread initializingThread;
     volatile boolean finalized;
@@ -368,6 +369,16 @@ final class PolyglotLanguageContext implements PolyglotImpl.VMObject {
 
     boolean isInitialized() {
         return initialized;
+    }
+
+    void markDormant() {
+        assert Thread.holdsLock(context) && initialized;
+        dormant = true;
+    }
+
+    /** Initialized and not dormant: see {@link PolyglotContextImpl#patch}. */
+    boolean isInitializedAndLive() {
+        return initialized && !dormant;
     }
 
     CallTarget parseCached(ParseOrigin origin, PolyglotLanguage accessingLanguage, Source source, String[] argumentNames) throws AssertionError {

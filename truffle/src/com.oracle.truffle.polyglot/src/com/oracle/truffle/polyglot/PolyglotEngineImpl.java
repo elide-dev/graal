@@ -2280,7 +2280,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
     private static boolean arePreInitializedLanguagesCompatible(PolyglotContextImpl context, PolyglotContextConfig config) {
         Map<String, PolyglotLanguageContext> preInitializedLanguages = new HashMap<>();
         for (PolyglotLanguageContext languageContext : context.contexts) {
-            if (languageContext.isInitialized() && !languageContext.language.isHost()) {
+            if (languageContext.isInitializedAndLive() && !languageContext.language.isHost()) {
                 preInitializedLanguages.put(languageContext.language.getId(), languageContext);
             }
         }

@@ -144,6 +144,12 @@ final class PolyglotEngineOptions {
     static final OptionKey<Boolean> UsePreInitializedContext = new OptionKey<>(true);
 
     @Option(category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = "" +
+                    "Adopt the pre-initialized context even when it initialized languages the new context does not permit. " +
+                    "Such languages stay dormant: never entered, patched, finalized or consulted on thread access. " +
+                    "The embedder guarantees no value of theirs escapes pre-initialization (default: false).", usageSyntax = "true|false")//
+    static final OptionKey<Boolean> DormantPreInitializedLanguages = new OptionKey<>(false);
+
+    @Option(category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = "" +
                     "Let an explicitly created engine use the pre-initialized context, which is otherwise reserved for the engine of a context created without an explicit engine (default: false).", usageSyntax = "true|false")//
     static final OptionKey<Boolean> ExplicitEngineUsesPreInitializedContext = new OptionKey<>(false);
 
