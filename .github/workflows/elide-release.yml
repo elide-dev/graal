@@ -43,6 +43,13 @@ env:
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
+  # The distribution is a JDK with Native Image, shaped like Oracle GraalVM's: the SDK's Native
+  # Image modules and the Truffle compiler, but no polyglot or Truffle API modules and no
+  # languages, which ship as Maven artifacts. ni-ce alone would include every component.
+  DIST_COMPONENTS: cmp,ni,nic,nil,sdkni,svm,svmt,svmsl,tflc,tflsm
+  # The languages build: the Maven artifacts and each platform's natives.
+  LANGUAGE_IMPORTS: /graal-js,/graalpython,/wasm
+  NATIVES_DISTS: TRUFFLE_API,TRUFFLE_NFI_LIBFFI,GRAALPYTHON_RESOURCES
 
 jobs:
   meta:
@@ -208,7 +215,7 @@ jobs:
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw "no Visual Studio with the C++ x64 tools found" }
           $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
-          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --dynamicimports /graal-js,/graalpython,/wasm"
+          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --components=$env:DIST_COMPONENTS"
           cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build && `"$env:MX`" $mxArgs graalvm-home > ..\..\graalvm-home.txt"
           if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
           $gvmHome = (Get-Content graalvm-home.txt | Select-Object -Last 1).Trim()
@@ -247,12 +254,36 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "hello.exe failed ($LASTEXITCODE)" }
           Get-ChildItem "$env:WS\out\dist"
 
+      # The Maven platform builds everything, for maven-deploy; the others, only what the natives
+      # come from.
+      - name: Build languages (Unix)
+        if: runner.os != 'Windows'
+        env:
+          MAVEN: ${{ matrix.maven }}
+        run: |
+          cd graal/vm
+          mx_args=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS}")
+          if [ "${MAVEN}" = true ]; then
+            "${MX}" "${mx_args[@]}" build
+          else
+            "${MX}" "${mx_args[@]}" build --dependencies "${NATIVES_DISTS}"
+          fi
+      - name: Build languages (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
+          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --dynamicimports $env:LANGUAGE_IMPORTS"
+          cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build --dependencies $env:NATIVES_DISTS"
+          if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
+
       - name: Collect natives (Unix)
         if: runner.os != 'Windows'
         run: |
           # This platform's native resources, which the publish job merges into the Maven jars.
           cd graal/vm
-          mx_args=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports /graal-js,/graalpython,/wasm)
+          mx_args=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS}")
           jars=()
           for spec in truffle-api=TRUFFLE_API truffle-nfi-libffi=TRUFFLE_NFI_LIBFFI python-resources=GRAALPYTHON_RESOURCES; do
             jars+=("${spec%%=*}=$("${MX}" "${mx_args[@]}" paths "${spec#*=}" | tail -1)")
@@ -263,7 +294,7 @@ jobs:
         shell: pwsh
         run: |
           Set-Location graal\vm
-          $mxArgs = @('--java-home', $env:JAVA_HOME, '--env', 'ni-ce', '--dynamicimports', '/graal-js,/graalpython,/wasm')
+          $mxArgs = @('--java-home', $env:JAVA_HOME, '--env', 'ni-ce', '--dynamicimports', $env:LANGUAGE_IMPORTS)
           $jars = @()
           foreach ($spec in 'truffle-api=TRUFFLE_API', 'truffle-nfi-libffi=TRUFFLE_NFI_LIBFFI', 'python-resources=GRAALPYTHON_RESOURCES') {
             $artifact, $dist = $spec -split '=', 2
