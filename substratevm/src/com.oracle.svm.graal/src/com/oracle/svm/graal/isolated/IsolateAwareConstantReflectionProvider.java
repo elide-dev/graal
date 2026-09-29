@@ -253,6 +253,15 @@ final class IsolateAwareConstantReflectionProvider extends SubstrateConstantRefl
             ConstantData hubData = StackValue.get(ConstantData.class);
             ConstantDataConverter.fromCompiler(hub, hubData);
             ImageHeapRef<DynamicHub> ref = getHubConstantAsImageHeapRef(IsolatedCompileContext.get().getClient(), hubData);
+            if (ref.equal(Word.nullPointer())) {
+                /*
+                 * Not a hub, or the hub of a class loaded at run time (runtime class loading): the
+                 * compiler isolate knows only image heap types, so this constant does not denote a
+                 * compile-time type. Callers then do not fold or speculate on it (for example, a
+                 * Truffle argument-type profile naming such a class is not used for a cast).
+                 */
+                return null;
+            }
             resolved = SubstrateObjectConstant.forObject(ImageHeapObjects.deref(ref));
         }
         return super.asJavaType(resolved);
@@ -263,7 +272,7 @@ final class IsolateAwareConstantReflectionProvider extends SubstrateConstantRefl
     private static ImageHeapRef<DynamicHub> getHubConstantAsImageHeapRef(@SuppressWarnings("unused") ClientIsolateThread client, ConstantData hubData) {
         JavaConstant hub = ConstantDataConverter.toClient(hubData);
         Object target = SubstrateObjectConstant.asObject(hub);
-        return (target instanceof DynamicHub) ? ImageHeapObjects.ref((DynamicHub) target) : Word.nullPointer();
+        return (target instanceof DynamicHub dynamicHub && ImageHeapObjects.isInImageHeap(dynamicHub)) ? ImageHeapObjects.ref(dynamicHub) : Word.nullPointer();
     }
 
     @Override

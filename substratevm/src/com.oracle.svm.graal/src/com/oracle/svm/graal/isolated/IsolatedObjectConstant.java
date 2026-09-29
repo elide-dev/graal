@@ -25,6 +25,7 @@
 package com.oracle.svm.graal.isolated;
 
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.guest.staging.c.function.CEntryPointOptions;
@@ -34,6 +35,7 @@ import com.oracle.svm.core.graal.isolated.IsolatedCompileClient;
 import com.oracle.svm.core.graal.isolated.IsolatedCompileContext;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 
+import jdk.graal.compiler.core.common.PermanentBailoutException;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
@@ -62,7 +64,16 @@ public final class IsolatedObjectConstant extends SubstrateObjectConstant {
 
     public Class<?> getObjectClass() {
         if (cachedClass == null) {
-            cachedClass = ImageHeapObjects.deref(getObjectClass0(IsolatedCompileContext.get().getClient(), handle));
+            ImageHeapRef<Class<?>> ref = getObjectClass0(IsolatedCompileContext.get().getClient(), handle);
+            if (ref.equal(Word.nullPointer())) {
+                /*
+                 * An instance of a class loaded at run time (runtime class loading): the compiler
+                 * isolate knows only image heap types, so it cannot give this constant its exact
+                 * type. Abandon this compilation rather than the process.
+                 */
+                throw new PermanentBailoutException("Isolated compilation cannot reference a constant of a class loaded at run time");
+            }
+            cachedClass = ImageHeapObjects.deref(ref);
         }
         return cachedClass;
     }
@@ -71,7 +82,8 @@ public final class IsolatedObjectConstant extends SubstrateObjectConstant {
     @CEntryPointOptions(callerEpilogue = IsolatedCompileClient.ExceptionRethrowCallerEpilogue.class)
     private static ImageHeapRef<Class<?>> getObjectClass0(@SuppressWarnings("unused") ClientIsolateThread client, ClientHandle<?> h) {
         Object target = IsolatedCompileClient.get().unhand(h);
-        return ImageHeapObjects.ref(target.getClass());
+        Class<?> type = target.getClass();
+        return ImageHeapObjects.isInImageHeap(type) ? ImageHeapObjects.ref(type) : Word.nullPointer();
     }
 
     @Override
