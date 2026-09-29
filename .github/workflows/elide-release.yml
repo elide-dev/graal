@@ -46,8 +46,10 @@ env:
   # The distribution is a JDK with Native Image, shaped like Oracle GraalVM's: the SDK's Native
   # Image modules, the Truffle compiler and libgraal, but no polyglot or Truffle API modules and
   # no languages, which ship as Maven artifacts. ni-ce alone would include every component, and
-  # no libgraal, so the JVM would compile with jargraal.
-  DIST_COMPONENTS: cmp,lg,ni,nic,nil,sdkni,svm,svmt,svmsl,tflc,tflsm
+  # no libgraal, so the JVM would compile with jargraal. niwasm (from /web-image) is the WebImage
+  # backend at lib/svm/tools/svm-wasm.
+  DIST_IMPORTS: /web-image
+  DIST_COMPONENTS: cmp,lg,ni,nic,nil,sdkni,svm,svmt,svmsl,tflc,tflsm,niwasm
   DIST_NATIVE_IMAGES: lib:jvmcicompiler,native-image,lib:native-image-agent,lib:native-image-diagnostics-agent
   # The languages build: the Maven artifacts and each platform's natives.
   LANGUAGE_IMPORTS: /graal-js,/graalpython,/wasm
@@ -221,7 +223,7 @@ jobs:
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw "no Visual Studio with the C++ x64 tools found" }
           $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
-          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --components=$env:DIST_COMPONENTS --native-images=$env:DIST_NATIVE_IMAGES --non-rebuildable-images=lib:jvmcicompiler"
+          $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --dynamicimports $env:DIST_IMPORTS --components=$env:DIST_COMPONENTS --native-images=$env:DIST_NATIVE_IMAGES --non-rebuildable-images=lib:jvmcicompiler"
           cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build && `"$env:MX`" $mxArgs graalvm-home > ..\..\graalvm-home.txt"
           if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
           $gvmHome = (Get-Content graalvm-home.txt | Select-Object -Last 1).Trim()
