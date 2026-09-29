@@ -1222,7 +1222,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         assert Thread.holdsLock(this);
         List<PolyglotLanguage> deniedLanguages = null;
         for (PolyglotLanguageContext context : contexts) {
-            if (!context.isInitialized()) {
+            if (!context.isInitializedAndLive()) {
                 continue;
             }
             boolean accessAllowed = true;
@@ -1514,7 +1514,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         assert Thread.holdsLock(this);
         BitSet contextsToInitialize = null;
         for (PolyglotLanguageContext context : contexts) {
-            if (context.isInitialized() && !threadInfo.isLanguageContextInitialized(context.language) && !threadInfo.isLanguageContextInitializing(context.language)) {
+            if (context.isInitializedAndLive() && !threadInfo.isLanguageContextInitialized(context.language) && !threadInfo.isLanguageContextInitializing(context.language)) {
                 assert !threadInfo.isFinalizationComplete();
                 if (contextsToInitialize == null) {
                     contextsToInitialize = new BitSet(contexts.length);
@@ -1556,7 +1556,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         assert Thread.holdsLock(this);
 
         for (PolyglotLanguageContext context : contexts) {
-            if (context.isInitialized()) {
+            if (context.isInitializedAndLive()) {
                 context.ensureMultiThreadingInitialized(mustSucceed);
             }
         }
@@ -1579,7 +1579,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         boolean singleThread = isSingleThreaded();
         List<PolyglotLanguage> deniedLanguages = null;
         for (PolyglotLanguageContext context : contexts) {
-            if (context.isInitialized()) {
+            if (context.isInitializedAndLive()) {
                 if (!EngineAccessor.LANGUAGE.isThreadAccessAllowed(context.env, current, singleThread)) {
                     if (deniedLanguages == null) {
                         deniedLanguages = new ArrayList<>();
@@ -3466,7 +3466,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                 exitNotificationPerformed = false;
                 for (int i = contexts.length - 1; i >= 0; i--) {
                     PolyglotLanguageContext context = contexts[i];
-                    if (context.isInitialized()) {
+                    if (context.isInitializedAndLive()) {
                         exitNotificationPerformed |= context.exitContext(exitMode, code);
                     }
                 }
@@ -3494,7 +3494,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
                 // disposal/finalization
                 for (int i = contexts.length - 1; i >= 0; i--) {
                     PolyglotLanguageContext context = contexts[i];
-                    if (context.isInitialized()) {
+                    if (context.isInitializedAndLive()) {
                         try {
                             finalizationPerformed |= context.finalizeContext(mustSucceed, notifyInstruments);
                         } finally {
@@ -3799,14 +3799,26 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         EngineAccessor.LANGUAGE.configureLoggers(this, newConfig.logLevels, getAllLoggers());
         final Object[] prev = engine.enter(this);
         try {
+            boolean allowDormant = engine.getEngineOptionValues().get(PolyglotEngineOptions.DormantPreInitializedLanguages);
+            List<PolyglotLanguageContext> notPermitted = null;
             for (int i = 0; i < this.contexts.length; i++) {
                 final PolyglotLanguageContext context = this.contexts[i];
                 if (context.language.isHost()) {
                     initializeHostContext(context, newConfig);
                 }
+                if (allowDormant && isDormantCandidate(context, newConfig)) {
+                    if (notPermitted == null) {
+                        notPermitted = new ArrayList<>();
+                    }
+                    notPermitted.add(context);
+                    continue;
+                }
                 if (!context.patch(newConfig)) {
                     return false;
                 }
+            }
+            if (notPermitted != null && !patchOrMarkDormant(notPermitted, newConfig)) {
+                return false;
             }
         } finally {
             engine.leave(prev, this);
@@ -3815,6 +3827,42 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         if (s != null) {
             s.sourceCache.patch(TracingSourceCacheListener.createOrNull(engine), engine.sourceCacheStatisticsListener);
             layer.initializeInstructionTracers(s);
+        }
+        return true;
+    }
+
+    /*
+     * With DormantPreInitializedLanguages, a public language the pre-initialized context
+     * initialized but the new config does not permit stays dormant unless a permitted language
+     * depends on it: it can never be entered, so it is not patched and takes no part in thread
+     * access checks, thread initialization, exit notification or finalization.
+     */
+    private static boolean isDormantCandidate(PolyglotLanguageContext context, PolyglotContextConfig newConfig) {
+        return context.isInitialized() && !context.language.isHost() && !context.language.cache.isInternal() &&
+                        !newConfig.allowedPublicLanguages.contains(context.language.getId());
+    }
+
+    private boolean patchOrMarkDormant(List<PolyglotLanguageContext> notPermitted, PolyglotContextConfig newConfig) {
+        Set<String> reachable = new HashSet<>();
+        for (PolyglotLanguageContext context : contexts) {
+            if (context.isInitialized() && newConfig.allowedPublicLanguages.contains(context.language.getId())) {
+                Map<String, LanguageInfo> accessible = context.getAccessibleLanguages(true);
+                if (accessible != null) {
+                    reachable.addAll(accessible.keySet());
+                }
+            }
+        }
+        for (PolyglotLanguageContext context : notPermitted) {
+            if (reachable.contains(context.language.getId())) {
+                if (!context.patch(newConfig)) {
+                    return false;
+                }
+            } else {
+                synchronized (this) {
+                    context.markDormant();
+                    decrementInitializedLanguagesCount();
+                }
+            }
         }
         return true;
     }

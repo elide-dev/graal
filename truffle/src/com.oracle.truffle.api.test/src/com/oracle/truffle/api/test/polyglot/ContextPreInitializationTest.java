@@ -160,6 +160,7 @@ public class ContextPreInitializationTest {
     private static final String SYS_OPTION2_KEY = "polyglot." + FIRST + ".Option2";
     private static final List<CountingContext> emittedContexts = new ArrayList<>();
     private static final Set<String> patchableLanguages = new HashSet<>();
+    private static final Set<Class<? extends BaseLanguage>> multiThreadedLanguages = new HashSet<>();
 
     private static String originalDynamicCompilationThresholds;
 
@@ -197,6 +198,7 @@ public class ContextPreInitializationTest {
         BaseLanguage.actions.clear();
         resetSystemPropertiesOptions();
         patchableLanguages.clear();
+        multiThreadedLanguages.clear();
         emittedContexts.clear();
         NEXT_ORDER_INDEX.set(0);
 
@@ -2983,6 +2985,63 @@ public class ContextPreInitializationTest {
     }
 
     @Test
+    public void testDormantPreInitializedLanguage() throws Exception {
+        setPatchable(FIRST, SECOND);
+        multiThreadedLanguages.add(ContextPreInitializationTestFirstLanguage.class);
+        doContextPreinitialize(FIRST, SECOND);
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(2, contexts.size());
+        CountingContext firstLangCtx = findContext(FIRST, contexts);
+        assertNotNull(firstLangCtx);
+        CountingContext secondLangCtx = findContext(SECOND, contexts);
+        assertNotNull(secondLangCtx);
+        try (Context ctx = Context.newBuilder(FIRST).allowExperimentalOptions(true).option("engine.DormantPreInitializedLanguages", "true").allowCreateThread(true).build()) {
+            assertEquals("test", ctx.eval(Source.create(FIRST, "test")).asString());
+            assertEquals(2, emittedContexts.size());
+            assertEquals(1, firstLangCtx.patchContextCount);
+            assertEquals(0, secondLangCtx.patchContextCount);
+            int secondThreadInits = secondLangCtx.initializeThreadCount;
+            // SECOND is single-threaded but dormant, so a second active thread is admitted.
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            ctx.enter();
+            try {
+                Thread t = new Thread(() -> {
+                    try {
+                        ctx.eval(Source.create(FIRST, "test"));
+                    } catch (Throwable e) {
+                        failure.set(e);
+                    }
+                });
+                t.start();
+                t.join();
+            } finally {
+                ctx.leave();
+            }
+            assertNull(failure.get());
+            assertEquals(secondThreadInits, secondLangCtx.initializeThreadCount);
+        }
+        assertEquals(1, secondLangCtx.disposeContextCount);
+        assertEquals(1, firstLangCtx.disposeContextCount);
+    }
+
+    @Test
+    public void testDormantPreInitializedLanguageKeepsDependencies() throws Exception {
+        setPatchable(FIRST, SECOND);
+        doContextPreinitialize(FIRST, SECOND);
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(2, contexts.size());
+        CountingContext firstLangCtx = findContext(FIRST, contexts);
+        CountingContext secondLangCtx = findContext(SECOND, contexts);
+        try (Context ctx = Context.newBuilder(SECOND).allowExperimentalOptions(true).option("engine.DormantPreInitializedLanguages", "true").build()) {
+            assertEquals("test", ctx.eval(Source.create(SECOND, "test")).asString());
+            assertEquals(2, emittedContexts.size());
+            // FIRST is not permitted, but SECOND depends on it, so it is patched and stays live.
+            assertEquals(1, firstLangCtx.patchContextCount);
+            assertEquals(1, secondLangCtx.patchContextCount);
+        }
+    }
+
+    @Test
     public void testGR57292() throws Exception {
         String message = "Test exception";
         BaseLanguage.registerAction(ContextPreInitializationTestFirstLanguage.class, ActionKind.ON_INITIALIZE_CONTEXT, (env) -> {
@@ -3313,6 +3372,11 @@ public class ContextPreInitializationTest {
         protected void disposeThread(CountingContext context, Thread thread) {
             context.disposeThreadCount++;
             context.disposeThreadOrder = nextId();
+        }
+
+        @Override
+        protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
+            return singleThreaded || multiThreadedLanguages.contains(getClass());
         }
 
         @Override
