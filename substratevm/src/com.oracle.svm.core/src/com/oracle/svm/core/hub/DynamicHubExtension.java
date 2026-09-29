@@ -28,7 +28,7 @@ import java.lang.ref.SoftReference;
 import java.lang.reflect.Constructor;
 import java.security.ProtectionDomain;
 
-import com.oracle.svm.core.configure.RuntimeDynamicAccessMetadata;
+import com.oracle.svm.guest.staging.configure.RuntimeDynamicAccessMetadata;
 
 import jdk.internal.vm.annotation.Stable;
 import sun.reflect.annotation.AnnotationType;

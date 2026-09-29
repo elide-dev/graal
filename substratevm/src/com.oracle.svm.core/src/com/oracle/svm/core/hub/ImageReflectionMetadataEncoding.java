@@ -34,7 +34,7 @@ import java.lang.reflect.RecordComponent;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.configure.RuntimeDynamicAccessMetadata;
+import com.oracle.svm.guest.staging.configure.RuntimeDynamicAccessMetadata;
 import com.oracle.svm.core.reflect.RuntimeMetadataDecoder;
 
 /**
