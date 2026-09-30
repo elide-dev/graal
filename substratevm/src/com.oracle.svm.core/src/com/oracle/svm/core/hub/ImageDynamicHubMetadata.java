@@ -24,13 +24,13 @@
  */
 package com.oracle.svm.core.hub;
 
-import static com.oracle.svm.core.reflect.RuntimeMetadataDecoder.NO_DATA;
+import static com.oracle.svm.guest.staging.reflect.RuntimeMetadataDecoder.NO_DATA;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.reflect.RuntimeMetadataDecoder;
+import com.oracle.svm.guest.staging.reflect.RuntimeMetadataDecoder;
 
 /**
  * Class metadata of image classes (enclosing method, annotations, nest members, ...). The seven
@@ -82,7 +82,7 @@ final class ImageDynamicHubMetadata {
         if (index == NO_DATA) {
             return null;
         }
-        Object[] enclosingMethod = decoder().parseEnclosingMethod(index, declaringClass);
+        Object[] enclosingMethod = decoder().parseEnclosingMethod(index, DynamicHub.toClass(declaringClass));
         if (enclosingMethod != null) {
             PredefinedClassesSupport.throwIfUnresolvable((Class<?>) enclosingMethod[0], declaringClass.getClassLoader0());
         }
@@ -94,7 +94,7 @@ final class ImageDynamicHubMetadata {
         if (index == NO_DATA) {
             return null;
         }
-        return decoder().parseObjects(index, declaringClass);
+        return decoder().parseObjects(index, DynamicHub.toClass(declaringClass));
     }
 
     static byte[] getRawAnnotations(int encoded, DynamicHub declaringClass) {
@@ -102,7 +102,7 @@ final class ImageDynamicHubMetadata {
         if (index == NO_DATA) {
             return null;
         }
-        return decoder().parseByteArray(index, declaringClass);
+        return decoder().parseByteArray(index, DynamicHub.toClass(declaringClass));
     }
 
     static byte[] getRawTypeAnnotations(int encoded, DynamicHub declaringClass) {
@@ -110,7 +110,7 @@ final class ImageDynamicHubMetadata {
         if (index == NO_DATA) {
             return null;
         }
-        return decoder().parseByteArray(index, declaringClass);
+        return decoder().parseByteArray(index, DynamicHub.toClass(declaringClass));
     }
 
     static Class<?>[] getDeclaredClasses(int encoded, DynamicHub declaringClass) {
@@ -142,7 +142,7 @@ final class ImageDynamicHubMetadata {
     }
 
     private static Class<?>[] parseClasses(int index, DynamicHub declaringClass) {
-        Class<?>[] classes = decoder().parseClasses(index, declaringClass);
+        Class<?>[] classes = decoder().parseClasses(index, DynamicHub.toClass(declaringClass));
         for (Class<?> clazz : classes) {
             PredefinedClassesSupport.throwIfUnresolvable(clazz, declaringClass.getClassLoader0());
         }
