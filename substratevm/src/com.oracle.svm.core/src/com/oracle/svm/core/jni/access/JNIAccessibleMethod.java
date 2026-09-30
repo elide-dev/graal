@@ -24,6 +24,9 @@
  */
 package com.oracle.svm.core.jni.access;
 
+import static com.oracle.svm.guest.staging.reflect.RuntimeMetadataDecoder.NEGATIVE_FLAG_MASK;
+import static com.oracle.svm.guest.staging.reflect.RuntimeMetadataDecoder.PRESERVED_FLAG_MASK;
+
 import java.lang.reflect.Modifier;
 
 import org.graalvm.collections.EconomicSet;
@@ -39,7 +42,6 @@ import com.oracle.svm.shared.BuildPhaseProvider.ReadyForCompilation;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.code.ImageCodeInfo;
-import com.oracle.svm.core.code.RuntimeMetadataDecoderImpl;
 import com.oracle.svm.core.graal.nodes.LoadMethodByIndexNode;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.meta.MethodRef;
@@ -76,7 +78,7 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
     public static final int NEW_OBJECT_TARGET_INVALID_FOR_ABSTRACT_TYPE = -1;
 
     public static JNIAccessibleMethod negativeMethodQuery(JNIAccessibleClass jniClass) {
-        return new JNIAccessibleMethod(jniClass, RuntimeMetadataDecoderImpl.NEGATIVE_FLAG_MASK, false);
+        return new JNIAccessibleMethod(jniClass, NEGATIVE_FLAG_MASK, false);
     }
 
     @Platforms(HOSTED_ONLY.class)
@@ -140,13 +142,13 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
     @Platforms(HOSTED_ONLY.class)
     public JNIAccessibleMethod(JNIAccessibleClass declaringClass, int modifiers, boolean preserved) {
         super(declaringClass);
-        assert (modifiers & RuntimeMetadataDecoderImpl.PRESERVED_FLAG_MASK) == 0;
-        this.modifiers = modifiers | (preserved ? RuntimeMetadataDecoderImpl.PRESERVED_FLAG_MASK : 0);
+        assert (modifiers & PRESERVED_FLAG_MASK) == 0;
+        this.modifiers = modifiers | (preserved ? PRESERVED_FLAG_MASK : 0);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public boolean isNegative() {
-        return (modifiers & RuntimeMetadataDecoderImpl.NEGATIVE_FLAG_MASK) != 0;
+        return (modifiers & NEGATIVE_FLAG_MASK) != 0;
     }
 
     @AlwaysInline("Work around an issue with the LLVM backend with which the return value was accessed incorrectly.")
@@ -239,11 +241,11 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
 
     @Override
     public boolean isPreserved() {
-        return (modifiers & RuntimeMetadataDecoderImpl.PRESERVED_FLAG_MASK) != 0;
+        return (modifiers & PRESERVED_FLAG_MASK) != 0;
     }
 
     @Override
     public void setNotPreserved() {
-        modifiers = modifiers & (~RuntimeMetadataDecoderImpl.PRESERVED_FLAG_MASK);
+        modifiers = modifiers & (~PRESERVED_FLAG_MASK);
     }
 }
