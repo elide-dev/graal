@@ -8,6 +8,7 @@ This changelog summarizes major changes between Truffle versions relevant to lan
 * GR-71613: Added `CompilerDirectives.mergeExplodeKey` method for explicitly marking a local variable as a key for `@ExplodeLoop(MERGE_EXPLODE)` methods. It is recommended to migrate all merge exploded loops to use this method to catch unintended graph size explosions.
 * GR-79855: Extended `HostCompilerDirectives.BytecodeInterpreterHandlerConfig.Argument.Field.templateVariable()` to support per-field template variant counts for bytecode handler threading and added template-aware main dispatch from the switch loop.
 * GR-71613: Added `CompilerDirectives.mergeExplodeKey` method for explicitly marking a local variable as a key for `@ExplodeLoop(MERGE_EXPLODE)` methods. It is recommended to migrate all merge exploded loops to use this method to catch unintended graph size explosions.
+* GR-80089: Bytecode DSL: Made the ClearLocal builtin non-optional. Custom operations that conflict with this builtin should be renamed.
 
 ## Version 25.4
 * (Elide fork) On Native Image built with `-H:+VMContinuationsWithRuntimeCompilation`, polyglot contexts run on continuation-backed virtual threads with runtime compilation. Instead of the "one platform thread per VirtualThread" warning, the engine warns that virtual threads whose caller frames were accessed in write or materialize mode stay pinned to their carrier thread.
