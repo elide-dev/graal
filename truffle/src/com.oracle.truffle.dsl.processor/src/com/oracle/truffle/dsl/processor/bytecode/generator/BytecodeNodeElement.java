@@ -2742,8 +2742,9 @@ final class BytecodeNodeElement extends AbstractElement {
 
         CodeExecutableElement profileBranch = createProfileBranch(branchProfilesType);
         CodeExecutableElement ensureFalseProfile = createEnsureFalseProfile(branchProfilesType);
+        CodeExecutableElement recordUnseenBranch = createRecordUnseenBranch(branchProfilesType);
 
-        return List.of(branchProfilesField, allocateBranchProfiles, profileBranch, ensureFalseProfile);
+        return List.of(branchProfilesField, allocateBranchProfiles, profileBranch, ensureFalseProfile, recordUnseenBranch);
     }
 
     /**
@@ -2780,9 +2781,20 @@ final class BytecodeNodeElement extends AbstractElement {
         b.startAssign("t").tree(BytecodeRootNodeElement.readIntArray("branchProfiles", "profileIndex * 2")).end();
         b.startAssign("f").tree(BytecodeRootNodeElement.readIntArray("branchProfiles", "profileIndex * 2 + 1")).end();
 
+        /*
+         * Compiled code records a direction its profile has not seen before deoptimizing on it.
+         * The deoptimization otherwise resumes from an earlier frame state (as early as the start
+         * of the root when nothing in between has side effects) and the interpreter re-evaluates
+         * the condition. A condition that changes in between (one decided by a race with another
+         * thread, for example) would then leave the rare direction unrecorded, and every
+         * recompilation would deoptimize on it again until deopt cycle detection gives up
+         * compiling the root. A plain store before the deoptimization does not survive
+         * compilation, so the record is a boundary call (recordUnseenBranch).
+         */
         b.startIf().string("condition").end().startBlock();
 
         b.startIf().string("t == 0").end().startBlock();
+        b.statement("recordUnseenBranch(branchProfiles, profileIndex * 2)");
         b.tree(GeneratorUtils.createTransferToInterpreterAndInvalidate());
         b.end();
 
@@ -2792,6 +2804,7 @@ final class BytecodeNodeElement extends AbstractElement {
 
         b.end().startElseBlock(); // condition
         b.startIf().string("f == 0").end().startBlock();
+        b.statement("recordUnseenBranch(branchProfiles, profileIndex * 2 + 1)");
         b.tree(GeneratorUtils.createTransferToInterpreterAndInvalidate());
         b.end();
 
@@ -2827,6 +2840,21 @@ final class BytecodeNodeElement extends AbstractElement {
         b.end(); // catch block
 
         b.statement(BytecodeRootNodeElement.writeIntArray("branchProfiles", index, count));
+    }
+
+    /**
+     * Records a branch direction compiled code has not seen, before it deoptimizes on it. A
+     * boundary call, so the store stays a side effect the deoptimization resumes after.
+     */
+    private CodeExecutableElement createRecordUnseenBranch(TypeMirror branchProfilesType) {
+        CodeExecutableElement recordUnseenBranch = new CodeExecutableElement(Set.of(PRIVATE, STATIC), type(void.class), "recordUnseenBranch",
+                        new CodeVariableElement(branchProfilesType, "branchProfiles"),
+                        new CodeVariableElement(type(int.class), "index"));
+        CodeTreeBuilder b = recordUnseenBranch.createBuilder();
+        b.startIf().tree(BytecodeRootNodeElement.readIntArray("branchProfiles", "index")).string(" == 0").end().startBlock();
+        b.statement(BytecodeRootNodeElement.writeIntArray("branchProfiles", "index", "1"));
+        b.end();
+        return parent.withTruffleBoundary(recordUnseenBranch);
     }
 
     private CodeExecutableElement createEnsureFalseProfile(TypeMirror branchProfilesType) {
