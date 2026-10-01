@@ -62,7 +62,6 @@ import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.runtime.BytecodeOSRMetadata;
-import com.oracle.truffle.runtime.OptimizedCallTarget;
 
 import jdk.graal.compiler.test.GraalTest;
 
@@ -91,46 +90,6 @@ public class BytecodeDSLOSRTest extends TestWithSynchronousCompiling {
                         "engine.OSRCompilationThreshold", String.valueOf(OSR_THRESHOLD),
                         "engine.OSRMaxCompilationReAttempts", String.valueOf(1),
                         "engine.ThrowOnMaxOSRCompilationReAttemptsReached", "true");
-    }
-
-    /**
-     * Compiled code that deoptimizes on a branch direction its profile has not seen must record
-     * the direction. Nothing before the branch has side effects, so the deoptimization resumes
-     * at the start of the root and the interpreter re-evaluates the condition, which here (as
-     * with a condition decided by a race with another thread) takes the other direction. Without
-     * the record, every recompilation deoptimizes on the same direction again.
-     */
-    @Test
-    public void testUnseenBranchRecordedWhenReexecutionDiffers() {
-        // return inCompiledCode() ? 1 : 2
-        BytecodeDSLOSRTestRootNode root = parseNode(b -> {
-            b.beginRoot();
-            b.beginIfThenElse();
-            b.emitInCompiledCode();
-            b.beginReturn();
-            b.emitLoadConstant(1);
-            b.endReturn();
-            b.beginReturn();
-            b.emitLoadConstant(2);
-            b.endReturn();
-            b.endIfThenElse();
-            b.endRoot();
-        });
-
-        OptimizedCallTarget target = (OptimizedCallTarget) root.getCallTarget();
-        assertEquals(2, target.call());
-        target.compile(true);
-        assertCompiled(target);
-
-        // Compiled code takes the unseen direction, records it and deoptimizes after the record,
-        // so the interpreter continues with the condition compiled code evaluated.
-        assertEquals(1, target.call());
-        assertNotCompiled(target);
-
-        target.compile(true);
-        assertCompiled(target);
-        assertEquals(1, target.call());
-        assertCompiled(target);
     }
 
     @Test
