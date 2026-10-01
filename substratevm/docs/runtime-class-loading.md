@@ -22,9 +22,25 @@ Run-time-loaded code calls build-time-loaded methods through their compiled code
 The image therefore keeps compiled code for the public JDK methods annotated with `@ForceInline` that image code calls, even though image code inlines all of these calls.
 It also always keeps the core reflection entry points: `Method.invoke`, `Constructor.newInstance`, and the `get` and `set` methods of `Field`.
 
-To enable just-in-time (JIT) compilation of run-time-loaded bytecode, use `-H:+GraalJITCompileAtRuntime`.
+### Preservation Option Argument Files
+
+You can keep preservation selections in an [argument file with option-value continuations](../../docs/reference-manual/native-image/BuildOptions.md#argument-files):
+
+```text
+# Library scope
+-H:Preserve=...
+    package=my.library.*
+    module=java.logging
+```
+
+Pass this file as `native-image @=preserve.args ...`.
+The driver expands the section into `-H:Preserve=package=my.library.*,module=java.logging`.
+`Preserve` remains an application build choice and cannot be embedded in a library's _native-image.properties_.
 
 ### Runtime Compilation Mode Options
+
+Use `-H:+GraalJITCompileAtRuntime` at build time to include Ristretto in the image for just-in-time (JIT) compilation of run-time-loaded bytecode.
+This also makes the additional run-time options described below available in the resulting image.
 
 Ristretto-enabled images recognize the HotSpot-style run-time options `-Xint`, `-Xmixed`, and
 `-Xcomp`. `-Xint` disables run-time compilation and uses the interpreter; `-Xmixed` enables
