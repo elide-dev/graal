@@ -11,6 +11,7 @@ This changelog summarizes major changes between Truffle versions relevant to lan
 * GR-80089: Bytecode DSL: Made the ClearLocal builtin non-optional. Custom operations that conflict with this builtin should be renamed.
 * GR-13989: `TruffleFile.newByteChannel` now returns `FileChannel`, enabling file regions to be mapped to `MemorySegment` instances on JDK 22 and later.
 * GR-79068: `FileChannel` instances returned by `TruffleFile.newByteChannel` now expose file locking through the `lock` and `tryLock` methods when supported by the underlying file system.
+* GR-79950: Added `DynamicObject.SetAllPropertyFlagsNode` for updating flags of multiple existing properties without assigning their values. It supports uniform flags, per-key flags, and remove/add masks.
 
 ## Version 25.4
 * (Elide fork) On Native Image built with `-H:+VMContinuationsWithRuntimeCompilation`, polyglot contexts run on continuation-backed virtual threads with runtime compilation. Instead of the "one platform thread per VirtualThread" warning, the engine warns that virtual threads whose caller frames were accessed in write or materialize mode stay pinned to their carrier thread.
