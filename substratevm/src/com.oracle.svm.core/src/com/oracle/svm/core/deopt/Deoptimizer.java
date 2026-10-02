@@ -1450,11 +1450,14 @@ public final class Deoptimizer {
 
         DeoptimizedFrame deoptimizedFrame = null;
 
-        if (SubstrateOptions.useRistretto()) {
+        /*
+         * Only code whose method deoptimizes to the interpreter gets an interpreter frame, as in
+         * getLazyDeoptStub. Other runtime-compiled code in a Ristretto image, such as Truffle
+         * compilations, deoptimizes to its AOT entry point below.
+         */
+        if (hasInstalledCodeInterpreterDeoptTarget(pc)) {
             SubstrateInstalledCode installedCode = CodeInfoTable.lookupInstalledCode(pc);
-            if (installedCode != null) {
-                deoptimizedFrame = InterpreterSupport.singleton().createInterpreterDeoptimizedFrame(installedCode, this, pc, frameInfo, sourceChunk, isEagerDeopt);
-            }
+            deoptimizedFrame = InterpreterSupport.singleton().createInterpreterDeoptimizedFrame(installedCode, this, pc, frameInfo, sourceChunk, isEagerDeopt);
         }
 
         if (deoptimizedFrame == null) {
