@@ -58,7 +58,6 @@ import jdk.graal.compiler.truffle.TruffleCompilerConfiguration;
 import jdk.graal.compiler.truffle.TruffleCompilerImpl;
 import jdk.graal.compiler.truffle.TruffleCompilerOptions;
 import jdk.graal.compiler.truffle.TruffleTierConfiguration;
-import jdk.graal.compiler.truffle.phases.InstrumentationSuite;
 import jdk.graal.compiler.truffle.phases.TruffleTier;
 import jdk.vm.ci.code.InstalledCode;
 
@@ -86,7 +85,7 @@ public class SubstrateTruffleCompilerImpl extends TruffleCompilerImpl implements
     @Override
     protected TruffleTier newTruffleTier(OptionValues options) {
         return new TruffleTier(options,
-                        new InstrumentationSuite(partialEvaluator.instrumentationCfg, partialEvaluator.getInstrumentation()),
+                        newInstrumentationSuite(),
                         new SubstratePostPartialEvaluationSuite(getGraalOptions(), TruffleCompilerOptions.IterativePartialEscape.getValue(options)));
     }
 
