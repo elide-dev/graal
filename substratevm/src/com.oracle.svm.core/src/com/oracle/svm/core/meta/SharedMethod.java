@@ -124,6 +124,18 @@ public interface SharedMethod extends ResolvedJavaMethod {
     int getImageCodeDeoptOffset();
 
     /**
+     * Returns the GOT entry of this method in image code, or a negative value if image code does
+     * not call it through the GOT (see {@link com.oracle.svm.core.pltgot.PLTGOTConfiguration}).
+     *
+     * Code compiled at run time must call a method that has a GOT entry through that entry, as
+     * image code does: the method's code at {@link #getImageCodeOffset()} is only valid after the
+     * entry is resolved (e.g., when the method's code is stored compressed in the image).
+     */
+    default int getImageGOTEntry() {
+        return -1;
+    }
+
+    /**
      * Always call this method indirectly, even if it is normally called directly.
      */
     boolean forceIndirectCall();

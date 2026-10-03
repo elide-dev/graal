@@ -122,6 +122,12 @@ public class SubstrateMethod implements SharedRuntimeMethod {
      */
     @UnknownPrimitiveField(availability = AfterHeapLayout.class) protected int imageCodeDeoptOffset;
 
+    /**
+     * The GOT entry of this method in image code, or -1 if image code does not call it through the
+     * GOT. See {@link #getImageGOTEntry()}.
+     */
+    @UnknownPrimitiveField(availability = AfterHeapLayout.class) protected int imageGOTEntry;
+
     @UnknownObjectField(types = {SubstrateMethod[].class, SubstrateMethod.class}, canBeNull = true, availability = ReadyForCompilation.class)//
     protected Object implementations;
 
@@ -229,9 +235,10 @@ public class SubstrateMethod implements SharedRuntimeMethod {
         this.vTableIndex = vTableIndex;
     }
 
-    public void setSubstrateDataAfterHeapLayout(int imageCodeOffset, int imageCodeDeoptOffset) {
+    public void setSubstrateDataAfterHeapLayout(int imageCodeOffset, int imageCodeDeoptOffset, int imageGOTEntry) {
         this.imageCodeOffset = imageCodeOffset;
         this.imageCodeDeoptOffset = imageCodeDeoptOffset;
+        this.imageGOTEntry = imageGOTEntry;
     }
 
     @Override
@@ -255,6 +262,11 @@ public class SubstrateMethod implements SharedRuntimeMethod {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public int getImageCodeDeoptOffset() {
         return imageCodeDeoptOffset;
+    }
+
+    @Override
+    public int getImageGOTEntry() {
+        return imageGOTEntry;
     }
 
     @Override

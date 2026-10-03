@@ -36,6 +36,7 @@ import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.impl.Word;
 
+import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
@@ -48,6 +49,8 @@ import com.oracle.svm.core.graal.nodes.LoadMethodByIndexNode;
 import com.oracle.svm.core.graal.nodes.LoadOpenTypeWorldDispatchTableStartingOffset;
 import com.oracle.svm.core.graal.nodes.LoweredDeadEndNode;
 import com.oracle.svm.core.graal.nodes.MethodOffsetToPointerNode;
+import com.oracle.svm.core.graal.nodes.ReadReservedRegisterFixedNode;
+import com.oracle.svm.core.graal.nodes.ReadReservedRegisterFloatingNode;
 import com.oracle.svm.core.graal.nodes.ThrowBytecodeExceptionNode;
 import com.oracle.svm.core.hub.crema.CremaSupport;
 import com.oracle.svm.core.imagelayer.DynamicImageLayerInfo;
@@ -56,6 +59,7 @@ import com.oracle.svm.core.meta.SubstrateMethodRefStamp;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.nodes.SubstrateIndirectCallTargetNode;
 import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
+import com.oracle.svm.core.pltgot.GOTAccess;
 import com.oracle.svm.core.snippets.ImplicitExceptions;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SubstrateForeignCallTarget;
@@ -468,7 +472,30 @@ public abstract class NonSnippetLowerings {
                     } else {
                         CFunctionPointer rawAdrConstant = targetMethod.getAOTEntrypoint();
                         assert !SubstrateUtil.HOSTED;
-                        if (rawAdrConstant == Word.nullPointer()) {
+                        if (rawAdrConstant == Word.nullPointer() && targetMethod.getImageGOTEntry() >= 0) {
+                            /*
+                             * Image code calls this method through its GOT entry, so its code is
+                             * only valid once the entry is resolved (e.g., when the code is stored
+                             * compressed). Call it through the GOT entry too, which initially
+                             * points to the method's resolver stub.
+                             */
+                            ReservedRegisters reservedRegisters = ReservedRegisters.singleton();
+                            ValueNode heapBase;
+                            if (reservedRegisters.mustUseFixedRead(graph)) {
+                                ReadReservedRegisterFixedNode fixedHeapBase = graph.add(new ReadReservedRegisterFixedNode(reservedRegisters.getHeapBaseRegister()));
+                                graph.addBeforeFixed(node, fixedHeapBase);
+                                heapBase = fixedHeapBase;
+                            } else {
+                                heapBase = graph.unique(new ReadReservedRegisterFloatingNode(reservedRegisters.getHeapBaseRegister()));
+                            }
+                            ValueNode gotEntryOffset = ConstantNode.forIntegerKind(wordKind, GOTAccess.getGOTEntryOffsetFromHeapRegister(targetMethod.getImageGOTEntry()), graph);
+                            AddressNode gotEntryAddress = graph.unique(new OffsetAddressNode(heapBase, gotEntryOffset));
+                            /* The entry changes when it is resolved. */
+                            ReadNode methodAddress = graph.add(new ReadNode(gotEntryAddress, LocationIdentity.ANY_LOCATION, SubstrateTarget.getWordStamp(), BarrierType.NONE, MemoryOrderMode.PLAIN));
+                            loweredCallTarget = graph.add(new SubstrateIndirectCallTargetNode(
+                                            methodAddress, parameters.toArray(new ValueNode[parameters.size()]), callTarget.returnStamp(), signature, targetMethod, callType, invokeKind));
+                            graph.addBeforeFixed(node, methodAddress);
+                        } else if (rawAdrConstant == Word.nullPointer()) {
                             /*
                              * In runtime-compiled code, we emit indirect calls via the respective
                              * heap objects to avoid patching and creating trampolines.
