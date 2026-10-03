@@ -701,7 +701,17 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
             var heapBase = ReservedRegisters.singleton().getHeapBaseRegister().asValue(wordKind);
             var heapBaseOffset = GOTAccess.getGOTEntryOffsetFromHeapRegister(gotEntry);
             int wordBits = wordKind.getPlatformKind().getSizeInBytes() * Byte.SIZE;
-            Value gotEntryAddress = AArch64AddressValue.makeAddress(wordKind, wordBits, heapBase, heapBaseOffset);
+            Value gotEntryAddress;
+            if (AArch64Address.isValidImmediateAddress(wordBits, AArch64Address.AddressingMode.IMMEDIATE_SIGNED_UNSCALED, heapBaseOffset)) {
+                gotEntryAddress = AArch64AddressValue.makeAddress(wordKind, wordBits, heapBase, heapBaseOffset);
+            } else {
+                /*
+                 * GOT entries are at negative offsets from the heap base, and a load's negative
+                 * immediate offset only reaches the first 32 of them.
+                 */
+                Value address = getArithmetic().emitAdd(heapBase, emitConstant(wordKind, JavaConstant.forLong(heapBaseOffset)), false);
+                gotEntryAddress = AArch64AddressValue.makeAddress(wordKind, wordBits, asAllocatable(address));
+            }
             return getArithmetic().emitLoad(wordKind, gotEntryAddress, null, MemoryOrderMode.PLAIN, MemoryExtendKind.DEFAULT);
         }
 
