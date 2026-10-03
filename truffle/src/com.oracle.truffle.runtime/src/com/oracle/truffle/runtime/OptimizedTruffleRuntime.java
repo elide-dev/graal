@@ -726,10 +726,18 @@ public abstract class OptimizedTruffleRuntime implements TruffleRuntime, Truffle
     private void shutdown() {
         flushCompilations(null);
         getListener().onShutdown();
-        TruffleCompiler tcp = truffleCompiler;
+        TruffleCompiler tcp = getTruffleCompilerToShutDown();
         if (tcp != null) {
             tcp.shutdown();
         }
+    }
+
+    /**
+     * Returns the compiler to {@linkplain TruffleCompiler#shutdown() shut down} when the runtime shuts
+     * down, or {@code null} if there is none.
+     */
+    protected TruffleCompiler getTruffleCompilerToShutDown() {
+        return truffleCompiler;
     }
 
     public final void shutdownCompilationForEngine(EngineData engine) {

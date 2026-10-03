@@ -117,14 +117,23 @@ public class RuntimeCompilationSupport {
 
     protected final GlobalMetrics metricValues = new GlobalMetrics();
     protected final DiagnosticsOutputDirectory outputDirectory = new DiagnosticsOutputDirectory(RuntimeOptionValues.singleton().get());
+    /** Whether a debug context collected metrics into {@link #metricValues}. */
+    volatile boolean metricsCollected;
+    /** Whether {@link #outputDirectory} was handed out, so that it may have been created. */
+    volatile boolean outputDirectoryUsed;
     protected final Map<ExceptionAction, Integer> compilationProblemsPerAction = new EnumMap<>(ExceptionAction.class);
 
     public DebugContext openDebugContext(OptionValues options, CompilationIdentifier compilationId, Object compilable, PrintStream logStream) {
         Description description = new Description(compilable, compilationId.toString(CompilationIdentifier.Verbosity.ID));
-        return new Builder(options, runtimeConfig.getDebugHandlersFactories()).globalMetrics(metricValues).description(description).logStream(logStream).build();
+        DebugContext debug = new Builder(options, runtimeConfig.getDebugHandlersFactories()).globalMetrics(metricValues).description(description).logStream(logStream).build();
+        if (debug.areMetricsEnabled()) {
+            metricsCollected = true;
+        }
+        return debug;
     }
 
     public DiagnosticsOutputDirectory getDebugOutputDirectory() {
+        outputDirectoryUsed = true;
         return outputDirectory;
     }
 

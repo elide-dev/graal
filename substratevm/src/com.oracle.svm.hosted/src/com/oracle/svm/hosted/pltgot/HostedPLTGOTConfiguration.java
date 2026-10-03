@@ -38,10 +38,12 @@ import com.oracle.svm.core.graal.code.SubstrateCallingConventionKind;
 import com.oracle.svm.core.meta.SharedMethod;
 import com.oracle.svm.core.pltgot.PLTGOTConfiguration;
 import com.oracle.svm.core.snippets.SubstrateForeignCallTarget;
+import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.hosted.meta.HostedMetaAccess;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.GuestAccess;
+import com.oracle.svm.util.OriginalClassProvider;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterConfig;
@@ -65,6 +67,14 @@ public abstract class HostedPLTGOTConfiguration extends PLTGOTConfiguration {
     }
 
     public static boolean canBeCalledViaPLTGOT(SharedMethod method) {
+        if (method.getName().equals("execute") && RuntimeSupport.Hook.class.isAssignableFrom(OriginalClassProvider.getJavaClass(method.getDeclaringClass()))) {
+            /*
+             * Startup and teardown hooks run outside what PGO profiles cover (e.g., teardown hooks
+             * run after the profile is written), so they would be selected for code compression and
+             * decompressed on every run. They are small: call them directly.
+             */
+            return false;
+        }
         if (GuestAnnotationAccess.isAnnotationPresent(method, CEntryPoint.class)) {
             return false;
         }
