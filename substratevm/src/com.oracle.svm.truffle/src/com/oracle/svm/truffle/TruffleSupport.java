@@ -60,6 +60,7 @@ import com.oracle.truffle.runtime.OptimizedCallTarget;
 import com.oracle.truffle.runtime.OptimizedDirectCallNode;
 
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
+import jdk.graal.compiler.phases.tiers.Suites;
 import jdk.graal.compiler.truffle.EconomyPartialEvaluatorConfiguration;
 import jdk.graal.compiler.truffle.KnownTruffleTypes;
 import jdk.graal.compiler.truffle.PartialEvaluatorConfiguration;
@@ -112,18 +113,30 @@ public class TruffleSupport {
         SubstrateBackend substrateBackend = RuntimeCompilationSupport.getRuntimeConfig().getBackendForNormalMethod();
         substrateBackend.setRuntimeToRuntimeInvokeMethod(optimizedCallTargetMethod);
         KnownTruffleTypes types = ImageSingletons.lookup(KnownTruffleTypes.class);
+        Suites firstTierSuites = truffleSuites(RuntimeCompilationSupport.getFirstTierSuites());
+        Suites fullOptSuites = truffleSuites(RuntimeCompilationSupport.getFullOptSuites());
         final TruffleTierConfiguration firstTier = new TruffleTierConfiguration(new EconomyPartialEvaluatorConfiguration(), substrateBackend,
-                        RuntimeCompilationSupport.getFirstTierProviders(), RuntimeCompilationSupport.getFirstTierSuites(),
+                        RuntimeCompilationSupport.getFirstTierProviders(), firstTierSuites,
                         RuntimeCompilationSupport.getFirstTierLirSuites(),
                         types);
 
         PartialEvaluatorConfiguration peConfig = TruffleCompilerImpl.createPartialEvaluatorConfiguration(compilerConfigurationName);
         final TruffleTierConfiguration lastTier = new TruffleTierConfiguration(peConfig, substrateBackend,
-                        RuntimeCompilationSupport.getRuntimeConfig().getProviders(), RuntimeCompilationSupport.getFullOptSuites(),
+                        RuntimeCompilationSupport.getRuntimeConfig().getProviders(), fullOptSuites,
                         RuntimeCompilationSupport.getLIRSuites(),
                         types);
         return new TruffleCompilerConfiguration(runtime, graphBuilderPlugins, runtimeCompilationFeature.getHostedProviders().getSnippetReflection(), firstTier, lastTier, types,
-                        RuntimeCompilationSupport.getFullOptSuites(), null);
+                        fullOptSuites, null);
+    }
+
+    /**
+     * {@link TruffleTierConfiguration} adds the Truffle phases to the suites it is given. With
+     * Ristretto, the shared runtime suites also compile bytecode loaded at run time, which those
+     * phases cannot handle (they expect a Truffle compilation), so Truffle gets its own copy. Without
+     * Ristretto, only Truffle uses the shared suites.
+     */
+    private static Suites truffleSuites(Suites runtimeSuites) {
+        return SubstrateOptions.useRistretto() ? runtimeSuites.copy() : runtimeSuites;
     }
 
     public static boolean isIsolatedCompilation() {
