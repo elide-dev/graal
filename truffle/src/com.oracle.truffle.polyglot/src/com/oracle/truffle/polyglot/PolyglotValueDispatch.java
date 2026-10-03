@@ -2244,325 +2244,253 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
     @SuppressWarnings("unused")
     static final class InteropValue extends PolyglotValueDispatch {
 
-        final CallTarget isNativePointer;
-        final CallTarget asNativePointer;
-        final CallTarget hasArrayElements;
-        final CallTarget getArrayElement;
-        final CallTarget setArrayElement;
-        final CallTarget removeArrayElement;
-        final CallTarget getArraySize;
-        final CallTarget hasBufferElements;
-        final CallTarget isBufferWritable;
-        final CallTarget getBufferSize;
-        final CallTarget readBufferByte;
-        final CallTarget readBuffer;
-        final CallTarget writeBufferByte;
-        final CallTarget readBufferShort;
-        final CallTarget writeBufferShort;
-        final CallTarget readBufferInt;
-        final CallTarget writeBufferInt;
-        final CallTarget readBufferLong;
-        final CallTarget writeBufferLong;
-        final CallTarget readBufferFloat;
-        final CallTarget writeBufferFloat;
-        final CallTarget readBufferDouble;
-        final CallTarget writeBufferDouble;
-        final CallTarget hasMembers;
-        final CallTarget hasMember;
-        final CallTarget getMember;
-        final CallTarget putMember;
-        final CallTarget removeMember;
-        final CallTarget isNull;
-        final CallTarget canExecute;
-        final CallTarget execute;
-        final CallTarget canInstantiate;
-        final CallTarget newInstance;
-        final CallTarget executeNoArgs;
-        final CallTarget executeVoid;
-        final CallTarget executeVoidNoArgs;
-        final CallTarget canInvoke;
-        final CallTarget invoke;
-        final CallTarget invokeNoArgs;
-        final CallTarget getMemberKeys;
-        final CallTarget isDate;
-        final CallTarget asDate;
-        final CallTarget isTime;
-        final CallTarget asTime;
-        final CallTarget isTimeZone;
-        final CallTarget asTimeZone;
-        final CallTarget asInstant;
-        final CallTarget isDuration;
-        final CallTarget asDuration;
-        final CallTarget isException;
-        final CallTarget throwException;
-        final CallTarget isMetaObject;
-        final CallTarget isMetaInstance;
-        final CallTarget getMetaQualifiedName;
-        final CallTarget getMetaSimpleName;
-        final CallTarget hasMetaParents;
-        final CallTarget getMetaParents;
-        final CallTarget hasIterator;
-        final CallTarget getIterator;
-        final CallTarget isIterator;
-        final CallTarget hasIteratorNextElement;
-        final CallTarget getIteratorNextElement;
-        final CallTarget hasHashEntries;
-        final CallTarget getHashSize;
-        final CallTarget hasHashEntry;
-        final CallTarget getHashValue;
-        final CallTarget getHashValueOrDefault;
-        final CallTarget putHashEntry;
-        final CallTarget removeHashEntry;
-        final CallTarget getHashEntriesIterator;
-        final CallTarget getHashKeysIterator;
-        final CallTarget getHashValuesIterator;
-        final CallTarget isHostObject;
-        final CallTarget asHostObject;
-        final CallTarget asClassLiteral;
-        final CallTarget asTypeLiteral;
-        final CallTarget hasStaticScope;
-        final CallTarget getStaticScope;
+        /*
+         * One call target per Value operation, created on the operation's first use. A receiver
+         * class typically uses only a few of them, and creating all of them when its first value
+         * is converted costs startup time. Threads that race on first use may each create a call
+         * target; that is harmless, as any of them is valid, and volatile publishes it safely.
+         */
+        volatile CallTarget isNativePointer;
+        volatile CallTarget asNativePointer;
+        volatile CallTarget hasArrayElements;
+        volatile CallTarget getArrayElement;
+        volatile CallTarget setArrayElement;
+        volatile CallTarget removeArrayElement;
+        volatile CallTarget getArraySize;
+        volatile CallTarget hasBufferElements;
+        volatile CallTarget isBufferWritable;
+        volatile CallTarget getBufferSize;
+        volatile CallTarget readBufferByte;
+        volatile CallTarget readBuffer;
+        volatile CallTarget writeBufferByte;
+        volatile CallTarget readBufferShort;
+        volatile CallTarget writeBufferShort;
+        volatile CallTarget readBufferInt;
+        volatile CallTarget writeBufferInt;
+        volatile CallTarget readBufferLong;
+        volatile CallTarget writeBufferLong;
+        volatile CallTarget readBufferFloat;
+        volatile CallTarget writeBufferFloat;
+        volatile CallTarget readBufferDouble;
+        volatile CallTarget writeBufferDouble;
+        volatile CallTarget hasMembers;
+        volatile CallTarget hasMember;
+        volatile CallTarget getMember;
+        volatile CallTarget putMember;
+        volatile CallTarget removeMember;
+        volatile CallTarget isNull;
+        volatile CallTarget canExecute;
+        volatile CallTarget execute;
+        volatile CallTarget canInstantiate;
+        volatile CallTarget newInstance;
+        volatile CallTarget executeNoArgs;
+        volatile CallTarget executeVoid;
+        volatile CallTarget executeVoidNoArgs;
+        volatile CallTarget canInvoke;
+        volatile CallTarget invoke;
+        volatile CallTarget invokeNoArgs;
+        volatile CallTarget getMemberKeys;
+        volatile CallTarget isDate;
+        volatile CallTarget asDate;
+        volatile CallTarget isTime;
+        volatile CallTarget asTime;
+        volatile CallTarget isTimeZone;
+        volatile CallTarget asTimeZone;
+        volatile CallTarget asInstant;
+        volatile CallTarget isDuration;
+        volatile CallTarget asDuration;
+        volatile CallTarget isException;
+        volatile CallTarget throwException;
+        volatile CallTarget isMetaObject;
+        volatile CallTarget isMetaInstance;
+        volatile CallTarget getMetaQualifiedName;
+        volatile CallTarget getMetaSimpleName;
+        volatile CallTarget hasMetaParents;
+        volatile CallTarget getMetaParents;
+        volatile CallTarget hasIterator;
+        volatile CallTarget getIterator;
+        volatile CallTarget isIterator;
+        volatile CallTarget hasIteratorNextElement;
+        volatile CallTarget getIteratorNextElement;
+        volatile CallTarget hasHashEntries;
+        volatile CallTarget getHashSize;
+        volatile CallTarget hasHashEntry;
+        volatile CallTarget getHashValue;
+        volatile CallTarget getHashValueOrDefault;
+        volatile CallTarget putHashEntry;
+        volatile CallTarget removeHashEntry;
+        volatile CallTarget getHashEntriesIterator;
+        volatile CallTarget getHashKeysIterator;
+        volatile CallTarget getHashValuesIterator;
+        volatile CallTarget isHostObject;
+        volatile CallTarget asHostObject;
+        volatile CallTarget asClassLiteral;
+        volatile CallTarget asTypeLiteral;
+        volatile CallTarget hasStaticScope;
+        volatile CallTarget getStaticScope;
 
         final Class<?> receiverType;
 
         InteropValue(PolyglotImpl polyglot, PolyglotLanguageInstance languageInstance, Object receiverObject, Class<?> receiverType) {
             super(polyglot, languageInstance);
             this.receiverType = receiverType;
-            this.asClassLiteral = createTarget(AsClassLiteralNodeGen.create(this));
-            this.asTypeLiteral = createTarget(AsTypeLiteralNodeGen.create(this));
-            this.isNativePointer = createTarget(IsNativePointerNodeGen.create(this));
-            this.asNativePointer = createTarget(AsNativePointerNodeGen.create(this));
-            this.hasArrayElements = createTarget(HasArrayElementsNodeGen.create(this));
-            this.getArrayElement = createTarget(GetArrayElementNodeGen.create(this));
-            this.setArrayElement = createTarget(SetArrayElementNodeGen.create(this));
-            this.removeArrayElement = createTarget(RemoveArrayElementNodeGen.create(this));
-            this.getArraySize = createTarget(GetArraySizeNodeGen.create(this));
-            this.hasBufferElements = createTarget(HasBufferElementsNodeGen.create(this));
-            this.isBufferWritable = createTarget(IsBufferWritableNodeGen.create(this));
-            this.getBufferSize = createTarget(GetBufferSizeNodeGen.create(this));
-            this.readBufferByte = createTarget(ReadBufferByteNodeGen.create(this));
-            this.readBuffer = createTarget(ReadBufferNodeGen.create(this));
-            this.writeBufferByte = createTarget(WriteBufferByteNodeGen.create(this));
-            this.readBufferShort = createTarget(ReadBufferShortNodeGen.create(this));
-            this.writeBufferShort = createTarget(WriteBufferShortNodeGen.create(this));
-            this.readBufferInt = createTarget(ReadBufferIntNodeGen.create(this));
-            this.writeBufferInt = createTarget(WriteBufferIntNodeGen.create(this));
-            this.readBufferLong = createTarget(ReadBufferLongNodeGen.create(this));
-            this.writeBufferLong = createTarget(WriteBufferLongNodeGen.create(this));
-            this.readBufferFloat = createTarget(ReadBufferFloatNodeGen.create(this));
-            this.writeBufferFloat = createTarget(WriteBufferFloatNodeGen.create(this));
-            this.readBufferDouble = createTarget(ReadBufferDoubleNodeGen.create(this));
-            this.writeBufferDouble = createTarget(WriteBufferDoubleNodeGen.create(this));
-            this.hasMember = createTarget(HasMemberNodeGen.create(this));
-            this.getMember = createTarget(GetMemberNodeGen.create(this));
-            this.putMember = createTarget(PutMemberNodeGen.create(this));
-            this.removeMember = createTarget(RemoveMemberNodeGen.create(this));
-            this.isNull = createTarget(IsNullNodeGen.create(this));
-            this.execute = createTarget(ExecuteNodeGen.create(this));
-            this.executeNoArgs = createTarget(ExecuteNoArgsNodeGen.create(this));
-            this.executeVoid = createTarget(ExecuteVoidNodeGen.create(this));
-            this.executeVoidNoArgs = createTarget(ExecuteVoidNoArgsNodeGen.create(this));
-            this.newInstance = createTarget(NewInstanceNodeGen.create(this));
-            this.canInstantiate = createTarget(CanInstantiateNodeGen.create(this));
-            this.canExecute = createTarget(CanExecuteNodeGen.create(this));
-            this.canInvoke = createTarget(CanInvokeNodeGen.create(this));
-            this.invoke = createTarget(InvokeNodeGen.create(this));
-            this.invokeNoArgs = createTarget(InvokeNoArgsNodeGen.create(this));
-            this.hasMembers = createTarget(HasMembersNodeGen.create(this));
-            this.getMemberKeys = createTarget(GetMemberKeysNodeGen.create(this));
-            this.isDate = createTarget(IsDateNodeGen.create(this));
-            this.asDate = createTarget(AsDateNodeGen.create(this));
-            this.isTime = createTarget(IsTimeNodeGen.create(this));
-            this.asTime = createTarget(AsTimeNodeGen.create(this));
-            this.isTimeZone = createTarget(IsTimeZoneNodeGen.create(this));
-            this.asTimeZone = createTarget(AsTimeZoneNodeGen.create(this));
-            this.asInstant = createTarget(AsInstantNodeGen.create(this));
-            this.isDuration = createTarget(IsDurationNodeGen.create(this));
-            this.asDuration = createTarget(AsDurationNodeGen.create(this));
-            this.isException = createTarget(IsExceptionNodeGen.create(this));
-            this.throwException = createTarget(ThrowExceptionNodeGen.create(this));
-            this.isMetaObject = createTarget(IsMetaObjectNodeGen.create(this));
-            this.isMetaInstance = createTarget(IsMetaInstanceNodeGen.create(this));
-            this.getMetaQualifiedName = createTarget(GetMetaQualifiedNameNodeGen.create(this));
-            this.getMetaSimpleName = createTarget(GetMetaSimpleNameNodeGen.create(this));
-            this.hasMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.HasMetaParentsNodeGen.create(this));
-            this.getMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetMetaParentsNodeGen.create(this));
-            this.hasIterator = createTarget(HasIteratorNodeGen.create(this));
-            this.getIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetIteratorNodeGen.create(this));
-            this.isIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.IsIteratorNodeGen.create(this));
-            this.hasIteratorNextElement = createTarget(HasIteratorNextElementNodeGen.create(this));
-            this.getIteratorNextElement = createTarget(GetIteratorNextElementNodeGen.create(this));
-            this.hasHashEntries = createTarget(HasHashEntriesNodeGen.create(this));
-            this.getHashSize = createTarget(GetHashSizeNodeGen.create(this));
-            this.hasHashEntry = createTarget(HasHashEntryNodeGen.create(this));
-            this.getHashValue = createTarget(GetHashValueNodeGen.create(this));
-            this.getHashValueOrDefault = createTarget(GetHashValueOrDefaultNodeGen.create(this));
-            this.putHashEntry = createTarget(PutHashEntryNodeGen.create(this));
-            this.removeHashEntry = createTarget(RemoveHashEntryNodeGen.create(this));
-            this.getHashEntriesIterator = createTarget(GetHashEntriesIteratorNodeGen.create(this));
-            this.getHashKeysIterator = createTarget(GetHashKeysIteratorNodeGen.create(this));
-            this.getHashValuesIterator = createTarget(GetHashValuesIteratorNodeGen.create(this));
-            this.isHostObject = createTarget(IsHostObjectNodeGen.create(this));
-            this.asHostObject = createTarget(AsHostObjectNodeGen.create(this));
-            this.hasStaticScope = createTarget(HasStaticScopeNodeGen.create(this));
-            this.getStaticScope = createTarget(GetStaticScopeNodeGen.create(this));
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public <T> T asClass(Object languageContext, Object receiver, Class<T> targetType) {
-            return (T) RUNTIME.callProfiled(this.asClassLiteral, languageContext, receiver, targetType);
+            return (T) RUNTIME.callProfiled(asClassLiteral != null ? asClassLiteral : (asClassLiteral = createTarget(AsClassLiteralNodeGen.create(this))), languageContext, receiver, targetType);
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public <T> T asTypeLiteral(Object languageContext, Object receiver, Class<T> rawType, Type type) {
-            return (T) RUNTIME.callProfiled(this.asTypeLiteral, languageContext, receiver, rawType, type);
+            return (T) RUNTIME.callProfiled(asTypeLiteral != null ? asTypeLiteral : (asTypeLiteral = createTarget(AsTypeLiteralNodeGen.create(this))), languageContext, receiver, rawType, type);
         }
 
         @Override
         public boolean isNativePointer(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isNativePointer, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isNativePointer != null ? isNativePointer : (isNativePointer = createTarget(IsNativePointerNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasArrayElements(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasArrayElements, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasArrayElements != null ? hasArrayElements : (hasArrayElements = createTarget(HasArrayElementsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getArrayElement(Object languageContext, Object receiver, long index) {
-            return RUNTIME.callProfiled(this.getArrayElement, languageContext, receiver, index);
+            return RUNTIME.callProfiled(getArrayElement != null ? getArrayElement : (getArrayElement = createTarget(GetArrayElementNodeGen.create(this))), languageContext, receiver, index);
         }
 
         @Override
         public void setArrayElement(Object languageContext, Object receiver, long index, Object value) {
-            RUNTIME.callProfiled(this.setArrayElement, languageContext, receiver, index, value);
+            RUNTIME.callProfiled(setArrayElement != null ? setArrayElement : (setArrayElement = createTarget(SetArrayElementNodeGen.create(this))), languageContext, receiver, index, value);
         }
 
         @Override
         public boolean removeArrayElement(Object languageContext, Object receiver, long index) {
-            return (boolean) RUNTIME.callProfiled(this.removeArrayElement, languageContext, receiver, index);
+            return (boolean) RUNTIME.callProfiled(removeArrayElement != null ? removeArrayElement : (removeArrayElement = createTarget(RemoveArrayElementNodeGen.create(this))), languageContext, receiver, index);
         }
 
         @Override
         public long getArraySize(Object languageContext, Object receiver) {
-            return (long) RUNTIME.callProfiled(this.getArraySize, languageContext, receiver);
+            return (long) RUNTIME.callProfiled(getArraySize != null ? getArraySize : (getArraySize = createTarget(GetArraySizeNodeGen.create(this))), languageContext, receiver);
         }
 
         // region Buffer Methods
 
         @Override
         public boolean hasBufferElements(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasBufferElements, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasBufferElements != null ? hasBufferElements : (hasBufferElements = createTarget(HasBufferElementsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isBufferWritable(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isBufferWritable, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isBufferWritable != null ? isBufferWritable : (isBufferWritable = createTarget(IsBufferWritableNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public long getBufferSize(Object languageContext, Object receiver) throws UnsupportedOperationException {
-            return (long) RUNTIME.callProfiled(this.getBufferSize, languageContext, receiver);
+            return (long) RUNTIME.callProfiled(getBufferSize != null ? getBufferSize : (getBufferSize = createTarget(GetBufferSizeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public byte readBufferByte(Object languageContext, Object receiver, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (byte) RUNTIME.callProfiled(this.readBufferByte, languageContext, receiver, byteOffset);
+            return (byte) RUNTIME.callProfiled(readBufferByte != null ? readBufferByte : (readBufferByte = createTarget(ReadBufferByteNodeGen.create(this))), languageContext, receiver, byteOffset);
         }
 
         @Override
         public void readBuffer(Object languageContext, Object receiver, long byteOffset, byte[] destination, int destinationOffset, int length)
                         throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.readBuffer, languageContext, receiver, byteOffset, destination, destinationOffset, length);
+            RUNTIME.callProfiled(readBuffer != null ? readBuffer : (readBuffer = createTarget(ReadBufferNodeGen.create(this))), languageContext, receiver, byteOffset, destination, destinationOffset, length);
         }
 
         @Override
         public void writeBufferByte(Object languageContext, Object receiver, long byteOffset, byte value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferByte, languageContext, receiver, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferByte != null ? writeBufferByte : (writeBufferByte = createTarget(WriteBufferByteNodeGen.create(this))), languageContext, receiver, byteOffset, value);
         }
 
         @Override
         public short readBufferShort(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (short) RUNTIME.callProfiled(this.readBufferShort, languageContext, receiver, order, byteOffset);
+            return (short) RUNTIME.callProfiled(readBufferShort != null ? readBufferShort : (readBufferShort = createTarget(ReadBufferShortNodeGen.create(this))), languageContext, receiver, order, byteOffset);
         }
 
         @Override
         public void writeBufferShort(Object languageContext, Object receiver, ByteOrder order, long byteOffset, short value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferShort, languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferShort != null ? writeBufferShort : (writeBufferShort = createTarget(WriteBufferShortNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
         }
 
         @Override
         public int readBufferInt(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (int) RUNTIME.callProfiled(this.readBufferInt, languageContext, receiver, order, byteOffset);
+            return (int) RUNTIME.callProfiled(readBufferInt != null ? readBufferInt : (readBufferInt = createTarget(ReadBufferIntNodeGen.create(this))), languageContext, receiver, order, byteOffset);
         }
 
         @Override
         public void writeBufferInt(Object languageContext, Object receiver, ByteOrder order, long byteOffset, int value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferInt, languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferInt != null ? writeBufferInt : (writeBufferInt = createTarget(WriteBufferIntNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
         }
 
         @Override
         public long readBufferLong(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (long) RUNTIME.callProfiled(this.readBufferLong, languageContext, receiver, order, byteOffset);
+            return (long) RUNTIME.callProfiled(readBufferLong != null ? readBufferLong : (readBufferLong = createTarget(ReadBufferLongNodeGen.create(this))), languageContext, receiver, order, byteOffset);
         }
 
         @Override
         public void writeBufferLong(Object languageContext, Object receiver, ByteOrder order, long byteOffset, long value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferLong, languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferLong != null ? writeBufferLong : (writeBufferLong = createTarget(WriteBufferLongNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
         }
 
         @Override
         public float readBufferFloat(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (float) RUNTIME.callProfiled(this.readBufferFloat, languageContext, receiver, order, byteOffset);
+            return (float) RUNTIME.callProfiled(readBufferFloat != null ? readBufferFloat : (readBufferFloat = createTarget(ReadBufferFloatNodeGen.create(this))), languageContext, receiver, order, byteOffset);
         }
 
         @Override
         public void writeBufferFloat(Object languageContext, Object receiver, ByteOrder order, long byteOffset, float value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferFloat, languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferFloat != null ? writeBufferFloat : (writeBufferFloat = createTarget(WriteBufferFloatNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
         }
 
         @Override
         public double readBufferDouble(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (double) RUNTIME.callProfiled(this.readBufferDouble, languageContext, receiver, order, byteOffset);
+            return (double) RUNTIME.callProfiled(readBufferDouble != null ? readBufferDouble : (readBufferDouble = createTarget(ReadBufferDoubleNodeGen.create(this))), languageContext, receiver, order, byteOffset);
         }
 
         @Override
         public void writeBufferDouble(Object languageContext, Object receiver, ByteOrder order, long byteOffset, double value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(this.writeBufferDouble, languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferDouble != null ? writeBufferDouble : (writeBufferDouble = createTarget(WriteBufferDoubleNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
         }
 
         // endregion
 
         @Override
         public boolean hasMembers(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasMembers, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasMembers != null ? hasMembers : (hasMembers = createTarget(HasMembersNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getMember(Object languageContext, Object receiver, String key) {
-            return RUNTIME.callProfiled(this.getMember, languageContext, receiver, key);
+            return RUNTIME.callProfiled(getMember != null ? getMember : (getMember = createTarget(GetMemberNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public boolean hasMember(Object languageContext, Object receiver, String key) {
-            return (boolean) RUNTIME.callProfiled(this.hasMember, languageContext, receiver, key);
+            return (boolean) RUNTIME.callProfiled(hasMember != null ? hasMember : (hasMember = createTarget(HasMemberNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public void putMember(Object languageContext, Object receiver, String key, Object member) {
-            RUNTIME.callProfiled(this.putMember, languageContext, receiver, key, member);
+            RUNTIME.callProfiled(putMember != null ? putMember : (putMember = createTarget(PutMemberNodeGen.create(this))), languageContext, receiver, key, member);
         }
 
         @Override
         public boolean removeMember(Object languageContext, Object receiver, String key) {
-            return (boolean) RUNTIME.callProfiled(this.removeMember, languageContext, receiver, key);
+            return (boolean) RUNTIME.callProfiled(removeMember != null ? removeMember : (removeMember = createTarget(RemoveMemberNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public Set<String> getMemberKeys(Object languageContext, Object receiver) {
-            Object keys = RUNTIME.callProfiled(this.getMemberKeys, languageContext, receiver);
+            Object keys = RUNTIME.callProfiled(getMemberKeys != null ? getMemberKeys : (getMemberKeys = createTarget(GetMemberKeysNodeGen.create(this))), languageContext, receiver);
             if (keys == null) {
                 // unsupported
                 return Collections.emptySet();
@@ -2572,67 +2500,67 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public boolean hasStaticScope(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasStaticScope, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasStaticScope != null ? hasStaticScope : (hasStaticScope = createTarget(HasStaticScopeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getStaticScope(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getStaticScope, languageContext, receiver);
+            return RUNTIME.callProfiled(getStaticScope != null ? getStaticScope : (getStaticScope = createTarget(GetStaticScopeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public long asNativePointer(Object languageContext, Object receiver) {
-            return (long) RUNTIME.callProfiled(this.asNativePointer, languageContext, receiver);
+            return (long) RUNTIME.callProfiled(asNativePointer != null ? asNativePointer : (asNativePointer = createTarget(AsNativePointerNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isDate(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isDate, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isDate != null ? isDate : (isDate = createTarget(IsDateNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public LocalDate asDate(Object languageContext, Object receiver) {
-            return (LocalDate) RUNTIME.callProfiled(this.asDate, languageContext, receiver);
+            return (LocalDate) RUNTIME.callProfiled(asDate != null ? asDate : (asDate = createTarget(AsDateNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isTime(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isTime, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isTime != null ? isTime : (isTime = createTarget(IsTimeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public LocalTime asTime(Object languageContext, Object receiver) {
-            return (LocalTime) RUNTIME.callProfiled(this.asTime, languageContext, receiver);
+            return (LocalTime) RUNTIME.callProfiled(asTime != null ? asTime : (asTime = createTarget(AsTimeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isTimeZone(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isTimeZone, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isTimeZone != null ? isTimeZone : (isTimeZone = createTarget(IsTimeZoneNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public ZoneId asTimeZone(Object languageContext, Object receiver) {
-            return (ZoneId) RUNTIME.callProfiled(this.asTimeZone, languageContext, receiver);
+            return (ZoneId) RUNTIME.callProfiled(asTimeZone != null ? asTimeZone : (asTimeZone = createTarget(AsTimeZoneNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Instant asInstant(Object languageContext, Object receiver) {
-            return (Instant) RUNTIME.callProfiled(this.asInstant, languageContext, receiver);
+            return (Instant) RUNTIME.callProfiled(asInstant != null ? asInstant : (asInstant = createTarget(AsInstantNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isDuration(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isDuration, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isDuration != null ? isDuration : (isDuration = createTarget(IsDurationNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Duration asDuration(Object languageContext, Object receiver) {
-            return (Duration) RUNTIME.callProfiled(this.asDuration, languageContext, receiver);
+            return (Duration) RUNTIME.callProfiled(asDuration != null ? asDuration : (asDuration = createTarget(AsDurationNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isHostObject(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isHostObject, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isHostObject != null ? isHostObject : (isHostObject = createTarget(IsHostObjectNodeGen.create(this))), languageContext, receiver);
         }
 
         private PolyglotEngineImpl getEngine() {
@@ -2663,72 +2591,72 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public Object asHostObject(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.asHostObject, languageContext, receiver);
+            return RUNTIME.callProfiled(asHostObject != null ? asHostObject : (asHostObject = createTarget(AsHostObjectNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isNull(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isNull, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isNull != null ? isNull : (isNull = createTarget(IsNullNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean canExecute(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.canExecute, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(canExecute != null ? canExecute : (canExecute = createTarget(CanExecuteNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public void executeVoid(Object languageContext, Object receiver, Object[] arguments) {
-            RUNTIME.callProfiled(this.executeVoid, languageContext, receiver, arguments);
+            RUNTIME.callProfiled(executeVoid != null ? executeVoid : (executeVoid = createTarget(ExecuteVoidNodeGen.create(this))), languageContext, receiver, arguments);
         }
 
         @Override
         public void executeVoid(Object languageContext, Object receiver) {
-            RUNTIME.callProfiled(this.executeVoidNoArgs, languageContext, receiver);
+            RUNTIME.callProfiled(executeVoidNoArgs != null ? executeVoidNoArgs : (executeVoidNoArgs = createTarget(ExecuteVoidNoArgsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object execute(Object languageContext, Object receiver, Object[] arguments) {
-            return RUNTIME.callProfiled(this.execute, languageContext, receiver, arguments);
+            return RUNTIME.callProfiled(execute != null ? execute : (execute = createTarget(ExecuteNodeGen.create(this))), languageContext, receiver, arguments);
         }
 
         @Override
         public Object execute(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.executeNoArgs, languageContext, receiver);
+            return RUNTIME.callProfiled(executeNoArgs != null ? executeNoArgs : (executeNoArgs = createTarget(ExecuteNoArgsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean canInstantiate(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.canInstantiate, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(canInstantiate != null ? canInstantiate : (canInstantiate = createTarget(CanInstantiateNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object newInstance(Object languageContext, Object receiver, Object[] arguments) {
-            return RUNTIME.callProfiled(this.newInstance, languageContext, receiver, arguments);
+            return RUNTIME.callProfiled(newInstance != null ? newInstance : (newInstance = createTarget(NewInstanceNodeGen.create(this))), languageContext, receiver, arguments);
         }
 
         @Override
         public boolean canInvoke(Object languageContext, String identifier, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.canInvoke, languageContext, receiver, identifier);
+            return (boolean) RUNTIME.callProfiled(canInvoke != null ? canInvoke : (canInvoke = createTarget(CanInvokeNodeGen.create(this))), languageContext, receiver, identifier);
         }
 
         @Override
         public Object invoke(Object languageContext, Object receiver, String identifier, Object[] arguments) {
-            return RUNTIME.callProfiled(this.invoke, languageContext, receiver, identifier, arguments);
+            return RUNTIME.callProfiled(invoke != null ? invoke : (invoke = createTarget(InvokeNodeGen.create(this))), languageContext, receiver, identifier, arguments);
         }
 
         @Override
         public Object invoke(Object languageContext, Object receiver, String identifier) {
-            return RUNTIME.callProfiled(this.invokeNoArgs, languageContext, receiver, identifier);
+            return RUNTIME.callProfiled(invokeNoArgs != null ? invokeNoArgs : (invokeNoArgs = createTarget(InvokeNoArgsNodeGen.create(this))), languageContext, receiver, identifier);
         }
 
         @Override
         public boolean isException(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isException, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isException != null ? isException : (isException = createTarget(IsExceptionNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public RuntimeException throwException(Object languageContext, Object receiver) {
-            RUNTIME.callProfiled(this.throwException, languageContext, receiver);
+            RUNTIME.callProfiled(throwException != null ? throwException : (throwException = createTarget(ThrowExceptionNodeGen.create(this))), languageContext, receiver);
             throw super.throwException(languageContext, receiver);
         }
 
@@ -3042,107 +2970,107 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public boolean isMetaObject(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isMetaObject, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isMetaObject != null ? isMetaObject : (isMetaObject = createTarget(IsMetaObjectNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isMetaInstance(Object languageContext, Object receiver, Object instance) {
-            return (boolean) RUNTIME.callProfiled(this.isMetaInstance, languageContext, receiver, instance);
+            return (boolean) RUNTIME.callProfiled(isMetaInstance != null ? isMetaInstance : (isMetaInstance = createTarget(IsMetaInstanceNodeGen.create(this))), languageContext, receiver, instance);
         }
 
         @Override
         public String getMetaQualifiedName(Object languageContext, Object receiver) {
-            return (String) RUNTIME.callProfiled(this.getMetaQualifiedName, languageContext, receiver);
+            return (String) RUNTIME.callProfiled(getMetaQualifiedName != null ? getMetaQualifiedName : (getMetaQualifiedName = createTarget(GetMetaQualifiedNameNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public String getMetaSimpleName(Object languageContext, Object receiver) {
-            return (String) RUNTIME.callProfiled(this.getMetaSimpleName, languageContext, receiver);
+            return (String) RUNTIME.callProfiled(getMetaSimpleName != null ? getMetaSimpleName : (getMetaSimpleName = createTarget(GetMetaSimpleNameNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasMetaParents(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasMetaParents, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasMetaParents != null ? hasMetaParents : (hasMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.HasMetaParentsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getMetaParents(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getMetaParents, languageContext, receiver);
+            return RUNTIME.callProfiled(getMetaParents != null ? getMetaParents : (getMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetMetaParentsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasIterator(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasIterator, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasIterator != null ? hasIterator : (hasIterator = createTarget(HasIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getIterator, languageContext, receiver);
+            return RUNTIME.callProfiled(getIterator != null ? getIterator : (getIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean isIterator(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.isIterator, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isIterator != null ? isIterator : (isIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.IsIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasIteratorNextElement(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasIteratorNextElement, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasIteratorNextElement != null ? hasIteratorNextElement : (hasIteratorNextElement = createTarget(HasIteratorNextElementNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getIteratorNextElement(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getIteratorNextElement, languageContext, receiver);
+            return RUNTIME.callProfiled(getIteratorNextElement != null ? getIteratorNextElement : (getIteratorNextElement = createTarget(GetIteratorNextElementNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasHashEntries(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(this.hasHashEntries, languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasHashEntries != null ? hasHashEntries : (hasHashEntries = createTarget(HasHashEntriesNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public long getHashSize(Object languageContext, Object receiver) {
-            return (long) RUNTIME.callProfiled(this.getHashSize, languageContext, receiver);
+            return (long) RUNTIME.callProfiled(getHashSize != null ? getHashSize : (getHashSize = createTarget(GetHashSizeNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public boolean hasHashEntry(Object languageContext, Object receiver, Object key) {
-            return (boolean) RUNTIME.callProfiled(this.hasHashEntry, languageContext, receiver, key);
+            return (boolean) RUNTIME.callProfiled(hasHashEntry != null ? hasHashEntry : (hasHashEntry = createTarget(HasHashEntryNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public Object getHashValue(Object languageContext, Object receiver, Object key) {
-            return RUNTIME.callProfiled(this.getHashValue, languageContext, receiver, key);
+            return RUNTIME.callProfiled(getHashValue != null ? getHashValue : (getHashValue = createTarget(GetHashValueNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public Object getHashValueOrDefault(Object languageContext, Object receiver, Object key, Object defaultValue) {
-            return RUNTIME.callProfiled(this.getHashValueOrDefault, languageContext, receiver, key, defaultValue);
+            return RUNTIME.callProfiled(getHashValueOrDefault != null ? getHashValueOrDefault : (getHashValueOrDefault = createTarget(GetHashValueOrDefaultNodeGen.create(this))), languageContext, receiver, key, defaultValue);
         }
 
         @Override
         public void putHashEntry(Object languageContext, Object receiver, Object key, Object value) {
-            RUNTIME.callProfiled(this.putHashEntry, languageContext, receiver, key, value);
+            RUNTIME.callProfiled(putHashEntry != null ? putHashEntry : (putHashEntry = createTarget(PutHashEntryNodeGen.create(this))), languageContext, receiver, key, value);
         }
 
         @Override
         public boolean removeHashEntry(Object languageContext, Object receiver, Object key) {
-            return (boolean) RUNTIME.callProfiled(this.removeHashEntry, languageContext, receiver, key);
+            return (boolean) RUNTIME.callProfiled(removeHashEntry != null ? removeHashEntry : (removeHashEntry = createTarget(RemoveHashEntryNodeGen.create(this))), languageContext, receiver, key);
         }
 
         @Override
         public Object getHashEntriesIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getHashEntriesIterator, languageContext, receiver);
+            return RUNTIME.callProfiled(getHashEntriesIterator != null ? getHashEntriesIterator : (getHashEntriesIterator = createTarget(GetHashEntriesIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getHashKeysIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getHashKeysIterator, languageContext, receiver);
+            return RUNTIME.callProfiled(getHashKeysIterator != null ? getHashKeysIterator : (getHashKeysIterator = createTarget(GetHashKeysIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getHashValuesIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(this.getHashValuesIterator, languageContext, receiver);
+            return RUNTIME.callProfiled(getHashValuesIterator != null ? getHashValuesIterator : (getHashValuesIterator = createTarget(GetHashValuesIteratorNodeGen.create(this))), languageContext, receiver);
         }
 
         private final class MemberSet extends AbstractSet<String> {
