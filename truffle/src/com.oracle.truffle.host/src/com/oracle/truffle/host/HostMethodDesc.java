@@ -291,6 +291,22 @@ abstract class HostMethodDesc {
                 return Runtime.version().feature() >= 19 && isCallerSensitive(executable);
             }
 
+            /**
+             * Returns the exception thrown by the reflectively invoked executable. This is a
+             * boundary because {@link Throwable#getCause()} is a virtual call: compiled, it can
+             * reach every {@code getCause()} override in the image.
+             */
+            @TruffleBoundary
+            static Throwable unwrapInvocationTargetException(Executable executable, InvocationTargetException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof InvocationTargetException && checkForDuplicateInvocationTargetException(executable)) {
+                    // JDK-8304585: Duplicated InvocationTargetException when the invocation of
+                    // a caller-sensitive method fails.
+                    cause = cause.getCause();
+                }
+                return cause;
+            }
+
         }
 
         private static final class MethodReflectImpl extends ReflectBase {
@@ -312,13 +328,7 @@ abstract class HostMethodDesc {
                 try {
                     return reflectInvoke(reflectionMethod, receiver, arguments);
                 } catch (InvocationTargetException e) {
-                    Throwable cause = e.getCause();
-                    if (cause instanceof InvocationTargetException && checkForDuplicateInvocationTargetException(reflectionMethod)) {
-                        // JDK-8304585: Duplicated InvocationTargetException when the invocation of
-                        // a caller-sensitive method fails.
-                        cause = cause.getCause();
-                    }
-                    throw cause;
+                    throw unwrapInvocationTargetException(reflectionMethod, e);
                 }
             }
 
@@ -353,13 +363,7 @@ abstract class HostMethodDesc {
                 try {
                     return reflectNewInstance(reflectionConstructor, arguments);
                 } catch (InvocationTargetException e) {
-                    Throwable cause = e.getCause();
-                    if (cause instanceof InvocationTargetException && checkForDuplicateInvocationTargetException(reflectionConstructor)) {
-                        // JDK-8304585: Duplicated InvocationTargetException when the invocation of
-                        // a caller-sensitive method fails.
-                        cause = cause.getCause();
-                    }
-                    throw cause;
+                    throw unwrapInvocationTargetException(reflectionConstructor, e);
                 }
             }
 
