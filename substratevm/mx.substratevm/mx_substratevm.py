@@ -486,14 +486,16 @@ def truffle_unittest_task(extra_build_args=None):
     ]))
     # Ristretto (JIT compilation of bytecode loaded at run time) in the same image as Truffle runtime
     # compilation. The image must build, Truffle code must deoptimize to its AOT entry points, and
-    # Ristretto code, eagerly or while its frame is active, to the interpreter.
+    # Ristretto code, eagerly or while its frame is active, to the interpreter. With run-time class
+    # loading, Truffle's runtime compilation must not reach blocklisted methods through overridden
+    # exception methods when host calls unwrap reflective exceptions.
     _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
         '-H:+RuntimeClassLoading',
         '-H:+GraalJITCompileAtRuntime',
     ]) + [
         '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED',
         '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
-    ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest'], extra_run_args=['-Dcom.oracle.svm.test.ristretto=true'])
+    ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'], extra_run_args=['-Dcom.oracle.svm.test.ristretto=true'])
     # JDWP support enables the PLT/GOT and requires frame information for all methods, which must
     # not force deoptimization targets for runtime compilation. Its startup hook must also allow
     # the isolates used for runtime compilation.
