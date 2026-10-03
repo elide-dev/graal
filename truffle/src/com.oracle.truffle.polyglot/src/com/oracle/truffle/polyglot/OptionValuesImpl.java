@@ -42,9 +42,11 @@ package com.oracle.truffle.polyglot;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +59,7 @@ import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionStability;
+import org.graalvm.options.OptionType;
 import org.graalvm.options.OptionValues;
 import org.graalvm.polyglot.SandboxPolicy;
 
@@ -72,14 +75,48 @@ final class OptionValuesImpl implements OptionValues {
     private List<OptionDescriptor> usedDeprecatedDescriptors;
     private volatile Set<OptionKey<?>> validAssertKeys;
     private final boolean trackDeprecatedOptions;
+    /**
+     * Options parsed during context pre-initialization, by option name (see
+     * {@link #put(String, String, boolean, Supplier)}). Null if there are none.
+     */
+    private final Map<String, ParsedOption> preparsedOptions;
+    /** Records the parsed options for an engine that pre-initializes a context; null otherwise. */
+    private final Map<String, ParsedOption> parsedOptions;
+
+    /**
+     * An option value parsed from {@code value}. {@code convertedValue} is null unless the option
+     * type's converter is known to depend only on the string.
+     */
+    record ParsedOption(String value, OptionDescriptor descriptor, Object convertedValue) {
+    }
+
+    /** The built-in option types, whose converters depend only on the string. */
+    private static final Set<OptionType<?>> PURE_OPTION_TYPES = Collections.newSetFromMap(new IdentityHashMap<>());
+    static {
+        for (Class<?> type : List.of(Boolean.class, Byte.class, Integer.class, Long.class, Float.class, Double.class, String.class)) {
+            PURE_OPTION_TYPES.add(OptionType.defaultType(type));
+        }
+    }
 
     OptionValuesImpl(OptionDescriptors descriptors, SandboxPolicy sandboxPolicy, boolean trackDeprecatedOptions) {
+        this(descriptors, sandboxPolicy, trackDeprecatedOptions, null, false);
+    }
+
+    /**
+     * @param preparsedOptions options parsed during context pre-initialization, see
+     *            {@link #getParsedOptions()}
+     * @param recordParsedOptions whether to record the parsed options, for an engine that
+     *            pre-initializes a context
+     */
+    OptionValuesImpl(OptionDescriptors descriptors, SandboxPolicy sandboxPolicy, boolean trackDeprecatedOptions, Map<String, ParsedOption> preparsedOptions, boolean recordParsedOptions) {
         Objects.requireNonNull(descriptors);
         Objects.requireNonNull(sandboxPolicy);
         this.descriptors = descriptors;
         this.sandboxPolicy = sandboxPolicy;
         this.values = new HashMap<>();
         this.trackDeprecatedOptions = trackDeprecatedOptions;
+        this.preparsedOptions = preparsedOptions;
+        this.parsedOptions = recordParsedOptions ? new HashMap<>() : null;
     }
 
     private OptionValuesImpl(OptionValuesImpl copy) {
@@ -88,6 +125,16 @@ final class OptionValuesImpl implements OptionValues {
         this.sandboxPolicy = copy.sandboxPolicy;
         this.usedDeprecatedDescriptors = copy.usedDeprecatedDescriptors;
         this.trackDeprecatedOptions = copy.trackDeprecatedOptions;
+        // Context options are parsed into a copy of the engine options; the map is immutable.
+        this.preparsedOptions = copy.preparsedOptions;
+        this.parsedOptions = null;
+    }
+
+    /**
+     * Returns the recorded parsed options, or null if these values do not record them.
+     */
+    Map<String, ParsedOption> getParsedOptions() {
+        return parsedOptions == null ? null : Map.copyOf(parsedOptions);
     }
 
     @Override
@@ -158,8 +205,20 @@ final class OptionValuesImpl implements OptionValues {
         }
     }
 
+    /**
+     * Parses {@code value} into the option {@code key}.
+     *
+     * When patching a pre-initialized context, the same option strings are usually parsed again. An
+     * option parsed from the same string during context pre-initialization reuses its descriptor,
+     * and, for the built-in option types, its converted value. Every other check still runs.
+     */
     public OptionDescriptor put(String key, String value, boolean allowExperimentalOptions, Supplier<OptionDescriptors> allOptionsSupplier) {
-        OptionDescriptor descriptor = findDescriptor(key, allowExperimentalOptions, allOptionsSupplier);
+        ParsedOption preparsed = preparsedOptions == null ? null : preparsedOptions.get(key);
+        if (preparsed != null && (!preparsed.value().equals(value) ||
+                        (!allowExperimentalOptions && preparsed.descriptor().getStability() == OptionStability.EXPERIMENTAL))) {
+            preparsed = null;
+        }
+        OptionDescriptor descriptor = preparsed != null ? preparsed.descriptor() : findDescriptor(key, allowExperimentalOptions, allOptionsSupplier);
         if (sandboxPolicy != SandboxPolicy.TRUSTED) {
             SandboxPolicy optionSandboxPolicy = descriptors instanceof TruffleOptionDescriptors ? ((TruffleOptionDescriptors) descriptors).getSandboxPolicy(key) : SandboxPolicy.TRUSTED;
             if (sandboxPolicy.isStricterThan(optionSandboxPolicy)) {
@@ -169,26 +228,11 @@ final class OptionValuesImpl implements OptionValues {
             }
         }
         OptionKey<?> optionKey = descriptor.getKey();
-        Object previousValue;
-        if (values.containsKey(optionKey)) {
-            previousValue = values.get(optionKey);
-        } else {
-            previousValue = optionKey.getDefaultValue();
-        }
-        String name = descriptor.getName();
-        String suffix = null;
-        if (descriptor.isOptionMap()) {
-            suffix = key.substring(name.length());
-            assert suffix.isEmpty() || suffix.startsWith(".");
-            if (suffix.startsWith(".")) {
-                suffix = suffix.substring(1);
-            }
-        }
         Object convertedValue;
-        try {
-            convertedValue = optionKey.getType().convert(previousValue, suffix, value);
-        } catch (IllegalArgumentException e) {
-            throw PolyglotEngineException.illegalArgument(e);
+        if (preparsed != null && preparsed.convertedValue() != null) {
+            convertedValue = preparsed.convertedValue();
+        } else {
+            convertedValue = convert(key, value, descriptor);
         }
         if (descriptor.isConstant()) {
             if (optionKey instanceof ConstantOptionKey<?> constantOptionKey) {
@@ -212,7 +256,34 @@ final class OptionValuesImpl implements OptionValues {
             usedDeprecatedDescriptors.add(descriptor);
         }
         values.put(descriptor.getKey(), convertedValue);
+        if (parsedOptions != null && !descriptor.isOptionMap()) {
+            parsedOptions.put(key, new ParsedOption(value, descriptor, PURE_OPTION_TYPES.contains(optionKey.getType()) ? convertedValue : null));
+        }
         return descriptor;
+    }
+
+    private Object convert(String key, String value, OptionDescriptor descriptor) {
+        OptionKey<?> optionKey = descriptor.getKey();
+        Object previousValue;
+        if (values.containsKey(optionKey)) {
+            previousValue = values.get(optionKey);
+        } else {
+            previousValue = optionKey.getDefaultValue();
+        }
+        String name = descriptor.getName();
+        String suffix = null;
+        if (descriptor.isOptionMap()) {
+            suffix = key.substring(name.length());
+            assert suffix.isEmpty() || suffix.startsWith(".");
+            if (suffix.startsWith(".")) {
+                suffix = suffix.substring(1);
+            }
+        }
+        try {
+            return optionKey.getType().convert(previousValue, suffix, value);
+        } catch (IllegalArgumentException e) {
+            throw PolyglotEngineException.illegalArgument(e);
+        }
     }
 
     private <T> boolean contains(OptionKey<T> optionKey) {

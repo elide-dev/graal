@@ -569,6 +569,50 @@ public class ContextPreInitializationTest {
         ctx.close();
     }
 
+    /**
+     * An option parsed during context pre-initialization is reused when the patch parses the same
+     * string again, and the context sees the same values as with a fresh parse.
+     */
+    @Test
+    public void testPreInitializedOptionReusedForSameValue() throws Exception {
+        System.setProperty(SYS_OPTION1_KEY, "true");
+        setPatchable(FIRST);
+        doContextPreinitialize(FIRST);
+        assertEquals("true", getPreInitParsedOptionValue(FIRST, FIRST + ".Option1"));
+        CountingContext firstLangCtx = findContext(FIRST, new ArrayList<>(emittedContexts));
+        assertNotNull(firstLangCtx);
+        firstLangCtx.optionValues.clear();
+        try (Context ctx = Context.newBuilder().option(FIRST + ".Option1", "true").option(FIRST + ".Option2", "true").build()) {
+            assertEquals("test", ctx.eval(Source.create(FIRST, "test")).asString());
+            assertEquals(1, firstLangCtx.patchContextCount);
+            assertTrue(firstLangCtx.optionValues.get(ContextPreInitializationTestFirstLanguage.Option1));
+            assertTrue(firstLangCtx.optionValues.get(ContextPreInitializationTestFirstLanguage.Option2));
+        } finally {
+            System.clearProperty(SYS_OPTION1_KEY);
+        }
+    }
+
+    /**
+     * An option parsed during context pre-initialization is parsed again when the patch sets it to
+     * a different string.
+     */
+    @Test
+    public void testPreInitializedOptionReparsedForDifferentValue() throws Exception {
+        System.setProperty(SYS_OPTION1_KEY, "true");
+        setPatchable(FIRST);
+        doContextPreinitialize(FIRST);
+        assertEquals("true", getPreInitParsedOptionValue(FIRST, FIRST + ".Option1"));
+        CountingContext firstLangCtx = findContext(FIRST, new ArrayList<>(emittedContexts));
+        assertNotNull(firstLangCtx);
+        firstLangCtx.optionValues.clear();
+        System.clearProperty(SYS_OPTION1_KEY);
+        try (Context ctx = Context.newBuilder().option(FIRST + ".Option1", "false").build()) {
+            assertEquals("test", ctx.eval(Source.create(FIRST, "test")).asString());
+            assertEquals(1, firstLangCtx.patchContextCount);
+            assertFalse(firstLangCtx.optionValues.get(ContextPreInitializationTestFirstLanguage.Option1));
+        }
+    }
+
     @Test
     public void testSystemPropertiesOptionsFailedPatch() throws Exception {
         System.setProperty(SYS_OPTION1_KEY, "true");
@@ -3187,6 +3231,54 @@ public class ContextPreInitializationTest {
         Method m = polyglotLoggersClass.getDeclaredMethod("getActiveFileHandlers");
         ReflectionUtils.setAccessible(m, true);
         return (Set<Path>) m.invoke(null);
+    }
+
+    /**
+     * Returns the raw value of {@code key} that the pre-initialized engine recorded for
+     * {@code languageId} (PolyglotLanguage.preinitParsedOptions), or null.
+     */
+    private static String getPreInitParsedOptionValue(String languageId, String key) throws ReflectiveOperationException {
+        Class<?> holderClass = Class.forName("org.graalvm.polyglot.Engine$ImplHolder", true, ContextPreInitializationTest.class.getClassLoader());
+        Object impl = readField(holderClass, null, "IMPL");
+        while (!impl.getClass().getName().equals("com.oracle.truffle.polyglot.PolyglotImpl")) {
+            Method getNext = findMethod(impl.getClass(), "getNext");
+            ReflectionUtils.setAccessible(getNext, true);
+            impl = getNext.invoke(impl);
+        }
+        Object engine = ((java.util.concurrent.atomic.AtomicReference<?>) readField(impl.getClass(), impl, "preInitializedEngineRef")).get();
+        Object language = ((Map<?, ?>) readField(engine.getClass(), engine, "idToLanguage")).get(languageId);
+        Map<?, ?> parsed = (Map<?, ?>) readField(language.getClass(), language, "preinitParsedOptions");
+        Object option = parsed == null ? null : parsed.get(key);
+        if (option == null) {
+            return null;
+        }
+        Method value = option.getClass().getDeclaredMethod("value");
+        ReflectionUtils.setAccessible(value, true);
+        return (String) value.invoke(option);
+    }
+
+    private static Object readField(Class<?> clazz, Object receiver, String name) throws ReflectiveOperationException {
+        for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                ReflectionUtils.setAccessible(f, true);
+                return f.get(receiver);
+            } catch (NoSuchFieldException e) {
+                // try the superclass
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
+    private static Method findMethod(Class<?> clazz, String name) throws NoSuchMethodException {
+        for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == 0) {
+                    return m;
+                }
+            }
+        }
+        throw new NoSuchMethodException(name);
     }
 
     private static Collection<? extends CountingContext> findContexts(
