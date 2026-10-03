@@ -113,6 +113,8 @@ import org.graalvm.word.impl.Word;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.HostedProviders;
+import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.UninterruptibleAnnotationUtils;
 import com.oracle.svm.core.UninterruptibleGuestValue;
 import com.oracle.svm.core.annotate.Alias;
@@ -364,6 +366,45 @@ public class TruffleFeature implements InternalFeature {
         }
 
         ImageSingletons.lookup(TruffleBaseFeature.class).setGraalGraphObjectReplacer(RuntimeCompilationFeature.singleton().getObjectReplacer());
+
+        if (SubstrateOptions.useRistretto()) {
+            access.registerObjectReplacer(new RuntimeGraphBuilderPluginsReplacer());
+        }
+    }
+
+    /**
+     * The Truffle compiler is built at image build time from the hosted graph builder plugins
+     * (see {@link TruffleSupport}), so the compiler objects in the image heap reference
+     * {@link GraphBuilderConfiguration.Plugins} instances holding hosted-only plugins. Truffle
+     * runtime compilation decodes pre-encoded graphs and never consults those plugins, so normally
+     * no reachable code reads their fields and they are never scanned. Ristretto makes the
+     * bytecode parser reachable at run time, which reads those fields and drags the hosted-only
+     * plugins into the image heap. This replacer gives the image heap a runtime-safe copy instead,
+     * mirroring the plugins {@link com.oracle.svm.truffle.api.SubstratePartialEvaluator} keeps for decoding: only the run-time
+     * checked invocation plugins, and no node or class initialization plugins.
+     */
+    private static final class RuntimeGraphBuilderPluginsReplacer implements Function<Object, Object> {
+        private final Map<GraphBuilderConfiguration.Plugins, GraphBuilderConfiguration.Plugins> replacements = new IdentityHashMap<>();
+
+        @Override
+        public Object apply(Object source) {
+            if (source instanceof GraphBuilderConfiguration.Plugins plugins) {
+                synchronized (replacements) {
+                    if (replacements.containsValue(plugins)) {
+                        return plugins;
+                    }
+                    return replacements.computeIfAbsent(plugins, RuntimeGraphBuilderPluginsReplacer::createRuntimePlugins);
+                }
+            }
+            return source;
+        }
+
+        private static GraphBuilderConfiguration.Plugins createRuntimePlugins(GraphBuilderConfiguration.Plugins hostedPlugins) {
+            InvocationPlugins invocationPlugins = new InvocationPlugins();
+            hostedPlugins.getInvocationPlugins().collectRuntimeCheckedPlugins(invocationPlugins, SubstrateTarget.getArchitecture());
+            invocationPlugins.closeRegistration();
+            return new GraphBuilderConfiguration.Plugins(invocationPlugins);
+        }
     }
 
     private void registerNeverPartOfCompilation(InvocationPlugins plugins) {
