@@ -42,11 +42,13 @@ import com.oracle.objectfile.ObjectFile;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.meta.SharedMethod;
 import com.oracle.svm.core.pltgot.GOTAccess;
 import com.oracle.svm.core.pltgot.GOTHeapSupport;
 import com.oracle.svm.core.pltgot.PLTGOTConfiguration;
+import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.FeatureImpl.AfterAbstractImageCreationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.AfterCompilationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
@@ -57,6 +59,7 @@ import com.oracle.svm.hosted.image.NativeImage;
 import com.oracle.svm.hosted.image.RelocatableBuffer;
 import com.oracle.svm.hosted.pltgot.aarch64.AArch64HostedPLTGOTConfiguration;
 import com.oracle.svm.hosted.pltgot.amd64.AMD64HostedPLTGOTConfiguration;
+import com.oracle.svm.shared.option.SubstrateOptionsParser;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
@@ -170,6 +173,19 @@ public class PLTGOTFeature implements InternalFeature {
 
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
+        /*
+         * Code compiled at run time in a compilation isolate calls image code through the GOT,
+         * which all isolates share. If the resolver places code outside the image code section,
+         * only the isolate that resolved a method knows its code, so the compilation isolate cannot
+         * walk such frames (e.g., in its GC).
+         */
+        if (RuntimeCompilation.isEnabled() && SubstrateOptions.SupportCompileInIsolates.getValue() &&
+                        !HostedPLTGOTConfiguration.singleton().getMethodAddressResolutionSupport().resolvesToImageCode()) {
+            throw UserError.abort("Isolated compilation (%s) is not supported when the PLT/GOT method address resolver places code outside the image code section, " +
+                            "e.g. with code compression. Disable it with %s (--gc=G1 already does).",
+                            SubstrateOptionsParser.commandArgument(SubstrateOptions.SupportCompileInIsolates, "+"),
+                            SubstrateOptionsParser.commandArgument(SubstrateOptions.SupportCompileInIsolates, "-"));
+        }
         Method resolver = HostedPLTGOTConfiguration.singleton().getArchSpecificResolverAsMethod();
         ((BeforeAnalysisAccessImpl) access).registerAsRoot(resolver, false, "PLT GOT support, registered in " + PLTGOTFeature.class);
     }

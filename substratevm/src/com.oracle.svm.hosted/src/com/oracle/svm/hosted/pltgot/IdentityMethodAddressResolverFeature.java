@@ -109,6 +109,11 @@ public class IdentityMethodAddressResolverFeature implements InternalFeature {
         public MethodAddressResolver createMethodAddressResolver() {
             return new IdentityMethodAddressResolver();
         }
+
+        @Override
+        public boolean resolvesToImageCode() {
+            return true;
+        }
     }
 
     @Override
