@@ -57,4 +57,14 @@ public interface MethodAddressResolutionSupport {
      * PLT/GOT at runtime.
      */
     MethodAddressResolver createMethodAddressResolver();
+
+    /**
+     * Returns whether every method resolves to its code in the image code section. Then all
+     * isolates of a process know the code that a resolved GOT entry points to. A resolver that
+     * places code elsewhere at run time (e.g., decompressed code) may only register that code in
+     * the isolate that resolved it, while the GOT is shared by all isolates.
+     */
+    default boolean resolvesToImageCode() {
+        return false;
+    }
 }

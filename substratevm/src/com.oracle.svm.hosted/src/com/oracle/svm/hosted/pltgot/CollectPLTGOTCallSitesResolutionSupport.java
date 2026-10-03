@@ -78,6 +78,11 @@ class CollectPLTGOTCallSitesResolutionSupport implements MethodAddressResolution
         return resolver.createMethodAddressResolver();
     }
 
+    @Override
+    public boolean resolvesToImageCode() {
+        return resolver.resolvesToImageCode();
+    }
+
     public Map<HostedMethod, Set<HostedMethod>> getCallerCalleesMap() {
         return Collections.unmodifiableMap(callerCalleesMap);
     }
