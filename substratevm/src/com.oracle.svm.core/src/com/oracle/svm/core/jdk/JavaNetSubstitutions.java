@@ -249,10 +249,15 @@ final class DefaultProxySelectorSystemProxiesAccessor {
     static final CGlobalData<Pointer> initState = CGlobalDataFactory.createWord(UNINITIALIZED);
 
     /** Avoids calling init() more than once per process, which can leak resources with isolates. */
+    @SuppressWarnings("restricted")
     static boolean ensureInitialized() {
         Boolean b = NetProperties.getBoolean("java.net.useSystemProxies");
         if (b != null && b) {
-            // NOTE: System.loadLibrary("net") has already been called early on.
+            /*
+             * DefaultProxySelector is initialized at build time, so its static initializer does
+             * not load the "net" library at run time, and it is not loaded at startup either.
+             */
+            System.loadLibrary("net");
             while (true) {
                 SignedWord value = initState.get().readWord(0);
                 if (value.greaterOrEqual(0)) {

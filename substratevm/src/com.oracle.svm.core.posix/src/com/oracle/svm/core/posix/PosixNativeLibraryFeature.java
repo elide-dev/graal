@@ -103,7 +103,14 @@ final class PosixNativeLibrarySupport extends JNIPlatformNativeLibrarySupport {
         if (Platform.includedIn(InternalPlatform.PLATFORM_JNI.class)) {
             try {
                 loadJavaLibrary();
-                loadNetLibrary();
+                /*
+                 * The "net" library is not loaded here. Its JNI_OnLoad probes IPv4, IPv6 and
+                 * SO_REUSEPORT support with sockets and /proc/net/if_inet6 (about 60 us), which
+                 * most programs never need. The run-time initialized classes that use it (e.g.,
+                 * InetAddress, NetworkInterface, sun.nio.ch.IOUtil) load it in their static
+                 * initializers, like on HotSpot. Its JNI_OnLoad only sets process-wide flags, so it
+                 * is safe to run once in each isolate that loads the library.
+                 */
 
                 String launchMechanism = System.getProperty(PLM_PROPERTY_NAME);
 
@@ -142,20 +149,6 @@ final class PosixNativeLibrarySupport extends JNIPlatformNativeLibrarySupport {
     protected void loadJavaLibrary() {
         super.loadJavaLibrary();
         Target_java_io_UnixFileSystem_JNI.initIDs();
-    }
-
-    @SuppressWarnings("restricted")
-    private static void loadNetLibrary() {
-        if (Isolates.isCurrentFirst()) {
-            /*
-             * NOTE: because the native OnLoad code probes java.net.preferIPv4Stack and stores its
-             * value in process-wide shared native state, the property's value in the first launched
-             * isolate applies to all subsequently launched isolates.
-             */
-            System.loadLibrary("net");
-        } else {
-            NativeLibrarySupport.singleton().registerInitializedBuiltinLibrary("net");
-        }
     }
 
     @Override
