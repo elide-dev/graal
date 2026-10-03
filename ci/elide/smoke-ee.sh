@@ -18,6 +18,15 @@ NI="${HOME_DIR}/bin/native-image"
 
 mkdir -p "${WORK}"
 cd "${WORK}"
+
+build_failed() { # <name>: prints the build output and the builder's error report
+  cat "$1.log"
+  for report in svm_err_*.md; do
+    [ -f "${report}" ] && sed -n '1,/## Build Output/p' "${report}" | head -150
+  done
+  echo "$1: build failed" >&2
+  exit 1
+}
 "${HOME_DIR}/bin/java" --version
 "${NI}" --version
 grep -q '^ELIDE_GRAALVM=' "${HOME_DIR}/release" || { echo "not an Elide EE build: no ELIDE_GRAALVM in release" >&2; exit 1; }
@@ -54,7 +63,7 @@ EOF
 build_and_run() { # <name> <native-image args...>
   local name=$1
   shift
-  "${NI}" -cp . "$@" -o "${name}" Smoke > "${name}.log" 2>&1 || { cat "${name}.log"; echo "${name}: build failed" >&2; exit 1; }
+  "${NI}" -cp . "$@" -o "${name}" Smoke > "${name}.log" 2>&1 || build_failed "${name}"
   "./${name}"
 }
 
@@ -91,12 +100,18 @@ public class JsSmoke {
                         .option("engine.BackgroundCompilation", "false").allowExperimentalOptions(true).build()) {
             Value fib = context.eval("js", "(function fib(n) { return n < 2 ? n : fib(n - 1) + fib(n - 2); })");
             for (int i = 0; i < 3; i++) {
-                int result = fib.execute(25).asInt();
-                if (result != 75025) {
-                    throw new AssertionError(result);
-                }
+                check(75025, fib.execute(25).asInt());
             }
+            // Doubles invalidate the int-specialized code: deoptimization, then recompilation.
+            check(12238.0, fib.execute(20.5).asDouble());
+            check(75025, fib.execute(25).asInt());
             System.out.println("ok js");
+        }
+    }
+
+    private static void check(Object expected, Object actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError(expected + " != " + actual);
         }
     }
 }
@@ -105,11 +120,15 @@ EOF
   js_build_and_run() { # <name> <native-image args...>
     local name=$1
     shift
-    "${NI}" -cp ".${cp}" "$@" -o "${name}" JsSmoke > "${name}.log" 2>&1 || { cat "${name}.log"; echo "${name}: build failed" >&2; exit 1; }
+    "${NI}" -cp ".${cp}" "$@" -o "${name}" JsSmoke > "${name}.log" 2>&1 || build_failed "${name}"
     "./${name}"
   }
   case "${PLATFORM}" in
-    linux-*) js_build_and_run js-g1 --gc=G1 ;;
+    linux-*)
+      js_build_and_run js-g1 --gc=G1
+      # Truffle-compiled code must call compressed image methods through the GOT (#38).
+      js_build_and_run js-compressed --gc=G1 -H:+UnlockExperimentalVMOptions -H:+EnableCodeCompression
+      ;;
     *) js_build_and_run js-plain ;;
   esac
 fi
