@@ -25,8 +25,11 @@
 package com.oracle.svm.test;
 
 import java.net.Socket;
+import java.net.StandardSocketOptions;
 
+import org.graalvm.nativeimage.Platform;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 
 public class ReusePortAvailableTest {
@@ -38,6 +41,19 @@ public class ReusePortAvailableTest {
             s.supportedOptions();
         } catch (Exception e) {
             Assert.fail("Call to supportedOptions() failed");
+        }
+    }
+
+    /**
+     * The "net" library is loaded when it is first needed, not at startup. Its JNI_OnLoad probes
+     * for SO_REUSEPORT support, so the option is only reported if that ran before the socket asked
+     * for it.
+     */
+    @Test
+    public void testReusePortSupportedAfterLazyNetLoading() throws Exception {
+        Assume.assumeTrue("SO_REUSEPORT is probed on Linux and macOS", Platform.includedIn(Platform.LINUX.class) || Platform.includedIn(Platform.DARWIN.class));
+        try (Socket s = new Socket()) {
+            Assert.assertTrue("SO_REUSEPORT missing from " + s.supportedOptions(), s.supportedOptions().contains(StandardSocketOptions.SO_REUSEPORT));
         }
     }
 }
