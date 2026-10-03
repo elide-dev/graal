@@ -54,6 +54,12 @@ env:
   # The languages build: the Maven artifacts and each platform's natives.
   LANGUAGE_IMPORTS: /graal-js,/graalpython,/wasm
   NATIVES_DISTS: TRUFFLE_API,TRUFFLE_NFI_LIBFFI,GRAALPYTHON_RESOURCES
+  # The oldest glibc the Linux distribution and the images it builds must run on. The Linux legs
+  # build in a container with this glibc: compiled on a newer one, SVM's C libraries and the images
+  # linking them need GLIBC_2.38 (glibc's C23 __isoc23_* redirects). ci/elide/check-glibc.sh checks
+  # the distribution and a smoke-test image against it. The build image is set per platform in the
+  # build job's matrix (container).
+  GLIBC_FLOOR: "2.35"
 
 jobs:
   meta:
@@ -93,6 +99,8 @@ jobs:
     name: Build ${{ matrix.platform }}
     needs: meta
     runs-on: ${{ matrix.runner }}
+    # The Linux legs build in an old-glibc container (see GLIBC_FLOOR); the others on the runner.
+    container: ${{ matrix.container }}
     timeout-minutes: 360
     strategy:
       fail-fast: false
@@ -100,9 +108,11 @@ jobs:
         include:
           - platform: linux-amd64
             runner: linux-amd64-cipool
+            container: docker.io/library/ubuntu:22.04
             maven: true
           - platform: linux-aarch64
             runner: linux-arm64-cipool
+            container: docker.io/library/ubuntu:22.04
           - platform: macos-aarch64
             runner: macos-arm64-cipool
           - platform: windows-amd64
@@ -115,6 +125,16 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Install build tools (Linux container)
+        if: matrix.container
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
+            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config
+          # The workspace belongs to the runner's user, not root.
+          git config --global --add safe.directory '*'
+          getconf GNU_LIBC_VERSION
       - name: Allow long paths (Windows)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
@@ -246,6 +266,11 @@ jobs:
           "${home}/bin/native-image" -cp . Hello hello
           ./hello
           ls -la "${WS}/out/dist"
+      - name: Check glibc floor (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          home=$(grep '^home=' build-dist.out | cut -d= -f2-)
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
