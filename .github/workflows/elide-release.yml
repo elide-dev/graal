@@ -1,7 +1,9 @@
 #
 # Builds Elide's GraalVM fork for every platform Elide ships, and publishes the release to
-# https://maven.elide.dev/gvm-elide/<version>: the Maven artifacts, and a GraalVM distribution per
-# platform under dist/.
+# https://maven.elide.dev/gvm-elide/<version>: the Maven artifacts, and two GraalVM distributions per
+# platform under dist/. graalvm-ce-* is the fork built from source. graalvm-ee-* is Oracle GraalVM
+# (the early-access build from the fork's upstream base, ORACLE_EE_TAG) with the fork's code in place
+# of Oracle's open-source code, for the enterprise features: G1, PGO, code compression, ...
 #
 # Triggers:
 #   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.4.4-elide.14`, to build and publish.
@@ -60,6 +62,11 @@ env:
   # the distribution and a smoke-test image against it. The build image is set per platform in the
   # build job's matrix (container).
   GLIBC_FLOOR: "2.35"
+  # The Oracle GraalVM build the EE distribution is made from (ci/elide/build-ee.py). It must be
+  # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
+  # Update it when the fork moves to a new upstream base.
+  ORACLE_EE_REPOSITORY: graalvm/oracle-graalvm-ea-builds
+  ORACLE_EE_TAG: jdk-25i4-25.0.4.1.1-ea.02
 
 jobs:
   meta:
@@ -157,7 +164,7 @@ jobs:
       # The runners are persistent, and a previous run's clean up may not have run: its archives and
       # natives would otherwise ship with this release.
       - name: Remove previous output
-        run: rm -rf out smoke build-dist.out graalvm-home.txt
+        run: rm -rf out smoke smoke-ee smoke-ee-js build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}"/graalvm-ee-*
       - name: Check free disk space
         run: |
           # Checked after the checkouts, whose git clean removes a previous run's build output.
@@ -271,6 +278,21 @@ jobs:
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
           ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello
+      - name: Build EE distribution (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          home=$(grep '^home=' build-dist.out | cut -d= -f2-)
+          python3 graal/ci/elide/build-ee.py "${VERSION}" "${PLATFORM}" "${home}" "${WS}/out/dist" | tee build-ee.out
+      - name: Smoke test EE (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          ./graal/ci/elide/smoke-ee.sh "${home}" "${PLATFORM}" smoke-ee
+      - name: Check glibc floor EE (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -291,6 +313,28 @@ jobs:
           & .\hello.exe
           if ($LASTEXITCODE -ne 0) { throw "hello.exe failed ($LASTEXITCODE)" }
           Get-ChildItem "$env:WS\out\dist"
+      - name: Build EE distribution (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python graal\ci\elide\build-ee.py $env:VERSION $env:PLATFORM $env:GVM_HOME "$env:WS/out/dist" | Tee-Object -FilePath build-ee.out
+          if ($LASTEXITCODE -ne 0) { throw "building the EE distribution failed ($LASTEXITCODE)" }
+      - name: Smoke test EE (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $eeHome = ((Get-Content build-ee.out | Select-String '^home=' | Select-Object -Last 1).Line -replace '^home=', '') -replace '/', '\'
+          & "$eeHome\bin\java.exe" --version
+          New-Item -ItemType Directory -Force smoke-ee | Out-Null
+          Set-Location smoke-ee
+          'public class Hello { public static void main(String[] a) { System.out.println("hello from " + System.getProperty("java.vendor.version")); } }' | Out-File -Encoding ascii Hello.java
+          & "$eeHome\bin\javac.exe" Hello.java
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
+          $ni = "`"$eeHome\bin\native-image.cmd`""
+          # PGO: an instrumented image writes default.iprof, the optimized build uses it.
+          cmd /c "call `"$vcvars`" x64 && $ni --version && $ni -cp . --pgo-instrument Hello hello-instrumented && hello-instrumented.exe && $ni -cp . --pgo=default.iprof Hello hello-pgo && hello-pgo.exe"
+          if ($LASTEXITCODE -ne 0) { throw "EE smoke test failed ($LASTEXITCODE)" }
 
       # The Maven platform builds everything, for maven-deploy; the others, only what the natives
       # come from.
@@ -365,6 +409,12 @@ jobs:
       - name: Deploy Maven artifacts
         if: matrix.maven
         run: ./graal/ci/elide/deploy-maven.sh "${VERSION}" "${WS}/out/maven"
+      - name: Smoke test EE with GraalJS
+        if: matrix.maven
+        run: |
+          # Truffle runtime compilation on the EE distribution, with the release's own Maven jars.
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          ./graal/ci/elide/smoke-ee.sh "${home}" "${PLATFORM}" smoke-ee-js "${WS}/out/maven" "${VERSION}"
 
       - name: Upload distribution
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -387,7 +437,7 @@ jobs:
       - name: Clean up
         if: always()
         run: |
-          rm -rf graal graaljs graalpython mx out smoke labsjdk build-dist.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-*
+          rm -rf graal graaljs graalpython mx out smoke smoke-ee smoke-ee-js labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
           df -Pk . | awk 'NR==2 {printf "free after cleanup: %d GB\n", $4 / 1024 / 1024}'
 
   publish:
@@ -440,7 +490,9 @@ jobs:
         run: |
           ls -la "stage/${VERSION}/dist"
           echo "$(find "stage/${VERSION}" -name '*.pom' | wc -l) Maven artifacts" | tee -a "${GITHUB_STEP_SUMMARY}"
-          [ "$(ls stage/${VERSION}/dist/*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 distributions"; exit 1; }
+          # A CE and an EE distribution per platform.
+          [ "$(ls stage/${VERSION}/dist/graalvm-ce-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 CE distributions"; exit 1; }
+          [ "$(ls stage/${VERSION}/dist/graalvm-ee-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 EE distributions"; exit 1; }
       - name: Upload to R2
         if: needs.meta.outputs.publish == 'true'
         uses: elide-tools/r2-upload-action@b59314040b32715ae31337cdbb7418582ade7cff  # main
