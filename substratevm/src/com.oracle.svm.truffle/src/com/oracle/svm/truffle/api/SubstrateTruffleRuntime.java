@@ -218,6 +218,15 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
      * Returns the compiler, initializing it first if needed. Every compilation gets the compiler
      * through this method ({@code OptimizedTruffleRuntime.compileImpl}).
      */
+    /**
+     * A compiler that was never initialized has compiled nothing, so there is nothing to report at
+     * shutdown. Skipping it also keeps compiler code that would only run at exit from running.
+     */
+    @Override
+    protected TruffleCompiler getTruffleCompilerToShutDown() {
+        return compilerInitialized ? truffleCompiler : null;
+    }
+
     @Override
     public SubstrateTruffleCompiler getTruffleCompiler(TruffleCompilable compilable) {
         Objects.requireNonNull(compilable, "Compilable must be non null.");

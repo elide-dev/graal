@@ -34,8 +34,17 @@ public class GraalSupport {
         @Override
         public void execute(boolean isFirstIsolate) {
             RuntimeCompilationSupport runtimeCompilationSupport = RuntimeCompilationSupport.get();
-            runtimeCompilationSupport.metricValues.print(RuntimeOptionValues.singleton().get());
-            runtimeCompilationSupport.outputDirectory.close();
+            /*
+             * Both calls synchronize on objects that nothing else may have locked, and usually have
+             * nothing to do. Skip them then: code that only runs at teardown is not covered by PGO
+             * profiles, so with code compression it would be decompressed just to exit.
+             */
+            if (runtimeCompilationSupport.metricsCollected) {
+                runtimeCompilationSupport.metricValues.print(RuntimeOptionValues.singleton().get());
+            }
+            if (runtimeCompilationSupport.outputDirectoryUsed) {
+                runtimeCompilationSupport.outputDirectory.close();
+            }
         }
     }
 }
