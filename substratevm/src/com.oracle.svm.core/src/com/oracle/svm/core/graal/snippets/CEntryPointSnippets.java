@@ -843,6 +843,10 @@ public final class CEntryPointSnippets extends SubstrateTemplates implements Sni
     @Uninterruptible(reason = "Tear-down in progress - still safe to execute interruptible Java code.", callerMustBe = true, calleeMustBe = false)
     private static void initiateTearDownIsolateInterruptibly() {
         RuntimeSupport.executeTearDownHooks();
+        if (ReferenceHandler.useDedicatedThread()) {
+            /* It is started without waiting for it, see ReferenceHandlerThread.start(). */
+            ReferenceHandlerThread.waitUntilAttached();
+        }
         PlatformThreads.tearDownOtherThreads();
         /*
          * At this point, only the current thread, the VM operation thread, and the reference
