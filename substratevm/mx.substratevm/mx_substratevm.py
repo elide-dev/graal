@@ -484,6 +484,16 @@ def truffle_unittest_task(extra_build_args=None):
         '-H:+EnablePLTGOT',
         '--features=com.oracle.svm.hosted.pltgot.IdentityMethodAddressResolverFeature',
     ]))
+    # Ristretto (JIT compilation of bytecode loaded at run time) in the same image as Truffle runtime
+    # compilation. The image must build, Truffle code must deoptimize to its AOT entry points, and
+    # Ristretto code, eagerly or while its frame is active, to the interpreter.
+    _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
+        '-H:+RuntimeClassLoading',
+        '-H:+GraalJITCompileAtRuntime',
+    ]) + [
+        '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED',
+        '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
+    ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest'], extra_run_args=['-Dcom.oracle.svm.test.ristretto=true'])
     # JDWP support enables the PLT/GOT and requires frame information for all methods, which must
     # not force deoptimization targets for runtime compilation. Its startup hook must also allow
     # the isolates used for runtime compilation.
@@ -504,19 +514,22 @@ def truffle_unittest_task(extra_build_args=None):
                     truffle_args(continuations_build_args) + ['-Dtruffle.test.RequireContinuationVirtualThreads=true'])
 
 
-def _truffle_runtime_compilation_test(extra_build_args):
-    """Runs an SL test with immediate compilation and checks that runtime-compiled code was installed."""
+def _truffle_runtime_compilation_test(extra_build_args, extra_tests=None, extra_run_args=None):
+    """Runs an SL test with immediate compilation and checks that runtime-compiled code was installed.
+
+    extra_tests are built into the same image and run with it; extra_run_args are passed to the image.
+    """
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as logfile:
         logfile_name = logfile.name
     success = False
     try:
-        native_unittest(['com.oracle.truffle.sl.test.SLFactorialTest'] + truffle_args(extra_build_args) +[
+        native_unittest(['com.oracle.truffle.sl.test.SLFactorialTest'] + (extra_tests or []) + truffle_args(extra_build_args) +[
                     '-Dpolyglot.engine.AllowExperimentalOptions=true',
                     '-Dpolyglot.engine.CompileImmediately=true',
                     '-Dpolyglot.engine.BackgroundCompilation=false',
                     f'-Dpolyglot.log.file={logfile_name}',
                     '-Djdk.graal.PrintCompilation=true'
-        ])
+        ] + (extra_run_args or []))
         compilation_pattern = re.compile(r"^SubstrateCompilation-.*root_eval.*allocated start=0x([0-9a-f]*)$")
         with open(logfile_name, encoding='utf-8') as f:
             for line in f:
