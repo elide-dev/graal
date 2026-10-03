@@ -44,6 +44,7 @@ import static com.oracle.truffle.api.CompilerDirectives.shouldNotReachHere;
 import static com.oracle.truffle.polyglot.EngineAccessor.LANGUAGE;
 import static com.oracle.truffle.polyglot.EngineAccessor.NODES;
 
+import java.util.Map;
 import java.util.Set;
 
 import com.oracle.truffle.api.impl.TruffleVersions;
@@ -71,6 +72,8 @@ final class PolyglotLanguage implements com.oracle.truffle.polyglot.PolyglotImpl
     private volatile OptionDescriptors sourceOptions;
     private volatile OptionValuesImpl emptySourceOptions;
     private volatile OptionValuesImpl optionValues;
+    /** Options parsed for context pre-initialization, see {@link OptionValuesImpl#put}. */
+    private Map<String, OptionValuesImpl.ParsedOption> preinitParsedOptions;
     private volatile boolean initialized;
 
     private volatile PolyglotLanguageInstance initLanguage;
@@ -237,7 +240,7 @@ final class PolyglotLanguage implements com.oracle.truffle.polyglot.PolyglotImpl
         if (optionValues == null) {
             synchronized (engine.lock) {
                 if (optionValues == null) {
-                    optionValues = new OptionValuesImpl(getOptionsInternal(), engine.sandboxPolicy, false);
+                    optionValues = new OptionValuesImpl(getOptionsInternal(), engine.sandboxPolicy, false, preinitParsedOptions, engine.isPreInitializationEngine());
                 }
             }
         }
@@ -253,6 +256,15 @@ final class PolyglotLanguage implements com.oracle.truffle.polyglot.PolyglotImpl
     }
 
     void clearOptionValues() {
+        OptionValuesImpl values = optionValues;
+        Map<String, OptionValuesImpl.ParsedOption> parsed = values == null ? null : values.getParsedOptions();
+        if (parsed != null) {
+            /*
+             * Keep the options parsed for context pre-initialization, so that patching the
+             * pre-initialized context reuses them for the same option strings.
+             */
+            preinitParsedOptions = parsed;
+        }
         optionValues = null;
     }
 

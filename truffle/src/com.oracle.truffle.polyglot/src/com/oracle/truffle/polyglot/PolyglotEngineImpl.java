@@ -1646,6 +1646,14 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         return d;
     }
 
+    /**
+     * Returns whether this engine was created to pre-initialize a context and has not been patched
+     * for use yet.
+     */
+    boolean isPreInitializationEngine() {
+        return PreInitContextHostLanguage.isInstance(hostLanguage);
+    }
+
     PolyglotContextImpl getPreInitializedContext() {
         return preInitializedContext.get();
     }
