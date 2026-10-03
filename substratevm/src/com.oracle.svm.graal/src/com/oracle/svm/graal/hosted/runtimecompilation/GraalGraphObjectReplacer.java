@@ -47,6 +47,7 @@ import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
 import com.oracle.svm.core.graal.nodes.SubstrateFieldLocationIdentity;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
+import com.oracle.svm.core.pltgot.PLTGOTConfiguration;
 import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.core.util.HostedStringDeduplication;
 import com.oracle.svm.guest.staging.util.ObservableImageHeapMapProvider;
@@ -67,6 +68,8 @@ import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.HostedType;
 import com.oracle.svm.hosted.meta.HostedUniverse;
+import com.oracle.svm.hosted.pltgot.GOTEntryAllocator;
+import com.oracle.svm.hosted.pltgot.HostedPLTGOTConfiguration;
 import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.shared.util.LogUtils;
 import com.oracle.svm.shared.util.ReflectionUtil;
@@ -557,8 +560,24 @@ public class GraalGraphObjectReplacer implements Function<Object, Object> {
              * can only run after the heap and code cache layout was done.
              */
             int imageCodeOffset = hMethod.isCodeAddressOffsetValid() ? hMethod.getCodeAddressOffset() : 0;
-            sMethod.setSubstrateDataAfterHeapLayout(imageCodeOffset, hMethod.getImageCodeDeoptOffset());
+            sMethod.setSubstrateDataAfterHeapLayout(imageCodeOffset, hMethod.getImageCodeDeoptOffset(), imageGOTEntry(hMethod));
         }
+    }
+
+    /**
+     * The method's GOT entry if image code calls it through the GOT. Code compiled at run time then
+     * calls it through the GOT too (see {@link SubstrateMethod#getImageGOTEntry()}).
+     */
+    private static int imageGOTEntry(HostedMethod hMethod) {
+        if (!PLTGOTConfiguration.isEnabled()) {
+            return -1;
+        }
+        GOTEntryAllocator allocator = HostedPLTGOTConfiguration.singleton().getGOTEntryAllocator();
+        if (!allocator.hasGOTLayout()) {
+            return -1;
+        }
+        int gotEntry = allocator.queryGOTEntry(hMethod);
+        return gotEntry >= 0 ? gotEntry : -1;
     }
 
     public void registerImmutableObjects(BeforeHeapLayoutAccess access) {

@@ -638,6 +638,10 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
             if (shouldEmitPLTGOTCall(targetMethod)) {
                 return getGOTEntryAddress(targetMethod);
             }
+            if (!SubstrateUtil.HOSTED && targetMethod.getImageGOTEntry() >= 0) {
+                /* See SharedMethod.getImageGOTEntry: call through the GOT, as image code does. */
+                return getGOTEntryAddress(targetMethod.getImageGOTEntry());
+            }
 
             if (SubstrateUtil.HOSTED && targetMethod.forceIndirectCall()) {
                 DynamicImageLayerInfo dynamicImageLayerInfo = DynamicImageLayerInfo.singleton();
@@ -689,9 +693,13 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
 
         private Variable getGOTEntryAddress(SharedMethod callee) {
             assert pltGOTConfiguration != null : "Foreign call through the GOT table is only possible if the PLT/GOT is enabled.";
+            return getGOTEntryAddress(pltGOTConfiguration.getMethodGOTEntry(callee));
+        }
+
+        private Variable getGOTEntryAddress(int gotEntry) {
             LIRKind wordKind = getLIRKindTool().getWordKind();
             var heapBase = ReservedRegisters.singleton().getHeapBaseRegister().asValue(wordKind);
-            var heapBaseOffset = GOTAccess.getGOTEntryOffsetFromHeapRegister(pltGOTConfiguration.getMethodGOTEntry(callee));
+            var heapBaseOffset = GOTAccess.getGOTEntryOffsetFromHeapRegister(gotEntry);
             int wordBits = wordKind.getPlatformKind().getSizeInBytes() * Byte.SIZE;
             Value gotEntryAddress = AArch64AddressValue.makeAddress(wordKind, wordBits, heapBase, heapBaseOffset);
             return getArithmetic().emitLoad(wordKind, gotEntryAddress, null, MemoryOrderMode.PLAIN, MemoryExtendKind.DEFAULT);
@@ -1433,7 +1441,14 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
                  */
                 try (ScratchRegister scratch = masm.getScratchRegister()) {
                     Register targetReg = scratch.getRegister();
-                    masm.mov(targetReg, SubstrateFrameContextSupport.getCallTargetAddress(callTarget));
+                    int gotEntry = ((SharedMethod) callTarget).getImageGOTEntry();
+                    if (gotEntry >= 0) {
+                        /* See SharedMethod.getImageGOTEntry: jump through the GOT, as image code does. */
+                        Register heapBase = ReservedRegisters.singleton().getHeapBaseRegister();
+                        masm.ldr(64, targetReg, masm.makeAddress(64, heapBase, GOTAccess.getGOTEntryOffsetFromHeapRegister(gotEntry), targetReg));
+                    } else {
+                        masm.mov(targetReg, SubstrateFrameContextSupport.getCallTargetAddress(callTarget));
+                    }
                     masm.jmp(targetReg);
                     int after = masm.position();
                     crb.recordIndirectCall(before, after, callTarget, null);

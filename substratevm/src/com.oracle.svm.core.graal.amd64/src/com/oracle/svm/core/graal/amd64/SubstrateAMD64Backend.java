@@ -757,6 +757,10 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
             if (shouldEmitPLTGOTCall(targetMethod)) {
                 return getGOTEntryAddress(targetMethod);
             }
+            if (!SubstrateUtil.HOSTED && targetMethod.getImageGOTEntry() >= 0) {
+                /* See SharedMethod.getImageGOTEntry: call through the GOT, as image code does. */
+                return getGOTEntryAddress(targetMethod.getImageGOTEntry());
+            }
 
             if (SubstrateUtil.HOSTED && targetMethod.forceIndirectCall()) {
                 DynamicImageLayerInfo dynamicImageLayerInfo = DynamicImageLayerInfo.singleton();
@@ -813,9 +817,13 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
 
         private Variable getGOTEntryAddress(SharedMethod callee) {
             assert pltGOTConfiguration != null : "Foreign call through the GOT table is only possible if the PLT/GOT is enabled.";
+            return getGOTEntryAddress(pltGOTConfiguration.getMethodGOTEntry(callee));
+        }
+
+        private Variable getGOTEntryAddress(int gotEntry) {
             LIRKind wordKind = getLIRKindTool().getWordKind();
             var heapBase = ReservedRegisters.singleton().getHeapBaseRegister().asValue(wordKind);
-            var heapBaseOffset = GOTAccess.getGOTEntryOffsetFromHeapRegister(pltGOTConfiguration.getMethodGOTEntry(callee));
+            var heapBaseOffset = GOTAccess.getGOTEntryOffsetFromHeapRegister(gotEntry);
             Value gotEntryAddress = new AMD64AddressValue(wordKind, heapBase, heapBaseOffset);
             return getArithmetic().emitLoad(wordKind, gotEntryAddress, null, MemoryOrderMode.PLAIN, MemoryExtendKind.DEFAULT);
         }
@@ -1670,7 +1678,13 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
             Register addressReg = getTailCallScratchRegister(crb);
 
             int before = asm.position();
-            asm.movq(addressReg, SubstrateFrameContextSupport.getCallTargetAddress(callTarget));
+            int gotEntry = ((SharedMethod) callTarget).getImageGOTEntry();
+            if (gotEntry >= 0) {
+                /* See SharedMethod.getImageGOTEntry: jump through the GOT, as image code does. */
+                asm.movq(addressReg, new AMD64Address(ReservedRegisters.singleton().getHeapBaseRegister(), GOTAccess.getGOTEntryOffsetFromHeapRegister(gotEntry)));
+            } else {
+                asm.movq(addressReg, SubstrateFrameContextSupport.getCallTargetAddress(callTarget));
+            }
             asm.jmp(addressReg);
             /* A trampoline jump does not need an additional CFI marker. */
             int after = asm.position();
