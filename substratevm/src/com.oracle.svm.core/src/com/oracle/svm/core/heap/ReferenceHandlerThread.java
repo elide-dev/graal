@@ -37,6 +37,7 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.thread.PlatformThreads;
 import com.oracle.svm.core.thread.RecurringCallbackSupport;
 import com.oracle.svm.core.thread.VMThreads;
 import com.oracle.svm.shared.Uninterruptible;
@@ -61,13 +62,31 @@ public final class ReferenceHandlerThread implements Runnable {
         thread.setDaemon(true);
     }
 
+    /**
+     * Starts the thread without waiting for it to run: waiting would put the thread's creation and
+     * attachment on the startup path of every isolate. Until the thread publishes
+     * {@link #isolateThread}, {@link #isReferenceHandlerThread(IsolateThread)} identifies it by its
+     * {@link Thread} object. Teardown calls {@link #waitUntilAttached()} first.
+     */
     public static void start() {
         if (!isSupported()) {
             return;
         }
 
         singleton().thread.start();
-        /* Wait until the isolateThread field is initialized. */
+    }
+
+    /**
+     * Waits until the thread has attached and published {@link #isolateThread}. Teardown must call
+     * this before {@code PlatformThreads.tearDownOtherThreads()}: a thread that attaches after that
+     * interrupts itself, which this thread must not be. The thread was started when the isolate was
+     * created, so this rarely has to wait.
+     */
+    public static void waitUntilAttached() {
+        if (!isSupported()) {
+            return;
+        }
+
         while (singleton().isolateThread.isNull()) {
             Thread.yield();
         }
@@ -78,6 +97,7 @@ public final class ReferenceHandlerThread implements Runnable {
             return;
         }
 
+        assert singleton().isolateThread.isNonNull() : "waitUntilAttached() must be called first";
         singleton().stopped = true;
         Heap.getHeap().wakeUpReferencePendingListWaiters();
     }
@@ -105,7 +125,18 @@ public final class ReferenceHandlerThread implements Runnable {
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static boolean isReferenceHandlerThread(IsolateThread other) {
-        return isSupported() && other == singleton().isolateThread;
+        if (!isSupported() || other.isNull()) {
+            return false;
+        }
+        IsolateThread handler = singleton().isolateThread;
+        if (handler.isNonNull()) {
+            return other == handler;
+        }
+        /*
+         * The thread was started but has not published its isolate thread yet (see start()). The
+         * caller keeps {@code other} alive, and the handler's Thread object never changes.
+         */
+        return PlatformThreads.fromVMThreadUnsafe(other) == singleton().thread;
     }
 
     public static boolean isReferenceHandlerThread(Thread other) {
