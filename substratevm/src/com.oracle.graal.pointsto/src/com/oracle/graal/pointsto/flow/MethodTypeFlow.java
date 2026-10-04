@@ -344,6 +344,16 @@ public class MethodTypeFlow extends TypeFlow<AnalysisMethod> {
 
             initFlowsGraph(bb, builder.postInitFlows);
 
+            if (!bb.getHostVM().isClosedTypeWorld()) {
+                /*
+                 * As in createFlowsGraph. A stub graph has no invokes, so the saturation when it was
+                 * created did not cover the invokes built now. Without it, the actual return of an
+                 * invoke that only open-world types implement stays empty, and the statements that
+                 * it predicates are considered unreachable.
+                 */
+                flowsGraph.saturateForOpenTypeWorld(bb);
+            }
+
             if (registerAsImplementationInvoked) {
                 if (parsingReason == null) {
                     method.registerAsImplementationInvoked(PointsToAnalysisMethod.unwrapInvokeReason(null));
