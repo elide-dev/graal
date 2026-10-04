@@ -85,18 +85,50 @@ public class SubstrateStackIntrospection implements StackIntrospection {
 
 class PhysicalStackFrameVisitor<T> extends StackFrameVisitor {
 
-    private ResolvedJavaMethod[] curMatchingMethods;
-    private final ResolvedJavaMethod[] laterMatchingMethods;
+    /**
+     * Return addresses in AOT image code whose physical frames can never match because none of
+     * their Java frames has a deoptimization entry point (true for most frames, e.g., all frames of
+     * host code). Lets later stack walks skip the code info lookup for them.
+     *
+     * The cache is direct-mapped and shared by all threads without synchronization: an entry is a
+     * single word, and a lost or overwritten entry only causes another lookup. Only addresses in
+     * the image code are cached, because it never changes.
+     */
+    private static final long[] NON_MATCHING_IPS = new long[4096];
+
+    /**
+     * The deoptimization entry point addresses of the methods to match ({@code null} matches every
+     * frame), computed once per stack walk.
+     */
+    private long[] curMatchingAddresses;
+    private final long[] laterMatchingAddresses;
     private int skip;
     private final InspectedFrameVisitor<T> visitor;
 
     protected T result;
 
     PhysicalStackFrameVisitor(ResolvedJavaMethod[] initialMethods, ResolvedJavaMethod[] matchingMethods, int initialSkip, InspectedFrameVisitor<T> visitor) {
-        this.curMatchingMethods = initialMethods;
-        this.laterMatchingMethods = matchingMethods;
+        this.curMatchingAddresses = deoptAddresses(initialMethods);
+        this.laterMatchingAddresses = deoptAddresses(matchingMethods);
         this.skip = initialSkip;
         this.visitor = visitor;
+    }
+
+    private static long[] deoptAddresses(ResolvedJavaMethod[] methods) {
+        if (methods == null) {
+            return null;
+        }
+        long[] addresses = new long[methods.length];
+        for (int i = 0; i < methods.length; i++) {
+            SharedMethod method = (SharedMethod) methods[i];
+            addresses[i] = CodeInfoAccess.absoluteIP(CodeInfoTable.getImageCodeInfo(method), method.getImageCodeDeoptOffset()).rawValue();
+        }
+        return addresses;
+    }
+
+    private static int nonMatchingIndex(CodePointer ip) {
+        long value = ip.rawValue();
+        return (int) (value ^ (value >>> 12)) & (NON_MATCHING_IPS.length - 1);
     }
 
     @Override
@@ -118,17 +150,22 @@ class PhysicalStackFrameVisitor<T> extends StackFrameVisitor {
         if (deoptimizedFrame != null) {
             virtualFrame = deoptimizedFrame.getTopFrame();
         } else {
+            if (curMatchingAddresses != null && NON_MATCHING_IPS[nonMatchingIndex(ip)] == ip.rawValue()) {
+                return true;
+            }
             info = CodeInfoTable.lookupCodeInfoQueryResult(codeInfo, ip);
             if (info.getFrameInfo() == null) {
                 /*
                  * We do not have detailed information about this physical frame. It does not
                  * contain Java frames that we care about, so we can move on to the caller.
                  */
+                rememberNonMatching(codeInfo, ip);
                 return true;
             }
             deoptInfo = info.getFrameInfo();
         }
 
+        boolean hasDeoptAddress = false;
         int virtualFrameIndex = 0;
         do {
             CodePointer deoptAddress;
@@ -138,8 +175,9 @@ class PhysicalStackFrameVisitor<T> extends StackFrameVisitor {
             } else {
                 deoptAddress = deoptInfo.getDeoptMethodAddress();
             }
+            hasDeoptAddress |= deoptAddress.isNonNull();
 
-            if (matchesDeoptAddress(deoptAddress, curMatchingMethods)) {
+            if (matchesDeoptAddress(deoptAddress, curMatchingAddresses)) {
                 if (skip > 0) {
                     skip--;
                 } else {
@@ -158,7 +196,7 @@ class PhysicalStackFrameVisitor<T> extends StackFrameVisitor {
                         virtualFrame = inspectedFrame.virtualFrame;
                         deoptInfo = null;
                     }
-                    curMatchingMethods = laterMatchingMethods;
+                    curMatchingAddresses = laterMatchingAddresses;
                 }
             }
 
@@ -170,16 +208,24 @@ class PhysicalStackFrameVisitor<T> extends StackFrameVisitor {
             virtualFrameIndex++;
         } while (virtualFrame != null || deoptInfo != null);
 
+        if (deoptimizedFrame == null && !hasDeoptAddress) {
+            rememberNonMatching(codeInfo, ip);
+        }
         return true;
     }
 
-    private static boolean matchesDeoptAddress(CodePointer ip, ResolvedJavaMethod[] methods) {
-        if (methods == null) {
+    private static void rememberNonMatching(CodeInfo codeInfo, CodePointer ip) {
+        if (CodeInfoAccess.isAOTImageCode(codeInfo) && CodeInfoAccess.contains(codeInfo, ip)) {
+            NON_MATCHING_IPS[nonMatchingIndex(ip)] = ip.rawValue();
+        }
+    }
+
+    private static boolean matchesDeoptAddress(CodePointer ip, long[] addresses) {
+        if (addresses == null) {
             return true;
         }
-        for (ResolvedJavaMethod method : methods) {
-            CodeInfo codeInfo = CodeInfoTable.getImageCodeInfo((SharedMethod) method);
-            if (ip == CodeInfoAccess.absoluteIP(codeInfo, ((SharedMethod) method).getImageCodeDeoptOffset())) {
+        for (long address : addresses) {
+            if (ip.rawValue() == address) {
                 return true;
             }
         }
