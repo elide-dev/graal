@@ -154,7 +154,7 @@ public class TlabOptionCache {
 
     private static void validateTlabSize(RuntimeOptionKey<Long> optionKey) {
         long optionValue = optionKey.getValue();
-        if (optionKey.hasBeenSet() && optionValue < getMinTlabSize()) {
+        if (optionKey.hasBeenSet() && optionValue != 0 && optionValue < getMinTlabSize()) {
             throw invalidOptionValue("Option 'TLABSize' (" + optionValue + ") must not be smaller than 'MinTLABSize' (" + getMinTlabSize() + ").");
         }
 
