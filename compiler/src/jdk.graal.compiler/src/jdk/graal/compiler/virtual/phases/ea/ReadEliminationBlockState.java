@@ -34,8 +34,6 @@ import jdk.graal.compiler.core.common.type.ArithmeticOpTable.BinaryOp;
 import jdk.graal.compiler.core.common.type.IntegerStamp;
 import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.graph.Node;
-import jdk.graal.compiler.nodes.FieldLocationIdentity;
-import jdk.graal.compiler.nodes.Invoke;
 import jdk.graal.compiler.nodes.NamedLocationIdentity;
 import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.ValueNode;
@@ -563,15 +561,15 @@ public class ReadEliminationBlockState extends EffectsBlockState<ReadElimination
      * array access. This method must implement Java semantic for regular fields, array accesses,
      * volatile operations etc.
      */
-    public void killReadCache(Node kill, LocationIdentity identity, ValueNode index, ValueNode array) {
+    public void killReadCache(@SuppressWarnings("unused") Node kill, LocationIdentity identity, ValueNode index, ValueNode array) {
         if (identity.isAny()) {
-            // Invalidating immutable field entries is optional: reusing them is valid, but keeping
-            // their values live across calls can introduce additional spills.
-            boolean maybeKillImmutable = kill instanceof Invoke;
+            /**
+             * Kill all mutable locations.
+             */
             Iterator<CacheEntry<?>> iterator = readCache.getKeys().iterator();
             while (iterator.hasNext()) {
                 CacheEntry<?> entry = iterator.next();
-                if (entry.getIdentity().isMutable() || (maybeKillImmutable && entry.getIdentity() instanceof FieldLocationIdentity)) {
+                if (entry.getIdentity().isMutable()) {
                     iterator.remove();
                 }
             }
@@ -587,12 +585,7 @@ public class ReadEliminationBlockState extends EffectsBlockState<ReadElimination
              *
              * Unsafe accesses will alias if they are writing to any location.
              */
-            // Unlike DGVN's LocationIdentity.overlaps check, a specific field kill also discards
-            // immutable entries, conservatively across receivers. This does not permit writes to
-            // immutable locations; see the producer contract in FieldAliasNode.
-            boolean sameField = identity instanceof FieldLocationIdentity field && entry.getIdentity() instanceof FieldLocationIdentity cachedField &&
-                            field.getField().equals(cachedField.getField());
-            if (sameField || entry.conflicts(identity, index, array)) {
+            if (entry.conflicts(identity, index, array)) {
                 iterator.remove();
             }
         }

@@ -47,7 +47,6 @@ import jdk.graal.compiler.nodes.FieldLocationIdentity;
 import jdk.graal.compiler.nodes.FixedNode;
 import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.GraphState.StageFlag;
-import jdk.graal.compiler.nodes.Invoke;
 import jdk.graal.compiler.nodes.LoopBeginNode;
 import jdk.graal.compiler.nodes.LoopExitNode;
 import jdk.graal.compiler.nodes.NamedLocationIdentity;
@@ -137,11 +136,11 @@ public final class PEReadEliminationClosure extends PartialEscapeClosure<PEReadE
         } else if (MemoryKill.isSingleMemoryKill(node)) {
             COUNTER_MEMORYCHECKPOINT.increment(node.getDebug());
             LocationIdentity identity = ((SingleMemoryKill) node).getKilledLocationIdentity();
-            processIdentity(state, identity, node instanceof Invoke);
+            processIdentity(state, identity);
         } else if (MemoryKill.isMultiMemoryKill(node)) {
             COUNTER_MEMORYCHECKPOINT.increment(node.getDebug());
             for (LocationIdentity identity : ((MultiMemoryKill) node).getKilledLocationIdentities()) {
-                processIdentity(state, identity, node instanceof Invoke);
+                processIdentity(state, identity);
             }
         }
 
@@ -250,7 +249,7 @@ public final class PEReadEliminationClosure extends PartialEscapeClosure<PEReadE
                     state.killReadCache(location, index);
                 }
             } else {
-                processIdentity(state, location, false);
+                processIdentity(state, location);
             }
         } else {
             state.killReadCache();
@@ -276,16 +275,7 @@ public final class PEReadEliminationClosure extends PartialEscapeClosure<PEReadE
             state.killReadCache();
             return false;
         }
-        if (load.field().isFinal()) {
-            ValueNode receiver = GraphUtil.unproxify(getAlias(load.object()));
-            ValueNode immutableAlias = state.getReadCache(receiver, new FieldLocationIdentity(load.field(), true), -1, load.field().getJavaKind(), this);
-            if (immutableAlias != null) {
-                effects.replaceAtUsages(load, immutableAlias, load);
-                addScalarAlias(load, immutableAlias);
-                return true;
-            }
-        }
-        return processLoad(load, load.object(), load.getLocationIdentity(), -1, load.field().getJavaKind(), state, effects);
+        return processLoad(load, load.object(), new FieldLocationIdentity(load.field()), -1, load.field().getJavaKind(), state, effects);
     }
 
     /**
@@ -293,7 +283,7 @@ public final class PEReadEliminationClosure extends PartialEscapeClosure<PEReadE
      */
     private boolean processFieldAlias(FieldAliasNode fieldAliasNode, PEReadEliminationBlockState state) {
         ValueNode receiver = GraphUtil.unproxify(fieldAliasNode.getReceiver());
-        LocationIdentity locationIdentity = fieldAliasNode.getLocationIdentity();
+        FieldLocationIdentity locationIdentity = new FieldLocationIdentity(fieldAliasNode.getField());
         ValueNode cachedValue = state.getReadCache(receiver, locationIdentity, -1, fieldAliasNode.getField().getJavaKind(), this);
         GraalError.guarantee(cachedValue == null, "FieldAliasNode %s should be inserted at the beginning of the method but there is an existing cached value %s", fieldAliasNode, cachedValue);
         state.addReadCache(receiver, locationIdentity, -1, fieldAliasNode.getField().getJavaKind(), false, fieldAliasNode.getAlias(), this);
@@ -326,9 +316,9 @@ public final class PEReadEliminationClosure extends PartialEscapeClosure<PEReadE
         return processLoad(unbox, unbox.getValue(), UNBOX_LOCATIONS.get(unbox.getBoxingKind()), -1, unbox.getBoxingKind(), state, effects);
     }
 
-    private static void processIdentity(PEReadEliminationBlockState state, LocationIdentity identity, boolean maybeKillImmutable) {
+    private static void processIdentity(PEReadEliminationBlockState state, LocationIdentity identity) {
         if (identity.isAny()) {
-            state.killReadCache(maybeKillImmutable);
+            state.killReadCache();
         } else {
             state.killReadCache(identity, -1);
         }
