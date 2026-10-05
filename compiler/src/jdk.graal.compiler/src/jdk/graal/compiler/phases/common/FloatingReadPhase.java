@@ -40,7 +40,6 @@ import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.UnmodifiableMapCursor;
 import org.graalvm.word.LocationIdentity;
 
-import jdk.graal.compiler.core.common.GraalOptions;
 import jdk.graal.compiler.core.common.cfg.CFGLoop;
 import jdk.graal.compiler.debug.Assertions;
 import jdk.graal.compiler.debug.DebugCloseable;
@@ -230,8 +229,6 @@ public class FloatingReadPhase extends PostRunCanonicalizationPhase<CoreProvider
     @Override
     @SuppressWarnings("try")
     protected void run(StructuredGraph graph, CoreProviders context) {
-        // Allow floating reads to be disabled per compilation while still building memory dependencies.
-        boolean floatReads = createFloatingReads && GraalOptions.OptFloatingReads.getValue(graph.getOptions());
         if (createFloatingReads) {
             /*
              * This is required so that FloatingReadNode.create can check it's ok to introduce
@@ -254,7 +251,7 @@ public class FloatingReadPhase extends PostRunCanonicalizationPhase<CoreProvider
 
         EconomicSetNodeEventListener listener = new EconomicSetNodeEventListener(EnumSet.of(NODE_ADDED, ZERO_USAGES));
         try (NodeEventScope nes = graph.trackNodeEvents(listener)) {
-            ReentrantNodeIterator.apply(new FloatingReadClosure(modifiedInLoops, floatReads, createMemoryMapNodes, initMemory), graph.start(), new MemoryMapImpl(graph.start()));
+            ReentrantNodeIterator.apply(new FloatingReadClosure(modifiedInLoops, createFloatingReads, createMemoryMapNodes, initMemory), graph.start(), new MemoryMapImpl(graph.start()));
         }
 
         for (Node n : removeExternallyUsedNodes(listener.getNodes())) {

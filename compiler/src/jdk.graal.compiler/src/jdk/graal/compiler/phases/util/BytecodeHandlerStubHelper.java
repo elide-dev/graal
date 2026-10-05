@@ -34,7 +34,6 @@ import org.graalvm.collections.EconomicMap;
 
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
 import jdk.graal.compiler.core.common.type.StampFactory;
-import jdk.graal.compiler.core.common.type.StampPair;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.java.FrameStateBuilder;
@@ -106,8 +105,7 @@ public final class BytecodeHandlerStubHelper {
      * expanded arguments are re-materialized as virtual objects whose fields alias the separate
      * stub parameters.
      */
-    private static ValueNode[] createHandlerArguments(BytecodeHandlerConfig handlerConfig, ResolvedJavaMethod targetMethod, GraphKit kit, ParameterNode[] stubParameters,
-                    boolean refreshImmutableFields) {
+    private static ValueNode[] createHandlerArguments(BytecodeHandlerConfig handlerConfig, ResolvedJavaMethod targetMethod, GraphKit kit, ParameterNode[] stubParameters) {
         ArrayList<ValueNode> handlerArguments = new ArrayList<>();
 
         AllocatedObjectNode[] allocatedObjects = new AllocatedObjectNode[targetMethod.getSignature().getParameterCount(targetMethod.hasReceiver())];
@@ -132,7 +130,7 @@ public final class BytecodeHandlerStubHelper {
                     virtualFields.get(allocatedObj).add(stubParameter);
                 } else {
                     ValueNode owner = handlerArguments.getLast();
-                    kit.append(new FieldAliasNode(owner, argumentInfo.field(), stubParameter, refreshImmutableFields && argumentInfo.isImmutable()));
+                    kit.append(new FieldAliasNode(owner, argumentInfo.field(), stubParameter));
                 }
             } else {
                 handlerArguments.add(stubParameter);
@@ -178,26 +176,21 @@ public final class BytecodeHandlerStubHelper {
     }
 
     /**
-     * Produces the current stub ABI values at a control-flow point. Immutable fields reuse incoming
-     * parameters unless refreshing is enabled. In that case, field reads allow read elimination to select
-     * an incoming alias or a reload after the handler is inlined.
-     * When called for an exception edge, {@code handlerResult} is {@code null}; a
+     * Produces the current stub ABI values at a control-flow point. Mutable expanded fields are read
+     * from their owner object, while immutable values can reuse their incoming stub parameters. When
+     * called for an exception edge, {@code handlerResult} is {@code null}; a
      * {@code copyFromReturn} slot therefore keeps its incoming stub parameter, because the throwing
      * call produced no return value. Backend-specific unwind handling can then publish this current
      * stub ABI snapshot before the stub rethrows.
      */
-    private static ValueNode[] loadCurrentStubArguments(BytecodeHandlerConfig handlerConfig, GraphKit kit, ParameterNode[] stubParameters, ValueNode[] handlerArguments,
-                    ValueNode handlerResult, boolean refreshImmutableFields) {
+    private static ValueNode[] loadCurrentStubArguments(BytecodeHandlerConfig handlerConfig, GraphKit kit, ParameterNode[] stubParameters, ValueNode[] handlerArguments, ValueNode handlerResult) {
         ValueNode[] values = new ValueNode[handlerConfig.getArgumentInfos().size()];
         for (ArgumentInfo argumentInfo : handlerConfig.getArgumentInfos()) {
             if (argumentInfo.isExpanded()) {
-                ValueNode owner = handlerArguments[argumentInfo.originalIndex()];
                 if (argumentInfo.isImmutable()) {
-                    // Preserve known properties such as non-nullness on both normal and exceptional exits.
-                    values[argumentInfo.index()] = refreshImmutableFields
-                                    ? kit.append(LoadFieldNode.createOverrideStamp(StampPair.createSingle(stubParameters[argumentInfo.index()].stamp(NodeView.DEFAULT)), owner, argumentInfo.field()))
-                                    : stubParameters[argumentInfo.index()];
+                    values[argumentInfo.index()] = stubParameters[argumentInfo.index()];
                 } else {
+                    ValueNode owner = handlerArguments[argumentInfo.originalIndex()];
                     values[argumentInfo.index()] = kit.append(LoadFieldNode.create(kit.getAssumptions(), owner, argumentInfo.field()));
                 }
             } else if (argumentInfo.copyFromReturn() && handlerResult != null) {
@@ -250,16 +243,6 @@ public final class BytecodeHandlerStubHelper {
     public static StructuredGraph createStub(GraphKit kit, ResolvedJavaMethod frameOwner, int bci, boolean threading, ResolvedJavaMethod nextOpcodeMethod,
                     Supplier<Object> bytecodeHandlerTableSupplier, BytecodeHandlerConfig handlerConfig, ResolvedJavaMethod targetMethod,
                     UnwindPathSupplier unwindPathSupplier) {
-        return createStub(kit, frameOwner, bci, threading, nextOpcodeMethod, bytecodeHandlerTableSupplier, handlerConfig, targetMethod, unwindPathSupplier, false);
-    }
-
-    /**
-     * When {@code refreshImmutableFields} is enabled, the compilation pipeline must run
-     * {@code FieldLoadRefreshPhase} and disable floating reads and dominator-based GVN.
-     */
-    public static StructuredGraph createStub(GraphKit kit, ResolvedJavaMethod frameOwner, int bci, boolean threading, ResolvedJavaMethod nextOpcodeMethod,
-                    Supplier<Object> bytecodeHandlerTableSupplier, BytecodeHandlerConfig handlerConfig, ResolvedJavaMethod targetMethod,
-                    UnwindPathSupplier unwindPathSupplier, boolean refreshImmutableFields) {
         StructuredGraph graph = kit.getGraph();
         FrameStateBuilder frameStateBuilder = new FrameStateBuilder(kit, frameOwner, graph);
         graph.start().setStateAfter(frameStateBuilder.create(bci, graph.start()));
@@ -267,7 +250,7 @@ public final class BytecodeHandlerStubHelper {
         graph.getGraphState().forceDisableFrameStateVerification();
 
         ParameterNode[] stubParameters = collectParameterNodes(handlerConfig, kit);
-        ValueNode[] handlerArguments = createHandlerArguments(handlerConfig, targetMethod, kit, stubParameters, refreshImmutableFields);
+        ValueNode[] handlerArguments = createHandlerArguments(handlerConfig, targetMethod, kit, stubParameters);
         InvokeWithExceptionNode handlerInvocation = kit.startInvokeWithException(targetMethod, invokeKind(targetMethod), frameStateBuilder, bci,
                         handlerArguments);
         if (unwindPathSupplier != null) {
@@ -295,12 +278,12 @@ public final class BytecodeHandlerStubHelper {
             tailCallTarget = kit.append(new BytecodeHandlerDispatchAddressNode(nextOpcode, bytecodeHandlerTableSupplier));
         }
 
-        ValueNode[] normalPathStubArguments = loadCurrentStubArguments(handlerConfig, kit, stubParameters, handlerArguments, handlerResult, refreshImmutableFields);
+        ValueNode[] normalPathStubArguments = loadCurrentStubArguments(handlerConfig, kit, stubParameters, handlerArguments, handlerResult);
         kit.append(new ReturnNode(createStubReturn(handlerConfig, kit, handlerResult, tailCallTarget, normalPathStubArguments)));
 
         kit.exceptionPart();
         if (unwindPathSupplier != null) {
-            ValueNode[] exceptionPathStubArguments = loadCurrentStubArguments(handlerConfig, kit, stubParameters, handlerArguments, null, refreshImmutableFields);
+            ValueNode[] exceptionPathStubArguments = loadCurrentStubArguments(handlerConfig, kit, stubParameters, handlerArguments, null);
             unwindPathSupplier.apply(handlerConfig, kit, exceptionPathStubArguments);
         }
         kit.append(new UnwindNode(kit.exceptionObject()));
