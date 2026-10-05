@@ -2370,7 +2370,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public boolean removeArrayElement(Object languageContext, Object receiver, long index) {
-            return (boolean) RUNTIME.callProfiled(removeArrayElement != null ? removeArrayElement : (removeArrayElement = createTarget(RemoveArrayElementNodeGen.create(this))), languageContext, receiver, index);
+            return (boolean) RUNTIME.callProfiled(removeArrayElement != null ? removeArrayElement : (removeArrayElement = createTarget(RemoveArrayElementNodeGen.create(this))), languageContext,
+                            receiver, index);
         }
 
         @Override
@@ -2403,7 +2404,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
         @Override
         public void readBuffer(Object languageContext, Object receiver, long byteOffset, byte[] destination, int destinationOffset, int length)
                         throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(readBuffer != null ? readBuffer : (readBuffer = createTarget(ReadBufferNodeGen.create(this))), languageContext, receiver, byteOffset, destination, destinationOffset, length);
+            RUNTIME.callProfiled(readBuffer != null ? readBuffer : (readBuffer = createTarget(ReadBufferNodeGen.create(this))), languageContext, receiver, byteOffset, destination, destinationOffset,
+                            length);
         }
 
         @Override
@@ -2413,12 +2415,14 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public short readBufferShort(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (short) RUNTIME.callProfiled(readBufferShort != null ? readBufferShort : (readBufferShort = createTarget(ReadBufferShortNodeGen.create(this))), languageContext, receiver, order, byteOffset);
+            return (short) RUNTIME.callProfiled(readBufferShort != null ? readBufferShort : (readBufferShort = createTarget(ReadBufferShortNodeGen.create(this))), languageContext, receiver, order,
+                            byteOffset);
         }
 
         @Override
         public void writeBufferShort(Object languageContext, Object receiver, ByteOrder order, long byteOffset, short value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(writeBufferShort != null ? writeBufferShort : (writeBufferShort = createTarget(WriteBufferShortNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferShort != null ? writeBufferShort : (writeBufferShort = createTarget(WriteBufferShortNodeGen.create(this))), languageContext, receiver, order, byteOffset,
+                            value);
         }
 
         @Override
@@ -2433,32 +2437,38 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public long readBufferLong(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (long) RUNTIME.callProfiled(readBufferLong != null ? readBufferLong : (readBufferLong = createTarget(ReadBufferLongNodeGen.create(this))), languageContext, receiver, order, byteOffset);
+            return (long) RUNTIME.callProfiled(readBufferLong != null ? readBufferLong : (readBufferLong = createTarget(ReadBufferLongNodeGen.create(this))), languageContext, receiver, order,
+                            byteOffset);
         }
 
         @Override
         public void writeBufferLong(Object languageContext, Object receiver, ByteOrder order, long byteOffset, long value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(writeBufferLong != null ? writeBufferLong : (writeBufferLong = createTarget(WriteBufferLongNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferLong != null ? writeBufferLong : (writeBufferLong = createTarget(WriteBufferLongNodeGen.create(this))), languageContext, receiver, order, byteOffset,
+                            value);
         }
 
         @Override
         public float readBufferFloat(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (float) RUNTIME.callProfiled(readBufferFloat != null ? readBufferFloat : (readBufferFloat = createTarget(ReadBufferFloatNodeGen.create(this))), languageContext, receiver, order, byteOffset);
+            return (float) RUNTIME.callProfiled(readBufferFloat != null ? readBufferFloat : (readBufferFloat = createTarget(ReadBufferFloatNodeGen.create(this))), languageContext, receiver, order,
+                            byteOffset);
         }
 
         @Override
         public void writeBufferFloat(Object languageContext, Object receiver, ByteOrder order, long byteOffset, float value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(writeBufferFloat != null ? writeBufferFloat : (writeBufferFloat = createTarget(WriteBufferFloatNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferFloat != null ? writeBufferFloat : (writeBufferFloat = createTarget(WriteBufferFloatNodeGen.create(this))), languageContext, receiver, order, byteOffset,
+                            value);
         }
 
         @Override
         public double readBufferDouble(Object languageContext, Object receiver, ByteOrder order, long byteOffset) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            return (double) RUNTIME.callProfiled(readBufferDouble != null ? readBufferDouble : (readBufferDouble = createTarget(ReadBufferDoubleNodeGen.create(this))), languageContext, receiver, order, byteOffset);
+            return (double) RUNTIME.callProfiled(readBufferDouble != null ? readBufferDouble : (readBufferDouble = createTarget(ReadBufferDoubleNodeGen.create(this))), languageContext, receiver,
+                            order, byteOffset);
         }
 
         @Override
         public void writeBufferDouble(Object languageContext, Object receiver, ByteOrder order, long byteOffset, double value) throws UnsupportedOperationException, IndexOutOfBoundsException {
-            RUNTIME.callProfiled(writeBufferDouble != null ? writeBufferDouble : (writeBufferDouble = createTarget(WriteBufferDoubleNodeGen.create(this))), languageContext, receiver, order, byteOffset, value);
+            RUNTIME.callProfiled(writeBufferDouble != null ? writeBufferDouble : (writeBufferDouble = createTarget(WriteBufferDoubleNodeGen.create(this))), languageContext, receiver, order,
+                            byteOffset, value);
         }
 
         // endregion
@@ -2980,7 +2990,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public String getMetaQualifiedName(Object languageContext, Object receiver) {
-            return (String) RUNTIME.callProfiled(getMetaQualifiedName != null ? getMetaQualifiedName : (getMetaQualifiedName = createTarget(GetMetaQualifiedNameNodeGen.create(this))), languageContext, receiver);
+            return (String) RUNTIME.callProfiled(getMetaQualifiedName != null ? getMetaQualifiedName : (getMetaQualifiedName = createTarget(GetMetaQualifiedNameNodeGen.create(this))), languageContext,
+                            receiver);
         }
 
         @Override
@@ -2990,12 +3001,14 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public boolean hasMetaParents(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(hasMetaParents != null ? hasMetaParents : (hasMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.HasMetaParentsNodeGen.create(this))), languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasMetaParents != null ? hasMetaParents
+                            : (hasMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.HasMetaParentsNodeGen.create(this))), languageContext, receiver);
         }
 
         @Override
         public Object getMetaParents(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(getMetaParents != null ? getMetaParents : (getMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetMetaParentsNodeGen.create(this))), languageContext, receiver);
+            return RUNTIME.callProfiled(getMetaParents != null ? getMetaParents : (getMetaParents = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetMetaParentsNodeGen.create(this))),
+                            languageContext, receiver);
         }
 
         @Override
@@ -3005,22 +3018,26 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public Object getIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(getIterator != null ? getIterator : (getIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetIteratorNodeGen.create(this))), languageContext, receiver);
+            return RUNTIME.callProfiled(getIterator != null ? getIterator : (getIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.GetIteratorNodeGen.create(this))),
+                            languageContext, receiver);
         }
 
         @Override
         public boolean isIterator(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(isIterator != null ? isIterator : (isIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.IsIteratorNodeGen.create(this))), languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(isIterator != null ? isIterator : (isIterator = createTarget(PolyglotValueDispatchFactory.InteropValueFactory.IsIteratorNodeGen.create(this))),
+                            languageContext, receiver);
         }
 
         @Override
         public boolean hasIteratorNextElement(Object languageContext, Object receiver) {
-            return (boolean) RUNTIME.callProfiled(hasIteratorNextElement != null ? hasIteratorNextElement : (hasIteratorNextElement = createTarget(HasIteratorNextElementNodeGen.create(this))), languageContext, receiver);
+            return (boolean) RUNTIME.callProfiled(hasIteratorNextElement != null ? hasIteratorNextElement : (hasIteratorNextElement = createTarget(HasIteratorNextElementNodeGen.create(this))),
+                            languageContext, receiver);
         }
 
         @Override
         public Object getIteratorNextElement(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(getIteratorNextElement != null ? getIteratorNextElement : (getIteratorNextElement = createTarget(GetIteratorNextElementNodeGen.create(this))), languageContext, receiver);
+            return RUNTIME.callProfiled(getIteratorNextElement != null ? getIteratorNextElement : (getIteratorNextElement = createTarget(GetIteratorNextElementNodeGen.create(this))), languageContext,
+                            receiver);
         }
 
         @Override
@@ -3045,7 +3062,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public Object getHashValueOrDefault(Object languageContext, Object receiver, Object key, Object defaultValue) {
-            return RUNTIME.callProfiled(getHashValueOrDefault != null ? getHashValueOrDefault : (getHashValueOrDefault = createTarget(GetHashValueOrDefaultNodeGen.create(this))), languageContext, receiver, key, defaultValue);
+            return RUNTIME.callProfiled(getHashValueOrDefault != null ? getHashValueOrDefault : (getHashValueOrDefault = createTarget(GetHashValueOrDefaultNodeGen.create(this))), languageContext,
+                            receiver, key, defaultValue);
         }
 
         @Override
@@ -3060,7 +3078,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public Object getHashEntriesIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(getHashEntriesIterator != null ? getHashEntriesIterator : (getHashEntriesIterator = createTarget(GetHashEntriesIteratorNodeGen.create(this))), languageContext, receiver);
+            return RUNTIME.callProfiled(getHashEntriesIterator != null ? getHashEntriesIterator : (getHashEntriesIterator = createTarget(GetHashEntriesIteratorNodeGen.create(this))), languageContext,
+                            receiver);
         }
 
         @Override
@@ -3070,7 +3089,8 @@ abstract class PolyglotValueDispatch extends AbstractValueDispatch {
 
         @Override
         public Object getHashValuesIterator(Object languageContext, Object receiver) {
-            return RUNTIME.callProfiled(getHashValuesIterator != null ? getHashValuesIterator : (getHashValuesIterator = createTarget(GetHashValuesIteratorNodeGen.create(this))), languageContext, receiver);
+            return RUNTIME.callProfiled(getHashValuesIterator != null ? getHashValuesIterator : (getHashValuesIterator = createTarget(GetHashValuesIteratorNodeGen.create(this))), languageContext,
+                            receiver);
         }
 
         private final class MemberSet extends AbstractSet<String> {
