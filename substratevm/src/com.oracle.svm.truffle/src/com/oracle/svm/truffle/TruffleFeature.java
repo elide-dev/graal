@@ -375,7 +375,7 @@ public class TruffleFeature implements InternalFeature {
     /**
      * The Truffle compiler is built at image build time from the hosted graph builder plugins
      * (see {@link TruffleSupport}), so the compiler objects in the image heap reference
-     * {@link GraphBuilderConfiguration.Plugins} instances holding hosted-only plugins. Truffle
+     * {@code GraphBuilderConfiguration.Plugins} instances holding hosted-only plugins. Truffle
      * runtime compilation decodes pre-encoded graphs and never consults those plugins, so normally
      * no reachable code reads their fields and they are never scanned. Ristretto makes the
      * bytecode parser reachable at run time, which reads those fields and drags the hosted-only

@@ -92,6 +92,7 @@ public class SLHostExceptionCauseOverrideTest extends AbstractSLTest {
             throw new CauseOverrideException(code);
         }
 
+        @SuppressWarnings("static-method") // called as a member through host interop
         public Object fail(long code) {
             throw new CauseOverrideException(code);
         }
