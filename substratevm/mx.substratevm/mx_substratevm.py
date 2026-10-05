@@ -3255,7 +3255,6 @@ _small_jdk_modules = [
     'jdk.management.jfr',
     'jdk.zipfs',
     'org.graalvm.collections',
-    'org.graalvm.jniutils',
     'org.graalvm.nativeimage',
     'org.graalvm.nativeimage.libgraal',
     'org.graalvm.polyglot',
