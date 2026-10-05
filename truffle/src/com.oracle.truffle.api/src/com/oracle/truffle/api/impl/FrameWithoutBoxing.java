@@ -1100,6 +1100,14 @@ public final class FrameWithoutBoxing implements VirtualFrame, MaterializedFrame
             return;
         }
 
+        if (CompilerDirectives.inCompiledCode() && CompilerDirectives.isPartialEvaluationConstant(length) && length <= SMALL_COPY_LENGTH) {
+            /*
+             * Element-wise with a constant length: escape analysis keeps a virtual source frame virtual, where System.arraycopy
+             * materializes its arrays (the operand copy of a Bytecode DSL yield in a resumed continuation).
+             */
+            copySmall((int) srcOffset, o, (int) dstOffset, (int) length);
+            return;
+        }
         // eventually we might want to optimize this further using Unsafe.
         // for now System.arrayCopy is fast enough.
         System.arraycopy(getIndexedTags(), (int) srcOffset, o.getIndexedTags(), (int) dstOffset, (int) length);
@@ -1121,6 +1129,23 @@ public final class FrameWithoutBoxing implements VirtualFrame, MaterializedFrame
             dstTags[dstI] = srcTags[srcI];
             dstIndexedLocals[dstI] = srcIndexedLocals[srcI];
             dstIndexedPrimitiveLocals[dstI] = srcIndexedPrimitiveLocals[srcI];
+        }
+    }
+
+    private static final int SMALL_COPY_LENGTH = 16;
+
+    @ExplodeLoop
+    private void copySmall(int src, FrameWithoutBoxing o, int dst, int length) {
+        byte[] tags = getIndexedTags();
+        byte[] otherTags = o.getIndexedTags();
+        Object[] locals = getIndexedLocals();
+        Object[] otherLocals = o.getIndexedLocals();
+        long[] primitives = getIndexedPrimitiveLocals();
+        long[] otherPrimitives = o.getIndexedPrimitiveLocals();
+        for (int i = 0; i < length; i++) {
+            otherTags[dst + i] = tags[src + i];
+            otherLocals[dst + i] = locals[src + i];
+            otherPrimitives[dst + i] = primitives[src + i];
         }
     }
 
