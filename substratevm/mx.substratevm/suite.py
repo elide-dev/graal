@@ -965,6 +965,8 @@ suite = {
             "native": "static_lib",
             "multitarget": {
                 "libc": ["glibc", "musl", "default"],
+                # "svm-lto" exists only when SVM_LTO_CC is set, see mx_substratevm.py.
+                "compiler": ["svm-lto", "host", "*"],
             },
             "os": {
                 "solaris": {
@@ -1029,6 +1031,8 @@ suite = {
             "use_jdk_headers" : True,
             "multitarget": {
                 "libc": ["glibc", "musl", "default"],
+                # "svm-lto" exists only when SVM_LTO_CC is set, see mx_substratevm.py.
+                "compiler": ["svm-lto", "host", "*"],
             },
             "os" : {
                 "darwin": {
@@ -1075,6 +1079,8 @@ suite = {
             "native": "static_lib",
             "multitarget": {
                 "libc": ["glibc", "musl", "default"],
+                # "svm-lto" exists only when SVM_LTO_CC is set, see mx_substratevm.py.
+                "compiler": ["svm-lto", "host", "*"],
             },
             "deliverable" : "svm_container",
             "os_arch": {
