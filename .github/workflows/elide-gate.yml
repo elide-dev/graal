@@ -1,0 +1,112 @@
+#
+# Elide's test gate for the fork's pull requests. It runs on our own runners the suites that the
+# upstream "GraalVM Gate" (main.yml) cannot finish on GitHub-hosted runners in its 60 minutes,
+# plus the suites that matter for Elide's languages but are not in that gate.
+#
+name: Elide Gate
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches:
+      - 'elide-25.4.x'
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: "elide-gate-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: ${{ matrix.name }}
+    runs-on: linux-amd64-cipool
+    container: docker.io/library/ubuntu:22.04
+    timeout-minutes: 240
+    # Known failures that predate this gate are tracked, but must not hide new ones in other jobs.
+    continue-on-error: ${{ matrix.known-failure != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: truffle unittests
+            suite: truffle
+            gate: build,fulltest
+          # Without upstream's standalone_pointsto_unittests (they analyze Espresso, which we do not
+          # ship, and hang on our runners: elide-dev/graal#64).
+          - name: substratevm native unittests
+            suite: substratevm
+            gate: build,helloworld,native_unittests
+            pip-packages: jsonschema==4.6.1
+          # Truffle runtime compilation on SVM, with PLT/GOT, Ristretto/Crema, JDWP and continuations.
+          - name: substratevm truffle unittests
+            suite: substratevm
+            gate: build,truffle_unittests
+            known-failure: "elide-dev/graal#51 (the -H:+JDWP variant fails to build)"
+          - name: regex unittests
+            suite: regex
+            unittest: com.oracle.truffle.regex
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      MX_GIT_CACHE: refcache
+      MX_PYTHON: python3
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
+            python3 python3-pip unzip zip xz-utils file binutils cmake ninja-build patch pkg-config
+          git config --global --add safe.directory '*'
+      - name: Checkout graal
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: graal
+      - name: Determine mx version
+        run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
+      - name: Checkout mx
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: graalvm/mx
+          ref: ${{ env.MX_VERSION }}
+          path: mx
+      # In the graal checkout, so that mx resolves the JDK id from its common.json (the JVMCI version
+      # the compiler requires), not from mx's own defaults.
+      - name: Fetch LabsJDK
+        working-directory: graal
+        run: |
+          echo "JAVA_HOME=${GITHUB_WORKSPACE}/labsjdk" >> "${GITHUB_ENV}"
+          # Some tests run JDK tools by name (JmxTest runs keytool).
+          echo "${GITHUB_WORKSPACE}/labsjdk/bin" >> "${GITHUB_PATH}"
+          mkdir -p "${RUNNER_TEMP}/jdks"
+          ../mx/mx --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${GITHUB_WORKSPACE}/labsjdk"
+          "${GITHUB_WORKSPACE}/labsjdk/bin/java" -version
+      - name: Install pip packages
+        if: matrix.pip-packages != ''
+        run: python3 -m pip install --quiet ${{ matrix.pip-packages }}
+      - name: Known failure
+        if: matrix.known-failure != ''
+        run: echo "::warning::This job may fail because of ${{ matrix.known-failure }}; it does not fail the gate."
+      - name: Gate
+        if: matrix.gate != ''
+        working-directory: graal/${{ matrix.suite }}
+        run: |
+          dy=()
+          if [ -n "${{ matrix.dynamic-imports }}" ]; then dy=(--dy "${{ matrix.dynamic-imports }}"); fi
+          ../../mx/mx --java-home="${JAVA_HOME}" "${dy[@]}" gate --tags "${{ matrix.gate }}"
+      - name: Unit tests
+        if: matrix.unittest != ''
+        working-directory: graal/${{ matrix.suite }}
+        run: |
+          ../../mx/mx --java-home="${JAVA_HOME}" build
+          ../../mx/mx --java-home="${JAVA_HOME}" unittest ${{ matrix.unittest }}
