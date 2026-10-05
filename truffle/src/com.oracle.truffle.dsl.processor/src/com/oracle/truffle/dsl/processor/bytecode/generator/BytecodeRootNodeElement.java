@@ -916,16 +916,7 @@ public final class BytecodeRootNodeElement extends AbstractElement {
         b.end();
 
         String returnValue = uncheckedGetFrameObject(decodeSp("state"));
-        if (model.hasYieldOperation()) {
-            // The frame may outlive this invocation. Clear the result for liveness analysis.
-            b.declaration(type(Object.class), "result", returnValue);
-            b.startIf().string("CompilerDirectives.inCompiledCode()").end().startBlock();
-            b.statement(clearFrame("frame", decodeSp("state")));
-            b.end();
-            b.statement("return result");
-        } else {
-            b.startReturn().string(returnValue).end();
-        }
+        b.startReturn().string(returnValue).end();
         mergeSuppressWarnings(ex, "all");
         return ex;
     }
