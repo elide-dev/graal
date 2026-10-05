@@ -248,32 +248,35 @@ public class DerivedOffsetInductionVariable extends DerivedInductionVariable {
     }
 
     @Override
-    protected ValueNode collectLocalEndpointOverflowConditions(boolean assumeLoopEntered, Stamp stamp, ValueNode effectiveMaxTripCount, ValueNode baseEndpoint,
+    protected ValueNode collectLocalExtremumOverflowConditions(boolean assumeLoopEntered, Stamp stamp, ValueNode effectiveMaxTripCount, ValueNode baseExtremum,
                     Collection<LogicNode> conditions) {
         GraalError.guarantee(stamp instanceof IntegerStamp, "Expected integer stamp for %s but got %s", this, stamp);
-        GraalError.guarantee(baseEndpoint != null, "Expected base endpoint for %s", this);
+        GraalError.guarantee(baseExtremum != null, "Expected base extremum for %s", this);
         ValueNode offsetValue = offset;
         if (!offsetValue.stamp(NodeView.DEFAULT).isCompatible(stamp)) {
             offsetValue = IntegerConvertNode.convert(offsetValue, stamp, graph(), NodeView.DEFAULT);
         }
         if (value instanceof AddNode) {
-            LogicNode addOverflow = IntegerAddExactOverflowNode.create(baseEndpoint, offsetValue);
+            LogicNode addOverflow = IntegerAddExactOverflowNode.create(baseExtremum, offsetValue);
             if (!addOverflow.isContradiction()) {
                 conditions.add(graph().addOrUniqueWithInputs(addOverflow));
             }
         } else {
             GraalError.guarantee(value instanceof SubNode, "Expected subtraction-based offset induction variable for %s but got %s", this, value);
-            LogicNode subOverflow;
-            if (baseIsSubtrahend) {
-                subOverflow = IntegerSubExactOverflowNode.create(offsetValue, baseEndpoint);
+            SubNode sub = (SubNode) value;
+            if (base.valueNode() == sub.getX()) {
+                LogicNode subOverflow = IntegerSubExactOverflowNode.create(baseExtremum, offsetValue);
+                if (!subOverflow.isContradiction()) {
+                    conditions.add(graph().addOrUniqueWithInputs(subOverflow));
+                }
             } else {
-                subOverflow = IntegerSubExactOverflowNode.create(baseEndpoint, offsetValue);
-            }
-            if (!subOverflow.isContradiction()) {
-                conditions.add(graph().addOrUniqueWithInputs(subOverflow));
+                LogicNode subOverflow = IntegerSubExactOverflowNode.create(offsetValue, baseExtremum);
+                if (!subOverflow.isContradiction()) {
+                    conditions.add(graph().addOrUniqueWithInputs(subOverflow));
+                }
             }
         }
-        return op(baseEndpoint, offsetValue);
+        return op(baseExtremum, offsetValue);
     }
 
     @Override
