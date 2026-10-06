@@ -1564,6 +1564,27 @@ suite = {
             "jacoco" : "exclude",
         },
 
+        "com.oracle.svm.graalos": {
+            "subDir": "src",
+            "sourceDirs": ["src"],
+            "dependencies": [
+                "SVM",
+            ],
+            "requiresConcealed": {
+                "java.base": [
+                    "jdk.internal.misc",
+                    "jdk.internal.util",
+                    "sun.nio.fs",
+                ],
+            },
+            "javaCompliance": "24+",
+            "workingSets": "graalos-support",
+            "annotationProcessors": [
+                "SVM_PROCESSOR",
+            ],
+            "checkPackagePrefix": False,
+        },
+
         # This is a transitional project that can be referenced from both the guest module and the builder
         # module. It is intended as a staging place for code that eventually should go into the guest, but
         # is currently still referenced in the builder. Eventually, all content of this project should move
@@ -2189,6 +2210,7 @@ suite = {
                     "com.oracle.svm.jdwp.bridge.jniutils               to com.oracle.svm.jdwp.server",
                     "com.oracle.svm.interpreter.metadata               to com.oracle.svm.jdwp.server",
                     "com.oracle.svm.interpreter.metadata.serialization to com.oracle.svm.jdwp.server",
+                    "com.oracle.svm.core.graalos to svm.graalos.support",
                 ],
                 "opens" : [
                     "com.oracle.svm.core                          to jdk.graal.compiler",
@@ -2268,6 +2290,17 @@ suite = {
             "maven": False,
         },
 
+        "SVM_GRAALOS_SUPPORT": {
+            "subDir": "src",
+            "dependencies": [
+                "com.oracle.svm.graalos",
+            ],
+            "distDependencies": [
+                "SVM",
+            ],
+            "maven": False,
+        },
+
         "SVM_SHARED": {
             "subDir": "src",
             "description" : "Module for sharing code that is used in both, the builder and the guest context",
@@ -2282,6 +2315,7 @@ suite = {
             "moduleInfo" : {
                 "name" : "org.graalvm.nativeimage.shared",
                 "exports" : [
+                    "com.oracle.svm.shared.util to svm.graalos.support",
                     """* to
                             com.oracle.svm.extraimage_enterprise,
                             com.oracle.svm.jdwp.server,
