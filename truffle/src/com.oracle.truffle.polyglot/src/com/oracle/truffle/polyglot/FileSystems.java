@@ -476,12 +476,17 @@ final class FileSystems {
         private FileSystem delegate; // effectively final after patch context
         private ImageHeapPathConverter converter = new ImageHeapPathConverter();
 
-        PreInitializeContextFileSystem(String tmpDir) {
-            this(newDefaultFileSystem(tmpDir));
+        private final boolean preinitializeTempDirectory;
+        private volatile Path tempDirectory;
+
+        PreInitializeContextFileSystem() {
+            this.delegate = newDefaultFileSystem(null);
+            this.preinitializeTempDirectory = true;
         }
 
         PreInitializeContextFileSystem(FileSystem delegate) {
             this.delegate = delegate;
+            this.preinitializeTempDirectory = false;
         }
 
         void onPreInitializeContextEnd(InternalResourceRoots internalResourceRoots, Map<String, Path> languageHomes) {
@@ -490,6 +495,7 @@ final class FileSystems {
             }
             converter.initialize(internalResourceRoots, languageHomes);
             converter = null;
+            tempDirectory = null;
             delegate = INVALID_FILESYSTEM;
         }
 
@@ -639,6 +645,19 @@ final class FileSystems {
 
         @Override
         public Path getTempDirectory() {
+            if (converter != null && preinitializeTempDirectory) {
+                Path result = tempDirectory;
+                if (result == null) {
+                    // Preinitialization need not have access to host temporary storage.
+                    String tmpDir = System.getProperty("java.io.tmpdir");
+                    if (tmpDir == null) {
+                        throw new UnsupportedOperationException("Temporary directories not supported");
+                    }
+                    result = delegate.parsePath(tmpDir);
+                    tempDirectory = result;
+                }
+                return wrap(result);
+            }
             return wrap(delegate.getTempDirectory());
         }
 
