@@ -477,9 +477,10 @@ def truffle_unittest_task(extra_build_args=None):
                            ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true'])
         native_unittest(tests + truffle_args(test_build_args))
 
-        # Static objects with field-based storage are pods in an image. With VirtualizePods, escape
-        # analysis scalar-replaces them in runtime compilation (elide-dev/graal#65). The checks of
-        # DebugInfoBuilder assume virtual objects have only Java fields, so they are disabled.
+        # Static objects with field-based storage are pods in an image. With VirtualizePods (the
+        # default), escape analysis scalar-replaces them in runtime compilation (elide-dev/graal#65),
+        # except when the assertions of DebugInfoBuilder, which assume virtual objects have only
+        # Java fields, are enabled, as they are in test images. So disable them here.
         pod_build_args = ['-R:+VirtualizePods', '-da:jdk.graal.compiler.core.gen.DebugInfoBuilder']
         native_unittest(['jdk.graal.compiler.truffle.test.StaticObjectAllocationTest'] + truffle_args(test_build_args + pod_build_args))
         # Compiled code that materializes and deoptimizes pods, with compilation in isolates.
