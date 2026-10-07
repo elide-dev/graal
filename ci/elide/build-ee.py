@@ -13,7 +13,8 @@ jdk.graal.compiler.management), taken from the CE build, go in lib/jvmci as graa
 graal-management.jar. When lib/jvmci exists, the native-image driver puts those on the image
 builder's --upgrade-module-path, so every image build uses the fork's compiler with the enterprise
 compiler on top. The JIT of the java launcher (libgraal) stays Oracle's. A change to another module
-that Oracle's build has inside lib/modules fails the build: those cannot be upgraded.
+that Oracle's build has inside lib/modules fails the build if it changes the module's classes: those
+cannot be upgraded. Changes to comments or formatting leave the classes byte-identical and pass.
 
 LinkCheck.java then checks that the enterprise code (the jars only Oracle's build has, and the
 enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
@@ -46,17 +47,17 @@ ASSET_PLATFORMS = {
 # (e.g. lib/jrt-fs.jar, which belongs to the JDK) stay Oracle's.
 OVERLAY_DIRS = ("lib/svm", "lib/truffle", "lib/graalvm")
 
-# Sources of modules that Oracle's build has inside lib/modules.
-LINKED_SOURCES = (
-    "compiler/src/jdk.graal.compiler/",
-    "compiler/src/jdk.graal.compiler.management/",
-    "compiler/src/jdk.graal.compiler.options/",
-    "sdk/src/org.graalvm.collections/",
-    "sdk/src/org.graalvm.nativeimage/",
-    "sdk/src/org.graalvm.nativeimage.libgraal/",
-    "sdk/src/org.graalvm.word/",
-    "truffle/src/com.oracle.truffle.compiler/",
-)
+# Sources of modules that Oracle's build has inside lib/modules (source directory -> module).
+LINKED_SOURCES = {
+    "compiler/src/jdk.graal.compiler/": "jdk.graal.compiler",
+    "compiler/src/jdk.graal.compiler.management/": "jdk.graal.compiler.management",
+    "compiler/src/jdk.graal.compiler.options/": "jdk.graal.compiler.options",
+    "sdk/src/org.graalvm.collections/": "org.graalvm.collections",
+    "sdk/src/org.graalvm.nativeimage/": "org.graalvm.nativeimage",
+    "sdk/src/org.graalvm.nativeimage.libgraal/": "org.graalvm.nativeimage.libgraal",
+    "sdk/src/org.graalvm.word/": "org.graalvm.word",
+    "truffle/src/com.oracle.truffle.compiler/": "org.graalvm.truffle.compiler",
+}
 # The subset that may change: modules the native-image driver upgrades from lib/jvmci (source
 # directory -> module, jar).
 UPGRADEABLE_SOURCES = {
@@ -127,23 +128,49 @@ def jvmci_tag(release):
     return match.group(0) if match else None
 
 
-def changed_linked_modules(graal, ee_commit):
+def changed_linked_modules(graal, ee_commit, ce_home, ee_home):
     """The upgradeable modules (module, jar) whose sources the fork changes, relative to the sources
-    of Oracle's build. Fails if the fork changes another module inside lib/modules."""
+    of Oracle's build. A module that cannot be upgraded may only have source changes that leave its
+    classes as they are (comments, formatting): its classes in the CE build must be byte-identical to
+    Oracle's, which the same sources give. Fails otherwise."""
     repository = "https://github.com/oracle/graal"
     run("git", "fetch", "--quiet", "--depth=1", repository, ee_commit, cwd=graal)
     names = run("git", "diff", "--name-only", "--no-renames", ee_commit, "HEAD", "--", *LINKED_SOURCES, cwd=graal)
-    modules, not_upgradeable = set(), []
+    modules, fixed = set(), {}
     for path in names.splitlines():
-        source = next((s for s in UPGRADEABLE_SOURCES if path.startswith(s)), None)
-        if source:
+        source = next((s for s in LINKED_SOURCES if path.startswith(s)), None)
+        if source in UPGRADEABLE_SOURCES:
             modules.add(UPGRADEABLE_SOURCES[source])
-        elif path:
-            not_upgradeable.append(path)
-    if not_upgradeable:
-        fail("the fork changes code that Oracle's build has inside lib/modules and that the EE "
-             f"distribution cannot upgrade: {', '.join(not_upgradeable)}")
+        elif source:
+            fixed.setdefault(LINKED_SOURCES[source], []).append(path)
+    for module, paths in sorted(fixed.items()):
+        differing = differing_classes(ce_home, ee_home, module)
+        if differing:
+            fail(f"the fork changes {module}, which Oracle's build has inside lib/modules and the EE "
+                 f"distribution cannot upgrade: classes {', '.join(differing[:20])} differ (sources: {', '.join(paths)})")
+        print(f"{module}: {len(paths)} changed sources, classes identical to Oracle's")
     return sorted(modules)
+
+
+def differing_classes(ce_home, ee_home, module):
+    """The classes of a module in lib/modules that differ between the CE build and Oracle's."""
+    trees = []
+    for home in (ce_home, ee_home):
+        jimage = os.path.join(home, "bin", "jimage.exe" if os.name == "nt" else "jimage")
+        out = tempfile.mkdtemp()
+        run(jimage, "extract", "--dir", out, "--include", f"regex:/{module}/.*", os.path.join(home, "lib", "modules"))
+        files = {}
+        root = os.path.join(out, module)
+        for dirpath, _, names in os.walk(root):
+            for name in names:
+                if name.endswith(".class"):
+                    path = os.path.join(dirpath, name)
+                    with open(path, "rb") as f:
+                        files[os.path.relpath(path, root).replace(os.sep, "/")] = hashlib.sha256(f.read()).digest()
+        shutil.rmtree(out)
+        trees.append(files)
+    ce, ee = trees
+    return sorted(name for name in ce.keys() | ee.keys() if ce.get(name) != ee.get(name))
 
 
 def write_upgrade_jars(ce_home, ee_home, modules):
@@ -271,7 +298,7 @@ def main():
     print(f"base: Oracle GraalVM {ee_release['GRAALVM_VERSION']} ({tag}), open source {ee_commit.group(1)}")
 
     replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
-    upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1)))
+    upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
 
     revision = run("git", "rev-parse", "HEAD", cwd=graal).strip()
