@@ -42,6 +42,7 @@ import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.MapCursor;
 
 import jdk.graal.compiler.core.common.EnterpriseCompatibility;
+import jdk.graal.compiler.nodes.Invoke;
 import jdk.graal.compiler.nodes.loop.Loop.IfPosition;
 
 import jdk.graal.compiler.core.common.calc.Condition;
@@ -277,6 +278,11 @@ public class LoopRotationPhase<Context extends CoreProviders> extends PhaseSuite
 
         @Option(help = "Minimal loop frequency for a loop to be considered for rotation.", type = OptionType.Debug)
         public static final OptionKey<Double> RotationMinLocalFrequency = new OptionKey<>(2D);
+
+        @Option(help = "Rotates loops whose rotated part contains a call. Rotation peels that part, which " +
+                       "duplicates the call site (e.g. a tail call lowered to a loop then keeps a call in the " +
+                       "peeled iteration).", type = OptionType.Debug)
+        public static final OptionKey<Boolean> RotateLoopsWithInvokes = new OptionKey<>(false);
         //@formatter:on
     }
 
@@ -290,6 +296,7 @@ public class LoopRotationPhase<Context extends CoreProviders> extends PhaseSuite
     private static final CounterKey NotRotatedNoToxicNodes = DebugContext.counter("LoopRotation_NotRotatedNoToxicNodes");
     private static final CounterKey NotRotatedCannotDuplicate = DebugContext.counter("LoopRotation_NotRotatedCannotDuplicate");
     private static final CounterKey NotRotatedCannotDuplicateNodeWithState = DebugContext.counter("LoopRotation_NotRotatedCannotDuplicate_NodeWithState");
+    private static final CounterKey NotRotatedInvoke = DebugContext.counter("LoopRotation_NotRotated_Invoke");
 
     private final CanonicalizerPhase canonicalizer;
 
@@ -544,6 +551,11 @@ public class LoopRotationPhase<Context extends CoreProviders> extends PhaseSuite
     @SuppressWarnings("fallthrough")
     private static boolean canRotate(NodeFlood toxicFlood) {
         for (Node toxic : toxicFlood.getVisited()) {
+            if (toxic instanceof Invoke && !Options.RotateLoopsWithInvokes.getValue(toxic.getOptions())) {
+                // rotation would duplicate the call site into the peeled iteration
+                NotRotatedInvoke.increment(toxic.getDebug());
+                return false;
+            }
             if (toxic instanceof NodeWithState && !(toxic instanceof StateSplit)) {
                 if (!((NodeWithState) toxic).states().isEmpty()) {
                     // info point nodes for example and other nodes with complex framestate edges
