@@ -43,6 +43,8 @@ package com.oracle.truffle.api.staticobject;
 import java.lang.reflect.Field;
 import java.nio.ByteOrder;
 
+import org.graalvm.nativeimage.ImageInfo;
+
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
@@ -1184,6 +1186,50 @@ public abstract class StaticProperty {
      * The version for &gt=9 will be able to call directly into host Unsafe methods to get better
      * performance.
      */
+    /**
+     * Compare-and-set and compare-and-exchange of fields narrower than an int, with an access of
+     * exactly the field's width. Only used in a native image, where {@code jdk.internal.misc.Unsafe}
+     * is accessible (on HotSpot, CASSupport emulates them with an int compare-and-swap of the
+     * enclosing word). Unlike the emulation, these accesses do not touch neighboring fields, so
+     * escape analysis can also virtualize them on scalar-replaced objects.
+     */
+    private static final class NarrowAtomics {
+        private NarrowAtomics() {
+        }
+
+        static boolean compareAndSetByte(Object o, long offset, byte expected, byte x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndSetByte(o, offset, expected, x);
+        }
+
+        static boolean compareAndSetBoolean(Object o, long offset, boolean expected, boolean x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndSetBoolean(o, offset, expected, x);
+        }
+
+        static boolean compareAndSetShort(Object o, long offset, short expected, short x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndSetShort(o, offset, expected, x);
+        }
+
+        static boolean compareAndSetChar(Object o, long offset, char expected, char x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndSetChar(o, offset, expected, x);
+        }
+
+        static byte compareAndExchangeByte(Object o, long offset, byte expected, byte x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndExchangeByte(o, offset, expected, x);
+        }
+
+        static boolean compareAndExchangeBoolean(Object o, long offset, boolean expected, boolean x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndExchangeBoolean(o, offset, expected, x);
+        }
+
+        static short compareAndExchangeShort(Object o, long offset, short expected, short x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndExchangeShort(o, offset, expected, x);
+        }
+
+        static char compareAndExchangeChar(Object o, long offset, char expected, char x) {
+            return jdk.internal.misc.Unsafe.getUnsafe().compareAndExchangeChar(o, offset, expected, x);
+        }
+    }
+
     private static final class CASSupport {
         private CASSupport() {
         }
@@ -1195,12 +1241,18 @@ public abstract class StaticProperty {
         private static boolean compareAndSetByte(Object o, long offset,
                         byte expected,
                         byte x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndSetByte(o, offset, expected, x);
+            }
             return compareAndExchangeByte(o, offset, expected, x) == expected;
         }
 
         private static boolean compareAndSetBoolean(Object o, long offset,
                         boolean expected,
                         boolean x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndSetBoolean(o, offset, expected, x);
+            }
             byte byteExpected = expected ? (byte) 1 : (byte) 0;
             byte byteX = x ? (byte) 1 : (byte) 0;
             return compareAndSetByte(o, offset, byteExpected, byteX);
@@ -1209,12 +1261,18 @@ public abstract class StaticProperty {
         private static boolean compareAndSetShort(Object o, long offset,
                         short expected,
                         short x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndSetShort(o, offset, expected, x);
+            }
             return compareAndExchangeShort(o, offset, expected, x) == expected;
         }
 
         private static boolean compareAndSetChar(Object o, long offset,
                         char expected,
                         char x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndSetChar(o, offset, expected, x);
+            }
             return compareAndSetShort(o, offset, (short) expected, (short) x);
         }
 
@@ -1237,6 +1295,9 @@ public abstract class StaticProperty {
         private static byte compareAndExchangeByte(Object o, long offset,
                         byte expected,
                         byte x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndExchangeByte(o, offset, expected, x);
+            }
             long wordOffset = offset & ~3;
             int shift = (int) (offset & 3) << 3;
             if (isBigEndian()) {
@@ -1259,6 +1320,9 @@ public abstract class StaticProperty {
         private static boolean compareAndExchangeBoolean(Object o, long offset,
                         boolean expected,
                         boolean x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndExchangeBoolean(o, offset, expected, x);
+            }
             byte byteExpected = expected ? (byte) 1 : (byte) 0;
             byte byteX = x ? (byte) 1 : (byte) 0;
             return compareAndExchangeByte(o, offset, byteExpected, byteX) != 0;
@@ -1267,6 +1331,9 @@ public abstract class StaticProperty {
         private static short compareAndExchangeShort(Object o, long offset,
                         short expected,
                         short x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndExchangeShort(o, offset, expected, x);
+            }
             if ((offset & 3) == 3) {
                 throw new IllegalArgumentException("Update spans the word, not supported");
             }
@@ -1292,6 +1359,9 @@ public abstract class StaticProperty {
         private static char compareAndExchangeChar(Object o, long offset,
                         char expected,
                         char x) {
+            if (ImageInfo.inImageRuntimeCode()) {
+                return NarrowAtomics.compareAndExchangeChar(o, offset, expected, x);
+            }
             return (char) compareAndExchangeShort(o, offset, (short) expected, (short) x);
         }
 
