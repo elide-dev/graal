@@ -1178,15 +1178,6 @@ public abstract class StaticProperty {
     }
 
     /**
-     * Temporary class to enable support for compare and swap/exchange for sub-word fields.
-     * <p>
-     * This class will be moved, in favor of overlay classes: one for version &lt=8 and &gt= 9. This
-     * class corresponds to the &lt=8 version.
-     * <p>
-     * The version for &gt=9 will be able to call directly into host Unsafe methods to get better
-     * performance.
-     */
-    /**
      * Compare-and-set and compare-and-exchange of fields narrower than an int, with an access of
      * exactly the field's width. Only used in a native image, where {@code jdk.internal.misc.Unsafe}
      * is accessible (on HotSpot, CASSupport emulates them with an int compare-and-swap of the
@@ -1230,6 +1221,15 @@ public abstract class StaticProperty {
         }
     }
 
+    /**
+     * Temporary class to enable support for compare and swap/exchange for sub-word fields.
+     * <p>
+     * This class will be moved, in favor of overlay classes: one for version &lt=8 and &gt= 9. This
+     * class corresponds to the &lt=8 version.
+     * <p>
+     * The version for &gt=9 will be able to call directly into host Unsafe methods to get better
+     * performance.
+     */
     private static final class CASSupport {
         private CASSupport() {
         }
