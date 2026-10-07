@@ -67,7 +67,14 @@ build_and_run() { # <name> <native-image args...>
   "./${name}"
 }
 
-build_and_run smoke-plain
+build_and_run smoke-plain -J-Xlog:class+load=info:file=classload.log
+# The image builder must use the fork's compiler (lib/jvmci/graal.jar, see build-ee.py) under the
+# enterprise compiler.
+if [ -f "${HOME_DIR}/lib/jvmci/graal.jar" ]; then
+  grep -q 'jdk.graal.compiler.core.GraalCompiler source: .*lib/jvmci/graal.jar' classload.log ||
+    { grep 'jdk.graal.compiler.core.GraalCompiler ' classload.log; echo "the image builder does not use the fork's compiler" >&2; exit 1; }
+  grep -q 'com.oracle.graal.compiler.enterprise' classload.log || { echo "the image builder does not use the enterprise compiler" >&2; exit 1; }
+fi
 build_and_run smoke-instrumented --pgo-instrument
 [ -s default.iprof ] || { echo "the instrumented image wrote no profile" >&2; exit 1; }
 build_and_run smoke-pgo --pgo=default.iprof
