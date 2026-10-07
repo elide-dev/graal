@@ -151,6 +151,46 @@ public final class TruffleString extends AbstractTruffleString {
     private static final byte FLAG_CACHE_HEAD = (byte) 0x80;
     TruffleString next;
 
+    /**
+     * Whether a {@link TruffleString} keeps the {@link String} it was created from or converted
+     * to, so that Java string identity survives crossings between guest and host code: converting
+     * the same {@link TruffleString} to a {@link String} again returns the same instance, and a
+     * {@link TruffleString} created from a whole {@link String} converts back to that instance. On
+     * by default in native images, where the field costs no memory (it fits in the object's
+     * alignment padding); set {@code -Dtruffle.strings.CacheJavaStrings=false} at image build time
+     * to turn it off, or {@code true} to turn it on on HotSpot.
+     */
+    static final boolean CACHE_JAVA_STRINGS = Boolean.parseBoolean(System.getProperty("truffle.strings.CacheJavaStrings", String.valueOf(ImageInfo.inImageCode())));
+    private static final VarHandle JAVA_STRING_UPDATER = initializeJavaStringUpdater();
+
+    @TruffleBoundary
+    private static VarHandle initializeJavaStringUpdater() {
+        try {
+            return MethodHandles.lookup().findVarHandle(TruffleString.class, "javaString", String.class);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * The {@link String} this string was created from or last converted to, if
+     * {@link #CACHE_JAVA_STRINGS}. Strings are immutable and safely published, so a plain read is
+     * enough.
+     */
+    private String javaString;
+
+    /**
+     * Records {@code s}, the {@link String} representation of this string, and returns the one to
+     * use: {@code s}, or the {@link String} another thread recorded first.
+     */
+    @TruffleBoundary
+    String cacheJavaString(String s) {
+        if (JAVA_STRING_UPDATER.compareAndSet(this, (String) null, s)) {
+            return s;
+        }
+        return javaString;
+    }
+
     private TruffleString(Object data, int offset, int length, int stride, Encoding encoding, int codePointLength, int codeRange, int hashCode, boolean isCacheHead) {
         super(data, offset, length, stride, encoding, isCacheHead ? FLAG_CACHE_HEAD : 0, codePointLength, codeRange, hashCode);
     }
@@ -2214,7 +2254,12 @@ public final class TruffleString extends AbstractTruffleString {
                 }
             }
             int hash = fullLength ? TStringUnsafe.getJavaStringHashMasked(javaString) : 0;
-            return TruffleString.createFromByteArray(array, offset, length, stride, Encoding.UTF_16, codePointLength, codeRange, hash, true);
+            TruffleString result = TruffleString.createFromByteArray(array, offset, length, stride, Encoding.UTF_16, codePointLength, codeRange, hash, true);
+            if (CACHE_JAVA_STRINGS && fullLength) {
+                // the new string is not yet published, so a plain store is enough
+                result.javaString = javaString;
+            }
+            return result;
         }
 
         /**
@@ -8026,7 +8071,22 @@ public final class TruffleString extends AbstractTruffleString {
                         @Cached @Shared InlinedConditionProfile impreciseProfile,
                         @Cached @Shared TStringInternalNodes.TransCodeNode transCodeNode,
                         @Cached @Shared InlinedConditionProfile reuseProfile,
-                        @Cached @Shared InlinedConditionProfile noTranscodeProfile) {
+                        @Cached @Shared InlinedConditionProfile noTranscodeProfile,
+                        @Cached @Shared InlinedConditionProfile cachedJavaStringProfile) {
+            if (CACHE_JAVA_STRINGS) {
+                String cached = a.javaString;
+                if (cachedJavaStringProfile.profile(node, cached != null)) {
+                    return cached;
+                }
+                return a.cacheJavaString(createJavaStringUTF16(a, node, managedProfileA, nativeProfileA, calcCodePointLengthProfile, impreciseProfile, transCodeNode, reuseProfile,
+                                noTranscodeProfile));
+            }
+            return createJavaStringUTF16(a, node, managedProfileA, nativeProfileA, calcCodePointLengthProfile, impreciseProfile, transCodeNode, reuseProfile, noTranscodeProfile);
+        }
+
+        private static String createJavaStringUTF16(TruffleString a, Node node, InlinedConditionProfile managedProfileA, InlinedConditionProfile nativeProfileA,
+                        InlinedConditionProfile calcCodePointLengthProfile, InlinedConditionProfile impreciseProfile, TStringInternalNodes.TransCodeNode transCodeNode,
+                        InlinedConditionProfile reuseProfile, InlinedConditionProfile noTranscodeProfile) {
             TruffleString cur;
             if (a.isCompatibleToIntl(Encoding.UTF_16) || (cur = a.next) == null) {
                 cur = a;
