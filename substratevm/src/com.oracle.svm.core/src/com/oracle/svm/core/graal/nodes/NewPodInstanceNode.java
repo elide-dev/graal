@@ -34,6 +34,7 @@ import com.oracle.svm.shared.util.SubstrateUtil;
 
 import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.core.common.type.TypeReference;
+import jdk.graal.compiler.core.gen.DebugInfoBuilder;
 import jdk.graal.compiler.graph.NodeClass;
 import jdk.graal.compiler.nodeinfo.NodeInfo;
 import jdk.graal.compiler.nodes.ConstantNode;
@@ -56,7 +57,7 @@ public final class NewPodInstanceNode extends AbstractNewObjectNode implements V
 
     public static class Options {
         @Option(help = "Scalar-replace pods (Truffle static objects with field-based storage) in runtime compilation.") //
-        public static final RuntimeOptionKey<Boolean> VirtualizePods = new RuntimeOptionKey<>(false, RelevantForCompilationIsolates);
+        public static final RuntimeOptionKey<Boolean> VirtualizePods = new RuntimeOptionKey<>(true, RelevantForCompilationIsolates);
     }
 
     private final ResolvedJavaType knownInstanceType;
@@ -111,6 +112,13 @@ public final class NewPodInstanceNode extends AbstractNewObjectNode implements V
     @Override
     public void virtualize(VirtualizerTool tool) {
         if (SubstrateUtil.HOSTED || !Options.VirtualizePods.getValue() || knownInstanceType == null || layout == null || pod == null) {
+            return;
+        }
+        if (DebugInfoBuilder.class.desiredAssertionStatus()) {
+            /*
+             * The assertions of DebugInfoBuilder.checkValues expect virtual objects to have only
+             * Java fields, so images with those assertions enabled do not scalar-replace pods.
+             */
             return;
         }
         if (!hub.isConstant() || !arrayLength.isConstant() || !referenceMap.isConstant() || !layout.isConstant() || !pod.isConstant()) {
