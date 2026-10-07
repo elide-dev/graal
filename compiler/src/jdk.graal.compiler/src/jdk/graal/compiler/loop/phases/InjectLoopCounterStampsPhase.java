@@ -74,7 +74,8 @@ import jdk.graal.compiler.phases.common.util.EconomicSetNodeEventListener;
 public class InjectLoopCounterStampsPhase extends BasePhase<CoreProviders> {
 
     public static class Options {
-        @Option(help = "Injects stamps on induction variables.", type = OptionType.Debug) public static final OptionKey<Boolean> OptLoopPhiStamps = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
+        @Option(help = "Injects stamps on induction variables.", type = OptionType.Debug) public static final OptionKey<Boolean> OptLoopPhiStamps = new OptionKey<>(
+                        EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
     }
 
     public static Stamp betterLoopCounterStamp(CountedLoopInfo counted, InductionVariable counter, IntegerStamp initStampBaseIV, IntegerStamp extremumStamp, IntegerStamp originalStamp) {
