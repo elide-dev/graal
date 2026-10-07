@@ -220,14 +220,14 @@ def overlay_jars(ce_home, ee_home):
                 target = os.path.join(ee_home, relative)
                 if os.path.exists(target):
                     shutil.copy2(os.path.join(ce_home, relative), target)
-                    replaced.append(target)
+                    replaced.append(os.path.normcase(os.path.normpath(target)))
     print(f"replaced {len(replaced)} jars with the fork's")
     if not replaced:
         fail("no jars to overlay; is the CE home right?")
     for directory in OVERLAY_DIRS:
         for dirpath, _, files in os.walk(os.path.join(ee_home, directory)):
             for name in files:
-                path = os.path.join(dirpath, name)
+                path = os.path.normcase(os.path.normpath(os.path.join(dirpath, name)))
                 if name.endswith(".jar") and path not in replaced:
                     enterprise.append(path)
     return replaced, sorted(enterprise)
