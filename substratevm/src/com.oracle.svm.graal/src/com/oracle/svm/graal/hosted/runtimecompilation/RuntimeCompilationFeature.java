@@ -76,6 +76,10 @@ import com.oracle.svm.core.graal.code.SubstratePlatformConfigurationProvider;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
 import com.oracle.svm.core.graal.meta.SubstrateReplacements;
 import com.oracle.svm.core.graal.nodes.InlinedInvokeArgumentsNode;
+import com.oracle.svm.core.graal.nodes.SubstrateAtomicReadAndAddNode;
+import com.oracle.svm.core.graal.nodes.SubstrateAtomicReadAndWriteNode;
+import com.oracle.svm.core.graal.nodes.SubstrateUnsafeCompareAndExchangeNode;
+import com.oracle.svm.core.graal.nodes.SubstrateUnsafeCompareAndSwapNode;
 import com.oracle.svm.core.graal.word.SubstrateWordTypes;
 import com.oracle.svm.core.heap.BarrierSetProvider;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
@@ -512,6 +516,15 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
         SubstrateReplacements replacements = (SubstrateReplacements) RuntimeCompilationSupport.getRuntimeConfig().getProviders().getReplacements();
         for (NodeClass<?> nodeClass : replacements.getSnippetNodeClasses()) {
             config.getMetaAccess().lookupJavaType(nodeClass.getClazz()).registerAsInstantiated("All " + NodeClass.class.getName() + " classes are marked as instantiated eagerly.");
+        }
+
+        /*
+         * UseVirtualizableAtomicsPhase adds these nodes to graphs for runtime compilation after
+         * analysis, just before encoding.
+         */
+        for (Class<?> nodeClass : List.of(SubstrateUnsafeCompareAndSwapNode.class, SubstrateUnsafeCompareAndExchangeNode.class, SubstrateAtomicReadAndWriteNode.class,
+                        SubstrateAtomicReadAndAddNode.class)) {
+            config.getMetaAccess().lookupJavaType(nodeClass).registerAsInstantiated("Added to graphs for runtime compilation by " + UseVirtualizableAtomicsPhase.class.getName());
         }
 
         /*

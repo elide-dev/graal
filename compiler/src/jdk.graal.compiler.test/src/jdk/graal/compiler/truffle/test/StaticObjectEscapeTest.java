@@ -244,6 +244,51 @@ public class StaticObjectEscapeTest extends TestWithSynchronousCompiling {
         assertArrayEquals(expected, result);
     }
 
+    /**
+     * Atomic accesses in compiled code, on an object that stays scalar-replaced, then after
+     * compiled code deoptimizes while it is.
+     */
+    @Test
+    public void atomics() {
+        Shapes shapes = new Shapes();
+        RootNode root = new TestRoot(shapes) {
+            @Override
+            public Object execute(VirtualFrame frame) {
+                Object object = create(frame.getArguments());
+                int seed = (int) frame.getArguments()[0];
+                boolean swapped = shapes.i.compareAndSwapInt(object, seed, seed * 2);
+                int added = shapes.i.getAndAddInt(object, 3);
+                long exchanged = shapes.l.compareAndExchangeLong(object, seed * 1000L, -1L);
+                boolean doubleSwapped = shapes.d.compareAndSwapDouble(object, seed + 0.5, 2.25);
+                boolean shortSwapped = shapes.s.compareAndSwapShort(object, (short) seed, (short) 9);
+                Object oldObject = shapes.o.getAndSetObject(object, "replaced");
+                if (seed < 0) {
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                }
+                return new Object[]{swapped, added, exchanged, doubleSwapped, shortSwapped, oldObject, shapes.values(object)};
+            }
+        };
+        OptimizedCallTarget target = compile(root, args(1));
+        for (int seed : new int[]{2, 3, -4}) {
+            Object[] args = args(seed);
+            Object[] result = (Object[]) target.call(args);
+            assertEquals(true, result[0]);
+            assertEquals(seed * 2, result[1]);
+            assertEquals(seed * 1000L, result[2]);
+            assertEquals(true, result[3]);
+            assertEquals(true, result[4]);
+            assertEquals(args[4], result[5]);
+            Object[] expected = expected(args);
+            expected[0] = seed * 2 + 3;
+            expected[1] = -1L;
+            expected[2] = 2.25;
+            expected[4] = "replaced";
+            expected[5] = (short) 9;
+            assertArrayEquals(expected, (Object[]) result[6]);
+        }
+        assertFalse(target.isValid());
+    }
+
     @TruffleBoundary
     static Object collect(Object object) {
         System.gc();
