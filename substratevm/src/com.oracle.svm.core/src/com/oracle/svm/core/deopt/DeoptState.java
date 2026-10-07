@@ -42,6 +42,8 @@ import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueType;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.graal.nodes.NewPodInstanceNode;
+import com.oracle.svm.core.heap.Pod;
 import com.oracle.svm.core.heap.ReferenceAccess;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.LayoutEncoding;
@@ -185,7 +187,9 @@ public class DeoptState {
         Object obj;
         UnsignedWord curOffset;
         int layoutEncoding = hub.getLayoutEncoding();
-        if (LayoutEncoding.isArray(layoutEncoding)) {
+        if (hub.isPodInstanceClass()) {
+            return materializePod(hub, encodings, virtualObjectId, sourceFrame);
+        } else if (LayoutEncoding.isArray(layoutEncoding)) {
             /* For arrays, the second encoded value is the array length. */
             int length = readValue(encodings[1], sourceFrame).asInt();
             curIdx++;
@@ -241,6 +245,41 @@ public class DeoptState {
             JavaConstant con = readValue(value, sourceFrame);
             Deoptimizer.writeValueInMaterializedObj(obj, curOffset, con, sourceFrame);
             curOffset = curOffset.add(objectLayout.sizeInBytes(kind));
+            curIdx++;
+        }
+        return obj;
+    }
+
+    /**
+     * Materializes a scalar-replaced pod, encoded by {@code FrameInfoEncoder.makePodVirtualObject}:
+     * after the hub come the pod, the number of written Java fields, their offsets and values, and
+     * the values of the pod's fields in the order of its {@linkplain Pod#getFieldLayout layout}.
+     */
+    private Object materializePod(DynamicHub hub, FrameInfoQueryResult.ValueInfo[] encodings, int virtualObjectId, FrameInfoQueryResult sourceFrame) {
+        Pod<?> pod = (Pod<?>) SubstrateObjectConstant.asObject(readValue(encodings[1], sourceFrame));
+        /* Allocates a zeroed instance with the pod's reference map, so a GC can scan it. */
+        Object obj = NewPodInstanceNode.newPodInstance(null, DynamicHub.toClass(hub), pod.getArrayLength(), pod.getReferenceMap());
+
+        /* Store the reference before filling the object. This breaks cycles in the object graph. */
+        materializedObjects[virtualObjectId] = obj;
+        Deoptimizer.maybeTestGC();
+
+        int javaFieldCount = readValue(encodings[2], sourceFrame).asInt();
+        int curIdx = 3;
+        for (int i = 0; i < javaFieldCount; i++) {
+            int offset = readValue(encodings[curIdx], sourceFrame).asInt();
+            JavaConstant con = readValue(encodings[curIdx + 1], sourceFrame);
+            Deoptimizer.writeValueInMaterializedObj(obj, Word.unsigned(offset), con, sourceFrame);
+            curIdx += 2;
+        }
+
+        int[] layout = pod.getFieldLayout();
+        if (encodings.length - curIdx != layout.length) {
+            throw fatalDeoptimizationError("Pod field count mismatch: " + (encodings.length - curIdx) + " values for " + layout.length + " fields", sourceFrame);
+        }
+        for (int element : layout) {
+            JavaConstant con = readValue(encodings[curIdx], sourceFrame);
+            Deoptimizer.writeValueInMaterializedObj(obj, Word.unsigned(Pod.fieldLayoutOffset(element)), con, sourceFrame);
             curIdx++;
         }
         return obj;

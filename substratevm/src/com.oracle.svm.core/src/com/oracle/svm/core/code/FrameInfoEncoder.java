@@ -854,6 +854,13 @@ public class FrameInfoEncoder {
         /* The first element is the hub of the virtual object. */
         valueList.add(makeValueInfo(data, JavaKind.Object, constantAccess.forObject(type.getHub(), false), isDeoptEntry));
 
+        if (type.getHub().isPodInstanceClass()) {
+            makePodVirtualObject(data, virtualObject, type, valueList, isDeoptEntry);
+            data.virtualObjects[id] = valueList.toArray(new ValueInfo[0]);
+            ImageSingletons.lookup(Counters.class).virtualObjectsCount.inc();
+            return;
+        }
+
         ObjectLayout objectLayout = ObjectLayout.singleton();
         assert type.isArray() == LayoutEncoding.isArray(type.getHub().getLayoutEncoding()) : "deoptimization code uses layout encoding to determine if type is an array";
         if (type.isArray()) {
@@ -956,6 +963,49 @@ public class FrameInfoEncoder {
 
         data.virtualObjects[id] = valueList.toArray(new ValueInfo[0]);
         ImageSingletons.lookup(Counters.class).virtualObjectsCount.inc();
+    }
+
+    /**
+     * Encodes a scalar-replaced pod (a {@code VirtualPodNode}), whose values are its Java instance
+     * fields, then its pod fields in the order of the pod's field layout, then the pod. After the
+     * hub, the encoding is: the pod; the number of Java fields that are written; for each of them,
+     * its offset and value; and the values of all pod fields. Deoptimization allocates the pod
+     * instance from the pod and takes the offsets of pod fields from its layout, so that this code,
+     * which may run in a compilation isolate, does not need to read the pod.
+     */
+    private void makePodVirtualObject(FrameData data, VirtualObject virtualObject, SharedType type, ArrayList<ValueInfo> valueList, boolean isDeoptEntry) {
+        JavaValue[] values = virtualObject.getValues();
+        SharedField[] javaFields = (SharedField[]) type.getInstanceFields(true);
+        int podIndex = values.length - 1;
+        VMError.guarantee(podIndex >= javaFields.length, "Pod virtual object has fewer values than Java fields");
+        valueList.add(makeValueInfo(data, JavaKind.Object, values[podIndex], isDeoptEntry));
+
+        int countIndex = valueList.size();
+        valueList.add(null);
+        int written = 0;
+        ObjectLayout objectLayout = ObjectLayout.singleton();
+        for (int i = 0; i < javaFields.length; i++) {
+            SharedField field = javaFields[i];
+            JavaKind valueKind = virtualObject.getSlotKind(i);
+            if (field.getLocation() < 0 || valueKind == JavaKind.Illegal) {
+                continue;
+            }
+            JavaKind kind = field.getStorageKind();
+            if (objectLayout.sizeInBytes(kind) == 4 && objectLayout.sizeInBytes(valueKind) == 8) {
+                /* As for instances, a wide value written to a narrow field spans the next one. */
+                kind = valueKind;
+            }
+            valueList.add(makeValueInfo(data, JavaKind.Int, JavaConstant.forInt(field.getLocation()), isDeoptEntry));
+            valueList.add(makeValueInfo(data, kind, values[i], isDeoptEntry));
+            written++;
+        }
+        valueList.set(countIndex, makeValueInfo(data, JavaKind.Int, JavaConstant.forInt(written), isDeoptEntry));
+
+        for (int i = javaFields.length; i < podIndex; i++) {
+            JavaKind kind = virtualObject.getSlotKind(i);
+            VMError.guarantee(kind != JavaKind.Illegal, "Pod field without a value");
+            valueList.add(makeValueInfo(data, kind, values[i], isDeoptEntry));
+        }
     }
 
     /**

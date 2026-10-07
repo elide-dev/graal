@@ -76,9 +76,19 @@ public final class Pod<T> {
     private final RuntimeSupport.PodInfo podInfo;
     private final int arrayLength;
     private final byte[] referenceMap;
+    /**
+     * The offset and kind of every field in the array part, including those of superpods, sorted
+     * by offset. Each element is {@code offset << FIELD_LAYOUT_KIND_BITS | kind.ordinal()}; see
+     * {@link #fieldLayoutOffset} and {@link #fieldLayoutKind}. Runtime compilation uses it to
+     * scalar-replace pods, and deoptimization to rematerialize them.
+     */
+    private final int[] fieldLayout;
     private final T factory;
 
-    private Pod(RuntimeSupport.PodInfo podInfo, int arrayLength, byte[] referenceMap) {
+    private static final int FIELD_LAYOUT_KIND_BITS = 4;
+    private static final JavaKind[] KINDS = JavaKind.values();
+
+    private Pod(RuntimeSupport.PodInfo podInfo, int arrayLength, byte[] referenceMap, int[] fieldLayout) {
         this.podInfo = podInfo;
         try {
             @SuppressWarnings("unchecked")
@@ -89,10 +99,39 @@ public final class Pod<T> {
         }
         this.arrayLength = arrayLength;
         this.referenceMap = referenceMap;
+        this.fieldLayout = fieldLayout;
     }
 
     public T getFactory() {
         return factory;
+    }
+
+    /** The length of the array part of instances, see {@link Builder#build}. */
+    public int getArrayLength() {
+        return arrayLength;
+    }
+
+    /** The encoded reference map of instances, see {@link ReferenceMapEncoder}. */
+    public byte[] getReferenceMap() {
+        return referenceMap;
+    }
+
+    /** See {@link #fieldLayout}. Must not be modified. */
+    public int[] getFieldLayout() {
+        return fieldLayout;
+    }
+
+    public static int fieldLayoutOffset(int element) {
+        return element >>> FIELD_LAYOUT_KIND_BITS;
+    }
+
+    public static JavaKind fieldLayoutKind(int element) {
+        return KINDS[element & ((1 << FIELD_LAYOUT_KIND_BITS) - 1)];
+    }
+
+    private static int fieldLayoutElement(int offset, JavaKind kind) {
+        assert offset >= 0 && kind.ordinal() < (1 << FIELD_LAYOUT_KIND_BITS) : offset + " " + kind;
+        return (offset << FIELD_LAYOUT_KIND_BITS) | kind.ordinal();
     }
 
     /**
@@ -175,7 +214,7 @@ public final class Pod<T> {
 
             JavaKind kind = JavaKind.fromJavaClass(type);
             int size = ObjectLayout.singleton().sizeInBytes(kind);
-            Field f = new Field(size, kind.isObject());
+            Field f = new Field(size, kind);
             fields.add(f);
             return f;
         }
@@ -214,6 +253,12 @@ public final class Pod<T> {
                 nextOffset = nextOffset.add(superPod.arrayLength - superRefMap.length);
             }
             ReferenceMapEncoder refMapEncoder = new ReferenceMapEncoder(superRefMap);
+            int superLayoutLength = superPod != null ? superPod.fieldLayout.length : 0;
+            int[] layout = new int[superLayoutLength + fields.size()];
+            if (superPod != null) {
+                System.arraycopy(superPod.fieldLayout, 0, layout, 0, superLayoutLength);
+            }
+            int layoutIndex = superLayoutLength;
             while (!fields.isEmpty()) {
                 boolean progress = false;
                 for (int i = 0; i < fields.size(); i++) {
@@ -221,6 +266,7 @@ public final class Pod<T> {
 
                     if (nextOffset.unsignedRemainder(field.size).equal(0)) {
                         field.initOffset(UnsignedUtils.safeToInt(nextOffset));
+                        layout[layoutIndex++] = fieldLayoutElement(field.offset, field.kind);
 
                         if (field.isReference) {
                             refMapEncoder.add(UnsignedUtils.safeToInt(nextOffset.subtract(baseOffset)), field.size);
@@ -239,19 +285,32 @@ public final class Pod<T> {
 
             byte[] referenceMap = refMapEncoder.encode();
             int arrayLength = UnsignedUtils.safeToInt(nextOffset) + referenceMap.length;
-            return new Pod<>(podInfo, arrayLength, referenceMap);
+            /* Superpod fields come first and fields are placed at increasing offsets. */
+            assert layoutIndex == layout.length && isSortedByOffset(layout);
+            return new Pod<>(podInfo, arrayLength, referenceMap, layout);
+        }
+
+        private static boolean isSortedByOffset(int[] layout) {
+            for (int i = 1; i < layout.length; i++) {
+                if (fieldLayoutOffset(layout[i - 1]) >= fieldLayoutOffset(layout[i])) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
     public static final class Field implements Comparable<Field> {
         private final int size;
         private final boolean isReference;
+        private final JavaKind kind;
         private int offset = -1;
 
-        Field(int size, boolean isReference) {
+        Field(int size, JavaKind kind) {
             assert size > 0;
             this.size = size;
-            this.isReference = isReference;
+            this.isReference = kind.isObject();
+            this.kind = kind;
         }
 
         public int getSize() {
