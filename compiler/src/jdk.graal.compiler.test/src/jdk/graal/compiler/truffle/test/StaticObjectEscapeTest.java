@@ -261,11 +261,12 @@ public class StaticObjectEscapeTest extends TestWithSynchronousCompiling {
                 long exchanged = shapes.l.compareAndExchangeLong(object, seed * 1000L, -1L);
                 boolean doubleSwapped = shapes.d.compareAndSwapDouble(object, seed + 0.5, 2.25);
                 boolean shortSwapped = shapes.s.compareAndSwapShort(object, (short) seed, (short) 9);
+                boolean booleanExchanged = shapes.b.compareAndExchangeBoolean(object, seed % 2 == 0, seed % 2 != 0);
                 Object oldObject = shapes.o.getAndSetObject(object, "replaced");
                 if (seed < 0) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
                 }
-                return new Object[]{swapped, added, exchanged, doubleSwapped, shortSwapped, oldObject, shapes.values(object)};
+                return new Object[]{swapped, added, exchanged, doubleSwapped, shortSwapped && booleanExchanged == (seed % 2 == 0), oldObject, shapes.values(object)};
             }
         };
         OptimizedCallTarget target = compile(root, args(1));
@@ -284,6 +285,7 @@ public class StaticObjectEscapeTest extends TestWithSynchronousCompiling {
             expected[2] = 2.25;
             expected[4] = "replaced";
             expected[5] = (short) 9;
+            expected[3] = seed % 2 != 0;
             assertArrayEquals(expected, (Object[]) result[6]);
         }
         assertFalse(target.isValid());

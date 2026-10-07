@@ -784,6 +784,11 @@ suite = {
       "requires" : [
         "jdk.unsupported", # sun.misc.Unsafe
       ],
+      "requiresConcealed" : {
+        "java.base" : [
+          "jdk.internal.misc", # Unsafe narrow compare-and-swap in native images
+        ],
+      },
       "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "17+",
       "javadocType" : "api",
