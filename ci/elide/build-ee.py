@@ -14,7 +14,7 @@ graal-management.jar. When lib/jvmci exists, the native-image driver puts those 
 builder's --upgrade-module-path, so every image build uses the fork's compiler with the enterprise
 compiler on top. The JIT of the java launcher (libgraal) stays Oracle's. A change to another module
 that Oracle's build has inside lib/modules fails the build if it changes the module's classes: those
-cannot be upgraded. Changes to comments or formatting leave the classes byte-identical and pass.
+cannot be upgraded. Changes to comments or formatting, which only move line numbers, pass.
 
 LinkCheck.java then checks that the enterprise code (the jars only Oracle's build has, and the
 enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
@@ -144,7 +144,7 @@ def changed_linked_modules(graal, ee_commit, ce_home, ee_home):
         elif source:
             fixed.setdefault(LINKED_SOURCES[source], []).append(path)
     for module, paths in sorted(fixed.items()):
-        differing = differing_classes(ce_home, ee_home, module)
+        differing = differing_classes(graal, ce_home, ee_home, module)
         if differing:
             fail(f"the fork changes {module}, which Oracle's build has inside lib/modules and the EE "
                  f"distribution cannot upgrade: classes {', '.join(differing[:20])} differ (sources: {', '.join(paths)})")
@@ -152,25 +152,21 @@ def changed_linked_modules(graal, ee_commit, ce_home, ee_home):
     return sorted(modules)
 
 
-def differing_classes(ce_home, ee_home, module):
-    """The classes of a module in lib/modules that differ between the CE build and Oracle's."""
-    trees = []
+def differing_classes(graal, ce_home, ee_home, module):
+    """The classes of a module in lib/modules that differ between the CE build and Oracle's, apart
+    from debug information (ClassDiff.java): comment changes move line numbers."""
+    dirs = []
     for home in (ce_home, ee_home):
         jimage = os.path.join(home, "bin", "jimage.exe" if os.name == "nt" else "jimage")
         out = tempfile.mkdtemp()
         run(jimage, "extract", "--dir", out, "--include", f"regex:/{module}/.*", os.path.join(home, "lib", "modules"))
-        files = {}
-        root = os.path.join(out, module)
-        for dirpath, _, names in os.walk(root):
-            for name in names:
-                if name.endswith(".class"):
-                    path = os.path.join(dirpath, name)
-                    with open(path, "rb") as f:
-                        files[os.path.relpath(path, root).replace(os.sep, "/")] = hashlib.sha256(f.read()).digest()
-        shutil.rmtree(out)
-        trees.append(files)
-    ce, ee = trees
-    return sorted(name for name in ce.keys() | ee.keys() if ce.get(name) != ee.get(name))
+        dirs.append(out)
+    java = os.path.join(ee_home, "bin", "java.exe" if os.name == "nt" else "java")
+    script = os.path.join(graal, "ci", "elide", "ClassDiff.java")
+    differing = run(java, script, os.path.join(dirs[0], module), os.path.join(dirs[1], module)).split()
+    for d in dirs:
+        shutil.rmtree(d)
+    return differing
 
 
 def write_upgrade_jars(ce_home, ee_home, modules):
