@@ -6,11 +6,18 @@ fork's base (same GraalVM version and JVMCI). Its open-source jars are replaced 
 taken from the CE distribution built in the same job. The enterprise parts stay: svm-enterprise
 (PGO, code compression, ...), the G1 libraries, the enterprise compiler and Truffle modules.
 
-Oracle's build has the Graal compiler inside lib/modules, so the fork's compiler changes cannot
-be overlaid as jars. The fork may only change compiler classes used for Truffle compilation; their
-classes are put in lib/truffle/builder/elide-compiler-patch.jar, which the truffle-svm macro
-(enabled by truffle-runtime) adds to the image builder with --patch-module. Any other change to
-code that Oracle's build has inside lib/modules fails the build.
+Oracle's build has the Graal compiler inside lib/modules. Its jdk.graal.compiler module is the
+open-source build of the same sources (byte for byte); the enterprise compiler is a separate module
+(com.oracle.graal.graal_enterprise). The fork's compiler modules (jdk.graal.compiler and
+jdk.graal.compiler.management), taken from the CE build, go in lib/jvmci as graal.jar and
+graal-management.jar. When lib/jvmci exists, the native-image driver puts those on the image
+builder's --upgrade-module-path, so every image build uses the fork's compiler with the enterprise
+compiler on top. The JIT of the java launcher (libgraal) stays Oracle's. A change to another module
+that Oracle's build has inside lib/modules fails the build: those cannot be upgraded.
+
+LinkCheck.java then checks that the enterprise code (the jars only Oracle's build has, and the
+enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
+modules.
 
   build-ee.py <version> <platform> <ce-home> <out-dir>
 
@@ -43,17 +50,20 @@ OVERLAY_DIRS = ("lib/svm", "lib/truffle", "lib/graalvm")
 LINKED_SOURCES = (
     "compiler/src/jdk.graal.compiler/",
     "compiler/src/jdk.graal.compiler.management/",
+    "compiler/src/jdk.graal.compiler.options/",
     "sdk/src/org.graalvm.collections/",
     "sdk/src/org.graalvm.nativeimage/",
     "sdk/src/org.graalvm.nativeimage.libgraal/",
     "sdk/src/org.graalvm.word/",
     "truffle/src/com.oracle.truffle.compiler/",
 )
-# The subset that may change: compiler classes used for Truffle compilation, patched by the
-# truffle-svm macro.
-PATCHABLE_SOURCES = "compiler/src/jdk.graal.compiler/src/jdk/graal/compiler/truffle/"
-PATCH_JAR = "lib/truffle/builder/elide-compiler-patch.jar"
-MACRO = "lib/svm/macros/truffle-svm/native-image.properties"
+# The subset that may change: modules the native-image driver upgrades from lib/jvmci (source
+# directory -> module, jar).
+UPGRADEABLE_SOURCES = {
+    "compiler/src/jdk.graal.compiler/": ("jdk.graal.compiler", "graal.jar"),
+    "compiler/src/jdk.graal.compiler.management/": ("jdk.graal.compiler.management", "graal-management.jar"),
+}
+UPGRADE_DIR = "lib/jvmci"
 
 
 def fail(message):
@@ -117,52 +127,67 @@ def jvmci_tag(release):
     return match.group(0) if match else None
 
 
-def changed_linked_sources(graal, ee_commit):
-    """The fork's changes, relative to the sources of Oracle's build, in modules inside lib/modules."""
+def changed_linked_modules(graal, ee_commit):
+    """The upgradeable modules (module, jar) whose sources the fork changes, relative to the sources
+    of Oracle's build. Fails if the fork changes another module inside lib/modules."""
     repository = "https://github.com/oracle/graal"
     run("git", "fetch", "--quiet", "--depth=1", repository, ee_commit, cwd=graal)
-    names = run("git", "diff", "--name-status", "--no-renames", ee_commit, "HEAD", "--", *LINKED_SOURCES, cwd=graal)
-    changes = [line.split("\t", 1) for line in names.splitlines() if line]
-    not_patchable = [path for status, path in changes if status == "D" or not path.startswith(PATCHABLE_SOURCES)]
-    if not_patchable:
-        fail("the fork changes code that Oracle's build has inside lib/modules, which the EE "
-             f"distribution cannot carry: {', '.join(not_patchable)}")
-    return [path for _, path in changes if path.endswith(".java")]
+    names = run("git", "diff", "--name-only", "--no-renames", ee_commit, "HEAD", "--", *LINKED_SOURCES, cwd=graal)
+    modules, not_upgradeable = set(), []
+    for path in names.splitlines():
+        source = next((s for s in UPGRADEABLE_SOURCES if path.startswith(s)), None)
+        if source:
+            modules.add(UPGRADEABLE_SOURCES[source])
+        elif path:
+            not_upgradeable.append(path)
+    if not_upgradeable:
+        fail("the fork changes code that Oracle's build has inside lib/modules and that the EE "
+             f"distribution cannot upgrade: {', '.join(not_upgradeable)}")
+    return sorted(modules)
 
 
-def write_patch_jar(ce_home, ee_home, sources):
-    """Puts the CE build's classes of the given compiler sources into the patch jar."""
-    classes_dir = tempfile.mkdtemp()
+def write_upgrade_jars(ce_home, ee_home, modules):
+    """Puts the CE build's copy of each module into lib/jvmci, as a modular jar. Returns the jars."""
     jimage = os.path.join(ce_home, "bin", "jimage.exe" if os.name == "nt" else "jimage")
-    run(jimage, "extract", "--dir", classes_dir, "--include", "regex:/jdk.graal.compiler/jdk/graal/compiler/truffle/.*",
-        os.path.join(ce_home, "lib", "modules"))
-    module_dir = os.path.join(classes_dir, "jdk.graal.compiler")
-    entries = []
-    for source in sources:
-        relative = source[len("compiler/src/jdk.graal.compiler/src/"):-len(".java")]
-        package_dir, name = os.path.split(relative)
-        found = [f for f in os.listdir(os.path.join(module_dir, package_dir))
-                 if f == f"{name}.class" or (f.startswith(f"{name}$") and f.endswith(".class"))]
-        if f"{name}.class" not in found:
-            fail(f"no class for {source} in the CE distribution")
-        entries += [f"{package_dir}/{f}" for f in sorted(found)]
-    with zipfile.ZipFile(os.path.join(ee_home, PATCH_JAR), "w", zipfile.ZIP_DEFLATED) as jar:
-        for entry in entries:
-            jar.write(os.path.join(module_dir, entry), entry)
-    shutil.rmtree(classes_dir)
-    print(f"compiler patch: {len(entries)} classes from {len(sources)} sources")
+    os.makedirs(os.path.join(ee_home, UPGRADE_DIR), exist_ok=True)
+    jars = []
+    for module, jar_name in modules:
+        classes_dir = tempfile.mkdtemp()
+        run(jimage, "extract", "--dir", classes_dir, "--include", f"regex:/{module}/.*", os.path.join(ce_home, "lib", "modules"))
+        module_dir = os.path.join(classes_dir, module)
+        if not os.path.isfile(os.path.join(module_dir, "module-info.class")):
+            fail(f"no module {module} in the CE distribution")
+        jar_path = os.path.join(ee_home, UPGRADE_DIR, jar_name)
+        count = 0
+        with zipfile.ZipFile(jar_path, "w", zipfile.ZIP_DEFLATED) as jar:
+            for dirpath, _, files in os.walk(module_dir):
+                for name in sorted(files):
+                    path = os.path.join(dirpath, name)
+                    entry = os.path.relpath(path, module_dir).replace(os.sep, "/")
+                    if entry == "module-info.java":  # jimage's rendering of the descriptor
+                        continue
+                    jar.write(path, entry)
+                    count += name.endswith(".class")
+        shutil.rmtree(classes_dir)
+        print(f"upgraded {module}: {UPGRADE_DIR}/{jar_name} ({count} classes)")
+        jars.append(jar_path)
+    return jars
 
-    macro = os.path.join(ee_home, MACRO)
-    with open(macro, encoding="utf-8") as f:
-        text = f.read()
-    if re.search(r"^JavaArgs\s*=", text, re.M):
-        fail(f"{MACRO} already has JavaArgs; merge the --patch-module argument into them")
-    with open(macro, "a", encoding="utf-8") as f:
-        f.write(f"\nJavaArgs = --patch-module=jdk.graal.compiler=${{.}}/../../../truffle/builder/{os.path.basename(PATCH_JAR)}\n")
+
+def link_check(graal, ee_home, fork_jars, enterprise_jars):
+    java = os.path.join(ee_home, "bin", "java.exe" if os.name == "nt" else "java")
+    script = os.path.join(graal, "ci", "elide", "LinkCheck.java")
+    result = subprocess.run([java, script, ee_home, *fork_jars, "--", *enterprise_jars], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    print(result.stdout, end="")
+    if result.returncode != 0:
+        fail("the enterprise code does not link against the fork's code (see the problems above)")
 
 
 def overlay_jars(ce_home, ee_home):
-    count = 0
+    """Replaces Oracle's jars with the CE build's. Returns the replaced jars and the jars only
+    Oracle's build has."""
+    replaced, enterprise = [], []
     for directory in OVERLAY_DIRS:
         for dirpath, _, files in os.walk(os.path.join(ce_home, directory)):
             for name in files:
@@ -172,10 +197,17 @@ def overlay_jars(ce_home, ee_home):
                 target = os.path.join(ee_home, relative)
                 if os.path.exists(target):
                     shutil.copy2(os.path.join(ce_home, relative), target)
-                    count += 1
-    print(f"replaced {count} jars with the fork's")
-    if count == 0:
+                    replaced.append(target)
+    print(f"replaced {len(replaced)} jars with the fork's")
+    if not replaced:
         fail("no jars to overlay; is the CE home right?")
+    for directory in OVERLAY_DIRS:
+        for dirpath, _, files in os.walk(os.path.join(ee_home, directory)):
+            for name in files:
+                path = os.path.join(dirpath, name)
+                if name.endswith(".jar") and path not in replaced:
+                    enterprise.append(path)
+    return replaced, sorted(enterprise)
 
 
 def package(root, name, platform, out_dir):
@@ -238,10 +270,9 @@ def main():
         fail(f"{tag} names no compiler source revision")
     print(f"base: Oracle GraalVM {ee_release['GRAALVM_VERSION']} ({tag}), open source {ee_commit.group(1)}")
 
-    overlay_jars(ce_home, ee_home)
-    sources = changed_linked_sources(graal, ee_commit.group(1))
-    if sources:
-        write_patch_jar(ce_home, ee_home, sources)
+    replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
+    upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1)))
+    link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
 
     revision = run("git", "rev-parse", "HEAD", cwd=graal).strip()
     release = os.path.join(ee_home, "release")
