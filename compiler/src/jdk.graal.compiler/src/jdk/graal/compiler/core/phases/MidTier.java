@@ -111,6 +111,16 @@ public class MidTier extends BaseTier<MidTierContext> {
         //@formatter:on
     }
 
+    /// The mid-tier defaults for runtime compilation (Truffle on HotSpot and runtime compilation in
+    /// Native Image): counted strip mining is off unless set. For Truffle guest code it adds
+    /// instructions without a peak gain (closure-heavy int loops: +14%; elide-dev/graal#75).
+    public static OptionValues runtimeCompilationDefaults(OptionValues options) {
+        if (Options.StripMineCountedLoops.hasBeenSet(options)) {
+            return options;
+        }
+        return new OptionValues(options, Options.StripMineCountedLoops, false);
+    }
+
     @SuppressWarnings("this-escape")
     public MidTier(OptionValues options) {
         AggressivePartialUnrollPhase.Options.checkPartialUnroll(options);
