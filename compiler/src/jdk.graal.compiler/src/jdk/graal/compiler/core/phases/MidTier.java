@@ -24,6 +24,7 @@
  */
 package jdk.graal.compiler.core.phases;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.GraalOptions;
 import jdk.graal.compiler.core.common.SpectrePHTMitigations;
 import jdk.graal.compiler.duplication.phases.DeDuplicationPhase;
@@ -91,22 +92,22 @@ public class MidTier extends BaseTier<MidTierContext> {
         public static final OptionKey<Boolean> OptimisticAliasingAnalysis = new OptionKey<>(true);
         /// Controls whether integer range guards with the same anchor are combined.
         @Option(help = "Combines integer range guards that have the same anchor.", type = OptionType.Debug)
-        public static final OptionKey<Boolean> OptGuardRangeGrouping = new OptionKey<>(true);
+        public static final OptionKey<Boolean> OptGuardRangeGrouping = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
 
         /// Controls whether eligible loop reads are replaced with loop-carried value phis.
         @Option(help = "Enables access node optimizations for loops. " +
                        "This can reduce the number of memory operations executed in the body of a loop.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> OptimizeLoopAccesses = new OptionKey<>(true);
+        public static final OptionKey<Boolean> OptimizeLoopAccesses = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
 
         @Option(help = "Enables strip mining for non-counted loops.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> StripMineNonCountedLoops = new OptionKey<>(true);
+        public static final OptionKey<Boolean> StripMineNonCountedLoops = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "Enables strip mining for counted loops.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> StripMineCountedLoops = new OptionKey<>(true);
+        public static final OptionKey<Boolean> StripMineCountedLoops = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "Enables preparation phases used by counted strip mining.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> StripMiningPreparationPhases = new OptionKey<>(true);
+        public static final OptionKey<Boolean> StripMiningPreparationPhases = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "Optimizes exact arithmetic where possible by rewriting it " +
                        "to non-exit counterparts iff provably no overflow is possible.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> OptExactArithmetic = new OptionKey<>(true);
+        public static final OptionKey<Boolean> OptExactArithmetic = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         //@formatter:on
     }
 

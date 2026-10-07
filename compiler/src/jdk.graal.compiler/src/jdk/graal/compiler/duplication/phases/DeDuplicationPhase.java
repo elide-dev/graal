@@ -32,6 +32,7 @@ import java.util.Optional;
 
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Equivalence;
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.util.CompilationAlarm;
 import jdk.graal.compiler.debug.Assertions;
 import jdk.graal.compiler.debug.DebugCloseable;
@@ -90,7 +91,7 @@ public class DeDuplicationPhase extends BasePhase<CoreProviders> {
         //@formatter:off
         @Option(help = "Deduplicates statements and expressions before control flow merges if they are equal. " +
                        "This can reduce code size.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> OptDeDuplication = new OptionKey<>(true);
+        public static final OptionKey<Boolean> OptDeDuplication = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         //@formatter:on
     }
 

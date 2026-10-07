@@ -42,6 +42,7 @@ import com.oracle.svm.shared.option.CommonOptionParser.BooleanOptionFormat;
 import com.oracle.svm.shared.option.CommonOptionParser.OptionParseResult;
 import com.oracle.svm.shared.option.UnsupportedOptionClassException;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.options.OptionDescriptor;
 import jdk.graal.compiler.options.OptionDescriptors;
 import jdk.graal.compiler.options.OptionKey;
@@ -68,7 +69,11 @@ public final class PointsToOptionParser {
             if (descriptor.getOptionKey() != null) {
                 OptionDescriptor existing = allAnalysisOptions.put(name, descriptor);
                 if (existing != null) {
-                    AnalysisError.shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existing.getLocation() + " and " + descriptor.getLocation());
+                    OptionDescriptor kept = EnterpriseCompatibility.resolveDuplicateOption(existing, descriptor);
+                    if (kept == null) {
+                        AnalysisError.shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existing.getLocation() + " and " + descriptor.getLocation());
+                    }
+                    allAnalysisOptions.put(name, kept);
                 }
             }
         });

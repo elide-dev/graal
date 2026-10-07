@@ -24,6 +24,7 @@
  */
 package jdk.graal.compiler.loop.phases;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.phases.common.util.LoopUtility;
 import static jdk.graal.compiler.nodeinfo.NodeCycles.CYCLES_IGNORED;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_IGNORED;
@@ -226,7 +227,7 @@ public class SimulationBasedLoopPeeling {
     public static class Options {
         //@formatter:off
         @Option(help = "Uses the dominance-based duplication simulation (DBDS) algorithm to simulate the impact of peeling on a loop.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> SimulationBasedLoopPeeling = new OptionKey<>(true);
+        public static final OptionKey<Boolean> SimulationBasedLoopPeeling = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
 
         @Option(help = "Minimal relative frequency of loop begin necessary to consider peeling.", type = OptionType.Debug)
         /*

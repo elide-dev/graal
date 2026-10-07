@@ -44,6 +44,7 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.MapCursor;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.core.common.GraalOptions;
 import jdk.graal.compiler.core.common.calc.Condition;
@@ -127,7 +128,7 @@ public class RangeCheckEliminationPhase extends BasePhase<MidTierContext> implem
         //@formatter:off
         @Option(help = "Performs range check elimination for Java long type range checks. " +
                 "Requires SpeculativeGuardMovement=true to be enabled.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> RangeCheckElimination = new OptionKey<>(true);
+        public static final OptionKey<Boolean> RangeCheckElimination = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "Log all range check sub values to stdout.", type = OptionType.Debug)
         public static final OptionKey<Boolean> RCELogRangeCheckValues = new OptionKey<>(false);
         @Option(help = "Force range check elimination even when SpeculativeGuardMovement is false.", type = OptionType.Debug)

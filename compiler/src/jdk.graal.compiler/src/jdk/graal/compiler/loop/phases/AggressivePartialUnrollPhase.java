@@ -34,6 +34,7 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.MapCursor;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.phases.common.util.LoopUtility;
 import jdk.graal.compiler.loop.phases.LoopTransformations.ProtectionData;
 
@@ -125,7 +126,7 @@ public class AggressivePartialUnrollPhase extends LoopPhase<LoopPolicies> {
     public static class Options {
         //@formatter:off
         @Option(help = "Enables the advanced version of partial loop unrolling that considers more loop shapes for unrolling.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> AggressivePartialUnroll = new OptionKey<>(true) {
+        public static final OptionKey<Boolean> AggressivePartialUnroll = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS) {
             @Override
             public Boolean getValue(OptionValues values) {
                 Boolean aggressive = super.getValue(values);

@@ -46,6 +46,7 @@ import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.shared.option.IntentionallyUnsupportedOptions;
 import com.oracle.svm.shared.option.SubstrateOptionsParser;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.util.CompilationAlarm;
 import jdk.graal.compiler.hotspot.CompilerConfigurationFactory;
 import jdk.graal.compiler.options.OptionDescriptor;
@@ -90,18 +91,23 @@ public class HostedOptionParser implements HostedOptionProvider {
             }
 
             if (!(descriptor.getOptionKey() instanceof RuntimeOptionKey)) {
-                OptionDescriptor existing = allHostedOptions.put(name, descriptor);
-                if (existing != null) {
-                    throw shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existing.getLocation() + " and " + descriptor.getLocation());
-                }
+                putOption(allHostedOptions, name, descriptor);
             }
             if (!(descriptor.getOptionKey() instanceof HostedOptionKey)) {
-                OptionDescriptor existing = allRuntimeOptions.put(name, descriptor);
-                if (existing != null) {
-                    throw shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existing.getLocation() + " and " + descriptor.getLocation());
-                }
+                putOption(allRuntimeOptions, name, descriptor);
             }
         });
+    }
+
+    private static void putOption(EconomicMap<String, OptionDescriptor> options, String name, OptionDescriptor descriptor) {
+        OptionDescriptor existing = options.put(name, descriptor);
+        if (existing != null) {
+            OptionDescriptor kept = EnterpriseCompatibility.resolveDuplicateOption(existing, descriptor);
+            if (kept == null) {
+                throw shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existing.getLocation() + " and " + descriptor.getLocation());
+            }
+            options.put(name, kept);
+        }
     }
 
     private static EconomicMap<String, OptionDescriptor> mergeOptions(EconomicMap<String, OptionDescriptor> allHostedOptions, EconomicMap<String, OptionDescriptor> allRuntimeOptions) {
@@ -111,7 +117,7 @@ public class HostedOptionParser implements HostedOptionProvider {
             String name = runtimeOptionCursor.getKey();
             OptionDescriptor newDesc = runtimeOptionCursor.getValue();
             OptionDescriptor existingDesc = allOptions.put(name, newDesc);
-            if (existingDesc != null && newDesc != existingDesc) {
+            if (existingDesc != null && newDesc != existingDesc && EnterpriseCompatibility.resolveDuplicateOption(existingDesc, newDesc) != newDesc) {
                 throw shouldNotReachHere("Option name \"" + name + "\" has multiple definitions: " + existingDesc.getLocation() + " and " + newDesc.getLocation());
             }
         }

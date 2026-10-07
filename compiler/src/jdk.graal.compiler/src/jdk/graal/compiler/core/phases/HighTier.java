@@ -88,8 +88,12 @@ public class HighTier extends BaseTier<HighTierContext> {
         // @formatter:on
     }
 
+    /// The options this tier was built with, for [#removeControlFlowDuplicationPhases].
+    private final OptionValues tierOptions;
+
     @SuppressWarnings("this-escape")
     public HighTier(OptionValues options) {
+        this.tierOptions = options;
         AggressivePartialUnrollPhase.Options.checkPartialUnroll(options);
         CanonicalizerPhase canonicalizer = CanonicalizerPhase.create();
         appendPhase(canonicalizer);
@@ -253,6 +257,13 @@ public class HighTier extends BaseTier<HighTierContext> {
 
     /// Removes the top-level block added by [#appendControlFlowDuplicationBlock] so a subclass can
     /// reposition it without changing the ordering of its cleanup phases.
+    /// Removes the control flow duplication phases, under the name Oracle's prebuilt enterprise
+    /// compiler calls (see [jdk.graal.compiler.core.common.EnterpriseCompatibility]). Upstream
+    /// renamed it to [#removeControlFlowDuplicationBlock].
+    protected final void removeControlFlowDuplicationPhases() {
+        removeControlFlowDuplicationBlock(tierOptions);
+    }
+
     protected final void removeControlFlowDuplicationBlock(OptionValues options) {
         if (!isControlFlowDuplicationEnabled(options)) {
             return;
