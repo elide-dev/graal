@@ -24,8 +24,10 @@
  */
 package jdk.graal.compiler.truffle.test;
 
+import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.polyglot.Context;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -109,6 +111,64 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
         assertNone(graph, RawStoreNode.class);
         assertNone(graph, LoadFieldNode.class);
         assertNone(graph, StoreFieldNode.class);
+    }
+
+    /**
+     * Atomic accesses on a pod are scalar-replaced too: compare-and-swap and compare-and-exchange
+     * (also of float and double fields, which compare bits), get-and-set and get-and-add. Only
+     * pods, in a native image, scalar-replace all of these.
+     */
+    @Test
+    public void atomics() {
+        Assume.assumeTrue("pods exist only in a native image", ImageInfo.inImageRuntimeCode() && "field-based".equals(storage));
+        StaticProperty i = new DefaultStaticProperty("i");
+        StaticProperty l = new DefaultStaticProperty("l");
+        StaticProperty d = new DefaultStaticProperty("d");
+        StaticProperty o = new DefaultStaticProperty("o");
+        StaticShape.Builder builder = StaticShape.newBuilder(language);
+        builder.property(i, int.class, false);
+        builder.property(l, long.class, false);
+        builder.property(d, double.class, false);
+        builder.property(o, Object.class, false);
+        StaticShape<DefaultStaticObjectFactory> shape = builder.build();
+
+        RootNode root = new RootNode(language) {
+            @Override
+            public Object execute(VirtualFrame frame) {
+                int arg = (int) frame.getArguments()[0];
+                Object object = shape.getFactory().create();
+                i.setInt(object, arg);
+                boolean swapped = i.compareAndSwapInt(object, arg, arg + 1);
+                int before = i.getAndAddInt(object, 10);
+                int exchanged = i.compareAndExchangeInt(object, arg + 11, 7);
+                long oldLong = l.getAndSetLong(object, 5L);
+                long added = l.getAndAddLong(object, 3L);
+                boolean doubleSwapped = d.compareAndSwapDouble(object, 0.0, 1.5);
+                boolean objectSwapped = o.compareAndSwapObject(object, null, frame.getArguments()[1]);
+                Object oldObject = o.getAndSetObject(object, null);
+                return (swapped ? 1 : 0) + before + exchanged + oldLong + added + l.getLong(object) + (doubleSwapped ? 100 : 0) + d.getDouble(object) + (objectSwapped ? 1000 : 0) +
+                                (oldObject == frame.getArguments()[1] ? 10000 : 0) + i.getInt(object);
+            }
+        };
+        Object[] args = {20, "o"};
+        /* 1 + 21 + 31 + 0 + 5 + 8 + 100 + 1.5 + 1000 + 10000 + 7 */
+        Assert.assertEquals(11174.5, root.getCallTarget().call(args));
+
+        StructuredGraph graph = partialEval(root, args);
+        assertNone(graph, AbstractNewObjectNode.class);
+        assertNone(graph, CommitAllocationNode.class);
+        assertNone(graph, RawLoadNode.class);
+        assertNone(graph, RawStoreNode.class);
+        /*
+         * The atomic accesses are virtualized too. (The frame can remain virtual in frame states,
+         * so virtual objects are not checked here.)
+         */
+        for (Node node : graph.getNodes()) {
+            String name = node.getClass().getSimpleName();
+            if (name.contains("CompareAndSwap") || name.contains("CompareAndExchange") || name.contains("AtomicReadAnd")) {
+                Assert.fail("Atomic access on a static object not virtualized: " + node + " in " + graph);
+            }
+        }
     }
 
     private static void assertNone(StructuredGraph graph, Class<? extends Node> nodeClass) {

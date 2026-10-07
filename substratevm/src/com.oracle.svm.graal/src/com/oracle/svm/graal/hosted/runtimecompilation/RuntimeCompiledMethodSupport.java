@@ -339,6 +339,8 @@ public class RuntimeCompiledMethodSupport {
     }
 
     protected void optimizeBeforeEncoding(StructuredGraph graph, Providers providers, CanonicalizerPhase canonicalizer) {
+        new UseVirtualizableAtomicsPhase().apply(graph, providers);
+
         canonicalizer.apply(graph, providers);
 
         new DominatorBasedGlobalValueNumberingPhase(canonicalizer).apply(graph, providers);
