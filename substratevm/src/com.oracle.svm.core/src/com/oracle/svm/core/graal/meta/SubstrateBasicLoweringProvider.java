@@ -30,19 +30,20 @@ import java.util.Map;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import jdk.graal.compiler.core.common.memory.BarrierType;
 
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
-import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.graal.nodes.FloatingWordCastNode;
 import com.oracle.svm.core.graal.nodes.LoweredDeadEndNode;
+import com.oracle.svm.core.graal.nodes.NewPodInstanceNode;
+import com.oracle.svm.core.graal.nodes.PodSlotField;
 import com.oracle.svm.core.graal.nodes.SubstrateCompressionNode;
 import com.oracle.svm.core.graal.nodes.SubstrateFieldLocationIdentity;
 import com.oracle.svm.core.graal.nodes.SubstrateNarrowOopStamp;
 import com.oracle.svm.core.graal.nodes.ThrowBytecodeExceptionNode;
+import com.oracle.svm.core.graal.nodes.VirtualPodNode;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
 import com.oracle.svm.core.graal.word.SubstrateWordTypes;
 import com.oracle.svm.core.heap.Heap;
@@ -52,8 +53,10 @@ import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.meta.SharedField;
 import com.oracle.svm.core.snippets.SubstrateIsArraySnippets;
+import com.oracle.svm.shared.util.SubstrateUtil;
 
 import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
+import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.spi.ForeignCallsProvider;
 import jdk.graal.compiler.core.common.spi.MetaAccessExtensionProvider;
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
@@ -88,6 +91,7 @@ import jdk.graal.compiler.nodes.extended.BytecodeExceptionNode.BytecodeException
 import jdk.graal.compiler.nodes.extended.GuardingNode;
 import jdk.graal.compiler.nodes.extended.LoadHubNode;
 import jdk.graal.compiler.nodes.java.AbstractNewArrayNode;
+import jdk.graal.compiler.nodes.java.AbstractNewObjectNode;
 import jdk.graal.compiler.nodes.java.NewArrayNode;
 import jdk.graal.compiler.nodes.memory.ReadNode;
 import jdk.graal.compiler.nodes.memory.address.AddressNode;
@@ -95,6 +99,7 @@ import jdk.graal.compiler.nodes.memory.address.OffsetAddressNode;
 import jdk.graal.compiler.nodes.spi.LoweringTool;
 import jdk.graal.compiler.nodes.spi.PlatformConfigurationProvider;
 import jdk.graal.compiler.nodes.type.NarrowOopStamp;
+import jdk.graal.compiler.nodes.virtual.VirtualObjectNode;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.replacements.DefaultJavaLoweringProvider;
@@ -311,8 +316,31 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
 
     @Override
     public int fieldOffset(ResolvedJavaField f) {
+        if (f instanceof PodSlotField podSlot) {
+            /* The pod entry of a VirtualPodNode is not stored: its offset is negative. */
+            return podSlot.getOffset();
+        }
         SharedField field = (SharedField) f;
         return field.isAccessed() ? field.getLocation() : -1;
+    }
+
+    /**
+     * A {@link VirtualPodNode} is materialized with the same allocation as the pod it replaces, which
+     * also installs its reference map; its entries are then written at their {@linkplain #fieldOffset
+     * offsets}.
+     */
+    @Override
+    public AbstractNewObjectNode createUninitializedObject(VirtualObjectNode virtual, StructuredGraph graph) {
+        if (virtual instanceof VirtualPodNode virtualPod) {
+            ConstantNode hub = ConstantNode.forConstant(virtualPod.getHub(), getProviders().getMetaAccess(), graph);
+            ConstantNode arrayLength = ConstantNode.forConstant(virtualPod.getArrayLength(), getProviders().getMetaAccess(), graph);
+            ConstantNode referenceMap = ConstantNode.forConstant(virtualPod.getReferenceMap(), getProviders().getMetaAccess(), graph);
+            AbstractNewObjectNode allocation = graph.add(new NewPodInstanceNode(virtualPod.type(), hub, arrayLength, referenceMap));
+            /* The final STORE_STORE barrier will be emitted by finishAllocatedObjects. */
+            allocation.clearEmitMemoryBarrier();
+            return allocation;
+        }
+        return super.createUninitializedObject(virtual, graph);
     }
 
     private static void lowerAssertionNode(AssertionNode n) {
