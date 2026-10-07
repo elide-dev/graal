@@ -321,9 +321,15 @@ public class LinkCheck {
     }
 
     void checkAccess(String where, String consumer, ClassModel declarer, String member, boolean isPrivate) {
-        if (isPrivate && !name(declarer).equals(consumer) && forkClasses.containsKey(name(declarer))) {
+        // Private members are accessible within their nest: a class and its nested classes.
+        if (isPrivate && !topLevel(name(declarer)).equals(topLevel(consumer)) && forkClasses.containsKey(name(declarer))) {
             problems.add(where + " uses " + name(declarer) + "." + member + ", which is private in the fork");
         }
+    }
+
+    static String topLevel(String className) {
+        int dollar = className.indexOf('$');
+        return dollar < 0 ? className : className.substring(0, dollar);
     }
 
     void checkInheritance(String where, ClassModel model) {
