@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Supplier;
 
+import jdk.graal.compiler.core.phases.MidTier;
 import jdk.graal.compiler.options.OptionType;
 import org.graalvm.collections.EconomicMap;
 
@@ -179,6 +180,7 @@ public final class HotSpotTruffleCompilerImpl extends TruffleCompilerImpl implem
          * Host inlining is not necessary for Truffle guest compilation so disable it.
          */
         options = new OptionValues(options, HostInliningPhase.Options.TruffleHostInlining, Boolean.FALSE);
+        options = MidTier.runtimeCompilationDefaults(options);
 
         HotSpotGraalRuntimeProvider graalRuntime = (HotSpotGraalRuntimeProvider) getCompiler(options).getGraalRuntime();
         SnippetReflectionProvider snippetReflection = graalRuntime.getRequiredCapability(SnippetReflectionProvider.class);
