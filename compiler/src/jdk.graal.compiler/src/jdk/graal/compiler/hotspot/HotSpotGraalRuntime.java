@@ -258,6 +258,15 @@ public final class HotSpotGraalRuntime implements HotSpotGraalRuntimeProvider {
         final boolean supported;
 
         /**
+         * Whether this GC supports the vectorization of objects, which Oracle's prebuilt enterprise
+         * compiler queries (see {@link jdk.graal.compiler.core.common.EnterpriseCompatibility}).
+         * Upstream now asks the GC's {@code BarrierSet}; ZGC and Shenandoah do not support it.
+         */
+        public boolean supportsVectorization() {
+            return this != Z && this != Shenandoah;
+        }
+
+        /**
          * Specifies if {@link #name()} is expected to be present in the {@code CollectedHeap::Name}
          * C++ enum.
          */

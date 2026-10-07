@@ -175,6 +175,16 @@ public class CountedLoopInfo {
      */
     private boolean invertedLoopComplexSignednessRange;
 
+    /**
+     * The constructor before inverted loops had a separate body induction variable and trip count
+     * limit, which Oracle's prebuilt enterprise compiler calls (see
+     * {@link jdk.graal.compiler.core.common.EnterpriseCompatibility}). Its subclass keeps its own
+     * body induction variable and trip count limit and overrides their getters.
+     */
+    protected CountedLoopInfo(Loop loop, InductionVariable limitCheckedIV, IfNode ifNode, ValueNode limit, boolean isLimitIncluded, AbstractBeginNode body, boolean unsigned) {
+        this(loop, limitCheckedIV, limitCheckedIV, ifNode, limit, limit, isLimitIncluded, body, unsigned, false);
+    }
+
     @SuppressWarnings("this-escape")
     protected CountedLoopInfo(Loop loop, InductionVariable limitedCheckedIV, InductionVariable bodyUsedIV, IfNode ifNode, ValueNode limit, ValueNode tripCountLimit,
                     boolean isLimitIncluded,

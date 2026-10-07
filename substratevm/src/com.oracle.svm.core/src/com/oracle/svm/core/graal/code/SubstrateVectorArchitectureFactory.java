@@ -43,6 +43,16 @@ public abstract class SubstrateVectorArchitectureFactory {
     @FunctionalInterface
     public interface VectorArchitectureFactory<VectorArch extends VectorArchitecture, Arch extends Architecture> {
         VectorArch create(Arch arch, boolean vectorArchEnabled, int referenceSize, boolean compressedReferences, int alignment, boolean enableObjectVectorization);
+
+        /**
+         * The factory method before object vectorization became configurable, which Oracle's
+         * prebuilt enterprise code implements with lambdas (see
+         * {@code jdk.graal.compiler.core.common.EnterpriseCompatibility}). Object vectorization is
+         * on, as in the vector architectures' constructors without the flag.
+         */
+        default VectorArch create(Arch arch, boolean vectorArchEnabled, int referenceSize, boolean compressedReferences, int alignment) {
+            return create(arch, vectorArchEnabled, referenceSize, compressedReferences, alignment, true);
+        }
     }
 
     /**
@@ -53,7 +63,21 @@ public abstract class SubstrateVectorArchitectureFactory {
      */
     protected <VectorArch extends VectorArchitecture, Arch extends Architecture> VectorArchitecture getSingletonVectorArchitecture(VectorArchitectureFactory<VectorArch, Arch> factory,
                     Arch arch, boolean vectorArchEnabled, int referenceSize, int alignment, BarrierSet barrierSet) {
-        VectorArch newVectorArchitecture = factory.create(arch, vectorArchEnabled, referenceSize, true, alignment, barrierSet.supportsObjectArrayRangeBarriers());
+        return singleton(factory.create(arch, vectorArchEnabled, referenceSize, true, alignment, barrierSet.supportsObjectArrayRangeBarriers()));
+    }
+
+    /**
+     * {@link #getSingletonVectorArchitecture} before object vectorization became configurable, which
+     * Oracle's prebuilt enterprise code calls (see
+     * {@code jdk.graal.compiler.core.common.EnterpriseCompatibility}). It uses the factory method
+     * without the flag.
+     */
+    protected <VectorArch extends VectorArchitecture, Arch extends Architecture> VectorArchitecture getSingletonVectorArchitecture(VectorArchitectureFactory<VectorArch, Arch> factory,
+                    Arch arch, boolean vectorArchEnabled, int referenceSize, int alignment) {
+        return singleton(factory.create(arch, vectorArchEnabled, referenceSize, true, alignment));
+    }
+
+    private VectorArchitecture singleton(VectorArchitecture newVectorArchitecture) {
         if (vectorArchitecture == null) {
             synchronized (SubstrateVectorArchitectureFactory.class) {
                 if (vectorArchitecture == null) {

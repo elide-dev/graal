@@ -33,6 +33,7 @@ import java.util.Optional;
 
 import org.graalvm.word.LocationIdentity;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.cfg.AbstractControlFlowGraph;
 import jdk.graal.compiler.core.common.cfg.BlockMap;
 import jdk.graal.compiler.core.common.util.CompilationAlarm;
@@ -107,7 +108,7 @@ public final class PartialRedundancySchedulePhase extends BasePhase<CoreProvider
                        "partial redundancy elimination (for example, global value numbering) by duplicating expressions into branches. " +
                        "This can improve performance if partially redundant expressions are only used in cold branches but the global " +
                        "value numbered version not. ", type = OptionType.Expert)
-        public static final OptionKey<Boolean> PartialRedundancyScheduling = new OptionKey<>(true);
+        public static final OptionKey<Boolean> PartialRedundancyScheduling = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "")
         public static final OptionKey<Boolean> PruneLargeDominatorUsageTrees = new OptionKey<>(true);
         @Option(help = "")

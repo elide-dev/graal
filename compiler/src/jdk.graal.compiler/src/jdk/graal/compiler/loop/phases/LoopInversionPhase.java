@@ -29,6 +29,7 @@ import java.util.Optional;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.MapCursor;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.nodes.loop.DefaultLoopPolicies;
 import jdk.graal.compiler.nodes.loop.LoopPolicies;
 import jdk.graal.compiler.loop.phases.LoopTransformations.ProtectionData;
@@ -93,7 +94,7 @@ public class LoopInversionPhase extends LoopPhase<LoopPolicies> {
     public static class Options {
         //@formatter:off
         @Option(help = "Performs loop-inversion optimization.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> LoopInversion = new OptionKey<>(true);
+        public static final OptionKey<Boolean> LoopInversion = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
 
         @Option(help = "", type = OptionType.Debug)
         public static final OptionKey<Boolean> HighTierInversion = new OptionKey<>(false);

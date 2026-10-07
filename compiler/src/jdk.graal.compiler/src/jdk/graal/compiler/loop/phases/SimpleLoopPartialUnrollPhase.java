@@ -62,7 +62,7 @@ import jdk.graal.compiler.vector.nodes.op.VectorOperation;
 /// }
 /// // The simple phase can unroll this three-block loop without proxy nodes.
 /// ```
-public class SimpleLoopPartialUnrollPhase extends LoopPhase<LoopPolicies> {
+public class SimpleLoopPartialUnrollPhase extends LoopPartialUnrollPhase {
 
     public SimpleLoopPartialUnrollPhase(LoopPolicies policies, CanonicalizerPhase canonicalizer) {
         super(policies, canonicalizer);

@@ -26,6 +26,7 @@ package jdk.graal.compiler.core.phases;
 
 import static jdk.graal.compiler.phases.common.DeadCodeEliminationPhase.Optionality.Required;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.GraalOptions;
 import jdk.graal.compiler.graph.Graph;
 import jdk.graal.compiler.nodes.GraphState;
@@ -64,7 +65,7 @@ public class LowTier extends BaseTier<LowTierContext> {
 
         // @formatter:off
         @Option(help = "Break chained phis", type = OptionType.Debug)
-        public static final OptionKey<Boolean> BreakChainedPhis = new OptionKey<>(true);
+        public static final OptionKey<Boolean> BreakChainedPhis = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
         @Option(help = "", type = OptionType.Debug)
         public static final OptionKey<Boolean> ProfileCompiledMethods = new OptionKey<>(false);
         // @formatter:on

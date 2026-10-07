@@ -41,6 +41,7 @@ import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.MapCursor;
 
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.nodes.loop.Loop.IfPosition;
 
 import jdk.graal.compiler.core.common.calc.Condition;
@@ -251,7 +252,7 @@ public class LoopRotationPhase<Context extends CoreProviders> extends PhaseSuite
     public static class Options {
         //@formatter:off
         @Option(help = "Enables loop rotation to let the compiler detect more loops as counted.", type = OptionType.Expert)
-        public static final OptionKey<Boolean> LoopRotation = new OptionKey<>(true);
+        public static final OptionKey<Boolean> LoopRotation = new OptionKey<>(EnterpriseCompatibility.MOVED_OPTIMIZATIONS);
 
         @Option(help = "Enables loop rotation in the high tier.", type = OptionType.Debug)
         public static final OptionKey<Boolean> HighTierLoopRotation = new OptionKey<>(true);
