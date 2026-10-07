@@ -115,8 +115,8 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
 
     /**
      * Atomic accesses on a pod are scalar-replaced too: compare-and-swap and compare-and-exchange
-     * (also of float and double fields, which compare bits), get-and-set and get-and-add. Only
-     * pods, in a native image, scalar-replace all of these.
+     * (also of float and double fields, which compare bits, and of narrow fields), get-and-set and
+     * get-and-add. Only pods, in a native image, scalar-replace all of these.
      */
     @Test
     public void atomics() {
@@ -125,11 +125,19 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
         StaticProperty l = new DefaultStaticProperty("l");
         StaticProperty d = new DefaultStaticProperty("d");
         StaticProperty o = new DefaultStaticProperty("o");
+        StaticProperty b = new DefaultStaticProperty("b");
+        StaticProperty z = new DefaultStaticProperty("z");
+        StaticProperty s = new DefaultStaticProperty("s");
+        StaticProperty c = new DefaultStaticProperty("c");
         StaticShape.Builder builder = StaticShape.newBuilder(language);
         builder.property(i, int.class, false);
         builder.property(l, long.class, false);
         builder.property(d, double.class, false);
         builder.property(o, Object.class, false);
+        builder.property(b, byte.class, false);
+        builder.property(z, boolean.class, false);
+        builder.property(s, short.class, false);
+        builder.property(c, char.class, false);
         StaticShape<DefaultStaticObjectFactory> shape = builder.build();
 
         RootNode root = new RootNode(language) {
@@ -146,13 +154,19 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
                 boolean doubleSwapped = d.compareAndSwapDouble(object, 0.0, 1.5);
                 boolean objectSwapped = o.compareAndSwapObject(object, null, frame.getArguments()[1]);
                 Object oldObject = o.getAndSetObject(object, null);
-                return (swapped ? 1 : 0) + before + exchanged + oldLong + added + l.getLong(object) + (doubleSwapped ? 100 : 0) + d.getDouble(object) + (objectSwapped ? 1000 : 0) +
+                /* Narrow fields: 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 when all succeed. */
+                int narrow = (b.compareAndSwapByte(object, (byte) 0, (byte) 5) ? 1 : 0) + (b.compareAndExchangeByte(object, (byte) 5, (byte) 6) == 5 ? 2 : 0) +
+                                (z.compareAndSwapBoolean(object, false, true) ? 4 : 0) + (z.compareAndExchangeBoolean(object, true, false) ? 8 : 0) +
+                                (s.compareAndSwapShort(object, (short) 0, (short) 7) ? 16 : 0) + (s.compareAndExchangeShort(object, (short) 7, (short) 8) == 7 ? 32 : 0) +
+                                (c.compareAndSwapChar(object, '\0', 'x') ? 64 : 0) + (c.compareAndExchangeChar(object, 'x', 'y') == 'x' ? 128 : 0);
+                return narrow + b.getByte(object) + s.getShort(object) + c.getChar(object) + (z.getBoolean(object) ? 1000000 : 0) + (swapped ? 1 : 0) + before + exchanged + oldLong + added +
+                                l.getLong(object) + (doubleSwapped ? 100 : 0) + d.getDouble(object) + (objectSwapped ? 1000 : 0) +
                                 (oldObject == frame.getArguments()[1] ? 10000 : 0) + i.getInt(object);
             }
         };
         Object[] args = {20, "o"};
-        /* 1 + 21 + 31 + 0 + 5 + 8 + 100 + 1.5 + 1000 + 10000 + 7 */
-        Assert.assertEquals(11174.5, root.getCallTarget().call(args));
+        /* 255 + 6 + 8 + 'y' (121), then 1 + 21 + 31 + 0 + 5 + 8 + 100 + 1.5 + 1000 + 10000 + 7 */
+        Assert.assertEquals(390 + 11174.5, root.getCallTarget().call(args));
 
         StructuredGraph graph = partialEval(root, args);
         assertNone(graph, AbstractNewObjectNode.class);
