@@ -1797,8 +1797,6 @@ public class NativeImage {
             }
         }
 
-        boolean useContainer = useBundle() && bundleSupport.useContainer;
-
         arguments.addAll(config.getGeneratorMainClass());
 
         Path keepAliveFile;
@@ -1813,6 +1811,7 @@ public class NativeImage {
             keepAliveFile = createFileInTempDir(".native_image.alive");
         }
 
+        boolean useContainer = useBundle() && bundleSupport.useContainer;
         Path keepAliveFileInContainer = Path.of("/keep_alive");
         arguments.addAll(Arrays.asList(SubstrateOptions.KEEP_ALIVE_PREFIX, (useContainer ? keepAliveFileInContainer : keepAliveFile).toString()));
 
