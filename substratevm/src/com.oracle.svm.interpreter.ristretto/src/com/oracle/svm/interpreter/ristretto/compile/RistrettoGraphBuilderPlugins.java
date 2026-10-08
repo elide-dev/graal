@@ -100,6 +100,7 @@ public final class RistrettoGraphBuilderPlugins {
         SubstrateSharedGraphBuilderPlugins.registerSystemIdentityHashCodePlugin(invocationPlugins);
         SubstrateSharedGraphBuilderPlugins.registerObjectPlugins(invocationPlugins);
         SubstrateSharedGraphBuilderPlugins.registerUnsafeAllocateInstancePlugin(new Registration(invocationPlugins, "jdk.internal.misc.Unsafe"));
+        SubstrateSharedGraphBuilderPlugins.registerUnsafeAllocateInstancePlugin(new Registration(invocationPlugins, "sun.misc.Unsafe"));
         registerMethodHandlesPlugins(invocationPlugins);
         /*
          * registerClassPlugins(...) accepts two optional hosted hooks. We intentionally disable
