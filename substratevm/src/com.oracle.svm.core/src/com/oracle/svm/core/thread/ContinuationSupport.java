@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -75,6 +75,12 @@ public class ContinuationSupport {
     public static final int FREEZE_PINNED_NATIVE = 3;
     public static final int FREEZE_YIELDING = -2;
 
+    /**
+     * {@link KnownIntrinsics#farReturn} must return this value as a boxed integer. Boxing is unsafe
+     * in the uninterruptible return path, so the value is boxed at image build time.
+     */
+    private static final Integer BOXED_FREEZE_OK = FREEZE_OK;
+
     private long ipOffset;
     /* Read by run-time code (not only by snippet lowering), so it must not be folded during analysis. */
     @UnknownPrimitiveField(availability = ReadyForCompilation.class) //
@@ -143,7 +149,7 @@ public class ContinuationSupport {
         CodePointer enterIP = singleton().copyFrames(storedCont, topSP, preparedData);
         patchStackAddressesInCopiedFrames(storedCont, enterIP, topSP);
         StoredContinuationAccess.markThawed(storedCont);
-        KnownIntrinsics.farReturn(FREEZE_OK, topSP, enterIP, false);
+        KnownIntrinsics.farReturn(BOXED_FREEZE_OK, topSP, enterIP, false);
     }
 
     @Uninterruptible(reason = "Copies stack frames containing references.")
