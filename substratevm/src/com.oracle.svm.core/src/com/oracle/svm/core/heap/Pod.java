@@ -284,7 +284,12 @@ public final class Pod<T> {
             }
 
             byte[] referenceMap = refMapEncoder.encode();
-            int arrayLength = UnsignedUtils.safeToInt(nextOffset) + referenceMap.length;
+            /*
+             * The array length counts the pod fields and reference map from the array base offset,
+             * as the super pod's length is read above. The absolute end offset would leave a dead gap
+             * the size of the base offset in every instance, and again for each super pod.
+             */
+            int arrayLength = UnsignedUtils.safeToInt(nextOffset.subtract(baseOffset)) + referenceMap.length;
             /* Superpod fields come first and fields are placed at increasing offsets. */
             assert layoutIndex == layout.length && isSortedByOffset(layout);
             return new Pod<>(podInfo, arrayLength, referenceMap, layout);
