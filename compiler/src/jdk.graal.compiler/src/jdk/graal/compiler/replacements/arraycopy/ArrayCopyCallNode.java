@@ -197,10 +197,20 @@ public final class ArrayCopyCallNode extends AbstractMemoryCheckpoint implements
             }
             ForeignCallNode call = graph.add(new ForeignCallNode(desc, srcAddr, destAddr, len));
             LocationIdentity[] callKills = call.getKilledLocationIdentities();
-            assert callKills.length == 1 && callKills[0].equals(getKilledLocationIdentity()) : String.format("%s: copy of %s from %s should kill %s, unexpected kills: %s", call, elementKind,
+            assert callKills.length == 1 && (callKills[0].equals(getKilledLocationIdentity()) || initCopyKillsArrayLocation(callKills[0])) : String.format(
+                            "%s: copy of %s from %s should kill %s, unexpected kills: %s", call, elementKind,
                             getLocationIdentity(), getKilledLocationIdentity(), Arrays.toString(callKills));
             graph.replaceFixedWithFixed(this, call);
         }
+    }
+
+    /**
+     * Whether a stub killing {@code callKill} covers this node's kill: a primitive copy that kills
+     * {@link LocationIdentity#INIT_LOCATION} may use the stub for the array's location, as it writes
+     * exactly those elements (SubstrateForeignCallsProvider).
+     */
+    private boolean initCopyKillsArrayLocation(LocationIdentity callKill) {
+        return elementKind.isPrimitive() && LocationIdentity.INIT_LOCATION.equals(getKilledLocationIdentity()) && callKill.equals(NamedLocationIdentity.getArrayLocation(elementKind));
     }
 
     @Override

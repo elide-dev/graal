@@ -47,6 +47,7 @@ import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.spi.ForeignCallDescriptor;
 import jdk.graal.compiler.core.common.spi.ForeignCallSignature;
 import jdk.graal.compiler.debug.GraalError;
+import jdk.graal.compiler.nodes.NamedLocationIdentity;
 import jdk.graal.compiler.replacements.arraycopy.ArrayCopyForeignCalls;
 import jdk.graal.compiler.replacements.arraycopy.ArrayCopyLookup;
 import jdk.vm.ci.code.RegisterConfig;
@@ -209,7 +210,19 @@ public class SubstrateForeignCallsProvider implements ArrayCopyForeignCalls {
     @Override
     public ForeignCallDescriptor lookupArraycopyDescriptor(JavaKind kind, boolean aligned, boolean disjoint, boolean uninit, LocationIdentity killedLocation) {
         if (arrayCopyLookup != null) {
-            return arrayCopyLookup.lookupArraycopyDescriptor(kind, aligned, disjoint, uninit, killedLocation);
+            LocationIdentity killed = killedLocation;
+            if (kind.isPrimitive() && !uninit && LocationIdentity.INIT_LOCATION.equals(killedLocation)) {
+                /*
+                 * A primitive copy into a newly allocated, already initialized array. The copy
+                 * writes that array's elements, so the stub for the array location covers it.
+                 * Oracle's enterprise lookup has no stub for this combination and fails the
+                 * compilation (so Ristretto keeps such methods interpreted, and enough failures
+                 * abort the VM); its stubs for uninitialized destinations kill the array location
+                 * too.
+                 */
+                killed = NamedLocationIdentity.getArrayLocation(kind);
+            }
+            return arrayCopyLookup.lookupArraycopyDescriptor(kind, aligned, disjoint, uninit, killed);
         } else {
             throw VMError.unsupportedFeature("Fast ArrayCopy not supported yet.");
         }
