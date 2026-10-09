@@ -207,6 +207,79 @@ def link_check(graal, ee_home, fork_jars, enterprise_jars):
         fail("the enterprise code does not link against the fork's code (see the problems above)")
 
 
+DRIVER_JAR = "lib/graalvm/svm-driver.jar"
+MODULE_FLAGS = ("--add-exports=", "--add-opens=", "--add-reads=")
+
+
+def read_driver_flags(ee_home):
+    """Oracle's image builder JVM flags (graal-compiler-flags-*.config in its driver jar), which
+    also grant Oracle's enterprise modules access to JDK and JVMCI internals."""
+    path = os.path.join(ee_home, DRIVER_JAR)
+    if not os.path.exists(path):
+        return {}
+    with zipfile.ZipFile(path) as jar:
+        return {name: jar.read(name).decode("utf-8") for name in jar.namelist()
+                if re.fullmatch(r"graal-compiler-flags-\d+\.config", name)}
+
+
+def merge_driver_flags(ee_home, oracle_flags):
+    """Merges Oracle's module flags into the fork's driver jar, which replaced Oracle's.
+
+    The fork's driver passes the image builder JVM only the open-source modules' --add-exports and
+    --add-opens. Without Oracle's, the enterprise modules cannot reach the JDK and JVMCI internals
+    they need (e.g. the build reporter's jdk.graal.compiler.util.json export) when the image builder
+    runs through the Java driver (lib/graalvm/svm-driver.jar); Oracle's prebuilt native launcher
+    carries its own flags. Each flag's targets become the union of both; other flags stay the fork's.
+    """
+    path = os.path.join(ee_home, DRIVER_JAR)
+    if not oracle_flags or not os.path.exists(path):
+        return
+    with zipfile.ZipFile(path) as jar:
+        entries = [(info, jar.read(info.filename)) for info in jar.infolist()]
+    merged_count = 0
+    out = []
+    for info, data in entries:
+        if info.filename in oracle_flags:
+            data, added = merge_flag_lines(data.decode("utf-8"), oracle_flags[info.filename])
+            data = data.encode("utf-8")
+            merged_count += added
+        out.append((info, data))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as jar:
+        for info, data in out:
+            jar.writestr(info, data)
+    print(f"driver flags: merged {merged_count} module-flag targets from Oracle's driver")
+
+
+def merge_flag_lines(ours, theirs):
+    """The fork's flag file with Oracle's module flags merged in, and how many targets were added."""
+    def key_and_targets(line):
+        option, _, rest = line.partition("=")
+        source, _, targets = rest.rpartition("=")
+        return (option + "=", source), [t for t in targets.split(",") if t]
+
+    their_module_flags = {}
+    for line in theirs.splitlines():
+        if line.startswith(MODULE_FLAGS):
+            key, targets = key_and_targets(line)
+            their_module_flags.setdefault(key, []).extend(targets)
+        elif line and line not in ours.splitlines():
+            print(f"driver flags: keeping the fork's flags; Oracle's driver also has {line}")
+    lines, seen, added = [], set(), 0
+    for line in ours.splitlines():
+        if line.startswith(MODULE_FLAGS):
+            key, targets = key_and_targets(line)
+            seen.add(key)
+            extra = [t for t in their_module_flags.get(key, []) if t not in targets]
+            added += len(extra)
+            line = f"{key[0]}{key[1]}={','.join(targets + extra)}"
+        lines.append(line)
+    for key, targets in their_module_flags.items():
+        if key not in seen:
+            lines.append(f"{key[0]}{key[1]}={','.join(dict.fromkeys(targets))}")
+            added += len(targets)
+    return "\n".join(lines) + ("\n" if ours.endswith("\n") else ""), added
+
+
 def overlay_jars(ce_home, ee_home):
     """Replaces Oracle's jars with the CE build's. Returns the replaced jars and the jars only
     Oracle's build has."""
@@ -293,7 +366,9 @@ def main():
         fail(f"{tag} names no compiler source revision")
     print(f"base: Oracle GraalVM {ee_release['GRAALVM_VERSION']} ({tag}), open source {ee_commit.group(1)}")
 
+    oracle_driver_flags = read_driver_flags(ee_home)
     replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
+    merge_driver_flags(ee_home, oracle_driver_flags)
     upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
 
