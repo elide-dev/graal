@@ -6,7 +6,7 @@
 # of Oracle's open-source code, for the enterprise features: G1, PGO, code compression, ...
 #
 # Triggers:
-#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.4.4-elide.14`, to build and publish.
+#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.5.5-elide.1`, to build and publish.
 #     A tag ending in `-dryrun` builds and smoke-tests only.
 #   - Manual dispatch (once this file is on the default branch).
 #
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, e.g. 25.4.4-elide.14"
+        description: "Release version, e.g. 25.5.5-elide.1"
         required: true
         type: string
       publish:
@@ -39,9 +39,9 @@ concurrency:
 
 env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
-  GRAALJS_REF: elide-25.4.x
+  GRAALJS_REF: elide-25.5.x
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: elide-25.4.x
+  GRAALPYTHON_REF: elide-25.5.x
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
@@ -71,7 +71,7 @@ env:
   # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
   # Update it when the fork moves to a new upstream base.
   ORACLE_EE_REPOSITORY: graalvm/oracle-graalvm-ea-builds
-  ORACLE_EE_TAG: jdk-25i4-25.0.4.1.1-ea.02
+  ORACLE_EE_TAG: jdk-25i5-25.0.4.1.1-ea.03
 
 jobs:
   meta:
