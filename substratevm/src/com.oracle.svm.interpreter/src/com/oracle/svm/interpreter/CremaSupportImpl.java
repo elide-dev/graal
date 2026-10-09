@@ -1665,7 +1665,7 @@ public class CremaSupportImpl implements CremaSupport {
     public Object execute(ResolvedJavaMethod targetMethod, Object[] args, CallKind callKind) {
         InterpreterResolvedJavaMethod iMethod = (InterpreterResolvedJavaMethod) targetMethod;
         try {
-            return InterpreterToVM.dispatchInvocation(iMethod, args, callKind, false, false, false);
+            return InterpreterToVM.dispatchInvocation(iMethod, args, callKind, false, false);
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
         }
@@ -1945,7 +1945,7 @@ public class CremaSupportImpl implements CremaSupport {
         System.arraycopy(args, 0, basicArgs, 1, args.length);
         logIntrinsic("[from compiled] invokeBasic ", vmentry, basicArgs);
         try {
-            return InterpreterToVM.dispatchInvocation(vmentry, basicArgs, CallKind.DIRECT, false, false, true);
+            return InterpreterToVM.dispatchInvocation(vmentry, basicArgs, CallKind.DIRECT, false, true);
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
         }
@@ -1961,7 +1961,7 @@ public class CremaSupportImpl implements CremaSupport {
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToVirtual ", target, basicArgs);
         try {
-            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.VTABLE_LOOKUP, false, false, true);
+            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.VTABLE_LOOKUP, false, true);
             return Interpreter.rebasic(result, signature.getReturnKind());
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
@@ -1978,7 +1978,7 @@ public class CremaSupportImpl implements CremaSupport {
         Object[] basicArgs = unbasic(args, signature, false);
         logIntrinsic("[from compiled] linkToStatic ", target, basicArgs);
         try {
-            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.STATIC, false, false, true);
+            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.STATIC, false, true);
             return Interpreter.rebasic(result, signature.getReturnKind());
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
@@ -1995,7 +1995,7 @@ public class CremaSupportImpl implements CremaSupport {
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToSpecial ", target, basicArgs);
         try {
-            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.DIRECT, false, false, true);
+            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.DIRECT, false, true);
             return Interpreter.rebasic(result, signature.getReturnKind());
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
@@ -2012,7 +2012,7 @@ public class CremaSupportImpl implements CremaSupport {
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToInterface ", target, basicArgs);
         try {
-            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.ITABLE_LOOKUP, false, false, true);
+            Object result = InterpreterToVM.dispatchInvocation(target, basicArgs, CallKind.ITABLE_LOOKUP, false, true);
             return Interpreter.rebasic(result, signature.getReturnKind());
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
