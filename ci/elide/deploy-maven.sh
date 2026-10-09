@@ -15,7 +15,7 @@ REPO=${2:?repo-dir}
 WORKSPACE=$(pwd)
 MX_ARGS=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS:-/graal-js,/graalpython,/wasm}")
 LICENSES=GPLv2-CPE,UPL,MIT,BSD-new,Apache-2.0,ICU,PSF-License
-SVM_DISTS=SVM,POINTSTO,OBJECTFILE,SVM_DRIVER,NATIVE_IMAGE_BASE,LIBRARY_SUPPORT,SVM_SHARED,SVM_GUEST_STAGING,SVM_CAPNPROTO_RUNTIME,TRUFFLE_RUNTIME_SVM,SVM_CONFIGURE
+SVM_DISTS=SVM,POINTSTO,OBJECTFILE,SVM_DRIVER,NATIVE_IMAGE_BASE,LIBRARY_SUPPORT,SVM_SHARED,SVM_GUEST_STAGING,SVM_CAPNPROTO_RUNTIME,TRUFFLE_RUNTIME_SVM,SVM_CONFIGURE,SVM_JVMCI_SHARED,SVM_JVMCI_GUEST_STAGING
 
 mkdir -p "${REPO}"
 REPO=$(cd "${REPO}" && pwd)
@@ -23,3 +23,4 @@ REPO=$(cd "${REPO}" && pwd)
 (cd "${WORKSPACE}/graal/substratevm" && "${MX}" --java-home "${JAVA_HOME}" maven-deploy --only "${SVM_DISTS}" --version-string "${VERSION}" --licenses "${LICENSES}" local "file://${REPO}")
 
 echo "deployed $(find "${REPO}" -name '*.pom' | wc -l) artifacts to ${REPO}"
+python3 "${WORKSPACE}/graal/ci/elide/check-maven-closure.py" "${REPO}"
