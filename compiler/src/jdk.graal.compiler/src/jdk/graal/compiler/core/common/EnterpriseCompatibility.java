@@ -41,10 +41,12 @@ public final class EnterpriseCompatibility {
     private EnterpriseCompatibility() {
     }
 
-    /// Whether Oracle's enterprise compiler runs on top of this compiler. GraalVM CE has an empty
-    /// placeholder module of the same name, so this checks for its classes.
+    /// Whether an enterprise compiler that still has its own copies of the moved optimizations runs
+    /// on top of this compiler. Oracle removed those copies from its enterprise compiler once they
+    /// were in this one (e.g. Oracle GraalVM 25.5 EA 25i5 ea.03 has none), so this checks for one of
+    /// them: its loop inversion phase. GraalVM CE has an empty placeholder module of the same name.
     public static final boolean ENTERPRISE_COMPILER = ModuleLayer.boot().findModule("com.oracle.graal.graal_enterprise").map(
-                    m -> m.getPackages().contains("com.oracle.graal.compiler.enterprise")).orElse(false);
+                    m -> Class.forName(m, "com.oracle.graal.compiler.enterprise.phases.LoopInversionPhase") != null).orElse(false);
 
     /// The default for the options of the optimizations moved from the enterprise compiler: on,
     /// unless the enterprise compiler is present.
