@@ -855,7 +855,7 @@ public class FrameInfoEncoder {
         /* The first element is the hub of the virtual object. */
         valueList.add(makeValueInfo(data, JavaKind.Object, constantAccess.forObject(DynamicHubProvider.getHub(type), false), isDeoptEntry));
 
-        if (type.getHub().isPodInstanceClass()) {
+        if (DynamicHubProvider.getHub(type).isPodInstanceClass()) {
             makePodVirtualObject(data, virtualObject, type, valueList, isDeoptEntry);
             data.virtualObjects[id] = valueList.toArray(new ValueInfo[0]);
             ImageSingletons.lookup(Counters.class).virtualObjectsCount.inc();
