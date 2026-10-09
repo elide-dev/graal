@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - 'elide-25.4.x'
+      - 'elide-25.5.x'
     paths-ignore:
       - '**.md'
   workflow_dispatch:
