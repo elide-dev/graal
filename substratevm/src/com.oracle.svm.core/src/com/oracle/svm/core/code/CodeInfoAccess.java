@@ -405,8 +405,9 @@ public final class CodeInfoAccess {
     @Uninterruptible(reason = "Executes during isolate creation.")
     static void setCompressedFrameInfo(CodeInfo info, CompressedBlob blob) {
         CodeInfoImpl impl = cast(info);
-        NonmovableArray<Byte> encodings = NonmovableArrays.createByteArray(blob.getUncompressedLength(), NmtCategory.Code);
-        NonmovableArray<Integer> states = NonmovableArrays.createIntArray(blob.getChunkCount(), NmtCategory.Code);
+        /* Accounted as image heap: it is image-heap content, and the Code category must start at 0. */
+        NonmovableArray<Byte> encodings = NonmovableArrays.createByteArray(blob.getUncompressedLength(), NmtCategory.ImageHeap);
+        NonmovableArray<Integer> states = NonmovableArrays.createIntArray(blob.getChunkCount(), NmtCategory.ImageHeap);
         UnmanagedMemoryUtil.fill(NonmovableArrays.getArrayBase(states), Word.unsigned(blob.getChunkCount()).multiply(Integer.BYTES), (byte) 0);
         impl.setFrameInfoEncodings(encodings);
         impl.setFrameInfoChunkStates(states);
