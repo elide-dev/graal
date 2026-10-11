@@ -49,7 +49,6 @@ jobs:
           - name: substratevm truffle unittests
             suite: substratevm
             gate: build,truffle_unittests
-            known-failure: "elide-dev/graal#51 (the -H:+JDWP variant fails to build)"
           - name: regex unittests
             suite: regex
             unittest: com.oracle.truffle.regex
