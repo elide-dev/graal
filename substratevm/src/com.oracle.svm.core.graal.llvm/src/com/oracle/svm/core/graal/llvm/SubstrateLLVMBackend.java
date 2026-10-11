@@ -78,9 +78,11 @@ public class SubstrateLLVMBackend extends SubstrateBackend {
 
     @Override
     public CompilationResult createJNITrampolineMethod(ResolvedJavaMethod method, CompilationIdentifier identifier,
-                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData) {
+                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData,
+                    JNITrampolineCodeStart codeStart) {
         // GR-77614: Crema methodIDs should be handled here
         VMError.guarantee(cremaData == null);
+        VMError.guarantee(codeStart == null, "The LLVM backend does not use relative code pointers");
 
         CompilationResult result = new CompilationResult(identifier);
         result.setMethods(method, Collections.emptySet());

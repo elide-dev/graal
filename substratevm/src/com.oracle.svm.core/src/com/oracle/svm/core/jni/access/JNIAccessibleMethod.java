@@ -38,16 +38,19 @@ import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.BuildPhaseProvider.ReadyForCompilation;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.code.ImageCodeInfo;
 import com.oracle.svm.core.code.RuntimeMetadataDecoderImpl;
 import com.oracle.svm.core.graal.nodes.LoadMethodByIndexNode;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.meta.MethodRef;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.jni.CallVariant;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.shared.util.ReflectionUtil;
 
+import jdk.graal.compiler.api.replacements.Fold;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
 
@@ -58,9 +61,11 @@ import jdk.vm.ci.meta.ResolvedJavaField;
  * With {@linkplain #storesCodeOffsets() relative code pointers}, the entry points below are stored
  * in the image heap as offsets from the code base, so the dynamic linker has nothing to patch: an
  * image with every preserved method registered for JNI otherwise carries hundreds of thousands of
- * load-time relocations here, one per entry point. The offsets are turned into absolute addresses
- * in place by {@link #resolveCodePointers()} before a method ID for this method is handed out,
- * because the JNI call trampolines jump through these fields directly.
+ * load-time relocations here, one per entry point. The offsets are never rewritten: method IDs are
+ * shared by all isolates of an image (libgraal runs one per compiler thread), and each isolate has
+ * its own copy of the image heap. The getters below add the code base. The JNI call trampolines,
+ * which jump through the variant wrapper fields before entering the isolate, add the code start
+ * that they load through {@link #codeInfo}.
  */
 public final class JNIAccessibleMethod extends JNIAccessibleMember implements PreservableJNIElement {
     public static final int VTABLE_INDEX_STATICALLY_BOUND_METHOD = -1;
@@ -116,13 +121,18 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
     private MethodRef arrayNonvirtualWrapper;
     @UnknownPrimitiveField(availability = ReadyForCompilation.class)//
     private MethodRef valistNonvirtualWrapper;
-    /** Whether the entry points above are absolute; see {@link #resolveCodePointers()}. */
-    private volatile boolean codePointersResolved;
+    /**
+     * The code info whose code start the entry points are relative to, read only by the JNI call
+     * trampolines; null without {@linkplain #storesCodeOffsets() code offsets}.
+     */
+    @UnknownObjectField(availability = ReadyForCompilation.class, canBeNull = true)//
+    private ImageCodeInfo codeInfo;
 
     /**
      * Whether entry points are stored as offsets from the code base. Not with layered images, where
      * the code base covers only the initial layer's code section. Both conditions fold.
      */
+    @Fold
     public static boolean storesCodeOffsets() {
         return SubstrateOptions.useRelativeCodePointers() && !ImageLayerBuildingSupport.buildingImageLayer();
     }
@@ -142,7 +152,7 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
     @AlwaysInline("Work around an issue with the LLVM backend with which the return value was accessed incorrectly.")
     @Uninterruptible(reason = "Must not throw any exceptions.", callerMustBe = true)
     CodePointer getCallWrapperAddress() {
-        return (CodePointer) callWrapper;
+        return (CodePointer) toAddress(callWrapper);
     }
 
     @AlwaysInline("Work around an issue with the LLVM backend with which the return value was accessed incorrectly.")
@@ -154,47 +164,23 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
                 return LoadMethodByIndexNode.loadMethodByIndex(instance.getClass(), vtableIndex, interfaceTypeID);
             }
         }
-        return (CodePointer) nonvirtualTarget;
+        return (CodePointer) toAddress(nonvirtualTarget);
     }
 
+    /** Null if this is not a constructor; callers use that to distinguish NewObject calls. */
     PointerBase getNewObjectAddress() {
-        return (PointerBase) newObjectTarget;
+        long value = newObjectTarget.rawValue();
+        if (value == 0 || value == NEW_OBJECT_TARGET_INVALID_FOR_ABSTRACT_TYPE) {
+            return (PointerBase) newObjectTarget;
+        }
+        return toAddress(newObjectTarget);
     }
 
-    /**
-     * Turns the stored code offsets into absolute addresses, once. Called before a method ID for
-     * this method is handed out, which every call through JNI needs first: the getters above and
-     * the call trampolines read the fields directly. Native code that caches a method ID and shares
-     * it with another thread publishes it after this has completed on the thread that looked it
-     * up.
-     */
-    void resolveCodePointers() {
-        if (!storesCodeOffsets() || codePointersResolved) {
-            return;
-        }
-        synchronized (this) {
-            if (!codePointersResolved) {
-                Pointer codeBase = KnownIntrinsics.codeBase();
-                nonvirtualTarget = rebase(nonvirtualTarget, codeBase);
-                callWrapper = rebase(callWrapper, codeBase);
-                varargsWrapper = rebase(varargsWrapper, codeBase);
-                arrayWrapper = rebase(arrayWrapper, codeBase);
-                valistWrapper = rebase(valistWrapper, codeBase);
-                varargsNonvirtualWrapper = rebase(varargsNonvirtualWrapper, codeBase);
-                arrayNonvirtualWrapper = rebase(arrayNonvirtualWrapper, codeBase);
-                valistNonvirtualWrapper = rebase(valistNonvirtualWrapper, codeBase);
-                long newObject = newObjectTarget.rawValue();
-                if (newObject != 0 && newObject != NEW_OBJECT_TARGET_INVALID_FOR_ABSTRACT_TYPE) {
-                    newObjectTarget = ((Pointer) newObjectTarget).add(codeBase);
-                }
-                codePointersResolved = true;
-            }
-        }
-    }
-
-    private static MethodRef rebase(MethodRef offset, Pointer codeBase) {
-        Pointer p = (Pointer) offset;
-        return p.isNull() ? offset : (MethodRef) p.add(codeBase);
+    /** Turns a stored entry point into an address; see {@link #storesCodeOffsets()}. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static Pointer toAddress(WordBase entryPoint) {
+        Pointer p = (Pointer) entryPoint;
+        return storesCodeOffsets() ? p.add(KnownIntrinsics.codeBase()) : p;
     }
 
     public Class<?> getDeclaringClassObject() {
@@ -236,6 +222,19 @@ public final class JNIAccessibleMethod extends JNIAccessibleMember implements Pr
         this.arrayNonvirtualWrapper = arrayNonvirtual;
         this.valistNonvirtualWrapper = valistNonvirtual;
         setHidingSubclasses(hidingSubclasses);
+    }
+
+    /** @see #codeInfo */
+    @Platforms(HOSTED_ONLY.class)
+    public void setCodeInfo(ImageCodeInfo info) {
+        assert storesCodeOffsets() && codeInfo == null;
+        this.codeInfo = info;
+    }
+
+    /** The field through which the JNI call trampolines find the code start. */
+    @Platforms(HOSTED_ONLY.class)
+    public static ResolvedJavaField getCodeInfoField(MetaAccessProvider metaAccess) {
+        return metaAccess.lookupJavaField(ReflectionUtil.lookupField(JNIAccessibleMethod.class, "codeInfo"));
     }
 
     @Override

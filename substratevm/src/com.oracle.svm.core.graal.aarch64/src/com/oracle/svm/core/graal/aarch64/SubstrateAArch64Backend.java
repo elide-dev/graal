@@ -2076,7 +2076,8 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
 
     @Override
     public CompilationResult createJNITrampolineMethod(ResolvedJavaMethod method, CompilationIdentifier identifier,
-                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData) {
+                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData,
+                    JNITrampolineCodeStart codeStart) {
 
         CompilationResult result = new CompilationResult(identifier);
         AArch64MacroAssembler asm = new SubstrateAArch64MacroAssembler(getTarget());
@@ -2100,8 +2101,31 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
              * provided via Isolate.getHeapBase which is a no-op), which we then use to access the
              * method object and read the entry point.
              */
-            asm.add(64, scratchRegister, scratchRegister, methodIdArg.getRegister());
-            asm.ldr(64, scratchRegister, AArch64Address.createImmediateAddress(64, AddressingMode.IMMEDIATE_UNSIGNED_SCALED, scratchRegister, methodObjEntryPointOffset));
+            if (codeStart != null) {
+                /*
+                 * The entry point is an offset from the code start. Load the code start through the
+                 * method object's code info reference.
+                 */
+                try (ScratchRegister scratch2 = asm.getScratchRegister()) {
+                    Register codeStartRegister = scratch2.getRegister();
+                    int referenceBits = codeStart.referenceSize() * Byte.SIZE;
+                    asm.add(64, codeStartRegister, scratchRegister, methodIdArg.getRegister());
+                    asm.ldr(referenceBits, codeStartRegister,
+                                    AArch64Address.createImmediateAddress(referenceBits, AddressingMode.IMMEDIATE_UNSIGNED_SCALED, codeStartRegister, codeStart.codeInfoOffset()));
+                    if (codeStart.relativeToHeapBase()) {
+                        asm.add(64, codeStartRegister, scratchRegister, codeStartRegister, ShiftType.LSL, codeStart.referenceShift());
+                    } else if (codeStart.referenceShift() != 0) {
+                        asm.lsl(64, codeStartRegister, codeStartRegister, codeStart.referenceShift());
+                    }
+                    asm.ldr(64, codeStartRegister, AArch64Address.createImmediateAddress(64, AddressingMode.IMMEDIATE_UNSIGNED_SCALED, codeStartRegister, codeStart.codeStartOffset()));
+                    asm.add(64, scratchRegister, scratchRegister, methodIdArg.getRegister());
+                    asm.ldr(64, scratchRegister, AArch64Address.createImmediateAddress(64, AddressingMode.IMMEDIATE_UNSIGNED_SCALED, scratchRegister, methodObjEntryPointOffset));
+                    asm.add(64, scratchRegister, scratchRegister, codeStartRegister);
+                }
+            } else {
+                asm.add(64, scratchRegister, scratchRegister, methodIdArg.getRegister());
+                asm.ldr(64, scratchRegister, AArch64Address.createImmediateAddress(64, AddressingMode.IMMEDIATE_UNSIGNED_SCALED, scratchRegister, methodObjEntryPointOffset));
+            }
             asm.jmp(scratchRegister);
         }
         result.recordMark(asm.position(), PROLOGUE_DECD_RSP);
