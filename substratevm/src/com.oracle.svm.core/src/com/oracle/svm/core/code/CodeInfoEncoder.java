@@ -118,6 +118,10 @@ public class CodeInfoEncoder {
     public static class Options {
         @Option(help = "Statistics about code and deoptimization information") //
         public static final HostedOptionKey<Boolean> CodeInfoEncoderCounters = new HostedOptionKey<>(false);
+
+        @Option(help = "Store the bytecode index of every frame in the code metadata. Stack traces only need line numbers, so by default frames without " +
+                        "local values omit the bci, which makes StackWalker.StackFrame.getByteCodeIndex() report -1 for them.") //
+        public static final HostedOptionKey<Boolean> IncludeFrameByteCodeIndex = new HostedOptionKey<>(false);
     }
 
     @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class)

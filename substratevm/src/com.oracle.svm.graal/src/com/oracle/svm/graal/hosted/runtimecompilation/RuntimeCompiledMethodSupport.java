@@ -84,6 +84,7 @@ import com.oracle.svm.shared.util.VMError;
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.bytecode.ResolvedJavaMethodBytecode;
 import jdk.graal.compiler.bytecode.ResolvedJavaMethodBytecodeProvider;
+import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.core.common.spi.ConstantFieldProvider;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.DebugDumpHandlersFactory;
@@ -377,6 +378,9 @@ public class RuntimeCompiledMethodSupport {
         // at this point no new deoptimization entrypoints can be registered.
         SubstrateCompilationDirectives.singleton().sealDeoptimizationInfo();
 
+        /* Start offset of every method's encoding, so that the blob can be chunked per method. */
+        int[] recordStarts = new int[compilationState.runtimeGraphs.size()];
+        int recordCount = 0;
         for (var runtimeInfo : compilationState.runtimeGraphs.entrySet()) {
             var graph = runtimeInfo.getValue();
             var method = runtimeInfo.getKey();
@@ -384,6 +388,7 @@ public class RuntimeCompiledMethodSupport {
             graph.resetDebug(debug);
             try (DebugContext.Scope _ = debug.scope("Graph Encoding", graph);
                             DebugContext.Activation _ = debug.activate()) {
+                recordStarts[recordCount++] = NumUtil.safeToInt(compilationState.graphEncoder.getBytesWritten());
                 long startOffset = compilationState.graphEncoder.encode(graph);
                 compilationState.objectReplacer.createMethod(method).setEncodedGraphStartOffset(startOffset);
             } catch (Throwable ex) {
@@ -391,9 +396,9 @@ public class RuntimeCompiledMethodSupport {
             }
         }
 
-        HeapBreakdownProvider.singleton().setGraphEncodingByteLength(compilationState.graphEncoder.getEncoding().length);
-        RuntimeCompilationSupport.setGraphEncoding(null, compilationState.graphEncoder.getEncoding(), compilationState.graphEncoder.getObjects(),
+        RuntimeCompilationSupport.setFinalGraphEncoding(compilationState.graphEncoder.getEncoding(), Arrays.copyOf(recordStarts, recordCount), compilationState.graphEncoder.getObjects(),
                         compilationState.graphEncoder.getNodeClasses());
+        HeapBreakdownProvider.singleton().setGraphEncodingByteLength(RuntimeCompilationSupport.getGraphEncodingSizeInImage());
 
         compilationState.objectReplacer.setMethodsImplementations(hUniverse);
     }
@@ -437,18 +442,6 @@ public class RuntimeCompiledMethodSupport {
     }
 
     /**
-     * A graph encoder that unwraps the {@link ImageHeapConstant} objects. This is used both after
-     * analysis and after compilation. The corresponding graph decoder used during AOT compilation,
-     * {@link RuntimeCompilationGraphDecoder}, looks-up the constant in the shadow heap and re-wraps
-     * it.
-     * <p>
-     * The reason why we need to unwrap the {@link ImageHeapConstant}s after analysis, and not only
-     * when we finally encode the graphs for run time compilation, is because the values in
-     * {@link GraphEncoder#objectsArray} are captured in GraalSupport#graphObjects and
-     * SubstrateReplacements#snippetObjects which are then scanned.
-     */
-    @SuppressWarnings("javadoc")
-    /**
      * GR-52693: Even if a graph is built with trackNodeSourcePosition set to false, that explicit
      * information is overwritten when the option TrackNodeSourcePosition is set to true. We
      * therefore clear the NodeSourcePosition manually. Guards additionally keep a position for
@@ -464,6 +457,18 @@ public class RuntimeCompiledMethodSupport {
         }
     }
 
+    /**
+     * A graph encoder that unwraps the {@link ImageHeapConstant} objects. This is used both after
+     * analysis and after compilation. The corresponding graph decoder used during AOT compilation,
+     * {@link RuntimeCompilationGraphDecoder}, looks-up the constant in the shadow heap and re-wraps
+     * it.
+     * <p>
+     * The reason why we need to unwrap the {@link ImageHeapConstant}s after analysis, and not only
+     * when we finally encode the graphs for run time compilation, is because the values in
+     * {@link GraphEncoder#objectsArray} are captured in GraalSupport#graphObjects and
+     * SubstrateReplacements#snippetObjects which are then scanned.
+     */
+    @SuppressWarnings("javadoc")
     public static class RuntimeCompilationGraphEncoder extends GraphEncoder {
         public static final NodeClassMap RUNTIME_NODE_CLASS_MAP = new NodeClassMap();
 

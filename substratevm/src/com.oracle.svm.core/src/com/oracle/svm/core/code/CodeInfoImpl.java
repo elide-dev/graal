@@ -203,6 +203,17 @@ interface CodeInfoImpl extends CodeInfo {
     @RawField
     void setCodeInfoDefaultFrameInfoIndexes(NonmovableArray<Byte> codeInfoDefaultFrameInfoIndexes);
 
+    /**
+     * Per-chunk inflation state of compressed frame information, see
+     * {@link CodeInfoAccess#ensureFrameInfoAvailable}. Null when the frame information is stored
+     * uncompressed.
+     */
+    @RawField
+    NonmovableArray<Integer> getFrameInfoChunkStates();
+
+    @RawField
+    void setFrameInfoChunkStates(NonmovableArray<Integer> states);
+
     @RawField
     NonmovableArray<Byte> getFrameInfoEncodings();
 

@@ -501,6 +501,7 @@ public final class CodeInfoDecoder {
                 return false;
             case FI_DEOPT_ENTRY_INDEX_S4:
                 int frameInfoIndex = loadEncodedFrameInfoIndex(info, 0, entryOffset, entryFlags);
+                CodeInfoAccess.ensureFrameInfoAvailable(info, frameInfoIndex);
                 return FrameInfoDecoder.isFrameInfoMatch(frameInfoIndex, CodeInfoAccess.getFrameInfoEncodings(info), encodedBci);
             case FI_INFO_ONLY_INDEX_S4:
                 /*
@@ -534,6 +535,7 @@ public final class CodeInfoDecoder {
                 throw shouldNotReachHereUnexpectedInput(entryFlags); // ExcludeFromJacocoGeneratedReport
         }
         int frameInfoIndex = loadEncodedFrameInfoIndex(info, relativeIP, entryOffset, entryFlags);
+        CodeInfoAccess.ensureFrameInfoAvailable(info, frameInfoIndex);
         return FrameInfoDecoder.decodeFrameInfo(isDeoptEntry, new ReusableTypeReader(CodeInfoAccess.getFrameInfoEncodings(info), frameInfoIndex), info, constantAccess);
     }
 
@@ -1011,6 +1013,7 @@ public final class CodeInfoDecoder {
                     entryOffset = INVALID_FRAME_INFO_ENTRY_OFFSET;
                 } else {
                     int frameInfoIndex = loadEncodedFrameInfoIndex(info, state.entryIP, entryOffset, entryFlags);
+                    CodeInfoAccess.ensureFrameInfoAvailable(info, frameInfoIndex);
                     frameInfoReader.setByteIndex(frameInfoIndex);
                     frameInfoReader.setData(CodeInfoAccess.getFrameInfoEncodings(info));
                     state.isDeoptEntry = extractFI(entryFlags) == FI_DEOPT_ENTRY_INDEX_S4;

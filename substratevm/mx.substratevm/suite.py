@@ -216,6 +216,15 @@ suite = {
                 "version" : "0.1.16",
             },
         },
+        "ZSTD_JNI": {
+            "digest" : "sha512:1bff194019dbe663dac2292cabc735c83619a923f64127f4b55e066e8594d8cc58cebbbe53476d08f0580b823d32486bb111707461d3ee62fa557a23c6acf270",
+            "maven" : {
+                "groupId" : "com.github.luben",
+                "artifactId" : "zstd-jni",
+                "version" : "1.5.7-23",
+            },
+            "moduleName" : "com.github.luben.zstd_jni",
+        },
     },
 
     "projects": {
@@ -1005,6 +1014,30 @@ suite = {
                 },
                 "<others>": {
                     "cflags": ["-g", "-gdwarf-5", "-fPIC", "-O2", "-D_LITTLE_ENDIAN", "-ffunction-sections", "-fdata-sections", "-fvisibility=hidden", "-D_FORTIFY_SOURCE=0"],
+                },
+            },
+            "jacoco" : "exclude",
+        },
+
+        "com.oracle.svm.native.libzstd": {
+            "subDir": "src",
+            "native": "static_lib",
+            "deliverable": "zstd",
+            "description": "Decoder-only build of zstd 1.5.7 (BSD), linked statically into images that inflate compressed image-heap blobs at run time.",
+            "multitarget": {
+                "libc": ["glibc", "musl", "default"],
+                "compiler": ["svm-lto", "host", "*"],
+            },
+            "os": {
+                "solaris": {
+                    "ignore": "solaris is not supported",
+                },
+                "windows": {
+                    "cflags": ["-O2", "-DZSTD_DISABLE_ASM", "-DZSTD_LEGACY_SUPPORT=0", "-DZSTD_NO_TRACE", "-DXXH_NAMESPACE=ZSTD_", "-DZSTD_STATIC_LINKING_ONLY"],
+                },
+                "<others>": {
+                    "cflags": ["-g", "-gdwarf-5", "-fPIC", "-O3", "-ffunction-sections", "-fdata-sections", "-fvisibility=hidden", "-D_FORTIFY_SOURCE=0",
+                               "-DZSTD_DISABLE_ASM", "-DZSTD_LEGACY_SUPPORT=0", "-DZSTD_NO_TRACE", "-DXXH_NAMESPACE=ZSTD_", "-DZSTD_STATIC_LINKING_ONLY", "-DZSTDLIB_VISIBILITY=", "-DZSTDERRORLIB_VISIBILITY="],
                 },
             },
             "jacoco" : "exclude",
@@ -2684,6 +2717,7 @@ suite = {
                         # on linux we want os-arch/libc directory structure
                         "./": [
                             "dependency:com.oracle.svm.native.libchelper/*",
+                            "dependency:com.oracle.svm.native.libzstd/*",
                             "dependency:com.oracle.svm.native.jvm.posix/*",
                             "dependency:com.oracle.svm.native.libcontainer/*",
                             "file:debug/include",
@@ -2703,6 +2737,7 @@ suite = {
                         ],
                         "<os>-<arch>/": [
                             "dependency:com.oracle.svm.native.libchelper/<os>-<arch>/default/*",
+                            "dependency:com.oracle.svm.native.libzstd/<os>-<arch>/default/*",
                             "dependency:com.oracle.svm.native.jvm.posix/<os>-<arch>/default/*",
                             "dependency:com.oracle.svm.native.darwin/*",
                             "dependency:com.oracle.svm.native.jvm.windows/*",
@@ -3133,7 +3168,7 @@ suite = {
                 "debug/": ["file:debug/gdbpy/gdb-debughelpers.py"],
                 "clibraries/" : ["extracted-dependency:substratevm:SVM_HOSTED_NATIVE"],
                 "builder/clibraries/" : ["extracted-dependency:substratevm:SVM_HOSTED_NATIVE"],
-                "builder/lib/" : ["dependency:com.oracle.svm.native.reporterchelper"],
+                "builder/lib/" : ["dependency:com.oracle.svm.native.reporterchelper", "dependency:ZSTD_JNI"],
                 "schemas/reachability-metadata-schema.json" : ["file:schemas/reachability-metadata-schema-v1.2.0.json"],
                 "skills/" : ["file:skills/*"],
                 # Note: `ld64.lld` is a symlink to `lld`, but it is dereferenced here.

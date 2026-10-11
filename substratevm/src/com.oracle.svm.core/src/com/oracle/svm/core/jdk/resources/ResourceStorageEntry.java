@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,11 +26,18 @@
 package com.oracle.svm.core.jdk.resources;
 
 import java.util.Arrays;
+import java.util.function.Consumer;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.ZstdDictionary;
+import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
+import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.shared.BuildPhaseProvider;
+import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
 public final class ResourceStorageEntry extends ResourceStorageEntryBase {
@@ -39,13 +46,23 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
 
     private final boolean isDirectory;
     private final boolean fromJar;
-    private byte[][] data;
+    /**
+     * The resource contents, one array per classpath root that provides the resource. Large
+     * resources are stored compressed in {@link #compressedData} instead; this field is then null
+     * in the image and caches the inflated contents after the first access at run time.
+     */
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private volatile byte[][] data;
+    /** Per-slot compressed contents, null for entries stored uncompressed. */
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private CompressedBlob[] compressedData;
+    /** The uncompressed contents, kept for build-time consumers of entries stored compressed. */
+    @Platforms(Platform.HOSTED_ONLY.class) private byte[][] hostedData;
     private int[] rootIds;
 
     public ResourceStorageEntry(boolean isDirectory, boolean fromJar) {
         this.isDirectory = isDirectory;
         this.fromJar = fromJar;
         this.data = EMPTY_DATA;
+        this.hostedData = EMPTY_DATA;
     }
 
     @Override
@@ -60,7 +77,27 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
 
     @Override
     public byte[][] getData() {
-        return data;
+        if (SubstrateUtil.HOSTED) {
+            return hostedData;
+        }
+        byte[][] result = data;
+        if (result == null) {
+            /* Threads may race here; they produce identical arrays and either one is fine. */
+            result = new byte[compressedData.length][];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = compressedData[i].inflateAll();
+            }
+            data = result;
+        }
+        return result;
+    }
+
+    /** The number of data slots, without inflating compressed contents. */
+    public int getDataCount() {
+        if (SubstrateUtil.HOSTED) {
+            return hostedData.length;
+        }
+        return compressedData != null ? compressedData.length : data.length;
     }
 
     public int getRootId(int dataIndex) {
@@ -100,7 +137,7 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
     public int getDataIndexForRootId(int rootId) {
         if (rootIds == null) {
             /* Compact representation: every stored data slot uses rootId == dataIndex. */
-            return rootId >= 0 && rootId < data.length ? rootId : -1;
+            return rootId >= 0 && rootId < getDataCount() ? rootId : -1;
         }
         int offset = rootIdsOffset();
         if (rootId >= 0 && rootId < offset) {
@@ -118,17 +155,18 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
 
     private int rootIdsOffset() {
         /* The suffix starts where the implicit rootId == dataIndex prefix ends. */
-        return data.length - rootIds.length;
+        return getDataCount() - rootIds.length;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
     @Override
     public void addData(byte[] datum, int rootId) {
-        int dataIndex = data.length;
+        int dataIndex = hostedData.length;
         int effectiveRootId = rootId >= 0 ? rootId : dataIndex;
-        byte[][] newData = Arrays.copyOf(data, data.length + 1);
+        byte[][] newData = Arrays.copyOf(hostedData, hostedData.length + 1);
         newData[dataIndex] = datum;
         /* Always use a compact, immutable data structure in the image heap. */
+        hostedData = newData;
         data = newData;
         /*
          * Keep the trivial rootId == dataIndex prefix implicit. Once a non-trivial mapping appears,
@@ -151,8 +189,71 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
     public void replaceData(byte[] replacementData) {
         VMError.guarantee(BuildPhaseProvider.isAnalysisFinished(), "Replacing data of a resource entry before analysis finished. Register standard resource instead.");
         VMError.guarantee(!BuildPhaseProvider.isCompilationFinished(), "Trying to replace data of a resource entry after compilation finished.");
-        VMError.guarantee(data.length == 1, "Replacing data of a resource entry is only supported for entries with a single data slot.");
-        this.data = new byte[][]{replacementData};
+        VMError.guarantee(hostedData.length == 1, "Replacing data of a resource entry is only supported for entries with a single data slot.");
+        this.hostedData = new byte[][]{replacementData};
+        this.data = hostedData;
+    }
+
+    /** Resources smaller than this many bytes are stored uncompressed. */
+    public static final int MIN_COMPRESSED_RESOURCE_SIZE = 512;
+
+    /**
+     * Decides how the contents are stored in the image, after compilation: slots that are large
+     * enough are compressed individually with the shared dictionary and inflated on first access,
+     * everything else is stored as is. An entry is either entirely compressed or entirely raw so
+     * that run-time code only has to handle two shapes.
+     */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void compressForImage(HeapBlobCompression compression, ZstdDictionary dictionary) {
+        boolean compress = compression != null && hostedData.length > 0;
+        if (compress) {
+            for (byte[] datum : hostedData) {
+                if (datum.length < MIN_COMPRESSED_RESOURCE_SIZE) {
+                    compress = false;
+                    break;
+                }
+            }
+        }
+        CompressedBlob[] blobs = compress ? new CompressedBlob[hostedData.length] : null;
+        for (int i = 0; compress && i < blobs.length; i++) {
+            blobs[i] = compression.compressWhole(hostedData[i], dictionary, "embedded resources");
+            compress = blobs[i] != null;
+        }
+        if (compress) {
+            compressedData = blobs;
+            data = null;
+        } else {
+            compressedData = null;
+            data = hostedData;
+        }
+    }
+
+    /** The byte arrays this entry stores in the image heap: compressed frames or raw contents. */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void forEachImageHeapArray(Consumer<byte[]> consumer) {
+        if (compressedData != null) {
+            for (CompressedBlob blob : compressedData) {
+                blob.forEachImageHeapArray(consumer);
+            }
+        } else {
+            for (byte[] datum : data) {
+                consumer.accept(datum);
+            }
+        }
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void registerAsImmutable(Consumer<Object> registerAsImmutable) {
+        if (compressedData != null) {
+            registerAsImmutable.accept(compressedData);
+            for (CompressedBlob blob : compressedData) {
+                blob.registerAsImmutable(registerAsImmutable);
+            }
+        } else {
+            for (byte[] datum : data) {
+                registerAsImmutable.accept(datum);
+            }
+        }
     }
 
     @Override

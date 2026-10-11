@@ -28,9 +28,14 @@ import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_
 
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.c.struct.SizeOf;
+import org.graalvm.word.LocationIdentity;
+import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
+import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.nmt.NmtCategory;
+import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.core.AssertionsSupport;
 import com.oracle.svm.core.c.NonmovableArray;
@@ -47,6 +52,7 @@ import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.api.replacements.Fold;
+import jdk.graal.compiler.nodes.PauseNode;
 
 /**
  * Provides functionality to query information about a unit of compiled code from a {@link CodeInfo}
@@ -385,6 +391,81 @@ public final class CodeInfoAccess {
     public static void setFrameInfo(CodeInfo info, NonmovableArray<Byte> encodings) {
         CodeInfoImpl impl = cast(info);
         impl.setFrameInfoEncodings(encodings);
+    }
+
+    private static final int FRAME_INFO_CHUNK_ABSENT = 0;
+    private static final int FRAME_INFO_CHUNK_INFLATING = 1;
+    private static final int FRAME_INFO_CHUNK_READY = 2;
+
+    /**
+     * Installs compressed frame information of image code: the uncompressed array is allocated in
+     * unmanaged memory (its pages are only touched when chunks are inflated) and chunks are inflated
+     * on demand by {@link #ensureFrameInfoAvailable}.
+     */
+    @Uninterruptible(reason = "Executes during isolate creation.")
+    static void setCompressedFrameInfo(CodeInfo info, CompressedBlob blob) {
+        CodeInfoImpl impl = cast(info);
+        NonmovableArray<Byte> encodings = NonmovableArrays.createByteArray(blob.getUncompressedLength(), NmtCategory.Code);
+        NonmovableArray<Integer> states = NonmovableArrays.createIntArray(blob.getChunkCount(), NmtCategory.Code);
+        UnmanagedMemoryUtil.fill(NonmovableArrays.getArrayBase(states), Word.unsigned(blob.getChunkCount()).multiply(Integer.BYTES), (byte) 0);
+        impl.setFrameInfoEncodings(encodings);
+        impl.setFrameInfoChunkStates(states);
+    }
+
+    /**
+     * Makes the frame information starting at {@code index} readable. Compressed frame information
+     * is inflated chunk by chunk on first use; a frame slice is never longer than a chunk, so the
+     * chunk holding the index and the following one cover every sequential read. Readers that jump
+     * to another offset, e.g. to a shared frame, call this again for the target offset.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static void ensureFrameInfoAvailable(CodeInfo info, long index) {
+        CodeInfoImpl impl = cast(info);
+        NonmovableArray<Integer> states = impl.getFrameInfoChunkStates();
+        if (states.isNull()) {
+            return;
+        }
+        CompressedBlob blob = ImageCodeInfo.getFrameInfoBlob(info);
+        int length = blob.getUncompressedLength();
+        if (index < 0 || index >= length) {
+            return;
+        }
+        int first = blob.getChunkIndex((int) index);
+        ensureFrameInfoChunk(impl, blob, states, first);
+        long windowEnd = index + blob.getChunkLength(0);
+        if (windowEnd > length) {
+            windowEnd = length;
+        }
+        windowEnd--;
+        int last = blob.getChunkIndex((int) windowEnd);
+        if (last != first) {
+            ensureFrameInfoChunk(impl, blob, states, last);
+        }
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static void ensureFrameInfoChunk(CodeInfoImpl impl, CompressedBlob blob, NonmovableArray<Integer> states, int chunk) {
+        Pointer state = NonmovableArrays.addressOf(states, chunk);
+        /* A compare-and-swap is used for the read as well: it is a full fence on every platform. */
+        if (state.compareAndSwapInt(0, FRAME_INFO_CHUNK_READY, FRAME_INFO_CHUNK_READY, LocationIdentity.ANY_LOCATION) == FRAME_INFO_CHUNK_READY) {
+            return;
+        }
+        if (state.compareAndSwapInt(0, FRAME_INFO_CHUNK_ABSENT, FRAME_INFO_CHUNK_INFLATING, LocationIdentity.ANY_LOCATION) == FRAME_INFO_CHUNK_ABSENT) {
+            int newState = FRAME_INFO_CHUNK_ABSENT;
+            try {
+                Pointer dst = NonmovableArrays.addressOf(impl.getFrameInfoEncodings(), blob.getChunkStart(chunk));
+                blob.inflateChunkTo(chunk, dst, Word.unsigned(blob.getChunkLength(chunk)));
+                newState = FRAME_INFO_CHUNK_READY;
+            } finally {
+                /* Never leave the chunk marked as inflating, or every later reader would spin. */
+                state.compareAndSwapInt(0, FRAME_INFO_CHUNK_INFLATING, newState, LocationIdentity.ANY_LOCATION);
+            }
+        } else {
+            /* Another thread is inflating this chunk; inflation takes microseconds. */
+            while (state.compareAndSwapInt(0, FRAME_INFO_CHUNK_READY, FRAME_INFO_CHUNK_READY, LocationIdentity.ANY_LOCATION) != FRAME_INFO_CHUNK_READY) {
+                PauseNode.pause();
+            }
+        }
     }
 
     @Uninterruptible(reason = "Nonmovable arrays are not visible to GC until installed.")
