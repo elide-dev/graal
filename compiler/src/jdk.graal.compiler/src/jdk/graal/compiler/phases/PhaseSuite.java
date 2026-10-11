@@ -368,14 +368,8 @@ public class PhaseSuite<C> extends BasePhase<C> implements PhasePlan<BasePhase<?
         GraphState simulationGraphState = graphState.copy();
         for (BasePhase<? super C> phase : getPhases()) {
             Optional<NotApplicable> phaseNotApplicable = phase.notApplicableTo(simulationGraphState);
-            if (phaseNotApplicable.isPresent()) {
-                String name = phase.getClass().getName();
-                if (name.contains(".svm.") || name.contains(".truffle.")) {
-                    // GR-39494: notApplicableTo(GraphState) not yet implemented by SVM or Truffle
-                    // phases.
-                } else {
-                    cannotApplyBuf.format("%s : %s%n", phase.getClass().getName(), phaseNotApplicable.get().toString());
-                }
+            if (phaseNotApplicable.isPresent() && !phase.ignoreNotApplicable(phaseNotApplicable.get())) {
+                cannotApplyBuf.format("%s : %s%n", phase.getClass().getName(), phaseNotApplicable.get().toString());
             }
             try {
                 if (phase instanceof PhaseSuite) {
