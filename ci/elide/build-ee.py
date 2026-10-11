@@ -306,6 +306,29 @@ def overlay_jars(ce_home, ee_home):
     return replaced, sorted(enterprise)
 
 
+# Directories where the fork ships files that Oracle's build does not have, e.g. the static zstd
+# decoder that every image links and the zstd-jni jar the image builder compresses heap blobs with.
+ADDITION_DIRS = ("lib/svm/builder/lib", "lib/svm/clibraries")
+
+
+def add_fork_files(ce_home, ee_home):
+    """Copies the files the fork adds in ADDITION_DIRS, leaving Oracle's files alone. Returns the
+    added files."""
+    added = []
+    for directory in ADDITION_DIRS:
+        for dirpath, _, files in os.walk(os.path.join(ce_home, directory)):
+            for name in files:
+                relative = os.path.relpath(os.path.join(dirpath, name), ce_home)
+                target = os.path.join(ee_home, relative)
+                if not os.path.exists(target):
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    shutil.copy2(os.path.join(ce_home, relative), target)
+                    added.append(relative)
+    for relative in added:
+        print(f"added the fork's {relative}")
+    return added
+
+
 def package(root, name, platform, out_dir):
     stage = os.path.dirname(root)
     named = os.path.join(stage, name)
@@ -368,6 +391,7 @@ def main():
 
     oracle_driver_flags = read_driver_flags(ee_home)
     replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
+    add_fork_files(ce_home, ee_home)
     merge_driver_flags(ee_home, oracle_driver_flags)
     upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
