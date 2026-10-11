@@ -67,7 +67,7 @@ public class WebImageBackend extends SubstrateBackend {
 
     @Override
     public CompilationResult createJNITrampolineMethod(ResolvedJavaMethod method, CompilationIdentifier identifier, RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg,
-                    int methodObjEntryPointOffset, CremaJNITrampolineData cremaData) {
+                    int methodObjEntryPointOffset, CremaJNITrampolineData cremaData, JNITrampolineCodeStart codeStart) {
         throw VMError.shouldNotReachHereAtRuntime();
     }
 
