@@ -1286,6 +1286,14 @@ public class Breakpoint {
         protected void onEnter(VirtualFrame frame) {
             onNode(frame, true, null, null);
         }
+
+        @Override
+        protected void onResume(VirtualFrame frame) {
+            /*
+             * A resume continues a statement that was already entered, so it does not hit the
+             * breakpoint again. The default implementation would delegate to onEnter.
+             */
+        }
     }
 
     private static class BreakpointAfterNode extends AbstractBreakpointNode {
@@ -1318,6 +1326,15 @@ public class Breakpoint {
             if (!(exception instanceof ControlFlowException || exception instanceof ThreadDeath)) {
                 onNode(frame, false, null, exception);
             }
+        }
+
+        @Override
+        protected void onYield(VirtualFrame frame, Object value) {
+            /*
+             * A yield interrupts the statement without completing it. The breakpoint hits when the
+             * statement returns after it is resumed. The default implementation would delegate to
+             * onReturnValue.
+             */
         }
 
     }
