@@ -82,6 +82,8 @@ import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.api.replacements.Fold;
+import jdk.graal.compiler.bytecode.ResolvedJavaMethodBytecode;
+import jdk.graal.compiler.bytecode.ResolvedJavaMethodBytecodeProvider;
 import jdk.graal.compiler.core.common.spi.ConstantFieldProvider;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.DebugDumpHandlersFactory;
@@ -91,6 +93,7 @@ import jdk.graal.compiler.java.BytecodeParser;
 import jdk.graal.compiler.java.GraphBuilderPhase;
 import jdk.graal.compiler.loop.phases.ConvertDeoptimizeToGuardPhase;
 import jdk.graal.compiler.nodes.CallTargetNode;
+import jdk.graal.compiler.nodes.DeoptimizingGuard;
 import jdk.graal.compiler.nodes.FrameState;
 import jdk.graal.compiler.nodes.GraphDecoder;
 import jdk.graal.compiler.nodes.GraphEncoder;
@@ -275,14 +278,7 @@ public class RuntimeCompiledMethodSupport {
             aMethod.clearAnalyzedGraph();
 
             if (!trackNodeSourcePosition) {
-                /*
-                 * GR-52693: Even if a graph is built with trackNodeSourcePosition set to false,
-                 * that explicit information is overwritten when the option TrackNodeSourcePosition
-                 * is set to true. We therefore clear the NodeSourcePosition manually.
-                 */
-                for (Node node : graph.getNodes()) {
-                    node.clearNodeSourcePosition();
-                }
+                clearNodeSourcePositions(graph);
             }
 
             try (DebugContext.Scope _ = debug.scope("RuntimeOptimize", graph, method, this)) {
@@ -290,6 +286,11 @@ public class RuntimeCompiledMethodSupport {
                 optimizeBeforeEncoding(graph, compilationState.runtimeCompilationProviders, canonicalizer);
             } catch (Throwable e) {
                 throw debug.handle(e);
+            }
+
+            if (!trackNodeSourcePosition) {
+                /* Optimization phases may have created guards that carry positions again. */
+                clearNodeSourcePositions(graph);
             }
 
             /*
@@ -447,13 +448,29 @@ public class RuntimeCompiledMethodSupport {
      * SubstrateReplacements#snippetObjects which are then scanned.
      */
     @SuppressWarnings("javadoc")
+    /**
+     * GR-52693: Even if a graph is built with trackNodeSourcePosition set to false, that explicit
+     * information is overwritten when the option TrackNodeSourcePosition is set to true. We
+     * therefore clear the NodeSourcePosition manually. Guards additionally keep a position for
+     * their no-deopt successor in a data field, which would otherwise end up in the encoded graph
+     * object pool and keep the referenced methods' metadata alive.
+     */
+    private static void clearNodeSourcePositions(StructuredGraph graph) {
+        for (Node node : graph.getNodes()) {
+            node.clearNodeSourcePosition();
+            if (node instanceof DeoptimizingGuard guard) {
+                guard.setNoDeoptSuccessorPosition(null);
+            }
+        }
+    }
+
     public static class RuntimeCompilationGraphEncoder extends GraphEncoder {
         public static final NodeClassMap RUNTIME_NODE_CLASS_MAP = new NodeClassMap();
 
         protected final ImageHeapScanner heapScanner;
 
         public RuntimeCompilationGraphEncoder(Architecture architecture, ImageHeapScanner heapScanner) {
-            super(architecture, null, RUNTIME_NODE_CLASS_MAP);
+            super(architecture, null, RUNTIME_NODE_CLASS_MAP, SubstrateOptions.IncludeNodeSourcePositions.getValue());
             this.heapScanner = heapScanner;
         }
 
@@ -473,6 +490,14 @@ public class RuntimeCompiledMethodSupport {
             }
             if (object instanceof ImageHeapConstant heapConstant) {
                 return SubstrateGraalUtils.hostedToRuntime(heapConstant, heapScanner.getConstantReflection());
+            }
+            if (object instanceof ResolvedJavaMethodBytecode bytecode && bytecode.getOrigin() == ResolvedJavaMethodBytecodeProvider.INSTANCE) {
+                /*
+                 * Every FrameState references the Bytecode of its method. The default wrapper is
+                 * fully determined by the method, so encode the method and let the decoder
+                 * re-create the wrapper instead of storing one wrapper object per method.
+                 */
+                return bytecode.getMethod();
             }
             return object;
         }

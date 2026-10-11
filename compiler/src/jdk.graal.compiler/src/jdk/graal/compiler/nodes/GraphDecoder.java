@@ -43,6 +43,8 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Equivalence;
 
+import jdk.graal.compiler.bytecode.Bytecode;
+import jdk.graal.compiler.bytecode.ResolvedJavaMethodBytecode;
 import jdk.graal.compiler.core.common.Fields;
 import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.core.common.PermanentBailoutException;
@@ -525,6 +527,8 @@ public class GraphDecoder {
         public final EncodedGraph encodedGraph;
         /** The highest node order id that a fixed node has in the EncodedGraph. */
         public final int maxFixedNodeOrderId;
+        /** Whether every node in the EncodedGraph is followed by a source-position object id. */
+        public final boolean hasSourcePositions;
         /**
          * Number of bytes needed to encode an order id (order ids have a per-encoded-graph fixed
          * size).
@@ -624,7 +628,9 @@ public class GraphDecoder {
 
             if (encodedGraph != null) {
                 reader = UnsafeArrayTypeReader.create(encodedGraph.getEncoding(), encodedGraph.getStartOffset(), architecture.supportsUnalignedMemoryAccess());
-                maxFixedNodeOrderId = reader.getUVInt();
+                long trailer = reader.getUV();
+                hasSourcePositions = (trailer & GraphEncoder.TRAILER_HAS_SOURCE_POSITIONS) != 0;
+                maxFixedNodeOrderId = (int) (trailer >>> GraphEncoder.TRAILER_MAX_FIXED_NODE_ORDER_ID_SHIFT);
                 GraphState.GuardsStage guardsStage = (GraphState.GuardsStage) readObject(this);
                 EnumSet<GraphState.StageFlag> stageFlags = (EnumSet<GraphState.StageFlag>) readObject(this);
                 if (caller == null) {
@@ -664,6 +670,7 @@ public class GraphDecoder {
             } else {
                 reader = null;
                 maxFixedNodeOrderId = 0;
+                hasSourcePositions = false;
                 orderIdWidth = 0;
             }
 
@@ -2730,7 +2737,7 @@ public class GraphDecoder {
     @SuppressWarnings("try")
     protected void readProperties(MethodScope methodScope, Node node) {
         try (DebugCloseable a = ReadPropertiesTimer.start(debug)) {
-            NodeSourcePosition position = (NodeSourcePosition) readObject(methodScope);
+            NodeSourcePosition position = methodScope.hasSourcePositions ? (NodeSourcePosition) readObject(methodScope) : null;
             Fields fields = node.getNodeClass().getData();
             for (int pos = 0; pos < fields.getCount(); pos++) {
                 if (fields.getType(pos).isPrimitive()) {
@@ -2738,6 +2745,13 @@ public class GraphDecoder {
                     fields.setRawPrimitive(node, pos, primitive);
                 } else {
                     Object value = readObject(methodScope);
+                    if (value instanceof ResolvedJavaMethod method && fields.getType(pos) == Bytecode.class) {
+                        /*
+                         * Encoders may store the method instead of its default Bytecode wrapper so
+                         * that the object pool does not carry one wrapper per method.
+                         */
+                        value = new ResolvedJavaMethodBytecode(method);
+                    }
                     fields.putObject(node, pos, value);
                 }
             }
