@@ -73,6 +73,7 @@ import com.oracle.svm.core.jni.CallVariant;
 import com.oracle.svm.core.jni.JNIJavaCallTrampolineHolder;
 import com.oracle.svm.core.jni.access.JNIAccessibleClass;
 import com.oracle.svm.core.jni.access.JNIAccessibleField;
+import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.jni.access.JNIAccessibleMethod;
 import com.oracle.svm.core.jni.access.JNIAccessibleMethodDescriptor;
 import com.oracle.svm.core.jni.access.JNINativeLinkage;
@@ -318,6 +319,11 @@ public class JNIAccessFeature implements Feature {
         for (CallVariant variant : CallVariant.values()) {
             registerJavaCallTrampoline(access, variant, false);
             registerJavaCallTrampoline(access, variant, true);
+        }
+        if (JNIAccessibleMethod.storesCodeOffsets()) {
+            /* Read only by the call trampolines. */
+            ResolvedJavaField codeInfoField = JNIAccessibleMethod.getCodeInfoField(access.getMetaAccess().getWrapped());
+            access.registerAsAccessed(access.getUniverse().lookup(codeInfoField), "it is read by the JNI call trampolines");
         }
         pendingNativeCallWrappers.forEach((wrapper, linkage) -> registerNativeCallWrapperReachabilityHandler(access, wrapper, linkage));
         pendingNativeCallWrappers.clear();
@@ -635,10 +641,7 @@ public class JNIAccessFeature implements Feature {
         }
         for (JNICallableJavaMethod method : calledJavaMethods) {
             finishMethodBeforeCompilation(method, access);
-            /* With code offsets, JNIAccessibleMethod.resolveCodePointers writes them at run time. */
-            if (!JNIAccessibleMethod.storesCodeOffsets()) {
-                access.registerAsImmutable(method.jniMethod); // contains relocatable pointers
-            }
+            access.registerAsImmutable(method.jniMethod);
         }
     }
 
@@ -696,6 +699,9 @@ public class JNIAccessFeature implements Feature {
         EconomicSet<Class<?>> hidingSubclasses = findHidingSubclasses(hTarget.getDeclaringClass(), sub -> anyMethodMatchesIgnoreReturnType(sub, method.descriptor));
         method.jniMethod.finishBeforeCompilation(hidingSubclasses, vtableIndex, interfaceTypeID, nonvirtualTarget, newObjectTarget, callWrapper,
                         varargs, array, valist, varargsNonvirtual, arrayNonvirtual, valistNonvirtual);
+        if (JNIAccessibleMethod.storesCodeOffsets()) {
+            method.jniMethod.setCodeInfo(CodeInfoTable.getCurrentLayerImageCodeCache());
+        }
     }
 
     /** @see JNIAccessibleMethod#storesCodeOffsets() */

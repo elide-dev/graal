@@ -251,8 +251,22 @@ public abstract class SubstrateBackend extends Backend {
     public record CremaJNITrampolineData(ResolvedJavaMethod wrapperMethod, CallVariant callVariant) {
     }
 
+    /**
+     * How a JNI call trampoline turns an entry point stored as a code offset into an address: it
+     * loads the reference at {@code codeInfoOffset} of the method object, uncompresses it
+     * ({@code referenceSize} bytes, shifted left by {@code referenceShift}, plus the heap base if
+     * {@code relativeToHeapBase}), and adds the word at {@code codeStartOffset} of that object.
+     */
+    public record JNITrampolineCodeStart(int codeInfoOffset, int codeStartOffset, int referenceSize, int referenceShift, boolean relativeToHeapBase) {
+    }
+
+    /**
+     * @param codeStart null if entry points are stored as addresses, else how to find the code
+     *            start they are relative to.
+     */
     public abstract CompilationResult createJNITrampolineMethod(ResolvedJavaMethod method, CompilationIdentifier identifier,
-                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData);
+                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData,
+                    JNITrampolineCodeStart codeStart);
 
     /**
      * Returns whether the backend can fold the stack overflow check into the method prologue for

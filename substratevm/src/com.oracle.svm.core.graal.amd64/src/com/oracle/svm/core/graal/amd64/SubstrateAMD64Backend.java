@@ -2556,7 +2556,8 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
 
     @Override
     public CompilationResult createJNITrampolineMethod(ResolvedJavaMethod method, CompilationIdentifier identifier,
-                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData) {
+                    RegisterValue threadArg, int threadIsolateOffset, RegisterValue methodIdArg, int methodObjEntryPointOffset, CremaJNITrampolineData cremaData,
+                    JNITrampolineCodeStart codeStart) {
         CompilationResult result = new CompilationResult(identifier);
         AMD64MacroAssembler asm = createAssembler(HostedOptionValues.singleton().get());
         PatchConsumerFactory patchConsumerFactory = PatchConsumerFactory.HostedPatchConsumerFactory.factory();
@@ -2582,8 +2583,32 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
          * via Isolate.getHeapBase which is a no-op), which we then use to access the method object
          * and read the entry point.
          */
-        asm.addq(rax, methodIdArg.getRegister()); // address of JNIAccessibleMethod
-        asm.movq(jumpTargetRegister, new AMD64Address(rax, methodObjEntryPointOffset));
+        if (codeStart != null) {
+            /*
+             * The entry point is an offset from the code start. Load the code start through the
+             * method object's code info reference. r10 and r11 are neither argument registers nor
+             * callee saved in the native calling conventions.
+             */
+            Register codeStartRegister = jumpTargetRegister.equals(AMD64.r11) ? AMD64.r10 : AMD64.r11;
+            AMD64Address codeInfoAddress = new AMD64Address(rax, methodIdArg.getRegister(), Stride.S1, codeStart.codeInfoOffset());
+            if (codeStart.referenceSize() == Integer.BYTES) {
+                asm.movl(codeStartRegister, codeInfoAddress);
+            } else {
+                asm.movq(codeStartRegister, codeInfoAddress);
+            }
+            if (codeStart.relativeToHeapBase()) {
+                asm.leaq(codeStartRegister, new AMD64Address(rax, codeStartRegister, Stride.fromLog2(codeStart.referenceShift())));
+            } else if (codeStart.referenceShift() != 0) {
+                asm.shlq(codeStartRegister, codeStart.referenceShift());
+            }
+            asm.movq(codeStartRegister, new AMD64Address(codeStartRegister, codeStart.codeStartOffset()));
+            asm.addq(rax, methodIdArg.getRegister()); // address of JNIAccessibleMethod
+            asm.movq(jumpTargetRegister, new AMD64Address(rax, methodObjEntryPointOffset));
+            asm.addq(jumpTargetRegister, codeStartRegister);
+        } else {
+            asm.addq(rax, methodIdArg.getRegister()); // address of JNIAccessibleMethod
+            asm.movq(jumpTargetRegister, new AMD64Address(rax, methodObjEntryPointOffset));
+        }
         asm.jmp(jumpTargetRegister);
         result.recordMark(asm.position(), PROLOGUE_DECD_RSP);
         result.recordMark(asm.position(), PROLOGUE_END);
