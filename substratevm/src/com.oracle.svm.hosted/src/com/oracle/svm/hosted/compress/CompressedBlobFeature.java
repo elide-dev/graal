@@ -26,7 +26,9 @@ package com.oracle.svm.hosted.compress;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
+import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 
@@ -36,6 +38,19 @@ public final class CompressedBlobFeature implements InternalFeature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         ImageSingletons.add(HeapBlobCompression.class, new BlobCompressor());
+    }
+
+    @Override
+    public void beforeAnalysis(BeforeAnalysisAccess access) {
+        if (BlobCompressor.isEnabled()) {
+            /*
+             * Blobs are created after the analysis, so their types must be known up front even when
+             * no reachable code reads a compressed blob of some kind (e.g. resources in libgraal).
+             */
+            access.registerAsInHeap(CompressedBlob.class);
+            access.registerAsInHeap(CompressedBlob[].class);
+            access.registerAsInHeap(ZstdDictionary.class);
+        }
     }
 
     @Override
