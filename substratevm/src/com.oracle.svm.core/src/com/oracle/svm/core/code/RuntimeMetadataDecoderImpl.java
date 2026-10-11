@@ -91,6 +91,21 @@ public class RuntimeMetadataDecoderImpl implements RuntimeMetadataDecoder {
     public static final int PRESERVED_FLAG_MASK = 1 << PRESERVED_FLAG_INDEX;
     /* single lookup flags are filled before encoding */
     public static final int ALL_FLAGS_MASK = COMPLETE_FLAG_MASK | IN_HEAP_FLAG_MASK | HIDING_FLAG_MASK | NEGATIVE_FLAG_MASK | PRESERVED_FLAG_MASK;
+    private static final int FLAG_BITS = Integer.SIZE - PRESERVED_FLAG_INDEX;
+
+    /**
+     * Wire format of a modifiers word: the member modifiers shifted up by the number of flag bits
+     * with the flags in the low bits. Member modifiers are small numbers, so the common cases take
+     * one or two varint bytes, whereas keeping the flags in bits 27..31 and sign-extending the word
+     * into {@code putUV(long)} costs 11 bytes per complete member.
+     */
+    public static long encodeModifiersWord(int modifiersWithFlags) {
+        return ((long) (modifiersWithFlags & ~ALL_FLAGS_MASK) << FLAG_BITS) | ((modifiersWithFlags & ALL_FLAGS_MASK) >>> PRESERVED_FLAG_INDEX);
+    }
+
+    public static int decodeModifiersWord(long encoded) {
+        return (int) (encoded >>> FLAG_BITS) | ((int) (encoded & ((1 << FLAG_BITS) - 1)) << PRESERVED_FLAG_INDEX);
+    }
 
     public static final int ALL_FIELDS_FLAG = 1 << 16;
     public static final int ALL_DECLARED_FIELDS_FLAG = 1 << 17;
@@ -417,7 +432,7 @@ public class RuntimeMetadataDecoderImpl implements RuntimeMetadataDecoder {
      * </pre>
      */
     private static Object decodeField(UnsafeArrayTypeReader buf, Class<?> declaringClass, boolean publicOnly, boolean reflectOnly, int layerId) {
-        int modifiers = buf.getUVInt();
+        int modifiers = decodeModifiersWord(buf.getUV());
         boolean inHeap = (modifiers & IN_HEAP_FLAG_MASK) != 0;
         boolean complete = (modifiers & COMPLETE_FLAG_MASK) != 0;
         boolean preserved = (modifiers & PRESERVED_FLAG_MASK) != 0;
@@ -593,7 +608,7 @@ public class RuntimeMetadataDecoderImpl implements RuntimeMetadataDecoder {
      * </pre>
      */
     private static Object decodeExecutable(UnsafeArrayTypeReader buf, Class<?> declaringClass, boolean publicOnly, boolean reflectOnly, boolean isMethod, int layerId) {
-        int modifiers = buf.getUVInt();
+        int modifiers = decodeModifiersWord(buf.getUV());
         boolean inHeap = (modifiers & IN_HEAP_FLAG_MASK) != 0;
         boolean complete = (modifiers & COMPLETE_FLAG_MASK) != 0;
         boolean preserved = (modifiers & PRESERVED_FLAG_MASK) != 0;

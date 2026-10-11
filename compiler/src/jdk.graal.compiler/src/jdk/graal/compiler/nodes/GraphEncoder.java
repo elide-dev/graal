@@ -126,11 +126,18 @@ public class GraphEncoder {
     /**
      * Maximum unsigned integer fitting on 1 byte.
      */
-    public static final int MAX_INDEX_1_BYTE = 1 << 8 - 1;
+    public static final int MAX_INDEX_1_BYTE = (1 << 8) - 1;
     /**
      * Maximum unsigned integer fitting on 2 bytes.
      */
-    public static final int MAX_INDEX_2_BYTES = 1 << 16 - 1;
+    public static final int MAX_INDEX_2_BYTES = (1 << 16) - 1;
+
+    /**
+     * Bit in the first trailer value of an encoded graph that records whether every node carries a
+     * source-position object id. The remaining bits hold the maximum fixed node order id.
+     */
+    public static final int TRAILER_HAS_SOURCE_POSITIONS = 1;
+    public static final int TRAILER_MAX_FIXED_NODE_ORDER_ID_SHIFT = 1;
 
     /**
      * The known offset between the orderId of a {@link AbstractBeginNode} and its
@@ -190,9 +197,20 @@ public class GraphEncoder {
         this(architecture, null, GLOBAL_NODE_CLASS_MAP);
     }
 
+    /**
+     * Whether a source-position object id is written for every node. Encoders that know their
+     * graphs carry no positions omit the slot, which saves one byte per node.
+     */
+    protected final boolean encodeSourcePositions;
+
     public GraphEncoder(Architecture architecture, DebugContext debug, NodeClassMap nodeClasses) {
+        this(architecture, debug, nodeClasses, true);
+    }
+
+    public GraphEncoder(Architecture architecture, DebugContext debug, NodeClassMap nodeClasses, boolean encodeSourcePositions) {
         this.architecture = architecture;
         this.debug = debug;
+        this.encodeSourcePositions = encodeSourcePositions;
         this.objects = FrequencyEncoder.createEqualityEncoder();
         this.nodeClasses = nodeClasses == null ? GLOBAL_NODE_CLASS_MAP : nodeClasses;
         this.writer = UnsafeArrayTypeWriter.create(architecture.supportsUnalignedMemoryAccess());
@@ -215,7 +233,9 @@ public class GraphEncoder {
             // Create encoding id for the node class
             nodeClasses.getId(nodeClass);
 
-            addObject(node.getNodeSourcePosition());
+            if (encodeSourcePositions) {
+                addObject(node.getNodeSourcePosition());
+            }
             for (int i = 0; i < nodeClass.getData().getCount(); i++) {
                 if (!nodeClass.getData().getType(i).isPrimitive()) {
                     addObject(nodeClass.getData().get(node, i));
@@ -363,7 +383,7 @@ public class GraphEncoder {
          * start offset for all nodes).
          */
         int metadataStart = TypeConversion.asS4(writer.getBytesWritten());
-        writer.putUV(nodeOrder.maxFixedNodeOrderId);
+        writer.putUV(((long) nodeOrder.maxFixedNodeOrderId << TRAILER_MAX_FIXED_NODE_ORDER_ID_SHIFT) | (encodeSourcePositions ? TRAILER_HAS_SOURCE_POSITIONS : 0));
         writeObjectId(graph.getGuardsStage());
         writeObjectId(graph.getGraphState().getStageFlags());
         writeObjectId(inliningLogCodec.encode(graph, nodeOrder.orderIds::get));
@@ -463,7 +483,9 @@ public class GraphEncoder {
     }
 
     protected void writeProperties(Node node, Fields fields) {
-        writeObjectId(node.getNodeSourcePosition());
+        if (encodeSourcePositions) {
+            writeObjectId(node.getNodeSourcePosition());
+        }
         for (int idx = 0; idx < fields.getCount(); idx++) {
             if (fields.getType(idx).isPrimitive()) {
                 long primitive = fields.getRawPrimitive(node, idx);

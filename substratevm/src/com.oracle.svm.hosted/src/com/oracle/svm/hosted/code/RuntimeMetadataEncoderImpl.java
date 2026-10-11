@@ -37,6 +37,7 @@ import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.IN_HEAP_FLAG_M
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.NEGATIVE_FLAG_MASK;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.NULL_OBJECT;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.PRESERVED_FLAG_MASK;
+import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.encodeModifiersWord;
 import static com.oracle.svm.core.reflect.RuntimeMetadataDecoder.NO_DATA;
 import static com.oracle.svm.hosted.code.ReflectionRuntimeMetadata.AccessibleObjectMetadata;
 import static com.oracle.svm.hosted.code.ReflectionRuntimeMetadata.ClassMetadata;
@@ -1012,7 +1013,7 @@ public class RuntimeMetadataEncoderImpl implements RuntimeMetadataEncoder {
         modifiers |= field.hiding ? HIDING_FLAG_MASK : 0;
         modifiers |= field.negative ? NEGATIVE_FLAG_MASK : 0;
         modifiers |= field.dynamicAccessMetadata.isPreserved() ? PRESERVED_FLAG_MASK : 0;
-        buf.putUV(modifiers);
+        buf.putUV(encodeModifiersWord(modifiers));
         encodeConditions(buf, field.dynamicAccessMetadata);
 
         if (field.heapObject != null) {
@@ -1103,7 +1104,7 @@ public class RuntimeMetadataEncoderImpl implements RuntimeMetadataEncoder {
         modifiers |= isHiding ? HIDING_FLAG_MASK : 0;
         modifiers |= executable.negative ? NEGATIVE_FLAG_MASK : 0;
         modifiers |= executable.dynamicAccessMetadata.isPreserved() ? PRESERVED_FLAG_MASK : 0;
-        buf.putUV(modifiers);
+        buf.putUV(encodeModifiersWord(modifiers));
 
         encodeConditions(buf, executable.dynamicAccessMetadata);
 
