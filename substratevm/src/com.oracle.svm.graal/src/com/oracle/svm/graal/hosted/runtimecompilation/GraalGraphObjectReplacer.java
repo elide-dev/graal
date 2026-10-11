@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.graal.hosted.runtimecompilation;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -411,9 +412,23 @@ public class GraalGraphObjectReplacer implements Function<Object, Object> {
 
     private SubstrateField[] createAllInstanceFields(ResolvedJavaType originalType) {
         ResolvedJavaField[] originalFields = originalType.getInstanceFields(true);
+        if (originalFields.length == 0) {
+            return SubstrateField.EMPTY_ARRAY;
+        }
         SubstrateField[] sFields = new SubstrateField[originalFields.length];
         for (int idx = 0; idx < originalFields.length; idx++) {
             sFields[idx] = createField(originalFields[idx]);
+        }
+        /*
+         * A type that declares no instance fields of its own has exactly the fields of its
+         * superclass, so share the superclass array instead of storing a copy per type.
+         */
+        ResolvedJavaType superType = originalType.getSuperclass();
+        if (superType != null) {
+            SubstrateField[] superFields = createType(superType).getRawAllInstanceFields();
+            if (superFields != null && Arrays.equals(superFields, sFields)) {
+                return superFields;
+            }
         }
         return sFields;
     }
