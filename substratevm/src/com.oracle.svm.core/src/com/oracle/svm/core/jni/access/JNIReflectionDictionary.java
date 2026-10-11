@@ -395,6 +395,7 @@ public final class JNIReflectionDictionary {
             return Word.zero();
         }
         assert Heap.getHeap().isInImageHeap(method);
+        method.resolveCodePointers();
         return (JNIMethodId) Word.objectToUntrackedPointer(method).subtract(KnownIntrinsics.heapBase());
     }
 
