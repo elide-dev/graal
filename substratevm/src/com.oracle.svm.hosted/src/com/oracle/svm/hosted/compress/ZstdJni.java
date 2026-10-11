@@ -186,10 +186,16 @@ final class ZstdJni {
         }
     }
 
-    /** Returns the dictionary size written into {@code dictBuffer}, or a zstd error code. */
+    /** Returns the dictionary size written into {@code dictBuffer}, or 0 or a zstd error code. */
     static long trainFromBuffer(byte[][] samples, byte[] dictBuffer) {
         try {
             return (long) TRAIN_FROM_BUFFER.invokeExact(samples, dictBuffer, false);
+        } catch (RuntimeException e) {
+            /*
+             * zstd-jni reports training errors (e.g. "nb of samples too low") as a ZstdException
+             * instead of an error code. The caller compresses without a dictionary.
+             */
+            return 0;
         } catch (Throwable t) {
             throw VMError.shouldNotReachHere(t);
         }
