@@ -260,7 +260,7 @@ public abstract sealed class AbstractRuntimeClassRegistry extends AbstractClassR
         if (superClass.isInterface()) {
             throw new IncompatibleClassChangeError("Class " + parsed.getType() + " has interface " + superKlassType + " as super class");
         }
-        if (Modifier.isFinal(superClass.getModifiers())) {
+        if (Modifier.isFinal(classFileModifiers(superClass))) {
             throw new IncompatibleClassChangeError("Class " + parsed.getType() + " is a subclass of final class " + superKlassType);
         }
         checkNotHybrid(parsed);
@@ -272,6 +272,17 @@ public abstract sealed class AbstractRuntimeClassRegistry extends AbstractClassR
         CremaSupport.singleton().verifySuperAccesses(externalName, parsed.getName(), parsed.getFlags(), getClassLoader(), pkgString, module, superClass, superInterfaces);
         DynamicHub hub = CremaSupport.singleton().createHub(parsed, info, typeID, externalName, module, classLoader, superClass, superInterfaces);
         return DynamicHub.toClass(hub);
+    }
+
+    /**
+     * The modifiers subclassing is checked against (JVMS 5.3.5): the class file's own access flags,
+     * which a runtime-loaded hub's interpreter type carries. {@link Class#getModifiers()} reflects a
+     * nested class's {@code InnerClasses} entry instead, and kotlinc writes that entry as
+     * {@code ACC_FINAL} for an enum whose constants have bodies, whose own flags are not final.
+     */
+    private static int classFileModifiers(Class<?> type) {
+        ResolvedJavaType interpreted = DynamicHub.fromClass(type).getInterpreterType();
+        return interpreted != null ? interpreted.getModifiers() : type.getModifiers();
     }
 
     private Module findModule(ByteSequence pkgString) {
