@@ -38,6 +38,7 @@ import org.graalvm.collections.EconomicMap;
 
 import jdk.graal.compiler.core.GraalCompilerOptions;
 import jdk.graal.compiler.core.common.CompilationIdentifier;
+import jdk.graal.compiler.core.common.NativeImageSupport;
 import jdk.graal.compiler.core.common.util.CompilationAlarm;
 import jdk.graal.compiler.debug.CounterKey;
 import jdk.graal.compiler.debug.DebugCloseable;
@@ -218,6 +219,14 @@ public abstract class BasePhase<C> implements PhaseSizeContract {
 
     private final BasePhaseStatistics statistics;
 
+    /**
+     * Whether this phase belongs to SVM (GR-41437) or Truffle (GR-39494), whose phases do not all
+     * implement {@link #notApplicableTo} yet. Computed when the phase is created because Native
+     * Image obfuscation renames classes: phases in the image heap were created at image build time,
+     * under their original names.
+     */
+    private final boolean notApplicableToNotYetImplemented;
+
     public static class BasePhaseStatistics {
         /**
          * Records time spent in {@link BasePhase#apply(StructuredGraph, Object, boolean)}.
@@ -313,6 +322,8 @@ public abstract class BasePhase<C> implements PhaseSizeContract {
 
     protected BasePhase() {
         this.statistics = getBasePhaseStatistics(getClass());
+        String name = getClass().getName();
+        this.notApplicableToNotYetImplemented = name.contains(".svm.") || name.contains(".truffle.");
     }
 
     /**
@@ -346,7 +357,21 @@ public abstract class BasePhase<C> implements PhaseSizeContract {
      *         to {@link Optional#empty} if the phase can be applied
      */
     public Optional<NotApplicable> notApplicableTo(GraphState graphState) {
-        return Optional.of(new NotApplicable("BasePhase's notApplicableTo should be implemented by each phase"));
+        return Optional.of(NOT_IMPLEMENTED);
+    }
+
+    private static final NotApplicable NOT_IMPLEMENTED = new NotApplicable("BasePhase's notApplicableTo should be implemented by each phase");
+
+    /**
+     * Returns true if {@code reason}, returned by {@link #notApplicableTo}, must be ignored because
+     * this phase does not implement {@link #notApplicableTo} yet (GR-41437, GR-39494).
+     * <p>
+     * A phase created at image run time may have an obfuscated class name, so there any phase that
+     * still uses the default {@link #notApplicableTo} is accepted. Compilations on HotSpot and at
+     * image build time check every phase.
+     */
+    boolean ignoreNotApplicable(NotApplicable reason) {
+        return notApplicableToNotYetImplemented || (reason == NOT_IMPLEMENTED && NativeImageSupport.inRuntimeCode());
     }
 
     /**
@@ -449,13 +474,8 @@ public abstract class BasePhase<C> implements PhaseSizeContract {
         }
 
         Optional<NotApplicable> cannotBeApplied = this.notApplicableTo(graph.getGraphState());
-        if (cannotBeApplied.isPresent()) {
-            String name = this.getClass().getName();
-            if (name.contains(".svm.") || name.contains(".truffle.")) {
-                // Not yet implemented by SVM (GR-41437) or Truffle (GR-39494).
-            } else {
-                GraalError.shouldNotReachHere(graph + ": " + name + ": " + cannotBeApplied.get()); // ExcludeFromJacocoGeneratedReport
-            }
+        if (cannotBeApplied.isPresent() && !ignoreNotApplicable(cannotBeApplied.get())) {
+            GraalError.shouldNotReachHere(graph + ": " + this.getClass().getName() + ": " + cannotBeApplied.get()); // ExcludeFromJacocoGeneratedReport
         }
 
         if (PhaseOptions.CompilationExcludePhases.matches(options, this, graph)) {
