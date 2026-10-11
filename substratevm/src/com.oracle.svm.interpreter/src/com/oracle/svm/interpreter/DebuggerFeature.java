@@ -114,9 +114,11 @@ import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.shared.option.HostedOptionValues;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.util.GuestAccess;
+import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.JVMCIReflectionUtil;
 import com.oracle.svm.util.OriginalClassProvider;
 
+import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
 import jdk.graal.compiler.nodes.ValueNode;
@@ -488,7 +490,8 @@ public class DebuggerFeature implements InternalFeature {
             if (isReachable(aMethod)) {
                 boolean needsMethodBody = InterpreterFeature.executableByInterpreter(aMethod) && InterpreterFeature.callableByInterpreter(hMethod, hMetaAccess);
                 // Test if the methods needs to be compiled for execution in the interpreter:
-                if (aMethod.getAnalyzedGraph() != null && //
+                // (@Fold methods have generated invocation plugins but are never compiled on their own.)
+                if (aMethod.getAnalyzedGraph() != null && !GuestAnnotationAccess.isAnnotationPresent(aMethod, Fold.class) && //
                                 (aMethod.wrapped instanceof SubstitutionMethod ||
                                                 invocationPlugins.lookupInvocation(aMethod, invocationLookupOptions) != null)) {
                     // The method is substituted, or an invocation plugin is registered
