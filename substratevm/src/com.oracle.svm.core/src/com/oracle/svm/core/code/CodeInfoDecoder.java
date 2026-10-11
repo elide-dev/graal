@@ -587,8 +587,8 @@ public final class CodeInfoDecoder {
         } while (next.isNonNull() && methodId >= CodeInfoAccess.getMethodTableFirstId(next));
 
         boolean shortClass = NonmovableArrays.lengthOf(CodeInfoAccess.getClasses(info)) <= 0xffff;
-        boolean shortName = NonmovableArrays.lengthOf(CodeInfoAccess.getMemberNames(info)) <= 0xffff;
-        boolean shortSignature = NonmovableArrays.lengthOf(CodeInfoAccess.getOtherStrings(info)) <= 0xffff;
+        boolean shortName = CodeInfoAccess.getMemberNameCount(info) <= 0xffff;
+        boolean shortSignature = CodeInfoAccess.getOtherStringCount(info) <= 0xffff;
         int classBytes = shortClass ? Short.BYTES : Integer.BYTES;
         int nameBytes = shortName ? Short.BYTES : Integer.BYTES;
         int signatureBytes = shortSignature ? Short.BYTES : Integer.BYTES;
@@ -612,13 +612,13 @@ public final class CodeInfoDecoder {
         int classIndex = readIndex(p, shortClass, classOffset);
         Class<?> sourceClass = NonmovableArrays.getObject(CodeInfoAccess.getClasses(info), classIndex);
         int methodNameIndex = readIndex(p, shortName, nameOffset);
-        String sourceMethodName = NonmovableArrays.getObject(CodeInfoAccess.getMemberNames(info), methodNameIndex);
+        String sourceMethodName = CodeInfoAccess.getMemberName(info, methodNameIndex);
 
         String sourceMethodSignature;
         int sourceSignatureFlags;
         if (CodeInfoEncoder.shouldEncodeMethodSignatureAndModifiers()) {
             int sourceSignatureIndex = readIndex(p, shortSignature, signatureOffset);
-            sourceMethodSignature = NonmovableArrays.getObject(CodeInfoAccess.getOtherStrings(info), sourceSignatureIndex);
+            sourceMethodSignature = CodeInfoAccess.getOtherString(info, sourceSignatureIndex);
             sourceSignatureFlags = readIndex(p, true, flagsOffset);
         } else {
             sourceMethodSignature = CodeInfoEncoder.Encoders.INVALID_METHOD_SIGNATURE;

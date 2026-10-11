@@ -852,13 +852,13 @@ public class RuntimeMetadataDecoderImpl implements RuntimeMetadataDecoder {
         @Override
         public String getMemberName(int index, int layerId) {
             CodeInfo info = getCodeInfo(layerId);
-            return NonmovableArrays.getObject(CodeInfoAccess.getMemberNames(info), index);
+            return CodeInfoAccess.getMemberName(info, index);
         }
 
         @Override
         public String getOtherString(int index, int layerId) {
             CodeInfo info = getCodeInfo(layerId);
-            return NonmovableArrays.getObject(CodeInfoAccess.getOtherStrings(info), index);
+            return CodeInfoAccess.getOtherString(info, index);
         }
 
         /** @see com.oracle.svm.core.code.RuntimeMetadataEncoding */

@@ -49,6 +49,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.oracle.svm.core.code.CompactStringTable;
 import com.oracle.svm.core.config.ObjectLayout;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Pair;
@@ -68,6 +69,8 @@ import com.oracle.graal.pointsto.reports.ReportUtils;
 import com.oracle.graal.pointsto.util.CompletionExecutor;
 import com.oracle.objectfile.ObjectFile;
 import com.oracle.svm.common.meta.MethodVariant;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.hosted.compress.CompactStringTableBuilder;
 import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
@@ -656,6 +659,13 @@ public abstract class NativeImageCodeCache {
         HostedImageCodeInfo imageCodeInfo = CodeInfoTable.getCurrentLayerImageCodeCache().getHostedImageCodeInfo();
         codeInfoEncoder.encodeAllAndInstall(imageCodeInfo, new HostedInstantReferenceAdjuster(snippetReflection), watchdog::recordActivity);
         imageCodeInfo.compressFrameInfo(codeInfoEncoder.getFrameInfoEncoder().getMaxSliceBytes());
+        if (SubstrateOptions.CompactMetadataStrings.getValue() && ImageLayerBuildingSupport.lastImageBuild()) {
+            imageCodeInfo.compactStringTables(strings -> {
+                CompactStringTable table = CompactStringTableBuilder.build(strings);
+                assert table == null || CompactStringTableBuilder.verify(table, strings);
+                return table;
+            });
+        }
         runtimeMetadataEncoder.encodeAllAndInstall();
         imageCodeInfo.setCodeStart(firstMethod);
         imageCodeInfo.setCodeSize(codeSize);

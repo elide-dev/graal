@@ -25,6 +25,7 @@
 package com.oracle.svm.core.code;
 
 import java.util.ArrayList;
+import java.util.function.Function;
 import java.util.List;
 
 import org.graalvm.nativeimage.Platform;
@@ -81,8 +82,11 @@ public class ImageCodeInfo {
     @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) CompressedBlob frameInfoBlob;
     @UnknownObjectField(availability = AfterCompilation.class) Object[] objectConstants;
     @UnknownObjectField(availability = AfterCompilation.class) Class<?>[] classes;
-    @UnknownObjectField(availability = AfterCompilation.class) String[] memberNames;
-    @UnknownObjectField(availability = AfterCompilation.class) String[] otherStrings;
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) String[] memberNames;
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) String[] otherStrings;
+    /** Symbol-coded replacements of {@link #memberNames} and {@link #otherStrings}; when set, the arrays are null. */
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) CompactStringTable memberNameTable;
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) CompactStringTable otherStringTable;
     @UnknownObjectField(availability = AfterCompilation.class) byte[] methodTable;
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -110,20 +114,39 @@ public class ImageCodeInfo {
         return runtimeCodeInfos[0].getCodeInfo();
     }
 
+    /** The image code info that owns the given image code, or null for runtime code. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static ImageCodeInfo forCodeInfo(CodeInfo info) {
+        ImageCodeInfo[] imageCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfo.class);
+        ImageCodeInfoStorage[] runtimeCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfoStorage.class);
+        for (int i = 0; i < imageCodeInfos.length; i++) {
+            if (runtimeCodeInfos[i].getCodeInfo().equal(info)) {
+                return imageCodeInfos[i];
+            }
+        }
+        return null;
+    }
+
     /**
      * The compressed frame information of the given image code info, or null if its frame
      * information is stored uncompressed or {@code info} is not image code.
      */
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     static CompressedBlob getFrameInfoBlob(CodeInfo info) {
-        ImageCodeInfo[] imageCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfo.class);
-        ImageCodeInfoStorage[] runtimeCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfoStorage.class);
-        for (int i = 0; i < imageCodeInfos.length; i++) {
-            if (runtimeCodeInfos[i].getCodeInfo().equal(info)) {
-                return imageCodeInfos[i].frameInfoBlob;
-            }
-        }
-        return null;
+        ImageCodeInfo imageCodeInfo = forCodeInfo(info);
+        return imageCodeInfo == null ? null : imageCodeInfo.frameInfoBlob;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static CompactStringTable getMemberNameTable(CodeInfo info) {
+        ImageCodeInfo imageCodeInfo = forCodeInfo(info);
+        return imageCodeInfo == null ? null : imageCodeInfo.memberNameTable;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static CompactStringTable getOtherStringTable(CodeInfo info) {
+        ImageCodeInfo imageCodeInfo = forCodeInfo(info);
+        return imageCodeInfo == null ? null : imageCodeInfo.otherStringTable;
     }
 
     @Uninterruptible(reason = "Executes during isolate creation.")
@@ -173,8 +196,16 @@ public class ImageCodeInfo {
         }
         config.registerAsImmutable(objectConstants);
         config.registerAsImmutable(classes);
-        config.registerAsImmutable(memberNames);
-        config.registerAsImmutable(otherStrings);
+        if (memberNameTable != null) {
+            memberNameTable.registerAsImmutable(config::registerAsImmutable);
+        } else {
+            config.registerAsImmutable(memberNames);
+        }
+        if (otherStringTable != null) {
+            otherStringTable.registerAsImmutable(config::registerAsImmutable);
+        } else {
+            config.registerAsImmutable(otherStrings);
+        }
         config.registerAsImmutable(methodTable);
     }
 
@@ -207,6 +238,12 @@ public class ImageCodeInfo {
             addByteArrayLength(lengths, frameInfoEncodings);
         }
         addByteArrayLength(lengths, methodTable);
+        if (memberNameTable != null) {
+            memberNameTable.forEachImageHeapArray(array -> addByteArrayLength(lengths, array));
+        }
+        if (otherStringTable != null) {
+            otherStringTable.forEachImageHeapArray(array -> addByteArrayLength(lengths, array));
+        }
         return lengths;
     }
 
@@ -407,24 +444,53 @@ public class ImageCodeInfo {
             classes = NonmovableArrays.getHostedArray(array);
         }
 
+        /** The string tables as arrays, for build-time decoding even when stored symbol-coded. */
+        private String[] hostedMemberNames;
+        private String[] hostedOtherStrings;
+
         @Override
         public NonmovableObjectArray<String> getMemberNames() {
-            return NonmovableArrays.fromImageHeap(memberNames);
+            return NonmovableArrays.fromImageHeap(hostedMemberNames);
         }
 
         @Override
         public void setMemberNames(NonmovableObjectArray<String> array) {
-            memberNames = NonmovableArrays.getHostedArray(array);
+            hostedMemberNames = NonmovableArrays.getHostedArray(array);
+            memberNames = hostedMemberNames;
+            memberNameTable = null;
         }
 
         @Override
         public NonmovableObjectArray<String> getOtherStrings() {
-            return NonmovableArrays.fromImageHeap(otherStrings);
+            return NonmovableArrays.fromImageHeap(hostedOtherStrings);
         }
 
         @Override
         public void setOtherStrings(NonmovableObjectArray<String> array) {
-            otherStrings = NonmovableArrays.getHostedArray(array);
+            hostedOtherStrings = NonmovableArrays.getHostedArray(array);
+            otherStrings = hostedOtherStrings;
+            otherStringTable = null;
+        }
+
+        /**
+         * Replaces the string tables by symbol-coded byte pools; see {@link CompactStringTable}.
+         * The decoded strings are created on demand at run time.
+         */
+        public void compactStringTables(Function<String[], CompactStringTable> builder) {
+            if (hostedMemberNames != null) {
+                CompactStringTable table = builder.apply(hostedMemberNames);
+                if (table != null) {
+                    memberNameTable = table;
+                    memberNames = null;
+                }
+            }
+            if (hostedOtherStrings != null) {
+                CompactStringTable table = builder.apply(hostedOtherStrings);
+                if (table != null) {
+                    otherStringTable = table;
+                    otherStrings = null;
+                }
+            }
         }
 
         @Override

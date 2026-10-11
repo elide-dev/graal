@@ -355,6 +355,9 @@ public class SubstrateOptions {
         }
     };
 
+    @Option(help = "Store the method, field, and other name strings of the code metadata as one symbol-coded byte pool per table instead of one String object per entry; the strings are decoded on demand.")//
+    public static final HostedOptionKey<Boolean> CompactMetadataStrings = new HostedOptionKey<>(true);
+
     @Option(help = "Comma-separated list of class name prefixes (packages) whose methods are compiled with the code-size settings of -Os " +
                     "while the rest of the image keeps the selected optimization level, for example 'jdk.graal.compiler.,org.graalvm.shadowed.'.", type = OptionType.User)//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> OptimizeForSizePackages = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());

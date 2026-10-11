@@ -565,6 +565,46 @@ public final class CodeInfoAccess {
         return cast(info).getMemberNames();
     }
 
+    /** The member name at {@code index}; image code may store its names symbol-coded. */
+    @Uninterruptible(reason = "Decoding a symbol-coded name allocates; all callers that need names run interruptibly, see CompactStringTable.get.", calleeMustBe = false, mayBeInlined = true)
+    public static String getMemberName(CodeInfo info, int index) {
+        NonmovableObjectArray<String> names = cast(info).getMemberNames();
+        if (names.isNonNull()) {
+            return NonmovableArrays.getObject(names, index);
+        }
+        return ImageCodeInfo.getMemberNameTable(info).get(index);
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static int getMemberNameCount(CodeInfo info) {
+        NonmovableObjectArray<String> names = cast(info).getMemberNames();
+        if (names.isNonNull()) {
+            return NonmovableArrays.lengthOf(names);
+        }
+        CompactStringTable table = ImageCodeInfo.getMemberNameTable(info);
+        return table == null ? 0 : table.length();
+    }
+
+    /** The other string at {@code index}; image code may store its strings symbol-coded. */
+    @Uninterruptible(reason = "Decoding a symbol-coded string allocates; all callers that need strings run interruptibly, see CompactStringTable.get.", calleeMustBe = false, mayBeInlined = true)
+    public static String getOtherString(CodeInfo info, int index) {
+        NonmovableObjectArray<String> strings = cast(info).getOtherStrings();
+        if (strings.isNonNull()) {
+            return NonmovableArrays.getObject(strings, index);
+        }
+        return ImageCodeInfo.getOtherStringTable(info).get(index);
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static int getOtherStringCount(CodeInfo info) {
+        NonmovableObjectArray<String> strings = cast(info).getOtherStrings();
+        if (strings.isNonNull()) {
+            return NonmovableArrays.lengthOf(strings);
+        }
+        CompactStringTable table = ImageCodeInfo.getOtherStringTable(info);
+        return table == null ? 0 : table.length();
+    }
+
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static NonmovableObjectArray<String> getOtherStrings(CodeInfo info) {
         return cast(info).getOtherStrings();
