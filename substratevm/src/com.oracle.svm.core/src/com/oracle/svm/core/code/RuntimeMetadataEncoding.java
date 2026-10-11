@@ -29,6 +29,7 @@ import java.util.Arrays;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.MetadataAccessorImpl;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
@@ -66,8 +67,13 @@ import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 public class RuntimeMetadataEncoding {
     private static final int INITIAL_REFLECTION_METADATA_ENCODING_CAPACITY = 1024;
 
-    /** Generic runtime metadata encoding consumed by {@link RuntimeMetadataDecoderImpl}. */
-    @UnknownObjectField(availability = AfterCompilation.class) private byte[] encoding;
+    /**
+     * Generic runtime metadata encoding consumed by {@link RuntimeMetadataDecoderImpl}. When the
+     * encoding is stored compressed ({@link #compressedEncoding}), this field is null in the image
+     * and caches the inflated array after the first reflective query at run time.
+     */
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private volatile byte[] encoding;
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private CompressedBlob compressedEncoding;
 
     /**
      * Compact side-table encoding for non-layered image reflection metadata. During image building,
@@ -84,7 +90,22 @@ public class RuntimeMetadataEncoding {
     }
 
     public byte[] getEncoding() {
-        return encoding;
+        byte[] result = encoding;
+        if (result == null && compressedEncoding != null) {
+            /* Threads may race here; they produce identical arrays and either one is fine. */
+            result = compressedEncoding.inflateAll();
+            encoding = result;
+        }
+        return result;
+    }
+
+    /** The number of bytes the encoding occupies in the image heap, compressed or not. */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public int getEncodingSizeInImage() {
+        if (compressedEncoding != null) {
+            return compressedEncoding.getCompressedLength() + compressedEncoding.getDictionaryLength();
+        }
+        return encoding == null ? 0 : encoding.length;
     }
 
     public byte[] getReflectionMetadataEncoding() {
@@ -94,6 +115,13 @@ public class RuntimeMetadataEncoding {
     @Platforms(Platform.HOSTED_ONLY.class)
     public void setEncoding(byte[] encoding) {
         this.encoding = encoding;
+        this.compressedEncoding = null;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void setCompressedEncoding(CompressedBlob compressedEncoding) {
+        this.encoding = null;
+        this.compressedEncoding = compressedEncoding;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

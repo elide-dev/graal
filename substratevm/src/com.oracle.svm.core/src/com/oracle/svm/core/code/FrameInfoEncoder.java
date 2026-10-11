@@ -492,9 +492,13 @@ public class FrameInfoEncoder {
                         prevShared = sharedFrame;
                         prevFrame = frame;
                     }
+                    maxSliceBytes = Math.max(maxSliceBytes, NumUtil.safeToInt(encodingBuffer.getBytesWritten() - encodedSliceIndexes[sliceIdx]));
                 }
             }
         }
+
+        /** The largest number of bytes a compressed frame slice occupies contiguously. */
+        int maxSliceBytes;
 
         /**
          * @return frame's single successor, or {@code null} if the frame has either 0 or >1
@@ -517,8 +521,13 @@ public class FrameInfoEncoder {
 
             encodingBuffer.putSV(encodeCompressedFirstEntry(methodId, true));
             boolean encodeUniqueSuccessor = uniqueSuccessorIndex != NO_SUCCESSOR_INDEX_MARKER;
-            encodingBuffer.putSV(encodeCompressedSourceLineNumber(frame.sourceLineNumber, frame.isSliceEnd));
-            encodingBuffer.putSV(encodeCompressedEncodedBci(frame.encodedBci, encodeUniqueSuccessor));
+            if (FrameInfoDecoder.includeCompressedFrameBci()) {
+                encodingBuffer.putSV(encodeCompressedSourceLineNumber(frame.sourceLineNumber, frame.isSliceEnd));
+                encodingBuffer.putSV(encodeCompressedEncodedBci(frame.encodedBci, encodeUniqueSuccessor));
+            } else {
+                /* Without a bci, the line number value carries the unique-successor flag. */
+                encodingBuffer.putSV(encodeCompressedSourceLineNumber(frame.sourceLineNumber, frame.isSliceEnd, encodeUniqueSuccessor));
+            }
             if (encodeUniqueSuccessor) {
                 encodingBuffer.putSV(uniqueSuccessorIndex);
             }
@@ -1071,6 +1080,17 @@ public class FrameInfoEncoder {
         install(target, frameInfoEncodings);
     }
 
+    /** The largest number of bytes an uncompressed frame slice occupies. */
+    private int maxSliceBytes;
+
+    /**
+     * The largest number of bytes any frame slice occupies contiguously in the encoding, which
+     * bounds how far a decoder reads past a frame-info index. Valid after encoding.
+     */
+    public int getMaxSliceBytes() {
+        return Math.max(maxSliceBytes, frameMetadata.maxSliceBytes);
+    }
+
     @Uninterruptible(reason = "Nonmovable object arrays are not visible to GC until installed in target.")
     static void install(CodeInfo target, NonmovableArray<Byte> frameInfoEncodings) {
         CodeInfoAccess.setFrameInfo(target, frameInfoEncodings);
@@ -1091,6 +1111,7 @@ public class FrameInfoEncoder {
             if (data.frameSliceIndex == UNCOMPRESSED_FRAME_SLICE_INDEX) {
                 data.encodedFrameInfoIndex = encodingBuffer.getBytesWritten();
                 encodeUncompressedFrameData(data.frame, encodingBuffer, encoders, constantAccess);
+                maxSliceBytes = Math.max(maxSliceBytes, NumUtil.safeToInt(encodingBuffer.getBytesWritten() - data.encodedFrameInfoIndex));
             } else {
                 data.encodedFrameInfoIndex = frameMetadata.getEncodingOffset(data.frameSliceIndex);
                 assert frameMetadata.writeFrameVerificationInfo(data, encoders);
@@ -1246,6 +1267,17 @@ public class FrameInfoEncoder {
         int lineNumberWithAddend = sourceLineNumber + FrameInfoDecoder.COMPRESSED_SOURCE_LINE_ADDEND;
         VMError.guarantee(lineNumberWithAddend > 0);
         return isSliceEnd ? -(lineNumberWithAddend) : (lineNumberWithAddend);
+    }
+
+    /**
+     * Variant used when compressed frames carry no bci: the lowest bit of the magnitude records
+     * whether a unique shared frame successor follows, the sign records the slice end.
+     */
+    private static int encodeCompressedSourceLineNumber(int sourceLineNumber, boolean isSliceEnd, boolean hasUniqueSharedFrameSuccessor) {
+        int lineNumberWithAddend = sourceLineNumber + FrameInfoDecoder.COMPRESSED_SOURCE_LINE_ADDEND;
+        VMError.guarantee(lineNumberWithAddend > 0);
+        int value = (lineNumberWithAddend << 1) | (hasUniqueSharedFrameSuccessor ? 1 : 0);
+        return isSliceEnd ? -value : value;
     }
 
     void verifyEncoding(CodeInfo info) {

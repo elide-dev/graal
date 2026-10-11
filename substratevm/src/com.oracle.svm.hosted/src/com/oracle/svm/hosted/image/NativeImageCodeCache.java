@@ -655,6 +655,7 @@ public abstract class NativeImageCodeCache {
                     RuntimeMetadataEncoder runtimeMetadataEncoder, DeadlockWatchdog watchdog) {
         HostedImageCodeInfo imageCodeInfo = CodeInfoTable.getCurrentLayerImageCodeCache().getHostedImageCodeInfo();
         codeInfoEncoder.encodeAllAndInstall(imageCodeInfo, new HostedInstantReferenceAdjuster(snippetReflection), watchdog::recordActivity);
+        imageCodeInfo.compressFrameInfo(codeInfoEncoder.getFrameInfoEncoder().getMaxSliceBytes());
         runtimeMetadataEncoder.encodeAllAndInstall();
         imageCodeInfo.setCodeStart(firstMethod);
         imageCodeInfo.setCodeSize(codeSize);

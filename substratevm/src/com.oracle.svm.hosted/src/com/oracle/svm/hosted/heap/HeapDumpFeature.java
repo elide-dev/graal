@@ -39,6 +39,7 @@ import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.impl.HeapDumpSupport;
 
 import com.oracle.svm.core.VMInspectionOptions;
+import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.encoder.SymbolEncoder;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.heap.dump.HProfType;
@@ -53,6 +54,7 @@ import com.oracle.svm.core.imagelayer.DynamicImageLayerInfo;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.hub.DynamicHubProvider;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
+import com.oracle.svm.hosted.compress.BlobCompressor;
 import com.oracle.svm.jvmci.shared.meta.SharedField;
 import com.oracle.svm.jvmci.shared.meta.SharedType;
 import com.oracle.svm.core.util.ByteArrayReader;
@@ -120,7 +122,8 @@ public class HeapDumpFeature implements InternalFeature {
     @Override
     public void afterAnalysis(AfterAnalysisAccess access) {
         Field dataField = ReflectionUtil.lookupField(HeapDumpMetadata.HeapDumpEncodedData.class, "data");
-        isDataFieldReachable = access.isReachable(dataField);
+        Field compressedDataField = ReflectionUtil.lookupField(HeapDumpMetadata.HeapDumpEncodedData.class, "compressedData");
+        isDataFieldReachable = access.isReachable(dataField) || access.isReachable(compressedDataField);
     }
 
     @Override
@@ -128,8 +131,15 @@ public class HeapDumpFeature implements InternalFeature {
         if (isDataFieldReachable) {
             AfterCompilationAccessImpl accessImpl = (AfterCompilationAccessImpl) access;
             byte[] metadata = encodeMetadata(accessImpl.getTypes());
-            HeapDumpMetadata.HeapDumpEncodedData.setData(metadata);
-            access.registerAsImmutable(metadata);
+            /* Only ever read when a heap dump is written, so keep it compressed in the image. */
+            CompressedBlob compressed = BlobCompressor.shouldCompressBlob(metadata.length) ? BlobCompressor.compressWholeBlob(metadata, "heap dump metadata") : null;
+            if (compressed != null) {
+                HeapDumpMetadata.HeapDumpEncodedData.setCompressedData(compressed);
+                compressed.registerAsImmutable(access::registerAsImmutable);
+            } else {
+                HeapDumpMetadata.HeapDumpEncodedData.setData(metadata);
+                access.registerAsImmutable(metadata);
+            }
         }
     }
 

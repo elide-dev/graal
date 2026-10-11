@@ -60,6 +60,8 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
 
+import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.core.ClassLoaderSupport.ConditionWithOrigin;
 import com.oracle.svm.core.MissingRegistrationUtils;
@@ -1301,6 +1303,9 @@ public final class Resources {
 
 @AutomaticallyRegisteredFeature
 final class ResourcesFeature implements InternalFeature {
+    /** Upper bound on the resource bytes sampled for dictionary training. */
+    private static final long MAX_DICTIONARY_SAMPLE_BYTES = 64L * 1024 * 1024;
+
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         if (ImageLayerBuildingSupport.firstImageBuild()) {
@@ -1317,13 +1322,38 @@ final class ResourcesFeature implements InternalFeature {
          * of lazily initialized fields. Only the byte[] arrays themselves can be safely made
          * read-only.
          */
+        List<ResourceStorageEntry> entries = new ArrayList<>();
         for (ConditionalRuntimeValue<ResourceStorageEntryBase> entry : Resources.currentLayer().resources().getValues()) {
-            var unconditionalEntry = entry.getValueUnconditionally();
-            if (unconditionalEntry.hasData()) {
-                for (byte[] resource : unconditionalEntry.getData()) {
-                    access.registerAsImmutable(resource);
+            if (entry.getValueUnconditionally() instanceof ResourceStorageEntry storageEntry) {
+                entries.add(storageEntry);
+            }
+        }
+        /*
+         * Resources are mostly small files of similar kinds, so one dictionary trained over all of
+         * them lets each resource be compressed on its own and inflated on first access.
+         */
+        HeapBlobCompression compression = null;
+        ZstdDictionary dictionary = null;
+        if (HeapBlobCompression.isAvailable() && HeapBlobCompression.singleton().shouldCompress(Long.MAX_VALUE)) {
+            compression = HeapBlobCompression.singleton();
+            List<byte[]> samples = new ArrayList<>();
+            long sampleBytes = 0;
+            for (ResourceStorageEntry storageEntry : entries) {
+                for (byte[] datum : storageEntry.getData()) {
+                    if (datum.length >= ResourceStorageEntry.MIN_COMPRESSED_RESOURCE_SIZE && sampleBytes < MAX_DICTIONARY_SAMPLE_BYTES) {
+                        samples.add(datum);
+                        sampleBytes += datum.length;
+                    }
                 }
             }
+            dictionary = compression.trainDictionary(samples, "embedded resources");
+            if (dictionary != null) {
+                dictionary.registerAsImmutable(access::registerAsImmutable);
+            }
+        }
+        for (ResourceStorageEntry storageEntry : entries) {
+            storageEntry.compressForImage(compression, dictionary);
+            storageEntry.registerAsImmutable(access::registerAsImmutable);
         }
     }
 }

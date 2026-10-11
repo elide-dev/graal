@@ -38,6 +38,9 @@ import org.graalvm.word.impl.Word;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.NonmovableObjectArray;
+import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.nmt.NmtCategory;
@@ -73,7 +76,9 @@ public class ImageCodeInfo {
     @UnknownObjectField(availability = AfterCompilation.class) byte[] codeInfoEncodings;
     @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) byte[] codeInfoDefaultFrameInfoIndexes;
     @UnknownObjectField(availability = AfterCompilation.class) byte[] referenceMapEncoding;
-    @UnknownObjectField(availability = AfterCompilation.class) byte[] frameInfoEncodings;
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) byte[] frameInfoEncodings;
+    /** Compressed frame information; when set, {@link #frameInfoEncodings} is null in the image. */
+    @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) CompressedBlob frameInfoBlob;
     @UnknownObjectField(availability = AfterCompilation.class) Object[] objectConstants;
     @UnknownObjectField(availability = AfterCompilation.class) Class<?>[] classes;
     @UnknownObjectField(availability = AfterCompilation.class) String[] memberNames;
@@ -105,6 +110,22 @@ public class ImageCodeInfo {
         return runtimeCodeInfos[0].getCodeInfo();
     }
 
+    /**
+     * The compressed frame information of the given image code info, or null if its frame
+     * information is stored uncompressed or {@code info} is not image code.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static CompressedBlob getFrameInfoBlob(CodeInfo info) {
+        ImageCodeInfo[] imageCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfo.class);
+        ImageCodeInfoStorage[] runtimeCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfoStorage.class);
+        for (int i = 0; i < imageCodeInfos.length; i++) {
+            if (runtimeCodeInfos[i].getCodeInfo().equal(info)) {
+                return imageCodeInfos[i].frameInfoBlob;
+            }
+        }
+        return null;
+    }
+
     @Uninterruptible(reason = "Executes during isolate creation.")
     protected static void prepareCodeInfo0(ImageCodeInfo imageCodeInfo, CodeInfoImpl infoImpl, CodeInfo next) {
         assert infoImpl.getCodeStart().isNull() : "already initialized";
@@ -120,7 +141,11 @@ public class ImageCodeInfo {
         infoImpl.setCodeInfoIndexEntriesPerBlock(imageCodeInfo.codeInfoIndexEntriesPerBlock);
         infoImpl.setCodeInfoDefaultFrameInfoIndexes(NonmovableArrays.fromImageHeap(imageCodeInfo.codeInfoDefaultFrameInfoIndexes));
         infoImpl.setStackReferenceMapEncoding(NonmovableArrays.fromImageHeap(imageCodeInfo.referenceMapEncoding));
-        infoImpl.setFrameInfoEncodings(NonmovableArrays.fromImageHeap(imageCodeInfo.frameInfoEncodings));
+        if (imageCodeInfo.frameInfoBlob != null) {
+            CodeInfoAccess.setCompressedFrameInfo(infoImpl, imageCodeInfo.frameInfoBlob);
+        } else {
+            infoImpl.setFrameInfoEncodings(NonmovableArrays.fromImageHeap(imageCodeInfo.frameInfoEncodings));
+        }
         infoImpl.setObjectConstants(NonmovableArrays.fromImageHeap(imageCodeInfo.objectConstants));
         infoImpl.setClasses(NonmovableArrays.fromImageHeap(imageCodeInfo.classes));
         infoImpl.setMemberNames(NonmovableArrays.fromImageHeap(imageCodeInfo.memberNames));
@@ -141,7 +166,11 @@ public class ImageCodeInfo {
             config.registerAsImmutable(codeInfoDefaultFrameInfoIndexes);
         }
         config.registerAsImmutable(referenceMapEncoding);
-        config.registerAsImmutable(frameInfoEncodings);
+        if (frameInfoBlob != null) {
+            frameInfoBlob.registerAsImmutable(config::registerAsImmutable);
+        } else {
+            config.registerAsImmutable(frameInfoEncodings);
+        }
         config.registerAsImmutable(objectConstants);
         config.registerAsImmutable(classes);
         config.registerAsImmutable(memberNames);
@@ -169,7 +198,14 @@ public class ImageCodeInfo {
         addByteArrayLength(lengths, codeInfoEncodings);
         addByteArrayLength(lengths, codeInfoDefaultFrameInfoIndexes);
         addByteArrayLength(lengths, referenceMapEncoding);
-        addByteArrayLength(lengths, frameInfoEncodings);
+        if (frameInfoBlob != null) {
+            frameInfoBlob.forEachImageHeapArray(array -> addByteArrayLength(lengths, array));
+            if (frameInfoBlob.getDictionary() != null) {
+                frameInfoBlob.getDictionary().forEachImageHeapArray(array -> addByteArrayLength(lengths, array));
+            }
+        } else {
+            addByteArrayLength(lengths, frameInfoEncodings);
+        }
         addByteArrayLength(lengths, methodTable);
         return lengths;
     }
@@ -307,13 +343,48 @@ public class ImageCodeInfo {
         }
 
         @Override
+        public NonmovableArray<Integer> getFrameInfoChunkStates() {
+            /* Frame information is always readable at build time. */
+            return NonmovableArrays.nullArray();
+        }
+
+        @Override
+        public void setFrameInfoChunkStates(NonmovableArray<Integer> states) {
+            throw VMError.shouldNotReachHere("Chunk states exist only for compressed frame information at run time");
+        }
+
+        /** The uncompressed frame information, for build-time verification and persistence. */
+        private byte[] hostedFrameInfoEncodings;
+
+        @Override
         public NonmovableArray<Byte> getFrameInfoEncodings() {
-            return NonmovableArrays.fromImageHeap(frameInfoEncodings);
+            return NonmovableArrays.fromImageHeap(hostedFrameInfoEncodings);
         }
 
         @Override
         public void setFrameInfoEncodings(NonmovableArray<Byte> array) {
-            frameInfoEncodings = NonmovableArrays.getHostedArray(array);
+            byte[] encodings = NonmovableArrays.getHostedArray(array);
+            hostedFrameInfoEncodings = encodings;
+            frameInfoEncodings = encodings;
+            frameInfoBlob = null;
+        }
+
+        /**
+         * Stores the frame information compressed in chunks that are inflated on first use at run
+         * time. {@code maxSliceBytes} is the largest contiguous frame slice encoding; chunked
+         * compression is only used when every slice fits into one chunk, because the decoder
+         * inflates at most two chunks per read.
+         */
+        public void compressFrameInfo(int maxSliceBytes) {
+            byte[] encodings = hostedFrameInfoEncodings;
+            if (encodings == null || !HeapBlobCompression.isAvailable() || !ImageLayerBuildingSupport.lastImageBuild() || !HeapBlobCompression.singleton().shouldCompress(encodings.length)) {
+                return;
+            }
+            CompressedBlob blob = HeapBlobCompression.singleton().compressUniform(encodings, "frame information");
+            if (blob != null && maxSliceBytes <= blob.getChunkLength(0)) {
+                frameInfoBlob = blob;
+                frameInfoEncodings = null;
+            }
         }
 
         @Override

@@ -43,6 +43,7 @@ import com.oracle.svm.core.configure.ConditionalRuntimeValue;
 import com.oracle.svm.core.image.ImageHeapPartition;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.jdk.Resources;
+import com.oracle.svm.core.jdk.resources.ResourceStorageEntry;
 import com.oracle.svm.core.jdk.resources.ResourceStorageEntryBase;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
@@ -171,7 +172,7 @@ public class HeapBreakdownProvider {
         long codeInfoSize = codeInfoByteArrayLengths.stream().map(l -> objectLayout.getArraySize(JavaKind.Byte, l, true)).reduce(0L, Long::sum);
         addEntry(entries, byteArrayEntry, HeapBreakdownEntry.of(BYTE_ARRAY_PREFIX, "code metadata", "#glossary-code-metadata"), codeInfoSize, codeInfoByteArrayLengths.size());
         /* Extract byte[] for metadata. */
-        int metadataByteLength = RuntimeMetadataEncoding.currentLayer().getEncoding().length;
+        int metadataByteLength = RuntimeMetadataEncoding.currentLayer().getEncodingSizeInImage();
         if (metadataByteLength > 0) {
             long metadataSize = objectLayout.getArraySize(JavaKind.Byte, metadataByteLength, true);
             addEntry(entries, byteArrayEntry, HeapBreakdownEntry.of(BYTE_ARRAY_PREFIX, "reflection metadata", "#glossary-reflection-metadata"), metadataSize, 1);
@@ -186,13 +187,13 @@ public class HeapBreakdownProvider {
         if (!ImageLayerBuildingSupport.buildingExtensionLayer() && resourcesAreReachable) {
             /* Extract byte[] for resources. */
             for (ConditionalRuntimeValue<ResourceStorageEntryBase> resourceList : Resources.currentLayer().resources().getValues()) {
-                if (resourceList.getValueUnconditionally().hasData()) {
-                    for (byte[] resource : resourceList.getValueUnconditionally().getData()) {
-                        long resourceByteArraySize = objectLayout.getArraySize(JavaKind.Byte, resource.length, true);
-                        resourcesByteArraySize += resourceByteArraySize;
-                        resourceByteArrays.add(resource);
-                    }
+                if (resourceList.getValueUnconditionally() instanceof ResourceStorageEntry storageEntry) {
+                    /* Report the arrays that are actually in the image heap, compressed or not. */
+                    storageEntry.forEachImageHeapArray(resourceByteArrays::add);
                 }
+            }
+            for (byte[] resource : resourceByteArrays) {
+                resourcesByteArraySize += objectLayout.getArraySize(JavaKind.Byte, resource.length, true);
             }
             ByteArrayUsage resourceByteArrayUsage = consumeByteArrays(currentLayerByteArrays, usedByteArrays, resourceByteArrays);
             if (resourceByteArrayUsage.byteSize > 0) {

@@ -400,6 +400,13 @@ public class GraphEncoder {
     }
 
     /**
+     * Number of bytes written so far, i.e., the start offset of the next graph to be encoded.
+     */
+    public long getBytesWritten() {
+        return writer.getBytesWritten();
+    }
+
+    /**
      * Gets the encoded bytes for all graphs that were encoded by this encoder.
      */
     public byte[] getEncoding() {

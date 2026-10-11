@@ -289,6 +289,14 @@ The total size of all `byte[]` objects used for graph encodings.
 These encodings are a result of [runtime compiled methods](#glossary-runtime-methods).
 Therefore, reducing the number of such methods also reduces the size of corresponding graph encodings.
 
+##### <a name="glossary-compressed-heap-blobs"></a>Compressed Heap Blobs
+Large and rarely accessed `byte[]` objects in the image heap are stored compressed and inflated on first use at run time.
+This applies to [code metadata](#glossary-code-metadata), [reflection metadata](#glossary-reflection-metadata), [graph encodings](#glossary-graph-encodings), [embedded resources](#glossary-embedded-resources), and heap-dump metadata.
+The sizes reported above are the compressed sizes.
+The `native-image` builder compresses these blobs with [Zstandard](https://github.com/facebook/zstd) at build time; the native binary links a statically compiled Zstandard decoder.
+Frame information and graph encodings are stored in chunks with a shared dictionary, so a stack trace or a runtime compilation inflates only the chunks it touches.
+Use `-H:-CompressHeapBlobs` to store all blobs uncompressed, and `-H:HeapBlobMinimumSize` to change the size below which a blob is stored uncompressed.
+
 ##### <a name="glossary-heap-alignment"></a>Heap Alignment
 Additional space reserved to align the heap for the [selected garbage collector](#glossary-gc).
 The heap alignment may also contain GC-specific data structures.

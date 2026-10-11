@@ -40,6 +40,8 @@ import org.graalvm.nativeimage.hosted.Feature.FeatureAccess;
 import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
 import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
+import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.hosted.compress.BlobCompressor;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterAnalysis;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
@@ -109,6 +111,12 @@ public class RuntimeCompilationSupport {
 
     @UnknownObjectField(availability = AfterAnalysis.class) private SubstrateMethod[] methodsToCompile;
     @UnknownObjectField(availability = AfterAnalysis.class) private byte[] graphEncoding;
+    /**
+     * The encoded graphs compressed in method-aligned chunks; when non-null, {@link #graphEncoding}
+     * is null and {@link #inflatedGraphChunks} caches the chunks inflated so far at run time.
+     */
+    @UnknownObjectField(availability = AfterAnalysis.class, canBeNull = true) private CompressedBlob compressedGraphEncoding;
+    private volatile byte[][] inflatedGraphChunks;
     @UnknownObjectField(availability = AfterAnalysis.class) private Object[] graphObjects;
     @UnknownObjectField(availability = AfterAnalysis.class) private NodeClassMap graphNodeTypes;
     @UnknownPrimitiveField(availability = AfterAnalysis.class) private int graphNodeTypesSize;
@@ -244,6 +252,32 @@ public class RuntimeCompilationSupport {
         return result;
     }
 
+    /**
+     * Installs the final graph encoding. {@code recordStarts} holds the start offset of every
+     * method's encoding so that the blob can be compressed in method-aligned chunks; each chunk is
+     * inflated independently at run time when one of its methods is compiled.
+     */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static void setFinalGraphEncoding(byte[] graphEncoding, int[] recordStarts, Object[] graphObjects, NodeClassMap graphNodeTypes) {
+        setGraphEncoding(null, graphEncoding, graphObjects, graphNodeTypes);
+        RuntimeCompilationSupport support = get();
+        if (recordStarts.length > 0 && BlobCompressor.shouldCompressBlob(graphEncoding.length)) {
+            CompressedBlob blob = BlobCompressor.compressAligned(graphEncoding, recordStarts, "graph encodings");
+            if (blob != null) {
+                support.compressedGraphEncoding = blob;
+                support.graphEncoding = null;
+            }
+        }
+    }
+
+    public static int getGraphEncodingSizeInImage() {
+        RuntimeCompilationSupport support = get();
+        if (support.compressedGraphEncoding != null) {
+            return support.compressedGraphEncoding.getCompressedLength() + support.compressedGraphEncoding.getDictionaryLength();
+        }
+        return support.graphEncoding == null ? 0 : support.graphEncoding.length;
+    }
+
     private static void rescan(FeatureAccess a, Object object) {
         if (a instanceof DuringAnalysisAccessImpl access) {
             rescan(access.getUniverse(), object);
@@ -263,7 +297,11 @@ public class RuntimeCompilationSupport {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public static void registerImmutableObjects(BeforeHeapLayoutAccess access) {
-        access.registerAsImmutable(get().graphEncoding);
+        if (get().compressedGraphEncoding != null) {
+            get().compressedGraphEncoding.registerAsImmutable(access::registerAsImmutable);
+        } else {
+            access.registerAsImmutable(get().graphEncoding);
+        }
         access.registerAsImmutable(get().graphObjects);
         access.registerAsImmutable(get().graphNodeTypes);
     }
@@ -301,7 +339,30 @@ public class RuntimeCompilationSupport {
         if (startOffset == -1) {
             return null;
         }
-        return new EncodedGraph(get().graphEncoding, startOffset, get().graphObjects, get().graphNodeTypes, null, null, false, trackNodeSourcePosition);
+        RuntimeCompilationSupport support = get();
+        CompressedBlob blob = support.compressedGraphEncoding;
+        if (blob == null) {
+            return new EncodedGraph(support.graphEncoding, startOffset, support.graphObjects, support.graphNodeTypes, null, null, false, trackNodeSourcePosition);
+        }
+        int chunk = blob.getChunkIndex(startOffset);
+        byte[] chunkBytes = support.inflatedGraphChunk(chunk);
+        return new EncodedGraph(chunkBytes, startOffset - blob.getChunkStart(chunk), support.graphObjects, support.graphNodeTypes, null, null, false, trackNodeSourcePosition);
+    }
+
+    /**
+     * Returns the inflated chunk of the graph encoding, inflating it on first use. Inflating a
+     * chunk takes microseconds, so compiler threads simply serialize on the cache.
+     */
+    private synchronized byte[] inflatedGraphChunk(int chunk) {
+        if (inflatedGraphChunks == null) {
+            inflatedGraphChunks = new byte[compressedGraphEncoding.getChunkCount()][];
+        }
+        byte[] result = inflatedGraphChunks[chunk];
+        if (result == null) {
+            result = compressedGraphEncoding.inflateChunk(chunk);
+            inflatedGraphChunks[chunk] = result;
+        }
+        return result;
     }
 
     public static StructuredGraph decodeGraph(DebugContext debug, String name, CompilationIdentifier compilationId, SharedRuntimeMethod method, StructuredGraph caller) {

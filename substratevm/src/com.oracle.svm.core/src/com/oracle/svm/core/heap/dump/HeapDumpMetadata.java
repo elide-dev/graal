@@ -41,6 +41,8 @@ import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
+import com.oracle.svm.core.c.NonmovableArray;
+import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.core.c.NonmovableArrays;
@@ -135,7 +137,7 @@ public class HeapDumpMetadata {
         SubstrateUtil.guaranteeRuntimeOnly();
         VMError.guarantee(ImageLayerBuildingSupport.buildingImageLayer());
         for (var encodedData : HeapDumpEncodedData.layeredSingletons()) {
-            if (encodedData.data == null) {
+            if (!encodedData.hasData()) {
                 return false;
             }
         }
@@ -156,9 +158,8 @@ public class HeapDumpMetadata {
          * First read all encoded data arrays to determine how large of data structures to allocate.
          */
         for (HeapDumpEncodedData encodedData : encodedDataArray) {
-            byte[] data = encodedData.data;
-
-            Pointer start = NonmovableArrays.getArrayBase(NonmovableArrays.fromImageHeap(data));
+            encodedData.inflate();
+            Pointer start = encodedData.getDataStart();
             ByteStreamAccess.initialize(stream, start);
 
             /* Read the header. */
@@ -198,10 +199,8 @@ public class HeapDumpMetadata {
          */
         int fieldNameTableStartIdx = 0;
         for (HeapDumpEncodedData encodedData : encodedDataArray) {
-            byte[] data = encodedData.data;
-
             /* Re-initialize the stream. */
-            Pointer start = NonmovableArrays.getArrayBase(NonmovableArrays.fromImageHeap(data));
+            Pointer start = encodedData.getDataStart();
             ByteStreamAccess.initialize(stream, start);
 
             /* Re-read the header. */
@@ -247,7 +246,7 @@ public class HeapDumpMetadata {
                 stream.setPosition(stream.getPosition().add(length));
             }
             fieldNameTableStartIdx += currentFieldNameCount;
-            Pointer end = start.add(data.length);
+            Pointer end = start.add(encodedData.getDataLength());
             assert stream.getPosition().equal(end);
         }
 
@@ -278,6 +277,10 @@ public class HeapDumpMetadata {
      * Must always be called, regardless if {@link #initialize} returned true or false.
      */
     public void teardown() {
+        for (HeapDumpEncodedData encodedData : HeapDumpEncodedData.layeredSingletons()) {
+            encodedData.release();
+        }
+
         NullableNativeMemory.free(classInfos);
         classInfos = Word.nullPointer();
 
@@ -509,7 +512,11 @@ public class HeapDumpMetadata {
 
     @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = MultiLayer.class)
     public static class HeapDumpEncodedData {
-        @UnknownObjectField(availability = AfterCompilation.class) private byte[] data;
+        @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private byte[] data;
+        /** The encoded data compressed; when set, {@link #data} is null and inflated on demand. */
+        @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private CompressedBlob compressedData;
+        /** Unmanaged copy of the inflated data, alive between {@link #inflate} and {@link #release}. */
+        private NonmovableArray<Byte> inflated;
 
         private static HeapDumpEncodedData currentLayer() {
             return LayeredImageSingletonSupport.singleton().lookup(HeapDumpEncodedData.class, false, true);
@@ -522,6 +529,44 @@ public class HeapDumpMetadata {
         @Platforms(Platform.HOSTED_ONLY.class)
         public static void setData(byte[] value) {
             HeapDumpEncodedData.currentLayer().data = value;
+        }
+
+        @Platforms(Platform.HOSTED_ONLY.class)
+        public static void setCompressedData(CompressedBlob value) {
+            HeapDumpEncodedData.currentLayer().compressedData = value;
+        }
+
+        boolean hasData() {
+            return data != null || compressedData != null;
+        }
+
+        int getDataLength() {
+            return data != null ? data.length : compressedData.getUncompressedLength();
+        }
+
+        /** Inflates compressed data into unmanaged memory; a no-op for uncompressed data. */
+        void inflate() {
+            if (compressedData != null && inflated.isNull()) {
+                inflated = NonmovableArrays.createByteArray(compressedData.getUncompressedLength(), NmtCategory.HeapDump);
+                for (int chunk = 0; chunk < compressedData.getChunkCount(); chunk++) {
+                    compressedData.inflateChunkTo(chunk, NonmovableArrays.addressOf(inflated, compressedData.getChunkStart(chunk)), Word.unsigned(compressedData.getChunkLength(chunk)));
+                }
+            }
+        }
+
+        Pointer getDataStart() {
+            if (data != null) {
+                return NonmovableArrays.getArrayBase(NonmovableArrays.fromImageHeap(data));
+            }
+            assert inflated.isNonNull();
+            return NonmovableArrays.getArrayBase(inflated);
+        }
+
+        void release() {
+            if (inflated.isNonNull()) {
+                NonmovableArrays.releaseUnmanagedArray(inflated);
+                inflated = Word.nullPointer();
+            }
         }
     }
 }

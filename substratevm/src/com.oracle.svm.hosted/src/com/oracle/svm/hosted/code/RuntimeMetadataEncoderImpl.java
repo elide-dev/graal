@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.hosted.code;
 
+import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.hosted.DeleteGuestValue;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.ALL_FLAGS_MASK;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.ALL_NEST_MEMBERS_FLAG;
@@ -92,6 +93,7 @@ import com.oracle.svm.core.configure.RuntimeDynamicAccessMetadata;
 import com.oracle.svm.core.encoder.SymbolEncoder;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.hosted.compress.BlobCompressor;
 import com.oracle.svm.jvmci.shared.meta.SharedField;
 import com.oracle.svm.core.reflect.target.EncodedRuntimeMetadataSupplier;
 import com.oracle.svm.core.reflect.target.Target_jdk_internal_reflect_ConstantPool;
@@ -991,8 +993,13 @@ public class RuntimeMetadataEncoderImpl implements RuntimeMetadataEncoder {
 
     private static void install(UnsafeArrayTypeWriter encodingBuffer) {
         int encodingSize = TypeConversion.asS4(encodingBuffer.getBytesWritten());
-        byte[] dataEncoding = new byte[encodingSize];
-        RuntimeMetadataEncoding.currentLayer().setEncoding(encodingBuffer.toArray(dataEncoding));
+        byte[] dataEncoding = encodingBuffer.toArray(new byte[encodingSize]);
+        CompressedBlob compressed = BlobCompressor.shouldCompressBlob(encodingSize) ? BlobCompressor.compressWholeBlob(dataEncoding, "reflection metadata") : null;
+        if (compressed != null) {
+            RuntimeMetadataEncoding.currentLayer().setCompressedEncoding(compressed);
+        } else {
+            RuntimeMetadataEncoding.currentLayer().setEncoding(dataEncoding);
+        }
     }
 
     private static boolean anySet(int... indices) {
