@@ -1668,8 +1668,9 @@ final class Target_com_oracle_truffle_polyglot_PolyglotImpl {
     /*
      * Pre-initialization parses and clears the registered sources, but an image that does not
      * pre-initialize would otherwise keep them. Sources cannot be registered at image run time.
+     * The field must stay non-null: pre-initialization at image run time (tests) reads it.
      */
-    @Alias @RecomputeFieldValue(kind = Kind.Reset) //
+    @Alias @RecomputeFieldValue(kind = Kind.NewInstance, declClass = ArrayList.class) //
     private List<?> registeredPreinitializedSources;
 }
 

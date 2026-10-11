@@ -575,6 +575,8 @@ public class ContextPreInitializationTest {
      */
     @Test
     public void testPreInitializedOptionReusedForSameValue() throws Exception {
+        // Reads the pre-initialized engine's parsed options reflectively.
+        TruffleTestAssumptions.assumeNotAOT();
         System.setProperty(SYS_OPTION1_KEY, "true");
         setPatchable(FIRST);
         doContextPreinitialize(FIRST);
@@ -598,6 +600,8 @@ public class ContextPreInitializationTest {
      */
     @Test
     public void testPreInitializedOptionReparsedForDifferentValue() throws Exception {
+        // Reads the pre-initialized engine's parsed options reflectively.
+        TruffleTestAssumptions.assumeNotAOT();
         System.setProperty(SYS_OPTION1_KEY, "true");
         setPatchable(FIRST);
         doContextPreinitialize(FIRST);
@@ -828,6 +832,8 @@ public class ContextPreInitializationTest {
 
     @Test
     public void testRegisteredPreinitializedSource() throws Exception {
+        // Sources can only be registered while a native image is built.
+        TruffleTestAssumptions.assumeNotAOT();
         setPatchable(SHARED);
         Source source = Source.newBuilder(SHARED, "registered module", "module.shared").mimeType(SHARED_MODULE_MIME_TYPE).build();
         BaseLanguage.parsedSources.clear();
@@ -847,6 +853,8 @@ public class ContextPreInitializationTest {
 
     @Test
     public void testRegisterPreinitializedSourceAfterPreInitialization() throws Exception {
+        // Sources can only be registered while a native image is built.
+        TruffleTestAssumptions.assumeNotAOT();
         setPatchable(SHARED);
         doContextPreinitialize(SHARED);
         try {
@@ -863,6 +871,8 @@ public class ContextPreInitializationTest {
      */
     @Test
     public void testRegisteredPreinitializedSourceLanguageNotPreinitialized() throws Exception {
+        // Sources can only be registered while a native image is built.
+        TruffleTestAssumptions.assumeNotAOT();
         setPatchable(SHARED, FIRST);
         PreinitializedSources.register(Source.newBuilder(FIRST, "first source", "first.src").build(), Source.create(SHARED, "shared source"));
         BaseLanguage.parsedSources.clear();
@@ -872,6 +882,8 @@ public class ContextPreInitializationTest {
 
     @Test
     public void testRegisteredPreinitializedSourceNoLanguagePreinitialized() throws Exception {
+        // Sources can only be registered while a native image is built.
+        TruffleTestAssumptions.assumeNotAOT();
         setPatchable(SHARED);
         PreinitializedSources.register(Source.create(SHARED, "shared source"));
         BaseLanguage.parsedSources.clear();
