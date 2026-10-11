@@ -1330,6 +1330,12 @@ public class CompileQueue {
             // Keep handler reads fixed and branch-local to avoid increasing register pressure.
             customizedOptions = new OptionValues(customizedOptions, GraalOptions.OptFloatingReads, false, GraalOptions.OptDeduplicateReadsAcrossBranches, false);
         }
+        if (SubstrateOptions.isOptimizedForSize(method.getDeclaringClass().toJavaName())) {
+            /* Cold packages get the -Os settings while the rest of the image keeps its level. */
+            EconomicMap<OptionKey<?>, Object> sizeOptions = OptionValues.newOptionMap();
+            SubstrateOptions.configureOptimizeForCodeSize(sizeOptions, true, true, true);
+            customizedOptions = new OptionValues(customizedOptions, sizeOptions);
+        }
         if (omitPriorityInliningTuning()) {
             return customizedOptions;
         }

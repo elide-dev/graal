@@ -54,7 +54,7 @@ import jdk.vm.ci.meta.annotation.AnnotationsInfo;
 
 public class SubstrateField implements SharedField {
 
-    protected static final SubstrateField[] EMPTY_ARRAY = new SubstrateField[0];
+    public static final SubstrateField[] EMPTY_ARRAY = new SubstrateField[0];
 
     @UnknownObjectField(availability = AfterAnalysis.class) SubstrateType type;
     @UnknownObjectField(availability = AfterAnalysis.class) SubstrateType declaringClass;

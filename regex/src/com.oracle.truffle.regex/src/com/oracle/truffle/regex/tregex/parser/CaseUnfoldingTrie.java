@@ -41,45 +41,65 @@
 package com.oracle.truffle.regex.tregex.parser;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
-import org.graalvm.collections.EconomicMap;
-
+/**
+ * Trie over case-folded code point sequences. The tables are built once and stored in the image
+ * heap, so the nodes use sorted primitive arrays instead of boxed collections.
+ */
 public final class CaseUnfoldingTrie {
 
-    private final List<Integer> codepoints;
-    private final EconomicMap<Integer, CaseUnfoldingTrie> childNodes;
+    private static final int[] NO_CODEPOINTS = new int[0];
+    private static final CaseUnfoldingTrie[] NO_CHILDREN = new CaseUnfoldingTrie[0];
+
+    private int[] codepoints = NO_CODEPOINTS;
+    /** Sorted keys of {@link #children}. */
+    private int[] childKeys = NO_CODEPOINTS;
+    private CaseUnfoldingTrie[] children = NO_CHILDREN;
     private final int depth;
 
     public CaseUnfoldingTrie(int depth) {
-        this.codepoints = new ArrayList<>();
-        this.childNodes = EconomicMap.create();
         this.depth = depth;
     }
 
     public void add(int codepoint, int[] caseFoldedString, int offset) {
         if (caseFoldedString.length == offset) {
-            codepoints.add(codepoint);
+            codepoints = Arrays.copyOf(codepoints, codepoints.length + 1);
+            codepoints[codepoints.length - 1] = codepoint;
             return;
         }
 
-        if (!hasChildAt(caseFoldedString[offset])) {
-            childNodes.put(caseFoldedString[offset], new CaseUnfoldingTrie(depth + 1));
+        int key = caseFoldedString[offset];
+        int index = Arrays.binarySearch(childKeys, key);
+        if (index < 0) {
+            int insertAt = -index - 1;
+            int[] newKeys = new int[childKeys.length + 1];
+            CaseUnfoldingTrie[] newChildren = new CaseUnfoldingTrie[children.length + 1];
+            System.arraycopy(childKeys, 0, newKeys, 0, insertAt);
+            System.arraycopy(children, 0, newChildren, 0, insertAt);
+            newKeys[insertAt] = key;
+            newChildren[insertAt] = new CaseUnfoldingTrie(depth + 1);
+            System.arraycopy(childKeys, insertAt, newKeys, insertAt + 1, childKeys.length - insertAt);
+            System.arraycopy(children, insertAt, newChildren, insertAt + 1, children.length - insertAt);
+            childKeys = newKeys;
+            children = newChildren;
+            index = insertAt;
         }
-        getChildAt(caseFoldedString[offset]).add(codepoint, caseFoldedString, offset + 1);
+        children[index].add(codepoint, caseFoldedString, offset + 1);
     }
 
     public boolean hasChildAt(int index) {
-        return childNodes.containsKey(index);
+        return Arrays.binarySearch(childKeys, index) >= 0;
     }
 
     public CaseUnfoldingTrie getChildAt(int index) {
-        return childNodes.get(index);
+        int i = Arrays.binarySearch(childKeys, index);
+        return i >= 0 ? children[i] : null;
     }
 
-    public List<Integer> getCodepoints() {
+    public int[] getCodepoints() {
         return codepoints;
     }
 
@@ -148,7 +168,7 @@ public final class CaseUnfoldingTrie {
         return unfoldings;
     }
 
-    public static List<Integer> findSingleCharUnfoldings(CaseFoldData.CaseFoldAlgorithm algorithm, int[] caseFolded) {
+    public static int[] findSingleCharUnfoldings(CaseFoldData.CaseFoldAlgorithm algorithm, int[] caseFolded) {
         CaseUnfoldingTrie node = CaseFoldData.getUnfoldingTrie(algorithm);
         for (int codepoint : caseFolded) {
             assert node.hasChildAt(codepoint);
@@ -157,11 +177,8 @@ public final class CaseUnfoldingTrie {
         return node.getCodepoints();
     }
 
-    public static List<Integer> findSingleCharUnfoldings(CaseFoldData.CaseFoldAlgorithm algorithm, int caseFolded) {
-        if (CaseFoldData.getUnfoldingTrie(algorithm).hasChildAt(caseFolded)) {
-            return CaseFoldData.getUnfoldingTrie(algorithm).getChildAt(caseFolded).getCodepoints();
-        } else {
-            return Collections.emptyList();
-        }
+    public static int[] findSingleCharUnfoldings(CaseFoldData.CaseFoldAlgorithm algorithm, int caseFolded) {
+        CaseUnfoldingTrie child = CaseFoldData.getUnfoldingTrie(algorithm).getChildAt(caseFolded);
+        return child == null ? NO_CODEPOINTS : child.getCodepoints();
     }
 }
