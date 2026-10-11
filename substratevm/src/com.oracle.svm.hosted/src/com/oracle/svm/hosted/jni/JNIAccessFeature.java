@@ -45,10 +45,11 @@ import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.Pair;
 import org.graalvm.collections.UnmodifiableMapCursor;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.impl.RuntimeJNIAccessSupport;
-import org.graalvm.word.WordBase;
+import org.graalvm.word.PointerBase;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.graal.pointsto.BigBang;
@@ -78,9 +79,7 @@ import com.oracle.svm.core.jni.access.JNIAccessibleMethodDescriptor;
 import com.oracle.svm.core.jni.access.JNINativeLinkage;
 import com.oracle.svm.core.jni.access.JNIReflectionDictionary;
 import com.oracle.svm.core.jni.functions.JNIFunctions;
-import com.oracle.svm.core.meta.MethodOffset;
 import com.oracle.svm.core.meta.MethodPointer;
-import com.oracle.svm.core.meta.MethodRef;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.ClassLoaderFeature;
 import com.oracle.svm.hosted.ConditionalConfigurationRegistry;
@@ -635,10 +634,7 @@ public class JNIAccessFeature implements Feature {
         }
         for (JNICallableJavaMethod method : calledJavaMethods) {
             finishMethodBeforeCompilation(method, access);
-            /* With code offsets, JNIAccessibleMethod.resolveCodePointers writes them at run time. */
-            if (!JNIAccessibleMethod.storesCodeOffsets()) {
-                access.registerAsImmutable(method.jniMethod); // contains relocatable pointers
-            }
+            access.registerAsImmutable(method.jniMethod); // contains relocatable pointers
         }
     }
 
@@ -673,34 +669,29 @@ public class JNIAccessFeature implements Feature {
                 interfaceTypeID = indirectCallTargetClass.isInterface() ? indirectCallTargetClass.getInterfaceID() : JNIAccessibleMethod.INTERFACE_TYPEID_CLASS_TABLE;
             }
         }
-        MethodRef nonvirtualTarget = codeRef(hTarget);
-        WordBase newObjectTarget = null;
+        CodePointer nonvirtualTarget = new MethodPointer(hTarget);
+        PointerBase newObjectTarget = null;
         if (method.newObjectMethod != null) {
-            newObjectTarget = codeRef(hUniverse.lookup(aUniverse.lookup(method.newObjectMethod)));
+            newObjectTarget = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.newObjectMethod)));
         } else if (method.targetMethod.isConstructor()) {
             assert method.targetMethod.getDeclaringClass().isAbstract();
             newObjectTarget = Word.signed(JNIAccessibleMethod.NEW_OBJECT_TARGET_INVALID_FOR_ABSTRACT_TYPE);
         }
-        MethodRef callWrapper = codeRef(hUniverse.lookup(aUniverse.lookup(method.callWrapper)));
-        MethodRef varargs = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.varargs)));
-        MethodRef array = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.array)));
-        MethodRef valist = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.valist)));
-        MethodRef varargsNonvirtual = null;
-        MethodRef arrayNonvirtual = null;
-        MethodRef valistNonvirtual = null;
+        CodePointer callWrapper = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.callWrapper)));
+        CodePointer varargs = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.varargs)));
+        CodePointer array = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.array)));
+        CodePointer valist = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.valist)));
+        CodePointer varargsNonvirtual = null;
+        CodePointer arrayNonvirtual = null;
+        CodePointer valistNonvirtual = null;
         if (method.nonvirtualVariantWrappers != null) {
-            varargsNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.varargs)));
-            arrayNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.array)));
-            valistNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.valist)));
+            varargsNonvirtual = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.varargs)));
+            arrayNonvirtual = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.array)));
+            valistNonvirtual = new MethodPointer(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.valist)));
         }
         EconomicSet<Class<?>> hidingSubclasses = findHidingSubclasses(hTarget.getDeclaringClass(), sub -> anyMethodMatchesIgnoreReturnType(sub, method.descriptor));
         method.jniMethod.finishBeforeCompilation(hidingSubclasses, vtableIndex, interfaceTypeID, nonvirtualTarget, newObjectTarget, callWrapper,
                         varargs, array, valist, varargsNonvirtual, arrayNonvirtual, valistNonvirtual);
-    }
-
-    /** @see JNIAccessibleMethod#storesCodeOffsets() */
-    private static MethodRef codeRef(HostedMethod method) {
-        return JNIAccessibleMethod.storesCodeOffsets() ? new MethodOffset(method) : new MethodPointer(method);
     }
 
     private static boolean anyMethodMatchesIgnoreReturnType(ResolvedJavaType sub, JNIAccessibleMethodDescriptor descriptor) {
