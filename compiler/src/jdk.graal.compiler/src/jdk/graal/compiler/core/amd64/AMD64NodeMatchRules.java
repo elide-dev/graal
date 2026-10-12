@@ -51,11 +51,13 @@ import jdk.graal.compiler.asm.amd64.AMD64Assembler.SSEOp;
 import jdk.graal.compiler.asm.amd64.AMD64BaseAssembler.OperandSize;
 import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.NumUtil;
+import jdk.graal.compiler.core.common.Stride;
 import jdk.graal.compiler.core.common.calc.CanonicalCondition;
 import jdk.graal.compiler.core.common.calc.Condition;
 import jdk.graal.compiler.core.common.calc.FloatConvertCategory;
 import jdk.graal.compiler.core.common.memory.MemoryExtendKind;
 import jdk.graal.compiler.core.common.memory.MemoryOrderMode;
+import jdk.graal.compiler.core.common.type.IntegerStamp;
 import jdk.graal.compiler.core.common.type.PrimitiveStamp;
 import jdk.graal.compiler.core.gen.NodeLIRBuilder;
 import jdk.graal.compiler.core.gen.NodeMatchRules;
@@ -67,11 +69,13 @@ import jdk.graal.compiler.lir.CastValue;
 import jdk.graal.compiler.lir.LIRFrameState;
 import jdk.graal.compiler.lir.LIRValueUtil;
 import jdk.graal.compiler.lir.LabelRef;
+import jdk.graal.compiler.lir.Variable;
 import jdk.graal.compiler.lir.amd64.AMD64AddressValue;
 import jdk.graal.compiler.lir.amd64.AMD64BinaryConsumer;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow.TestBranchOp;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow.TestConstBranchOp;
+import jdk.graal.compiler.lir.amd64.AMD64Move;
 import jdk.graal.compiler.lir.amd64.AMD64UnaryConsumer;
 import jdk.graal.compiler.lir.gen.LIRGeneratorTool;
 import jdk.graal.compiler.nodes.ConstantNode;
@@ -555,6 +559,64 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
             return builder -> getArithmeticLIRGenerator().emitRol(operand(value), operand(shiftAmount));
         }
         return null;
+    }
+
+    /**
+     * Folds {@code base + (index << s)} with {@code s} in 1..3 into one {@code lea}. After
+     * canonicalization this covers multiplications by 3, 5 and 9 ({@code x * 3} is
+     * {@code (x << 1) + x}) and scaled sums such as {@code x * 2 + y}. A constant {@code base}
+     * becomes the displacement. An addition to a load keeps its memory-operand form.
+     */
+    @MatchRule("(Add (LeftShift=lshift index Constant) base)")
+    public ComplexMatchResult leaScaledIndex(LeftShiftNode lshift, ValueNode index, ValueNode base) {
+        if (base instanceof LIRLowerableAccess) {
+            // Leave an addition to a load to the memory-operand rules below.
+            return null;
+        }
+        if (base.isJavaConstant()) {
+            return lea(lshift, index, null, base.asJavaConstant().asLong());
+        }
+        return lea(lshift, index, base, 0);
+    }
+
+    /**
+     * Folds {@code (base + (index << s)) + displacement} into one {@code lea}.
+     */
+    @MatchRule("(Add (Add (LeftShift=lshift index Constant) base) Constant=disp)")
+    public ComplexMatchResult leaScaledIndexDisplacement(LeftShiftNode lshift, ValueNode index, ValueNode base, ConstantNode disp) {
+        if (base.isJavaConstant()) {
+            return null;
+        }
+        return lea(lshift, index, base, disp.asJavaConstant().asLong());
+    }
+
+    private ComplexMatchResult lea(LeftShiftNode lshift, ValueNode index, ValueNode base, long displacement) {
+        if (!(lshift.stamp(NodeView.DEFAULT) instanceof IntegerStamp stamp) || (stamp.getBits() != Integer.SIZE && stamp.getBits() != Long.SIZE)) {
+            return null;
+        }
+        int shift = lshift.getY().asJavaConstant().asInt() & lshift.getShiftAmountMask();
+        if (shift < 1 || shift > 3 || !NumUtil.isInt(displacement)) {
+            return null;
+        }
+        OperandSize size = stamp.getBits() == Long.SIZE ? QWORD : DWORD;
+        return builder -> {
+            LIRGeneratorTool gen = getLIRGeneratorTool();
+            Value indexValue = operand(index);
+            LIRKind kind;
+            AllocatableValue baseValue;
+            if (base == null) {
+                kind = LIRKind.combine(indexValue);
+                baseValue = Value.ILLEGAL;
+            } else {
+                Value b = operand(base);
+                kind = LIRKind.combine(b, indexValue);
+                baseValue = gen.asAllocatable(b);
+            }
+            AMD64AddressValue address = new AMD64AddressValue(kind, baseValue, gen.asAllocatable(indexValue), Stride.fromLog2(shift), (int) displacement);
+            Variable result = gen.newVariable(kind);
+            gen.append(new AMD64Move.LeaOp(result, address, size));
+            return result;
+        };
     }
 
     private ComplexMatchResult binaryRead(AMD64RMOp op, OperandSize size, ValueNode value, LIRLowerableAccess access) {

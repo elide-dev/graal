@@ -29,6 +29,7 @@ import static org.junit.Assume.assumeTrue;
 import org.junit.Before;
 import org.junit.Test;
 
+import jdk.graal.compiler.core.common.cfg.AbstractControlFlowGraph;
 import jdk.graal.compiler.core.common.cfg.BasicBlock;
 import jdk.graal.compiler.core.test.MatchRuleTest;
 import jdk.graal.compiler.lir.LIR;
@@ -39,6 +40,7 @@ import jdk.graal.compiler.lir.amd64.AMD64BinaryConsumer.MemoryConstOp;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow.CmpBranchOp;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow.CmpConstBranchOp;
 import jdk.graal.compiler.lir.amd64.AMD64ControlFlow.CmpDataBranchOp;
+import jdk.graal.compiler.lir.amd64.AMD64Move.LeaOp;
 import jdk.graal.compiler.lir.amd64.AMD64Unary;
 import jdk.vm.ci.amd64.AMD64;
 import jdk.vm.ci.amd64.AMD64Kind;
@@ -77,6 +79,70 @@ public class AMD64MatchRuleTest extends MatchRuleTest {
             }
         }
         assertTrue("Memory compare must be in the LIR", found);
+    }
+
+    public static int leaTimes3Snippet(int x) {
+        return x * 3;
+    }
+
+    public static int leaScaledDisplacementSnippet(int x) {
+        return x * 2 + 7;
+    }
+
+    public static int leaScaledSumDisplacementSnippet(int x, int y) {
+        return x * 4 + y + 11;
+    }
+
+    public static long leaLongTimes9Snippet(long x) {
+        return x * 9;
+    }
+
+    public static int noLeaShift4Snippet(int x, int y) {
+        return (x << 4) + y;
+    }
+
+    private int countLea(String snippet) {
+        compile(getResolvedJavaMethod(snippet), null);
+        LIR lir = getLIR();
+        int count = 0;
+        for (int blockId : lir.codeEmittingOrder()) {
+            if (blockId == AbstractControlFlowGraph.INVALID_BLOCK_ID) {
+                continue;
+            }
+            for (LIRInstruction ins : lir.getLIRforBlock(lir.getControlFlowGraph().getBlocks()[blockId])) {
+                if (ins instanceof LeaOp) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Checks that a shift by 1, 2 or 3 and an addition become one {@code lea}, and that the
+     * results stay correct when the arithmetic overflows.
+     */
+    @Test
+    public void testLea() {
+        assertTrue("x * 3 must use lea", countLea("leaTimes3Snippet") == 1);
+        assertTrue("x * 2 + 7 must use lea", countLea("leaScaledDisplacementSnippet") == 1);
+        assertTrue("x * 4 + y + 11 must use lea", countLea("leaScaledSumDisplacementSnippet") == 1);
+        assertTrue("x * 9 (long) must use lea", countLea("leaLongTimes9Snippet") == 1);
+        assertTrue("a shift by 4 cannot use lea", countLea("noLeaShift4Snippet") == 0);
+
+        int[] ints = {0, 1, -1, 12345, -98765, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE / 3 + 1};
+        for (int x : ints) {
+            test("leaTimes3Snippet", x);
+            test("leaScaledDisplacementSnippet", x);
+            for (int y : ints) {
+                test("leaScaledSumDisplacementSnippet", x, y);
+                test("noLeaShift4Snippet", x, y);
+            }
+        }
+        long[] longs = {0L, 1L, -1L, 1234567890123L, Long.MAX_VALUE, Long.MIN_VALUE, Long.MAX_VALUE / 9 + 1};
+        for (long x : longs) {
+            test("leaLongTimes9Snippet", x);
+        }
     }
 
     public static class TestClass {
