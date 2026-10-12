@@ -34,8 +34,10 @@ import org.graalvm.collections.Equivalence;
 import org.graalvm.collections.MapCursor;
 
 import jdk.graal.compiler.core.common.GraalOptions;
+import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.core.common.cfg.BlockMap;
 import jdk.graal.compiler.core.common.type.FloatStamp;
+import jdk.graal.compiler.core.common.type.IntegerStamp;
 import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.debug.Assertions;
@@ -71,9 +73,12 @@ import jdk.graal.compiler.nodes.UnaryOpLogicNode;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.ValueNodeInterface;
 import jdk.graal.compiler.nodes.ValuePhiNode;
+import jdk.graal.compiler.nodes.calc.AddNode;
 import jdk.graal.compiler.nodes.calc.BinaryNode;
 import jdk.graal.compiler.nodes.calc.ConditionalNode;
+import jdk.graal.compiler.nodes.calc.LeftShiftNode;
 import jdk.graal.compiler.nodes.calc.UnaryNode;
+import jdk.graal.compiler.nodes.calc.ZeroExtendNode;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph.RecursiveVisitor;
 import jdk.graal.compiler.nodes.cfg.HIRBlock;
@@ -86,6 +91,7 @@ import jdk.graal.compiler.nodes.memory.FloatingAccessNode;
 import jdk.graal.compiler.nodes.memory.FloatingReadNode;
 import jdk.graal.compiler.nodes.memory.MemoryAccess;
 import jdk.graal.compiler.nodes.memory.MemoryPhiNode;
+import jdk.graal.compiler.nodes.memory.address.AddressNode;
 import jdk.graal.compiler.nodes.spi.CanonicalizerTool;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
 import jdk.graal.compiler.nodes.spi.CoreProvidersDelegate;
@@ -123,6 +129,13 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         return 2.0f;
     }
 
+    /**
+     * The integer stamp a removed {@link PiNode} asserted for its {@link PiNode#object() value}.
+     * The stamp holds from the pi's scheduled position on, because the pi's guard dominates it.
+     */
+    public record RemovedPiStamp(ValueNode value, IntegerStamp stamp) {
+    }
+
     private static class FixReadsClosure extends ScheduledNodeIterator {
 
         /**
@@ -132,9 +145,18 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
          */
         private final NodeBitMap inferStampBitmap;
 
+        /**
+         * Integer stamps of removed pi nodes, keyed by the (now deleted) pi node object. The
+         * {@link RawConditionalEliminationVisitor} registers them when it reaches the pi's
+         * position in the schedule, so the knowledge the pi carried is not lost for the values
+         * the pi was taken from.
+         */
+        private final EconomicMap<Node, RemovedPiStamp> removedPiStamps;
+
         FixReadsClosure(StructuredGraph graph, ScheduleResult schedule) {
             super(schedule);
             inferStampBitmap = graph.createNodeBitMap();
+            removedPiStamps = EconomicMap.create(Equivalence.IDENTITY);
         }
 
         @Override
@@ -173,6 +195,9 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
                     for (Node n : piNode.usages()) {
                         inferStampBitmap.mark(n);
                     }
+                    if (piNode.stamp(NodeView.DEFAULT) instanceof IntegerStamp piStamp && !piStamp.isEmpty() && !piNode.getOriginalNode().isConstant()) {
+                        removedPiStamps.put(piNode, new RemovedPiStamp(piNode.getOriginalNode(), piStamp));
+                    }
                     piNode.replaceAndDelete(piNode.getOriginalNode());
                 }
             } else if (node instanceof MemoryAccess) {
@@ -196,6 +221,13 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         private final DebugContext debug;
         private final RawCanonicalizerTool rawCanonicalizerTool;
         private final EconomicMap<Node, HIRBlock> nodeToBlockMap;
+        private final EconomicMap<Node, RemovedPiStamp> removedPiStamps;
+        /**
+         * Nodes this visitor replaced, mapped to their replacement, so that a
+         * {@link RemovedPiStamp} whose value has been replaced in the meantime can still be
+         * registered for the node that now stands for that value.
+         */
+        private final EconomicMap<Node, Node> replacedNodes;
         protected EconomicMap<AbstractBeginNode, Stamp> successorStampCache;
 
         private class RawCanonicalizerTool extends CoreProvidersDelegate implements NodeView, CanonicalizerTool {
@@ -241,7 +273,19 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         }
 
         public RawConditionalEliminationVisitor(StructuredGraph graph, ScheduleResult schedule, MetaAccessProvider metaAccess, boolean replaceInputsWithConstants) {
+            this(graph, schedule, metaAccess, replaceInputsWithConstants, EconomicMap.emptyMap());
+        }
+
+        /**
+         * @param removedPiStamps stamps of {@link PiNode}s that were removed from the scheduled
+         *            graph, keyed by the deleted pi node; they are registered as known stamps
+         *            when the visitor reaches the pi's position in the schedule
+         */
+        public RawConditionalEliminationVisitor(StructuredGraph graph, ScheduleResult schedule, MetaAccessProvider metaAccess, boolean replaceInputsWithConstants,
+                        EconomicMap<Node, RemovedPiStamp> removedPiStamps) {
             this.graph = graph;
+            this.removedPiStamps = removedPiStamps;
+            this.replacedNodes = EconomicMap.create(Equivalence.IDENTITY);
             this.debug = graph.getDebug();
             this.schedule = schedule;
             this.metaAccess = metaAccess;
@@ -310,6 +354,7 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
             if (node.getNodeClass().valueNumberable()) {
                 Node dominatingDuplicate = graph.findDuplicate(node, nodePredicate);
                 if (dominatingDuplicate != null) {
+                    replacedNodes.put(node, dominatingDuplicate);
                     node.replaceAndDelete(dominatingDuplicate);
                     return;
                 }
@@ -462,6 +507,9 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         }
 
         protected void processUnary(UnaryNode node, HIRBlock block, NodePredicate gvnPredicate) {
+            if (node instanceof ZeroExtendNode zeroExtend && hoistAddressOffset(zeroExtend, block, gvnPredicate)) {
+                return;
+            }
             ValueNode value = node.getValue();
             Stamp bestStamp = getBestStamp(value);
             Stamp newStamp = node.foldStamp(bestStamp);
@@ -473,6 +521,7 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
                         if (newNode != null && !newNode.isAlive()) {
                             newNode = addHelper(newNode, block, gvnPredicate);
                         }
+                        replacedNodes.put(node, newNode);
                         node.replaceAndDelete(newNode);
                         GraphUtil.tryKillUnused(value);
                         return;
@@ -480,6 +529,73 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
                 }
                 registerNewValueStamp(node, newStamp);
             }
+        }
+
+        /**
+         * Rewrites {@code ZeroExtend(x + c)} with a constant {@code c} into {@code ZeroExtend(x) + c}
+         * when the stamps known at this point prove that the narrow addition cannot wrap around as
+         * an unsigned addition, so that both sides denote the same wide value. Only zero-extends
+         * that feed address computations are rewritten: there the wide addition becomes part of
+         * the displacement and the extension of {@code x} can be shared with other accesses, as in
+         * {@code a[j + 1] = a[j]}. This is the flow-sensitive counterpart of
+         * {@link OptimizeOffsetAddressPhase}, which needs the loop's induction variable analysis
+         * to prove the same thing.
+         */
+        private boolean hoistAddressOffset(ZeroExtendNode zeroExtend, HIRBlock block, NodePredicate gvnPredicate) {
+            if (zeroExtend.getInputBits() != Integer.SIZE || zeroExtend.getResultBits() != Long.SIZE) {
+                return false;
+            }
+            if (!(zeroExtend.getValue() instanceof AddNode add) || add.getClass() != AddNode.class || !add.getY().isJavaConstant() || !feedsOnlyAddresses(zeroExtend, 0)) {
+                return false;
+            }
+            ValueNode x = add.getX();
+            long c = add.getY().asJavaConstant().asInt();
+            if (!(getBestStamp(x) instanceof IntegerStamp xStamp) || !(getBestStamp(add) instanceof IntegerStamp sumStamp) || !narrowAddDoesNotWrapUnsigned(xStamp, sumStamp, c)) {
+                return false;
+            }
+            ValueNode replacement = addHelper(new AddNode(new ZeroExtendNode(x, Integer.SIZE, Long.SIZE), ConstantNode.forLong(c)), block, gvnPredicate);
+            replacedNodes.put(zeroExtend, replacement);
+            zeroExtend.replaceAndDelete(replacement);
+            GraphUtil.tryKillUnused(add);
+            graph.getOptimizationLog().report(FixReadsPhase.class, "AddressOffsetHoisting", replacement);
+            return true;
+        }
+
+        /**
+         * Whether {@code ZeroExtend(x + c) == ZeroExtend(x) + c} holds, i.e. whether the unsigned
+         * addition of {@code x} and {@code c} cannot wrap around {@code 2^bits}: if the sum wraps
+         * because {@code c > 0}, the narrow result lies in {@code [0, c)}; if it wraps because
+         * {@code c < 0}, the narrow result is negative when read as signed.
+         */
+        private static boolean narrowAddDoesNotWrapUnsigned(IntegerStamp x, IntegerStamp sum, long c) {
+            if (x.isEmpty() || sum.isEmpty()) {
+                return false;
+            }
+            if (c >= 0) {
+                return x.unsignedUpperBound() + c <= NumUtil.maxValueUnsigned(x.getBits()) || sum.lowerBound() >= c;
+            } else {
+                return x.unsignedLowerBound() >= -c || sum.isPositive();
+            }
+        }
+
+        /**
+         * Whether all usages of {@code node} are address computations, possibly via a scaled or
+         * offset intermediate addition.
+         */
+        private static boolean feedsOnlyAddresses(ValueNode node, int depth) {
+            if (node.hasNoUsages()) {
+                return false;
+            }
+            for (Node usage : node.usages()) {
+                if (usage instanceof AddressNode) {
+                    continue;
+                }
+                if (depth < 2 && (usage instanceof LeftShiftNode || usage instanceof AddNode) && feedsOnlyAddresses((ValueNode) usage, depth + 1)) {
+                    continue;
+                }
+                return false;
+            }
+            return true;
         }
 
         private ValueNode addHelper(ValueNode newNode, HIRBlock block, NodePredicate gvnPredicate) {
@@ -495,6 +611,7 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
             Constant constant = newStamp.asConstant();
             if (constant != null && !(node instanceof ConstantNode)) {
                 ConstantNode stampConstant = ConstantNode.forConstant(newStamp, constant, metaAccess, graph);
+                replacedNodes.put(node, stampConstant);
                 node.replaceAtUsages(stampConstant, InputType.Value);
                 graph.getOptimizationLog().report(FixReadsPhase.class, "ConstantReplacement", node);
                 GraphUtil.tryKillUnused(node);
@@ -522,6 +639,7 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
                         if (newNode != null && !newNode.isAlive()) {
                             newNode = addHelper(newNode, b, nodePredicate);
                         }
+                        replacedNodes.put(node, newNode);
                         node.replaceAndDelete(newNode);
                         GraphUtil.tryKillUnused(x);
                         GraphUtil.tryKillUnused(y);
@@ -556,7 +674,9 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
             TriState result = tryProveCondition(node.condition());
             if (result != TriState.UNKNOWN) {
                 boolean isTrue = (result == TriState.TRUE);
-                node.replaceAndDelete(isTrue ? node.trueValue() : node.falseValue());
+                ValueNode selected = isTrue ? node.trueValue() : node.falseValue();
+                replacedNodes.put(node, selected);
+                node.replaceAndDelete(selected);
                 graph.getOptimizationLog().report(FixReadsPhase.class, "ConditionalElimination", node);
             } else {
                 Stamp trueStamp = getBestStamp(node.trueValue());
@@ -667,6 +787,19 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
             for (Node n : schedule.getBlockToNodesMap().get(b)) {
                 if (n.isAlive()) {
                     processNode(n, b, nodePredicate);
+                } else {
+                    RemovedPiStamp removedPi = removedPiStamps.get(n);
+                    if (removedPi != null) {
+                        // The pi's guard dominates this position, so its stamp holds from here on,
+                        // also for whatever node now stands for the pi's value.
+                        Node value = removedPi.value();
+                        while (!value.isAlive() && replacedNodes.containsKey(value)) {
+                            value = replacedNodes.get(value);
+                        }
+                        if (value.isAlive() && value instanceof ValueNode valueNode) {
+                            registerNewValueStamp(valueNode, removedPi.stamp());
+                        }
+                    }
                 }
             }
             return mark;
@@ -714,7 +847,7 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         }
 
         if (GraalOptions.RawConditionalElimination.getValue(graph.getOptions()) && GraalOptions.EnableFixReadsConditionalElimination.getValue(graph.getOptions())) {
-            schedule.getCFG().visitDominatorTree(createVisitor(graph, schedule, context), false);
+            schedule.getCFG().visitDominatorTree(createVisitor(graph, schedule, context, fixReadsClosure.removedPiStamps), false);
         }
 
         assert verifyPiRemovalInvariants(graph);
@@ -772,8 +905,8 @@ public class FixReadsPhase extends BasePhase<CoreProviders> {
         graphState.removeRequirementToStage(StageFlag.FIXED_READS);
     }
 
-    protected ControlFlowGraph.RecursiveVisitor<?> createVisitor(StructuredGraph graph, ScheduleResult schedule, CoreProviders context) {
-        return new RawConditionalEliminationVisitor(graph, schedule, context.getMetaAccess(), replaceInputsWithConstants);
+    protected ControlFlowGraph.RecursiveVisitor<?> createVisitor(StructuredGraph graph, ScheduleResult schedule, CoreProviders context, EconomicMap<Node, RemovedPiStamp> removedPiStamps) {
+        return new RawConditionalEliminationVisitor(graph, schedule, context.getMetaAccess(), replaceInputsWithConstants, removedPiStamps);
     }
 
     protected static final class StampElement {
