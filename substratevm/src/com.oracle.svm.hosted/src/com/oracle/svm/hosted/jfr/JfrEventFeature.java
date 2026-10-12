@@ -33,12 +33,15 @@ import java.util.List;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.hosted.Feature;
 
+import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
+import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
 import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.fieldvaluetransformer.JVMCIFieldValueTransformerWithAvailability;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
+import com.oracle.svm.core.hub.DynamicHubExtension;
 import com.oracle.svm.core.hub.DynamicHubProvider;
 import com.oracle.svm.core.hub.DynamicHubSupport;
 import com.oracle.svm.core.jfr.JfrFeature;
@@ -104,7 +107,7 @@ public class JfrEventFeature implements InternalFeature {
          * finishes, but only in case jfr is enabled, so we do not add @UnknownObjectField
          * annotation to it, because it will be null if jfr is disabled.
          */
-        var configField = JVMCIReflectionUtil.getUniqueDeclaredField(metaAccess.lookupJavaType(DynamicHubCompanion.class), "jfrEventConfiguration");
+        var configField = JVMCIReflectionUtil.getUniqueDeclaredField(metaAccess.lookupJavaType(DynamicHubExtension.class), "jfrEventConfiguration");
         FieldValueInterceptionSupport.singleton().registerFieldValueTransformer(configField, new JVMCIFieldValueTransformerWithAvailability() {
             @Override
             public boolean isAvailable() {
@@ -135,12 +138,18 @@ public class JfrEventFeature implements InternalFeature {
             JfrTraceId.assign(clazz, hub.getTypeID() + 1);
         }
 
-        /* Store the event configuration in the dynamic hub companion. */
+        /*
+         * Store the event configuration in the dynamic hub extension. The extension object is
+         * usually allocated here, after analysis, so the companion field must be rescanned.
+         */
         FeatureImpl.CompilationAccessImpl accessImpl = ((FeatureImpl.CompilationAccessImpl) a);
+        var extensionField = JVMCIReflectionUtil.getUniqueDeclaredField(GuestAccess.get().lookupType(DynamicHubCompanion.class), "extension");
+        ScanReason reason = new OtherReason("Manual rescan triggered before compilation from " + JfrEventFeature.class);
         for (var newEventClass : JfrJavaEvents.getAllEventClasses()) {
             Object ec = JVM.getConfiguration(newEventClass);
             DynamicHub dynamicHub = accessImpl.getMetaAccess().lookupJavaType(newEventClass).getHub();
             dynamicHub.setJrfEventConfiguration(ec);
+            accessImpl.getHeapScanner().rescanField(dynamicHub.getCompanion(), extensionField, reason);
         }
     }
 }

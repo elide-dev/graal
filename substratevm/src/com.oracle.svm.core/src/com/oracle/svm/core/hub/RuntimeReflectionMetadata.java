@@ -66,7 +66,7 @@ public final class RuntimeReflectionMetadata implements ReflectionMetadata {
     public static Executable fromResolvedMethod(CremaResolvedJavaMethod method) {
         Class<?> declaringClass = InterpreterSupport.singleton().toClass(method.getDeclaringClass());
         DynamicHub declaringHub = DynamicHub.fromClass(declaringClass);
-        RuntimeReflectionMetadata metadata = (RuntimeReflectionMetadata) declaringHub.getCompanion().reflectionMetadata;
+        RuntimeReflectionMetadata metadata = (RuntimeReflectionMetadata) declaringHub.getCompanion().getRuntimeReflectionMetadata();
         return method.isConstructor() ? metadata.fromResolvedConstructor(declaringHub, method) : metadata.fromResolvedMethod(declaringHub, method);
     }
 

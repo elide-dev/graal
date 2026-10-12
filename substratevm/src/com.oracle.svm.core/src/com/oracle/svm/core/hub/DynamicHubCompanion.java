@@ -24,8 +24,6 @@
  */
 package com.oracle.svm.core.hub;
 
-import java.lang.ref.SoftReference;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.security.ProtectionDomain;
 
@@ -33,7 +31,7 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.classinitialization.ClassInitializationInfo;
-import com.oracle.svm.core.configure.RuntimeDynamicAccessMetadata;
+import com.oracle.svm.core.graal.meta.DynamicHubOffsets;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.hub.RuntimeClassLoading.ClassDefinitionInfo;
@@ -42,11 +40,11 @@ import com.oracle.svm.guest.staging.layered.LayeredFieldValue;
 import com.oracle.svm.jvmci.shared.meta.SharedType;
 import com.oracle.svm.guest.staging.layered.LayeredFieldValueTransformer;
 import com.oracle.svm.shared.BuildPhaseProvider;
+import com.oracle.svm.shared.util.SubstrateUtil;
 
+import jdk.internal.misc.Unsafe;
 import jdk.internal.vm.annotation.Stable;
 import jdk.vm.ci.meta.ResolvedJavaType;
-import sun.reflect.annotation.AnnotationType;
-import sun.reflect.generics.repository.ClassRepository;
 
 /**
  * Storage for non-critical or mutable data of {@link DynamicHub}.
@@ -55,6 +53,18 @@ import sun.reflect.generics.repository.ClassRepository;
  * improve sharing between isolates and processes, but could increase image size.
  */
 public final class DynamicHubCompanion {
+    /**
+     * {@code Class.annotationData} of this class is known to be empty; stands in for a shared
+     * empty {@code Class.AnnotationData} in {@link DynamicHubExtension#annotationData}.
+     */
+    static final int EXTENSION_FLAG_EMPTY_ANNOTATION_DATA = 1;
+    /**
+     * Unsafe allocation is always allowed; stands in for
+     * {@code RuntimeDynamicAccessMetadata.alwaysAvailable(false)} in
+     * {@link DynamicHubExtension#canUnsafeAllocate}.
+     */
+    static final int EXTENSION_FLAG_UNSAFE_ALLOCATION = 1 << 1;
+
     /** Field used for module information access at run-time. */
     final Module module;
 
@@ -128,13 +138,10 @@ public final class DynamicHubCompanion {
     @Stable ClassInitializationInfo classInitializationInfo;
 
     /**
-     * Metadata for querying the reflection data. When using layered images this field is always
-     * null and should not be queried. Instead, use {@link LayeredReflectionMetadataSingleton}.
+     * Encoded compact image reflection metadata for non-layered image classes. When using layered
+     * images this field is always zero and should not be queried. Instead, use
+     * {@link LayeredReflectionMetadataSingleton}.
      */
-    @UnknownObjectField(canBeNull = true, types = ImageReflectionMetadata.class, availability = BuildPhaseProvider.AfterCompilation.class) //
-    @Stable ReflectionMetadata reflectionMetadata;
-
-    /** Encoded compact image reflection metadata for non-layered image classes. */
     @UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class) //
     @Stable int encodedReflectionMetadata;
 
@@ -145,8 +152,20 @@ public final class DynamicHubCompanion {
     @UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class) //
     @Stable int encodedHubMetadata;
 
-    /** Class metadata of runtime-loaded classes; null for image classes. */
-    @Stable RuntimeDynamicHubMetadata hubMetadata;
+    /**
+     * Rarely used data of the class, see {@link DynamicHubExtension}. Set at image build time only
+     * for classes with class data or a JFR event configuration; all other classes allocate it on
+     * first use with {@link #ensureExtension()}.
+     */
+    DynamicHubExtension extension;
+
+    /**
+     * Flags that stand in for {@link DynamicHubExtension} values that are shared singletons, so
+     * that setting them does not require an extension object. See
+     * {@link #EXTENSION_FLAG_EMPTY_ANNOTATION_DATA} and {@link #EXTENSION_FLAG_UNSAFE_ALLOCATION}.
+     */
+    @UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class) //
+    @Stable byte extensionFlags;
 
     @Platforms(Platform.HOSTED_ONLY.class) //
     @Stable DynamicHub dynamicHub;
@@ -159,19 +178,6 @@ public final class DynamicHubCompanion {
      */
     Object classLoader;
     ResolvedJavaType interpreterType;
-
-    String packageName;
-    ProtectionDomain protectionDomain;
-    ClassRepository genericInfo;
-    SoftReference<Target_java_lang_Class_ReflectionData<?>> reflectionData;
-    AnnotationType annotationType;
-    @UnknownObjectField(fullyQualifiedTypes = "java.lang.Class$AnnotationData", canBeNull = true, availability = BuildPhaseProvider.AfterCompilation.class) //
-    Object annotationData;
-    Constructor<?> cachedConstructor;
-    Object jfrEventConfiguration;
-    @Stable RuntimeDynamicAccessMetadata dynamicAccess;
-    @Stable RuntimeDynamicAccessMetadata canUnsafeAllocate;
-    Object classData;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     static DynamicHubCompanion createHosted(Module module, DynamicHub superHub, String sourceFileName, int modifiers,
@@ -204,16 +210,75 @@ public final class DynamicHubCompanion {
         this.signature = signature;
 
         this.classLoader = classLoader;
-        this.classData = classData;
-        this.protectionDomain = protectionDomain;
+        if (classData != null) {
+            ensureExtension().classData = classData;
+        }
+        if (protectionDomain != null) {
+            ensureExtension().protectionDomain = protectionDomain;
+        }
     }
 
     public void setHubMetadata(RuntimeDynamicHubMetadata hubMetadata) {
-        this.hubMetadata = hubMetadata;
+        ensureExtension().hubMetadata = hubMetadata;
     }
 
     public void setReflectionMetadata(RuntimeReflectionMetadata reflectionMetadata) {
-        this.reflectionMetadata = reflectionMetadata;
+        ensureExtension().reflectionMetadata = reflectionMetadata;
+    }
+
+    /** Class metadata of a runtime-loaded class, or null for image classes. */
+    RuntimeDynamicHubMetadata getRuntimeHubMetadata() {
+        DynamicHubExtension result = extension;
+        return result == null ? null : result.hubMetadata;
+    }
+
+    /** Reflection metadata of a runtime-loaded class, or null for image classes. */
+    ReflectionMetadata getRuntimeReflectionMetadata() {
+        DynamicHubExtension result = extension;
+        return result == null ? null : result.reflectionMetadata;
+    }
+
+    /** The extension object, or null if none has been allocated yet. */
+    DynamicHubExtension extension() {
+        return extension;
+    }
+
+    /** Returns the extension object, allocating and publishing it if necessary. */
+    DynamicHubExtension ensureExtension() {
+        DynamicHubExtension result = extension;
+        if (result == null) {
+            result = allocateExtension();
+        }
+        return result;
+    }
+
+    private DynamicHubExtension allocateExtension() {
+        DynamicHubExtension created = new DynamicHubExtension();
+        if (SubstrateUtil.HOSTED) {
+            synchronized (this) {
+                if (extension == null) {
+                    extension = created;
+                }
+                return extension;
+            }
+        }
+        /*
+         * Use the witness value of the exchange instead of re-reading the field: the compiler may
+         * still hold the read that found the field null, e.g. right after the companion was
+         * allocated at run time, and would not see the value another thread installed.
+         */
+        long offset = DynamicHubOffsets.singleton().getCompanionExtensionOffset();
+        Object witness = Unsafe.getUnsafe().compareAndExchangeReference(this, offset, null, created);
+        return witness == null ? created : (DynamicHubExtension) witness;
+    }
+
+    boolean isExtensionFlagSet(int flag) {
+        return (extensionFlags & flag) != 0;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    void setExtensionFlag(int flag) {
+        extensionFlags = (byte) (extensionFlags | flag);
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
