@@ -69,6 +69,7 @@ import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.memory.MemoryOrderMode;
+import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.core.common.spi.ForeignCallDescriptor;
 import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.core.common.type.StampPair;
@@ -91,6 +92,8 @@ import jdk.graal.compiler.nodes.InvokeNode;
 import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.LogicConstantNode;
 import jdk.graal.compiler.nodes.LogicNode;
+import jdk.graal.compiler.nodes.calc.ConditionalNode;
+import jdk.graal.compiler.nodes.calc.IntegerEqualsNode;
 import jdk.graal.compiler.nodes.LoweredCallTargetNode;
 import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.PiNode;
@@ -462,7 +465,22 @@ public abstract class NonSnippetLowerings {
                              * its address cannot change.
                              */
                             ConstantNode stubEntryPointNode = ConstantNode.forLong(CremaSupport.singleton().getEnterDirectInterpreterStubEntryPoint().rawValue(), graph);
-                            ValueNode base = graph.addWithoutUnique(new FloatingWordCastNode(tool.getStampProvider().createMethodStamp(), stubEntryPointNode));
+
+                            /*
+                             * Once Ristretto has installed code for the target, the method's
+                             * direct call entry holds its entry point, and the call goes there
+                             * without the stub's argument marshalling. It is read at every call:
+                             * invalidation resets it at the safepoint that retires the code, and
+                             * no safepoint separates this read from the call. Compiled code
+                             * ignores the hidden argument.
+                             */
+                            ValueNode entryOffset = ConstantNode.forIntegerKind(wordKind, CremaSupport.singleton().getDirectCallEntryOffset(), graph);
+                            AddressNode entryAddress = graph.unique(new OffsetAddressNode(targetInterpreterMethodNode, entryOffset));
+                            ReadNode compiledEntry = graph.add(new ReadNode(entryAddress, LocationIdentity.ANY_LOCATION, StampFactory.forKind(JavaKind.Long), BarrierType.NONE, MemoryOrderMode.PLAIN));
+                            graph.addBeforeFixed(node, compiledEntry);
+                            LogicNode noCompiledEntry = graph.unique(new IntegerEqualsNode(compiledEntry, ConstantNode.forLong(0L, graph)));
+                            ValueNode target = graph.unique(new ConditionalNode(noCompiledEntry, stubEntryPointNode, compiledEntry));
+                            ValueNode base = graph.addWithoutUnique(new FloatingWordCastNode(tool.getStampProvider().createMethodStamp(), target));
 
                             loweredCallTarget = graph.add(new SubstrateIndirectCallTargetNode(
                                             base, parameters.toArray(new ValueNode[parameters.size()]), callTarget.returnStamp(), signature,

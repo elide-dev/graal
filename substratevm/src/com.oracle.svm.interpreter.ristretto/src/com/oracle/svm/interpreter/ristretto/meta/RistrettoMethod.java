@@ -561,6 +561,13 @@ public final class RistrettoMethod extends SubstrateMethod {
             }
             if (installCode) {
                 INSTALLED_CODE_UPDATER.set(this, code);
+                /*
+                 * Let direct calls from runtime-compiled code and patched dispatch slots reach the
+                 * code without the interpreter enter stubs; RistrettoInstalledCode.clearAddress
+                 * withdraws the entry when the code is invalidated.
+                 */
+                interpreterMethod.prepareDirectCallEntry();
+                publishDirectCallEntry(interpreterMethod, code);
             }
             /*
              * Retire this request before publishing COMPILED: invalidation can reopen compilation
@@ -579,6 +586,11 @@ public final class RistrettoMethod extends SubstrateMethod {
             }
             return true;
         }
+    }
+
+    @Uninterruptible(reason = "No safepoint between reading the entry point and publishing it: invalidation clears it at a safepoint.")
+    private static void publishDirectCallEntry(InterpreterResolvedJavaMethod method, SubstrateInstalledCodeImpl code) {
+        method.publishDirectCallEntry(code.getEntryPoint());
     }
 
     /**

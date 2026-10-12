@@ -2095,6 +2095,11 @@ public class CremaSupportImpl implements CremaSupport {
     }
 
     @Override
+    public long getDirectCallEntryOffset() {
+        return InterpreterResolvedJavaMethod.DIRECT_CALL_ENTRY_OFFSET;
+    }
+
+    @Override
     public CFunctionPointer getEnterDirectInterpreterStubEntryPoint() {
         VMError.guarantee(enterDirectInterpreterStubEntryPoint.isNonNull(), "entry point for enterDirectInterpreterStub was not setup at build-time");
         return enterDirectInterpreterStubEntryPoint;

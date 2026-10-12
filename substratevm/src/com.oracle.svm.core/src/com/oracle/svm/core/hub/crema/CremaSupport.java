@@ -199,6 +199,12 @@ public interface CremaSupport {
 
     CFunctionPointer getEnterDirectInterpreterStubEntryPoint();
 
+    /**
+     * Offset of the word in an interpreter method that holds its compiled entry point once
+     * Ristretto has installed code, or 0 while calls must go through the enter-direct stub.
+     */
+    long getDirectCallEntryOffset();
+
     /** Gets the JNI method-call wrapper entry point for {@code variant} and {@code nonVirtual}. */
     @Platforms(Platform.HOSTED_ONLY.class)
     CFunctionPointer getCremaJNIMethodCallWrapperEntryPoint(CallVariant variant, boolean nonVirtual);
