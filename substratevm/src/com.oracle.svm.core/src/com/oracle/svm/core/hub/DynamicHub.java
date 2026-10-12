@@ -870,8 +870,8 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
     @Platforms(Platform.HOSTED_ONLY.class)
     public void setHubMetadata(int enclosingMethodInfoIndex, int annotationsIndex, int typeAnnotationsIndex, int classesEncodingIndex, int permittedSubclassesEncodingIndex,
                     int nestMembersEncodingIndex, int signersEncodingIndex) {
-        assert companion.hubMetadata == null;
-        companion.hubMetadata = new ImageDynamicHubMetadata(enclosingMethodInfoIndex, annotationsIndex, typeAnnotationsIndex, classesEncodingIndex, permittedSubclassesEncodingIndex,
+        assert companion.encodedHubMetadata == PackedMetadataEncoding.NO_METADATA;
+        companion.encodedHubMetadata = ImageDynamicHubMetadata.encode(enclosingMethodInfoIndex, annotationsIndex, typeAnnotationsIndex, classesEncodingIndex, permittedSubclassesEncodingIndex,
                         nestMembersEncodingIndex, signersEncodingIndex);
     }
 
@@ -881,8 +881,13 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
         companion.annotationData = EMPTY_ANNOTATION_DATA;
     }
 
-    private DynamicHubMetadata hubMetadata() {
-        return companion.hubMetadata;
+    /**
+     * The metadata object of a runtime-loaded class, or null for image classes. Folds to null when
+     * runtime class loading is unsupported, so that the Crema-only code paths are not reachable.
+     */
+    @AlwaysInline("Ensure branches are eliminated when it's not supported")
+    private RuntimeDynamicHubMetadata runtimeHubMetadata() {
+        return RuntimeClassLoading.isSupported() ? companion.hubMetadata : null;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -2142,10 +2147,11 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
             return null;
         }
         checkClassFlag(ALL_SIGNERS_FLAG, "getSigners");
-        if (hubMetadata() == null) {
-            return null;
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getSigners(this);
         }
-        return hubMetadata().getSigners(this);
+        return ImageDynamicHubMetadata.getSigners(companion.encodedHubMetadata, this);
     }
 
     @Substitute
@@ -2243,8 +2249,8 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
              * hosted Dynamic hubs, the nest host is determined during creation. Hence, we know that
              * in this branch, we're dealing with a Crema dynamic hub.
              */
-            assert hubMetadata() instanceof RuntimeDynamicHubMetadata;
-            return companion.nestHost = ((RuntimeDynamicHubMetadata) hubMetadata()).getNestHost();
+            assert runtimeHubMetadata() != null;
+            return companion.nestHost = runtimeHubMetadata().getNestHost();
         } else {
             throw VMError.shouldNotReachHere("Nest host should only be uninitialized for runtime loaded classes.");
         }
@@ -2324,10 +2330,11 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
 
     @Substitute
     private Object[] getEnclosingMethod0() {
-        if (hubMetadata() == null) {
-            return null;
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getEnclosingMethod(this);
         }
-        return hubMetadata().getEnclosingMethod(this);
+        return ImageDynamicHubMetadata.getEnclosingMethod(companion.encodedHubMetadata, this);
     }
 
     @Substitute
@@ -2344,7 +2351,8 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
 
     @Substitute
     private void setSigners(Object[] signers) {
-        if (hubMetadata() instanceof RuntimeDynamicHubMetadata runtimeDynamicHubMetadata) {
+        RuntimeDynamicHubMetadata runtimeDynamicHubMetadata = runtimeHubMetadata();
+        if (runtimeDynamicHubMetadata != null) {
             assert !isPrimitive();
             if (!hubIsArray()) {
                 runtimeDynamicHubMetadata.setSigners(signers);
@@ -2364,18 +2372,20 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
 
     @Substitute
     byte[] getRawAnnotations() {
-        if (hubMetadata() == null) {
-            return null;
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getRawAnnotations(this);
         }
-        return hubMetadata().getRawAnnotations(this);
+        return ImageDynamicHubMetadata.getRawAnnotations(companion.encodedHubMetadata, this);
     }
 
     @Substitute
     byte[] getRawTypeAnnotations() {
-        if (hubMetadata() == null) {
-            return null;
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getRawTypeAnnotations(this);
         }
-        return hubMetadata().getRawTypeAnnotations(this);
+        return ImageDynamicHubMetadata.getRawTypeAnnotations(companion.encodedHubMetadata, this);
     }
 
     @Substitute
@@ -2441,10 +2451,11 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
 
     @Substitute
     private Class<?>[] getDeclaredClasses0() {
-        if (hubMetadata() == null) {
-            return new Class<?>[0];
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getDeclaredClasses(this);
         }
-        return hubMetadata().getDeclaredClasses(this);
+        return ImageDynamicHubMetadata.getDeclaredClasses(companion.encodedHubMetadata, this);
     }
 
     // Retrieves the desired assertion status of the class from the VM
@@ -2460,10 +2471,11 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
     @Substitute
     private Class<?>[] getNestMembers0() {
         checkClassFlag(ALL_NEST_MEMBERS_FLAG, "getNestMembers");
-        if (hubMetadata() == null) {
-            return new Class<?>[]{DynamicHub.toClass(this)};
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getNestMembers(this);
         }
-        return hubMetadata().getNestMembers(this);
+        return ImageDynamicHubMetadata.getNestMembers(companion.encodedHubMetadata, this);
     }
 
     @Delete
@@ -2511,10 +2523,11 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
             return null;
         }
         checkClassFlag(ALL_PERMITTED_SUBCLASSES_FLAG, "getPermittedSubclasses");
-        if (hubMetadata() == null) {
-            return new Class<?>[0];
+        RuntimeDynamicHubMetadata runtimeMetadata = runtimeHubMetadata();
+        if (runtimeMetadata != null) {
+            return runtimeMetadata.getPermittedSubClasses(this);
         }
-        return hubMetadata().getPermittedSubClasses(this);
+        return ImageDynamicHubMetadata.getPermittedSubClasses(companion.encodedHubMetadata, this);
     }
 
     @KeepOriginal
