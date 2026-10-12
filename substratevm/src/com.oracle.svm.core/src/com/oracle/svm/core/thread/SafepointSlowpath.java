@@ -26,6 +26,9 @@ package com.oracle.svm.core.thread;
 
 import static jdk.graal.compiler.core.common.spi.ForeignCallDescriptor.CallSideEffect.NO_SIDE_EFFECT;
 
+import org.graalvm.nativeimage.c.function.CodePointer;
+import org.graalvm.word.Pointer;
+
 import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.core.graal.code.ExplicitCallingConvention;
@@ -38,6 +41,9 @@ import com.oracle.svm.core.nodes.SafepointCheckNode;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 import com.oracle.svm.guest.staging.snippets.SubstrateForeignCallTarget;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalFactory;
+import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalWord;
 import com.oracle.svm.core.stack.JavaFrameAnchors;
 import com.oracle.svm.core.thread.RecurringCallbackSupport.RecurringCallbackTimer;
 import com.oracle.svm.core.thread.VMThreads.ActionOnTransitionToJavaSupport;
@@ -80,6 +86,14 @@ public class SafepointSlowpath {
     static final SubstrateForeignCallDescriptor SLOW_PATH_RUN_PENDING_ACTIONS = SnippetRuntime.findForeignCall(SafepointSlowpath.class,
                     "enterSlowPathRunPendingActions", NO_SIDE_EFFECT);
 
+    /**
+     * The stack pointer and return address of the compiled frame whose safepoint check is being
+     * handled, set while a safepoint check slowpath runs and null otherwise. Recurring callbacks use
+     * them to look at the interrupted Java code instead of the slowpath's own frames.
+     */
+    private static final FastThreadLocalWord<Pointer> pollingFrameSP = FastThreadLocalFactory.createWord("SafepointSlowpath.pollingFrameSP");
+    private static final FastThreadLocalWord<CodePointer> pollingFrameIP = FastThreadLocalFactory.createWord("SafepointSlowpath.pollingFrameIP");
+
     public static final SubstrateForeignCallDescriptor[] FOREIGN_CALLS = new SubstrateForeignCallDescriptor[]{
                     ENTER_SLOW_PATH_SAFEPOINT_CHECK_CALLEE_SAVED_CCONV,
                     ENTER_SLOW_PATH_SAFEPOINT_CHECK_OBJECT,
@@ -106,15 +120,17 @@ public class SafepointSlowpath {
 
     @SubstrateForeignCallTarget(stubCallingConvention = true)
     @Uninterruptible(reason = "Must not contain safepoint checks")
+    @NeverInline("Reads the frame of its caller, the compiled code that polled.")
     private static void enterSlowPathSafepointCheckCalleeSavedCCONV() throws Throwable {
-        slowPathSafepointCheck();
+        slowPathSafepointCheck(KnownIntrinsics.readCallerStackPointer(), KnownIntrinsics.readReturnAddress());
     }
 
     @ExplicitCallingConvention(SubstrateCallingConventionKind.ForwardReturnValue)
     @SubstrateForeignCallTarget(stubCallingConvention = true)
     @Uninterruptible(reason = "Must not contain safepoint checks")
+    @NeverInline("Reads the frame of its caller, the compiled code that polled.")
     private static Object enterSlowPathSafepointCheckObject(Object result) throws Throwable {
-        slowPathSafepointCheck();
+        slowPathSafepointCheck(KnownIntrinsics.readCallerStackPointer(), KnownIntrinsics.readReturnAddress());
         return result;
     }
 
@@ -124,13 +140,14 @@ public class SafepointSlowpath {
      */
     @SubstrateForeignCallTarget(stubCallingConvention = false)
     @Uninterruptible(reason = "Must not contain safepoint checks")
+    @NeverInline("Reads the frame of its caller, the compiled code that polled.")
     private static void enterSlowPathSafepointCheckRegularCCONV() throws Throwable {
-        slowPathSafepointCheck();
+        slowPathSafepointCheck(KnownIntrinsics.readCallerStackPointer(), KnownIntrinsics.readReturnAddress());
     }
 
     @AlwaysInline("Always inline into foreign call stub")
     @Uninterruptible(reason = "Must not contain safepoint checks", mayBeInlined = true)
-    public static void slowPathSafepointCheck() throws Throwable {
+    private static void slowPathSafepointCheck(Pointer callerSP, CodePointer callerIP) throws Throwable {
         if (VMThreads.SafepointBehavior.ignoresSafepoints()) {
             /* Safepoints are explicitly disabled for this thread. */
             SafepointCheckCounter.setVolatile(SafepointCheckCounter.MAX_VALUE);
@@ -138,7 +155,31 @@ public class SafepointSlowpath {
         }
 
         VMError.guarantee(StatusSupport.isStatusJava(), "Attempting to do a safepoint check when not in Java mode");
-        slowPathSafepointCheck(StatusSupport.STATUS_IN_JAVA, false, false);
+        Pointer previousSP = pollingFrameSP.get();
+        CodePointer previousIP = pollingFrameIP.get();
+        pollingFrameSP.set(callerSP);
+        pollingFrameIP.set(callerIP);
+        try {
+            slowPathSafepointCheck(StatusSupport.STATUS_IN_JAVA, false, false);
+        } finally {
+            pollingFrameSP.set(previousSP);
+            pollingFrameIP.set(previousIP);
+        }
+    }
+
+    /**
+     * Returns the stack pointer of the compiled frame whose safepoint check is being handled, or
+     * null if the current thread is not in a safepoint check slowpath entered from compiled code.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static Pointer getPollingFrameSP() {
+        return pollingFrameSP.get();
+    }
+
+    /** The return address that belongs to {@link #getPollingFrameSP()}. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static CodePointer getPollingFrameIP() {
+        return pollingFrameIP.get();
     }
 
     /**
