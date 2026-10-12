@@ -49,9 +49,11 @@ import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.imagelayer.LayeredFoldResolver;
 import com.oracle.svm.core.jfr.JfrExecutionSamplerSupported;
 import com.oracle.svm.core.jfr.JfrFeature;
+import com.oracle.svm.core.jfr.JfrStackWalker;
 import com.oracle.svm.core.jfr.SubstrateJVM;
 import com.oracle.svm.core.thread.RecurringCallbackSupport;
 import com.oracle.svm.core.thread.RecurringCallbackSupport.RecurringCallbackTimer;
+import com.oracle.svm.core.thread.SafepointSlowpath;
 import com.oracle.svm.core.thread.ThreadListenerSupport;
 import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.thread.VMThreads;
@@ -85,6 +87,7 @@ public final class JfrRecurringCallbackExecutionSampler extends AbstractJfrExecu
     @Override
     protected void startSampling() {
         assert VMOperation.isInProgressAtSafepoint();
+        JfrStackWalker.initializeRuntimeCompiledCodePlaceholder();
 
         SubstrateJVM.getSamplerBufferPool().adjustBufferCount();
 
@@ -188,8 +191,16 @@ public final class JfrRecurringCallbackExecutionSampler extends AbstractJfrExecu
         @NeverInline("Starting a stack walk in the caller frame")
         @Uninterruptible(reason = "Avoid interference with the application.")
         public void run(Threading.RecurringCallbackAccess access) {
-            Pointer sp = readCallerStackPointer();
-            CodePointer ip = readReturnAddress();
+            /*
+             * Start at the compiled frame that entered the safepoint slowpath, so that the sample
+             * shows the interrupted Java code rather than the slowpath and callback frames.
+             */
+            Pointer sp = SafepointSlowpath.getPollingFrameSP();
+            CodePointer ip = SafepointSlowpath.getPollingFrameIP();
+            if (sp.isNull()) {
+                sp = readCallerStackPointer();
+                ip = readReturnAddress();
+            }
             boolean sampled = tryUninterruptibleStackWalk(ip, sp, false);
             if (sampled) {
                 SubstrateJVM.getThreadRepo().registerMountedVThread();

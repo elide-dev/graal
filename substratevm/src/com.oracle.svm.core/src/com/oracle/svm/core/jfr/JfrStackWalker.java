@@ -45,6 +45,7 @@ import com.oracle.svm.core.code.RuntimeCodeCache;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
 import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
 import com.oracle.svm.core.deopt.Deoptimizer;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
 import com.oracle.svm.core.sampler.SamplerSampleWriter;
 import com.oracle.svm.core.sampler.SamplerSampleWriterData;
@@ -57,6 +58,7 @@ import com.oracle.svm.core.stack.JavaStackWalk;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.thread.VMThreads;
 import com.oracle.svm.core.util.PointerUtils;
+import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.VMError;
 
@@ -95,6 +97,42 @@ public final class JfrStackWalker {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     private JfrStackWalker() {
+    }
+
+    /**
+     * Initializes the placeholder frame that stands for runtime-compiled and deoptimized frames in
+     * sampled stack traces. Must be called before sampling starts.
+     */
+    public static void initializeRuntimeCompiledCodePlaceholder() {
+        RuntimeCompiledCode.initialize();
+    }
+
+    /**
+     * Appears in sampled stack traces in place of runtime-compiled code (for example Truffle or
+     * Ristretto compilations) and deoptimized frames.
+     */
+    static final class RuntimeCompiledCode {
+        static CodePointer placeholderIP;
+
+        static void initialize() {
+            if (placeholderIP.isNull()) {
+                CodePointer ip = frame();
+                if (CodeInfoTable.isInAOTImageCode(ip)) {
+                    placeholderIP = ip;
+                }
+            }
+        }
+
+        /** The return address of the call below is the placeholder; it has frame information. */
+        @NeverInline("The call site must stay in this method.")
+        private static CodePointer frame() {
+            return callerIP();
+        }
+
+        @NeverInline("Reads the return address into frame().")
+        private static CodePointer callerIP() {
+            return KnownIntrinsics.readReturnAddress();
+        }
     }
 
     @Uninterruptible(reason = "The method executes during signal handling.", callerMustBe = true)
@@ -276,6 +314,7 @@ public final class JfrStackWalker {
         JavaStackWalker.initialize(walk, thread, startSP, startIP, anchor);
         assert JavaStackWalker.getEndSP(walk).isNull() : "not supported by the code below";
 
+        boolean inRuntimeCompiledCode = false;
         while (JavaStackWalker.advance(walk, thread)) {
             JavaFrame frame = JavaStackWalker.getCurrentFrame(walk);
 
@@ -283,8 +322,28 @@ public final class JfrStackWalker {
                 /* Most likely, the stack walk already started with a wrong SP or IP. */
                 return UNPARSEABLE_STACK;
             } else if (Deoptimizer.checkIsDeoptimized(frame) || !UntetheredCodeInfoAccess.isAOTImageCode(frame.getIPCodeInfo())) {
-                return SKIPPED;
+                if (isAsync) {
+                    return SKIPPED;
+                }
+                /*
+                 * The stack trace is resolved later, when this code may be gone, so only AOT frames
+                 * can be recorded. The current thread walks its own stack in uninterruptible code,
+                 * so the runtime-compiled code cannot be freed during the walk: record each run of
+                 * such frames as one placeholder frame and keep the AOT frames around it.
+                 */
+                if (!inRuntimeCompiledCode) {
+                    inRuntimeCompiledCode = true;
+                    CodePointer placeholder = RuntimeCompiledCode.placeholderIP;
+                    if (placeholder.isNonNull()) {
+                        int result = recordIp(data, placeholder);
+                        if (result != NO_ERROR) {
+                            return result;
+                        }
+                    }
+                }
+                continue;
             }
+            inRuntimeCompiledCode = false;
 
             int result = recordIp(data, frame.getIP());
             if (result != NO_ERROR) {
