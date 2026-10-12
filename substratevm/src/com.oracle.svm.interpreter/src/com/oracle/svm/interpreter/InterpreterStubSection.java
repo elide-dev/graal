@@ -61,6 +61,7 @@ import com.oracle.svm.core.graal.nodes.VaListInitializationNode;
 import com.oracle.svm.core.graal.nodes.VaListNextArgNode;
 import com.oracle.svm.core.heap.GCCause;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.core.graal.meta.KnownOffsets;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.crema.CremaJNIMethodIds;
 import com.oracle.svm.core.hub.crema.CremaResolvedJavaMethod;
@@ -312,7 +313,7 @@ public abstract class InterpreterStubSection {
         InterpreterResolvedObjectType thisType = (InterpreterResolvedObjectType) hub.getInterpreterType();
         InterpreterResolvedJavaMethod interpreterMethod = thisType.getVtable()[vTableIndex];
 
-        return enterHelper(interpreterMethod, enterData);
+        return enterHelper(interpreterMethod, enterData, hub, vTableIndex);
     }
 
     public static final class FFMUpcallEnterPrologue implements CEntryPointOptions.Prologue {
@@ -739,6 +740,17 @@ public abstract class InterpreterStubSection {
     @AlwaysInline("Performance")
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     private static long enterHelper(InterpreterResolvedJavaMethod interpreterMethod, Pointer enterData) {
+        return enterHelper(interpreterMethod, enterData, null, -1);
+    }
+
+    /**
+     * Enters the interpreter for {@code interpreterMethod}. A vtable stub also passes the
+     * receiver's hub and the slot it came through, which is patched to the method's compiled
+     * entry once it has one, so later calls through that slot skip this stub.
+     */
+    @AlwaysInline("Performance")
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    private static long enterHelper(InterpreterResolvedJavaMethod interpreterMethod, Pointer enterData, DynamicHub dispatchHub, int dispatchIndex) {
         InterpreterAccessStubData accessHelper = ImageSingletons.lookup(InterpreterAccessStubData.class);
 
         PreparedSignature compiledSignature = interpreterMethod.getPreparedSignature();
@@ -771,7 +783,7 @@ public abstract class InterpreterStubSection {
             }
         }
 
-        Object retVal = enterInterpreterStub0(interpreterMethod, compiledSignature, enterData, handleCount, handleFrameId);
+        Object retVal = enterInterpreterStub0(interpreterMethod, compiledSignature, enterData, handleCount, handleFrameId, dispatchHub, dispatchIndex);
 
         /*
          * enterData is a pointer into this stub's stack frame. The interpreter can block and cause
@@ -782,12 +794,14 @@ public abstract class InterpreterStubSection {
     }
 
     @Uninterruptible(reason = "Switch to interruptible code.", mayBeInlined = true, calleeMustBe = false)
-    private static Object enterInterpreterStub0(InterpreterResolvedJavaMethod interpreterMethod, PreparedSignature compiledSignature, Pointer enterData, int handleCount, int handleFrameId) {
+    private static Object enterInterpreterStub0(InterpreterResolvedJavaMethod interpreterMethod, PreparedSignature compiledSignature, Pointer enterData, int handleCount, int handleFrameId,
+                    DynamicHub dispatchHub, int dispatchIndex) {
         TestingBackdoor.stressEnterStub();
-        return enterInterpreterStubCore(interpreterMethod, compiledSignature, enterData, handleCount, handleFrameId);
+        return enterInterpreterStubCore(interpreterMethod, compiledSignature, enterData, handleCount, handleFrameId, dispatchHub, dispatchIndex);
     }
 
-    private static Object enterInterpreterStubCore(InterpreterResolvedJavaMethod interpreterMethod, PreparedSignature compiledSignature, Pointer enterData, int handleCount, int handleFrameId) {
+    private static Object enterInterpreterStubCore(InterpreterResolvedJavaMethod interpreterMethod, PreparedSignature compiledSignature, Pointer enterData, int handleCount, int handleFrameId,
+                    DynamicHub dispatchHub, int dispatchIndex) {
         InterpreterAccessStubData accessHelper = ImageSingletons.lookup(InterpreterAccessStubData.class);
         ThreadLocalHandles<ThreadLocalInterpreterHandle> handles = tlsHandles();
         int[] argumentTypes = compiledSignature.getArgumentTypes();
@@ -803,6 +817,9 @@ public abstract class InterpreterStubSection {
 
         VMError.guarantee(handles.getHandleCount() == handleCount);
         VMError.guarantee(handleFrameId == handles.popFrame());
+        if (dispatchHub != null) {
+            patchDispatchSlot(dispatchHub, dispatchIndex, interpreterMethod);
+        }
 
         if (interpreterMethod.isNative() && interpreterMethod instanceof CremaResolvedJavaMethod) {
             try {
@@ -813,6 +830,51 @@ public abstract class InterpreterStubSection {
         }
 
         return call(interpreterMethod, args, true);
+    }
+
+    /**
+     * Points a runtime-loaded hub's dispatch slot at {@code method}'s compiled entry, if it has
+     * one and the slot still holds the Crema stub for its index. The slot is recorded on the
+     * method first, so the safepoint that invalidates the code can put the stub back.
+     */
+    private static void patchDispatchSlot(DynamicHub hub, int index, InterpreterResolvedJavaMethod method) {
+        if (method.getDirectCallEntry() == 0 || !hub.isRuntimeLoaded() || index < 0 || index >= MAX_VTABLE_STUBS) {
+            return;
+        }
+        KnownOffsets offsets = KnownOffsets.singleton();
+        long slotAddress = Word.objectToUntrackedPointer(hub).add(offsets.getVTableBaseOffset()).add(Word.signed((long) index * offsets.getVTableEntrySize())).rawValue();
+        long stubValue = dispatchSlotValue(getCremaStubForVTableIndex(index).rawValue());
+        tryPatchDispatchSlot(method, slotAddress, index, stubValue);
+    }
+
+    @Uninterruptible(reason = "No safepoint between reading the published entry and patching the slot: invalidation resets recorded slots at a safepoint.")
+    private static void tryPatchDispatchSlot(InterpreterResolvedJavaMethod method, long slotAddress, int index, long stubValue) {
+        long entry = method.getDirectCallEntry();
+        if (entry == 0) {
+            return;
+        }
+        Pointer slot = Word.pointer(slotAddress);
+        if (slot.readLong(0) != stubValue || !method.recordPatchedSlot(slotAddress, index)) {
+            return;
+        }
+        slot.writeLong(0, dispatchSlotValue(entry));
+    }
+
+    /**
+     * Puts the Crema stub back into a dispatch slot that still holds {@code entryPoint}. Called at
+     * the safepoint invalidating that code.
+     */
+    public static void resetDispatchSlot(long slotAddress, int index, long entryPoint) {
+        Pointer slot = Word.pointer(slotAddress);
+        if (slot.readLong(0) == dispatchSlotValue(entryPoint)) {
+            slot.writeLong(0, dispatchSlotValue(getCremaStubForVTableIndex(index).rawValue()));
+        }
+    }
+
+    /** A code address as dispatch tables store it (relative to the code base when configured). */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    private static long dispatchSlotValue(long absolute) {
+        return SubstrateOptions.useRelativeCodePointers() ? absolute - KnownIntrinsics.codeBase().rawValue() : absolute;
     }
 
     /**

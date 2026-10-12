@@ -32,6 +32,7 @@ import org.graalvm.collections.EconomicMap;
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.interpreter.metadata.RuntimeLoadedClassHierarchy;
 import com.oracle.svm.graal.meta.SubstrateInstalledCodeImpl;
+import com.oracle.svm.interpreter.InterpreterStubSection;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.shared.util.VMError;
 
@@ -134,6 +135,17 @@ public class RistrettoInstalledCode extends SubstrateInstalledCodeImpl implement
         public static boolean hasHierarchyAssumptions(RistrettoInstalledCode code) {
             return code.hasHierarchyAssumptions;
         }
+    }
+
+    /**
+     * Runs inside the safepoint that invalidates this code, on every invalidation path. Before the
+     * code's address is cleared, the owning method's direct call entry and every dispatch slot
+     * patched to it go back to the interpreter stubs, so no caller can reach the retired code.
+     */
+    @Override
+    public void clearAddress() {
+        rMethod.getInterpreterMethod().retractDirectCallEntry(getEntryPoint(), InterpreterStubSection::resetDispatchSlot);
+        super.clearAddress();
     }
 
     /** Invalidates this code and applies a pending reprofiling request if it is still current. */

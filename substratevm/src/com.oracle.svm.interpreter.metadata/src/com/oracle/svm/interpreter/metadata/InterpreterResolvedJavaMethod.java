@@ -190,6 +190,23 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
     // Token set by the toggle of method enter/exit events.
     private volatile Object interpreterExecToken;
 
+    /*
+     * Where calls into this method from runtime-compiled code and from runtime-loaded dispatch
+     * slots go once Ristretto has compiled it. Zero while it has no installed code, so callers
+     * take the interpreter enter stubs. Published when Ristretto installs code, and reset inside
+     * the safepoint that invalidates that code, so no caller can jump into invalidated code.
+     */
+    private volatile long directCallEntry;
+    private static final jdk.internal.misc.Unsafe UNSAFE = jdk.internal.misc.Unsafe.getUnsafe();
+    public static final long DIRECT_CALL_ENTRY_OFFSET = UNSAFE.objectFieldOffset(InterpreterResolvedJavaMethod.class, "directCallEntry");
+
+    /* Runtime-loaded hub dispatch slots patched to directCallEntry: addresses and indices. */
+    private static final int MAX_PATCHED_SLOTS = 16;
+    private long[] patchedSlotAddresses;
+    private int[] patchedSlotIndices;
+    private volatile int patchedSlotCount;
+    private static final long PATCHED_SLOT_COUNT_OFFSET = UNSAFE.objectFieldOffset(InterpreterResolvedJavaMethod.class, "patchedSlotCount");
+
     // TODO move to crema once GR-71517 is resolved
     private volatile ResolvedJavaMethod ristrettoMethod;
     private static final AtomicReferenceFieldUpdater<InterpreterResolvedJavaMethod, ResolvedJavaMethod> RISTRETTO_METHOD_UPDATER = AtomicReferenceFieldUpdater.newUpdater(
@@ -197,6 +214,84 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
 
     @UnknownObjectField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
     private PreparedSignature preparedSignature;
+
+    /** The compiled entry calls may jump to directly, or 0 while there is none. */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public long getDirectCallEntry() {
+        return directCallEntry;
+    }
+
+    /** Allocates the patched-slot record before code is published; slots are recorded without allocating. */
+    public void prepareDirectCallEntry() {
+        if (patchedSlotAddresses == null) {
+            patchedSlotIndices = new int[MAX_PATCHED_SLOTS];
+            patchedSlotAddresses = new long[MAX_PATCHED_SLOTS];
+        }
+    }
+
+    /** Publishes {@code entryPoint}, unless the code was already invalidated (entry point 0). */
+    @Uninterruptible(reason = "No safepoint between reading the code's entry point and publishing it.")
+    public void publishDirectCallEntry(long entryPoint) {
+        if (entryPoint != 0) {
+            directCallEntry = entryPoint;
+        }
+    }
+
+    /**
+     * Claims a record for a dispatch slot about to be patched to the current direct call entry;
+     * false if there is no room, in which case the slot must not be patched.
+     */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public boolean recordPatchedSlot(long address, int index) {
+        long[] addresses = patchedSlotAddresses;
+        int[] indices = patchedSlotIndices;
+        if (addresses == null || indices == null) {
+            return false;
+        }
+        while (true) {
+            int count = patchedSlotCount;
+            if (count >= addresses.length) {
+                return false;
+            }
+            if (UNSAFE.compareAndSetInt(this, PATCHED_SLOT_COUNT_OFFSET, count, count + 1)) {
+                addresses[count] = address;
+                indices[count] = index;
+                return true;
+            }
+        }
+    }
+
+    /**
+     * Withdraws {@code entryPoint} at the safepoint invalidating its code. The direct call entry is
+     * cleared if it is that code's, and every recorded slot still holding it goes back to its stub
+     * through {@code reset}, whichever code is published now (an OSR compilation's entry matches
+     * neither). The record is dropped only once nothing is published, when no slot can hold a
+     * live entry.
+     */
+    public void retractDirectCallEntry(long entryPoint, PatchedSlotReset reset) {
+        if (entryPoint == 0) {
+            return;
+        }
+        if (directCallEntry == entryPoint) {
+            directCallEntry = 0;
+        }
+        long[] addresses = patchedSlotAddresses;
+        int[] indices = patchedSlotIndices;
+        int count = patchedSlotCount;
+        if (addresses != null && indices != null) {
+            for (int i = 0; i < count && i < addresses.length; i++) {
+                reset.reset(addresses[i], indices[i], entryPoint);
+            }
+        }
+        if (directCallEntry == 0) {
+            patchedSlotCount = 0;
+        }
+    }
+
+    /** Restores one patched dispatch slot that may still hold {@code entryPoint}. */
+    public interface PatchedSlotReset {
+        void reset(long slotAddress, int index, long entryPoint);
+    }
 
     public static class InlinedBy {
         public InterpreterResolvedJavaMethod holder;
