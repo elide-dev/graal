@@ -1336,7 +1336,7 @@ public class NativeImage {
             if (!useBundle()) {
                 /*
                  * In bundle-mode the value of imagePath is purely virtual before it gets
-                 * substituted by substituteImagePath(imagePath) below. Validating the virtual value
+                 * redirected to the bundle's output directory below. Validating the virtual value
                  * would make no sense (and cause errors if the path does not exist anymore)
                  */
                 if (!Files.isDirectory(imageNamePathParent)) {
@@ -1364,7 +1364,7 @@ public class NativeImage {
             bundleSupport.updateBundleLocation(imagePath.resolve(bundleName), false);
 
             /* The imagePath has to be redirected to be within the bundle */
-            imagePath = bundleSupport.substituteImagePath(imagePath);
+            imagePath = bundleSupport.imagePathOutputDir;
             /* and we need to adjust the argument that passes the imagePath to the builder */
             updateArgumentEntryValue(imageBuilderArgs, imagePathEntry, imagePath.toString());
         } else {
