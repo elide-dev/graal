@@ -209,9 +209,16 @@ public class CremaFeature implements InternalFeature {
         InterpreterFeature.prepareSignatures();
 
         accessImpl.registerAsImmutable(CremaSupport.singleton());
-        accessImpl.registerAsImmutable(InterpreterForeignFunctionsSupport.singleton());
         CremaSupport.singleton().setEnterDirectInterpreterStubEntryPoint(new MethodPointer(hUniverse.lookup(enterDirectInterpreterStub)));
-        InterpreterForeignFunctionsSupport.singleton().setUpcallStubPointer(new MethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
+        /*
+         * Only foreign function support (com.oracle.svm.core.foreign) uses this singleton. Without
+         * it, the analysis never reached the singleton's type, and it is not in the image.
+         */
+        InterpreterForeignFunctionsSupport ffmSupport = InterpreterForeignFunctionsSupport.singleton();
+        if (hUniverse.getBigBang().getMetaAccess().optionalLookupJavaType(ffmSupport.getClass()).filter(AnalysisType::isReachable).isPresent()) {
+            accessImpl.registerAsImmutable(ffmSupport);
+            ffmSupport.setUpcallStubPointer(new MethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
+        }
         CremaSupport.singleton().setCremaJNIMethodCallWrapperEntryPoints(new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVarargsVirtualWrapper)),
                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodArrayVirtualWrapper)),
                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVaListVirtualWrapper)),
