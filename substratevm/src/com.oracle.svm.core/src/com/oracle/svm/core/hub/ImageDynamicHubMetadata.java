@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,114 +27,125 @@ package com.oracle.svm.core.hub;
 import static com.oracle.svm.core.reflect.RuntimeMetadataDecoder.NO_DATA;
 
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.shared.BuildPhaseProvider;
-import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.reflect.RuntimeMetadataDecoder;
 
-final class ImageDynamicHubMetadata implements DynamicHubMetadata {
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class) //
-    final int enclosingMethodInfoIndex;
+/**
+ * Class metadata of image classes (enclosing method, annotations, nest members, ...). The seven
+ * indices into the runtime metadata encoding are packed into
+ * {@link DynamicHubCompanion#encodedHubMetadata} with {@link PackedMetadataEncoding}, so no object
+ * per class is needed. Runtime-loaded classes use {@link RuntimeDynamicHubMetadata} instead.
+ */
+final class ImageDynamicHubMetadata {
+    private static final int ENCLOSING_METHOD_INFO = 1;
+    private static final int ANNOTATIONS = 1 << 1;
+    private static final int TYPE_ANNOTATIONS = 1 << 2;
+    private static final int CLASSES = 1 << 3;
+    private static final int PERMITTED_SUBCLASSES = 1 << 4;
+    private static final int NEST_MEMBERS = 1 << 5;
+    private static final int SIGNERS = 1 << 6;
 
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int annotationsIndex;
+    private static final Class<?>[] EMPTY_CLASSES = new Class<?>[0];
 
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int typeAnnotationsIndex;
-
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int classesEncodingIndex;
-
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int permittedSubclassesEncodingIndex;
-
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int nestMembersEncodingIndex;
-
-    @UnknownPrimitiveField(availability = BuildPhaseProvider.CompileQueueFinished.class)//
-    final int signersEncodingIndex;
-
-    ImageDynamicHubMetadata(int enclosingMethodInfoIndex, int annotationsIndex, int typeAnnotationsIndex, int classesEncodingIndex, int permittedSubclassesEncodingIndex,
-                    int nestMembersEncodingIndex, int signersEncodingIndex) {
-        this.enclosingMethodInfoIndex = enclosingMethodInfoIndex;
-        this.annotationsIndex = annotationsIndex;
-        this.typeAnnotationsIndex = typeAnnotationsIndex;
-        this.classesEncodingIndex = classesEncodingIndex;
-        this.permittedSubclassesEncodingIndex = permittedSubclassesEncodingIndex;
-        this.nestMembersEncodingIndex = nestMembersEncodingIndex;
-        this.signersEncodingIndex = signersEncodingIndex;
+    @Platforms(Platform.HOSTED_ONLY.class)
+    private ImageDynamicHubMetadata() {
     }
 
-    @Override
-    public Object[] getEnclosingMethod(DynamicHub declaringClass) {
-        if (enclosingMethodInfoIndex == NO_DATA) {
+    @Platforms(Platform.HOSTED_ONLY.class)
+    static int encode(int enclosingMethodInfoIndex, int annotationsIndex, int typeAnnotationsIndex, int classesEncodingIndex, int permittedSubclassesEncodingIndex,
+                    int nestMembersEncodingIndex, int signersEncodingIndex) {
+        int[] values = {enclosingMethodInfoIndex, annotationsIndex, typeAnnotationsIndex, classesEncodingIndex, permittedSubclassesEncodingIndex, nestMembersEncodingIndex, signersEncodingIndex};
+        int mask = 0;
+        for (int bit = 0; bit < values.length; bit++) {
+            if (values[bit] != NO_DATA) {
+                mask |= 1 << bit;
+            }
+        }
+        return PackedMetadataEncoding.encode(mask, values);
+    }
+
+    private static int getIndex(int encoded, int bit, DynamicHub declaringClass) {
+        return PackedMetadataEncoding.getValue(encoded, bit, NO_DATA, declaringClass.getLayerId());
+    }
+
+    private static RuntimeMetadataDecoder decoder() {
+        return ImageSingletons.lookup(RuntimeMetadataDecoder.class);
+    }
+
+    /**
+     * @return null or a value compatible with {@code java.lang.Class.EnclosingMethodInfo(Object[])}
+     */
+    static Object[] getEnclosingMethod(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, ENCLOSING_METHOD_INFO, declaringClass);
+        if (index == NO_DATA) {
             return null;
         }
-        Object[] enclosingMethod = ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseEnclosingMethod(enclosingMethodInfoIndex, declaringClass);
+        Object[] enclosingMethod = decoder().parseEnclosingMethod(index, declaringClass);
         if (enclosingMethod != null) {
             PredefinedClassesSupport.throwIfUnresolvable((Class<?>) enclosingMethod[0], declaringClass.getClassLoader0());
         }
         return enclosingMethod;
     }
 
-    @Override
-    public Object[] getSigners(DynamicHub declaringClass) {
-        if (signersEncodingIndex == NO_DATA) {
+    static Object[] getSigners(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, SIGNERS, declaringClass);
+        if (index == NO_DATA) {
             return null;
         }
-        return ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseObjects(signersEncodingIndex, declaringClass);
+        return decoder().parseObjects(index, declaringClass);
     }
 
-    @Override
-    public byte[] getRawAnnotations(DynamicHub declaringClass) {
-        if (annotationsIndex == NO_DATA) {
+    static byte[] getRawAnnotations(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, ANNOTATIONS, declaringClass);
+        if (index == NO_DATA) {
             return null;
         }
-        return ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseByteArray(annotationsIndex, declaringClass);
+        return decoder().parseByteArray(index, declaringClass);
     }
 
-    @Override
-    public byte[] getRawTypeAnnotations(DynamicHub declaringClass) {
-        if (typeAnnotationsIndex == NO_DATA) {
+    static byte[] getRawTypeAnnotations(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, TYPE_ANNOTATIONS, declaringClass);
+        if (index == NO_DATA) {
             return null;
         }
-        return ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseByteArray(typeAnnotationsIndex, declaringClass);
+        return decoder().parseByteArray(index, declaringClass);
     }
 
-    @Override
-    public Class<?>[] getDeclaredClasses(DynamicHub declaringClass) {
-        if (classesEncodingIndex == NO_DATA) {
-            return new Class<?>[0];
+    static Class<?>[] getDeclaredClasses(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, CLASSES, declaringClass);
+        if (index == NO_DATA) {
+            return EMPTY_CLASSES;
         }
-        Class<?>[] declaredClasses = ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseClasses(classesEncodingIndex, declaringClass);
-        for (Class<?> clazz : declaredClasses) {
-            PredefinedClassesSupport.throwIfUnresolvable(clazz, declaringClass.getClassLoader0());
-        }
-        return declaredClasses;
+        return parseClasses(index, declaringClass);
     }
 
-    @Override
-    public Class<?>[] getNestMembers(DynamicHub declaringClass) {
-        if (nestMembersEncodingIndex == NO_DATA) {
+    static Class<?>[] getNestMembers(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, NEST_MEMBERS, declaringClass);
+        if (index == NO_DATA) {
             return new Class<?>[]{DynamicHub.toClass(declaringClass)};
         }
-        Class<?>[] nestMembers = ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseClasses(nestMembersEncodingIndex, declaringClass);
-        for (Class<?> clazz : nestMembers) {
-            PredefinedClassesSupport.throwIfUnresolvable(clazz, declaringClass.getClassLoader0());
-        }
-        return nestMembers;
+        return parseClasses(index, declaringClass);
     }
 
-    @Override
-    public Class<?>[] getPermittedSubClasses(DynamicHub declaringClass) {
-        if (permittedSubclassesEncodingIndex == NO_DATA) {
-            return new Class<?>[0];
+    /**
+     * Returns the permitted subclasses for {@code declaringClass}. Must only be called when
+     * {@code declaringClass} represents a sealed type.
+     */
+    static Class<?>[] getPermittedSubClasses(int encoded, DynamicHub declaringClass) {
+        int index = getIndex(encoded, PERMITTED_SUBCLASSES, declaringClass);
+        if (index == NO_DATA) {
+            return EMPTY_CLASSES;
         }
-        Class<?>[] permittedSubclasses = ImageSingletons.lookup(RuntimeMetadataDecoder.class).parseClasses(permittedSubclassesEncodingIndex, declaringClass);
-        for (Class<?> clazz : permittedSubclasses) {
-            PredefinedClassesSupport.throwIfUnresolvable(clazz, declaringClass.getClassLoader0());
-        }
-        return permittedSubclasses;
+        return parseClasses(index, declaringClass);
     }
 
+    private static Class<?>[] parseClasses(int index, DynamicHub declaringClass) {
+        Class<?>[] classes = decoder().parseClasses(index, declaringClass);
+        for (Class<?> clazz : classes) {
+            PredefinedClassesSupport.throwIfUnresolvable(clazz, declaringClass.getClassLoader0());
+        }
+        return classes;
+    }
 }

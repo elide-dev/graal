@@ -35,7 +35,7 @@ import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.UnresolvedJavaType;
 
-public final class RuntimeDynamicHubMetadata implements DynamicHubMetadata {
+public final class RuntimeDynamicHubMetadata {
 
     private final CremaResolvedJavaType type;
 
@@ -45,12 +45,10 @@ public final class RuntimeDynamicHubMetadata implements DynamicHubMetadata {
         this.type = type;
     }
 
-    @Override
     public Object[] getEnclosingMethod(DynamicHub declaringClass) {
         return CremaSupport.singleton().computeEnclosingMethod(declaringClass);
     }
 
-    @Override
     public Object[] getSigners(DynamicHub declaringClass) {
         if (signers == null) {
             return null;
@@ -64,17 +62,14 @@ public final class RuntimeDynamicHubMetadata implements DynamicHubMetadata {
         this.signers = signers;
     }
 
-    @Override
     public byte[] getRawAnnotations(DynamicHub declaringClass) {
         return type.getRawAnnotations();
     }
 
-    @Override
     public byte[] getRawTypeAnnotations(DynamicHub dynamicHub) {
         return type.getRawTypeAnnotations();
     }
 
-    @Override
     public Class<?>[] getDeclaredClasses(DynamicHub declaringClass) {
         List<Class<?>> declaredClasses = new ArrayList<>();
         for (JavaType declaredMember : type.getDeclaredClasses()) {
@@ -86,7 +81,6 @@ public final class RuntimeDynamicHubMetadata implements DynamicHubMetadata {
         return declaredClasses.toArray(DynamicHub.EMPTY_CLASS_ARRAY);
     }
 
-    @Override
     public Class<?>[] getNestMembers(DynamicHub declaringClass) {
         List<Class<?>> nestMembers = new ArrayList<>();
         for (ResolvedJavaType nestMember : type.getNestMembers()) {
@@ -98,7 +92,6 @@ public final class RuntimeDynamicHubMetadata implements DynamicHubMetadata {
         return nestMembers.toArray(DynamicHub.EMPTY_CLASS_ARRAY);
     }
 
-    @Override
     public Class<?>[] getPermittedSubClasses(DynamicHub declaringClass) {
         List<Class<?>> permittedSubClasses = new ArrayList<>();
         List<? extends JavaType> permittedSubTypes = type.getPermittedSubclasses();

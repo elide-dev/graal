@@ -30,33 +30,18 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
-import java.nio.ByteOrder;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.SubstrateTarget;
-import com.oracle.svm.core.code.RuntimeMetadataEncoding;
 import com.oracle.svm.core.configure.RuntimeDynamicAccessMetadata;
 import com.oracle.svm.core.reflect.RuntimeMetadataDecoder;
-import com.oracle.svm.core.util.ByteArrayReader;
-import com.oracle.svm.shared.singletons.MultiLayeredImageSingleton;
-import com.oracle.svm.shared.util.VMError;
 
 /**
  * Compact encoding for non-layered image reflection metadata.
  * <p>
- * The value stored in {@link DynamicHubCompanion#encodedReflectionMetadata} is a tagged encoded
- * reference:
- * <ul>
- * <li>{@code 0}: no image reflection metadata is present.</li>
- * <li>high bit set: one metadata kind is stored inline. Bits 30..24 contain the metadata-kind mask
- * and bits 23..0 contain the non-negative value.</li>
- * <li>otherwise: the value is {@code offset + 1} into
- * {@link RuntimeMetadataEncoding#getReflectionMetadataEncoding()}.</li>
- * </ul>
- * A side-table entry starts with a one-byte metadata-kind mask. The values for all set bits then
- * follow as little-endian signed Java {@code int}s in ascending bit order: fields, methods,
+ * The value stored in {@link DynamicHubCompanion#encodedReflectionMetadata} is a
+ * {@link PackedMetadataEncoding} of the following values in ascending bit order: fields, methods,
  * constructors, record components, dynamic access, unsafe allocation, and class flags.
  */
 final class ImageReflectionMetadataEncoding {
@@ -68,13 +53,6 @@ final class ImageReflectionMetadataEncoding {
     private static final int UNSAFE_ALLOCATED = 1 << 5;
     private static final int CLASS_FLAGS = 1 << 6;
 
-    /** Zero is the default value of {@link DynamicHubCompanion#encodedReflectionMetadata}. */
-    private static final int NO_REFLECTION_METADATA = 0;
-    private static final int FIRST_REFLECTION_METADATA_INDEX = 1;
-    private static final int INLINE_ENCODING = 1 << 31;
-    private static final int INLINE_METADATA_MASK_SHIFT = 24;
-    private static final int INLINE_METADATA_MASK = 0x7F << INLINE_METADATA_MASK_SHIFT;
-    private static final int INLINE_VALUE_MASK = (1 << INLINE_METADATA_MASK_SHIFT) - 1;
     private static final Field[] EMPTY_FIELDS = new Field[0];
     private static final Method[] EMPTY_METHODS = new Method[0];
     private static final Constructor<?>[] EMPTY_CONSTRUCTORS = new Constructor<?>[0];
@@ -109,51 +87,12 @@ final class ImageReflectionMetadataEncoding {
             mask |= CLASS_FLAGS;
         }
 
-        if (Integer.bitCount(mask) == 1) {
-            int value = switch (mask) {
-                case FIELDS -> fieldsEncodingIndex;
-                case METHODS -> methodsEncodingIndex;
-                case CONSTRUCTORS -> constructorsEncodingIndex;
-                case RECORD_COMPONENTS -> recordComponentsEncodingIndex;
-                case DYNAMIC_ACCESS -> dynamicAccessIndex;
-                case UNSAFE_ALLOCATED -> unsafeAllocationIndex;
-                case CLASS_FLAGS -> classFlags;
-                default -> throw VMError.shouldNotReachHere("Unexpected reflection metadata mask: " + mask);
-            };
-            if (value >= 0 && value <= INLINE_VALUE_MASK) {
-                return INLINE_ENCODING | (mask << INLINE_METADATA_MASK_SHIFT) | value;
-            }
-        }
-
-        int index = RuntimeMetadataEncoding.currentLayer().addReflectionMetadata(1 + Integer.BYTES * Integer.bitCount(mask));
-        byte[] data = RuntimeMetadataEncoding.currentLayer().getReflectionMetadataEncoding();
-        data[index] = (byte) mask;
-        int pos = index + 1;
-        pos = putIfSet(data, pos, mask, FIELDS, fieldsEncodingIndex);
-        pos = putIfSet(data, pos, mask, METHODS, methodsEncodingIndex);
-        pos = putIfSet(data, pos, mask, CONSTRUCTORS, constructorsEncodingIndex);
-        pos = putIfSet(data, pos, mask, RECORD_COMPONENTS, recordComponentsEncodingIndex);
-        pos = putIfSet(data, pos, mask, DYNAMIC_ACCESS, dynamicAccessIndex);
-        pos = putIfSet(data, pos, mask, UNSAFE_ALLOCATED, unsafeAllocationIndex);
-        putIfSet(data, pos, mask, CLASS_FLAGS, classFlags);
-        return index + FIRST_REFLECTION_METADATA_INDEX;
-    }
-
-    @Platforms(Platform.HOSTED_ONLY.class)
-    private static int putIfSet(byte[] data, int pos, int mask, int bit, int value) {
-        if ((mask & bit) != 0) {
-            assert SubstrateTarget.getArchitecture().getByteOrder() == ByteOrder.LITTLE_ENDIAN;
-            data[pos] = (byte) value;
-            data[pos + 1] = (byte) (value >>> 8);
-            data[pos + 2] = (byte) (value >>> 16);
-            data[pos + 3] = (byte) (value >>> 24);
-            return pos + Integer.BYTES;
-        }
-        return pos;
+        int[] values = {fieldsEncodingIndex, methodsEncodingIndex, constructorsEncodingIndex, recordComponentsEncodingIndex, dynamicAccessIndex, unsafeAllocationIndex, classFlags};
+        return PackedMetadataEncoding.encode(mask, values);
     }
 
     public static boolean hasMetadata(int encodedReflectionMetadata) {
-        return encodedReflectionMetadata != NO_REFLECTION_METADATA;
+        return PackedMetadataEncoding.hasMetadata(encodedReflectionMetadata);
     }
 
     public static int getClassFlags(int encodedReflectionMetadata, int defaultClassFlags) {
@@ -194,29 +133,7 @@ final class ImageReflectionMetadataEncoding {
     }
 
     private static int getValue(int encodedReflectionMetadata, int bit, int defaultValue) {
-        if (!hasMetadata(encodedReflectionMetadata)) {
-            return defaultValue;
-        }
-        if ((encodedReflectionMetadata & INLINE_ENCODING) != 0) {
-            int mask = (encodedReflectionMetadata & INLINE_METADATA_MASK) >>> INLINE_METADATA_MASK_SHIFT;
-            return mask == bit ? encodedReflectionMetadata & INLINE_VALUE_MASK : defaultValue;
-        }
-        byte[] data = MultiLayeredImageSingleton.getForLayer(RuntimeMetadataEncoding.class, 0).getReflectionMetadataEncoding();
-        int pos = encodedReflectionMetadata - FIRST_REFLECTION_METADATA_INDEX;
-        int mask = ByteArrayReader.getU1(data, pos++);
-        if ((mask & bit) == 0) {
-            return defaultValue;
-        }
-        for (int currentBit = FIELDS; currentBit <= CLASS_FLAGS; currentBit <<= 1) {
-            if ((mask & currentBit) != 0) {
-                int value = ByteArrayReader.getS4(data, pos);
-                if (currentBit == bit) {
-                    return value;
-                }
-                pos += Integer.BYTES;
-            }
-        }
-        throw VMError.shouldNotReachHere("Could not find value for reflection metadata bit " + bit + " in mask " + mask);
+        /* Non-layered images only, so the side table always lives in layer 0. */
+        return PackedMetadataEncoding.getValue(encodedReflectionMetadata, bit, defaultValue, 0);
     }
-
 }
