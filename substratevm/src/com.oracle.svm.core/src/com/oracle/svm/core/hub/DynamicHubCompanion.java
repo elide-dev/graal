@@ -138,8 +138,15 @@ public final class DynamicHubCompanion {
     @UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class) //
     @Stable int encodedReflectionMetadata;
 
-    @UnknownObjectField(canBeNull = true, types = ImageDynamicHubMetadata.class, availability = BuildPhaseProvider.AfterCompilation.class) //
-    @Stable DynamicHubMetadata hubMetadata;
+    /**
+     * Class metadata of image classes, packed with {@link PackedMetadataEncoding}; see
+     * {@link ImageDynamicHubMetadata}. Zero if the class has no such metadata.
+     */
+    @UnknownPrimitiveField(availability = BuildPhaseProvider.AfterCompilation.class) //
+    @Stable int encodedHubMetadata;
+
+    /** Class metadata of runtime-loaded classes; null for image classes. */
+    @Stable RuntimeDynamicHubMetadata hubMetadata;
 
     @Platforms(Platform.HOSTED_ONLY.class) //
     @Stable DynamicHub dynamicHub;
