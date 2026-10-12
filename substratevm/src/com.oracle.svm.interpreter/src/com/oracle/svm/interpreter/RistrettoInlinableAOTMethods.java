@@ -305,9 +305,19 @@ final class RistrettoInlinableAOTMethods {
                         if (!(callee instanceof ResolvedJavaMethod resolvedCallee)) {
                             return "unresolved callee at bci " + bci;
                         }
+                        /*
+                         * The builder JVM may already have linked a signature-polymorphic site, in
+                         * which case the lookup returns its invokehandle adapter (for example the
+                         * static VarHandleGuards.guard_LI_L for VarHandle.getVolatile), so check the
+                         * referenced holder too (elide-dev/graal#113).
+                         */
                         String holder = resolvedCallee.getDeclaringClass().getName();
-                        if (holder.equals(METHOD_HANDLE) || holder.equals(VAR_HANDLE)) {
+                        String referencedHolder = cp.lookupReferencedType(BytecodeStream.readCPI(code, bci), bytecode).getName();
+                        if (holder.equals(METHOD_HANDLE) || holder.equals(VAR_HANDLE) || referencedHolder.equals(METHOD_HANDLE) || referencedHolder.equals(VAR_HANDLE)) {
                             return "signature-polymorphic call at bci " + bci;
+                        }
+                        if (resolvedCallee.isStatic() != (bytecode == INVOKESTATIC)) {
+                            return "callee does not match the invoke kind at bci " + bci + ": " + resolvedCallee.format("%H.%n(%p)");
                         }
                         if (!(iUniverse.methodOrUnresolved(callee) instanceof InterpreterResolvedJavaMethod)) {
                             return "callee not in the interpreter metadata at bci " + bci + ": " + resolvedCallee.format("%H.%n(%p)");

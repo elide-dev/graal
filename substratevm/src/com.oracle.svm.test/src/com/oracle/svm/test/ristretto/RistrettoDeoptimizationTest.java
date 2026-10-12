@@ -41,10 +41,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BooleanSupplier;
 
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.hosted.RuntimeResourceAccess;
 import org.junit.Assume;
 import org.junit.Before;
@@ -79,6 +82,27 @@ public class RistrettoDeoptimizationTest {
         public void beforeAnalysis(BeforeAnalysisAccess access) {
             for (Class<?> c : RUNTIME_CLASSES) {
                 RuntimeResourceAccess.addResource(RistrettoDeoptimizationTest.class.getModule(), classFileName(c));
+            }
+            /*
+             * Links the VarHandle call sites of the AOT methods that AtomicUser calls in the
+             * builder JVM, where JVMCI then resolves them to their invokehandle adapters
+             * (elide-dev/graal#113).
+             */
+            AtomicReferenceArray<Object> array = new AtomicReferenceArray<>(1);
+            array.lazySet(0, array);
+            AtomicReference<Object> reference = new AtomicReference<>();
+            if (array.get(0) != array || !reference.compareAndSet(null, array)) {
+                throw new AssertionError("unexpected atomic state");
+            }
+            /*
+             * Compiled on their own, so that the interpreter and Ristretto code can call them. Their
+             * VarHandle fields keep a location (as with -H:Preserve), so their bytecodes are kept.
+             */
+            try {
+                RuntimeReflection.register(AtomicReferenceArray.class.getMethod("get", int.class), AtomicReference.class.getMethod("compareAndSet", Object.class, Object.class));
+                RuntimeReflection.register(AtomicReferenceArray.class.getDeclaredField("AA"), AtomicReference.class.getDeclaredField("VALUE"));
+            } catch (NoSuchMethodException | NoSuchFieldException e) {
+                throw new AssertionError(e);
             }
         }
     }
@@ -193,7 +217,22 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class);
+    public static final class AtomicUser {
+        /**
+         * Reads {@code array[i]} and swaps {@code reference} from it to {@code i}, and returns 1
+         * when compiled. {@link AtomicReferenceArray#get} and {@link AtomicReference#compareAndSet}
+         * are AOT methods that call signature-polymorphic {@code VarHandle} methods.
+         */
+        public static int readAndSwap(AtomicReferenceArray<Object> array, AtomicReference<Object> reference, int i) {
+            Object value = array.get(i);
+            if (!reference.compareAndSet(value, i)) {
+                throw new AssertionError("compareAndSet failed at " + i);
+            }
+            return Probe.compiled();
+        }
+    }
+
+    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class);
 
     @Before
     public void requireRistretto() {
@@ -309,6 +348,31 @@ public class RistrettoDeoptimizationTest {
         assertEquals("Integer keys before the hook must run compiled", n / 2, compiled[0]);
         assertEquals("Key iterations must run in the interpreter", 0, compiled[1]);
         assertEquals("lookups after deoptimization", (long) n * (n - 1), (long) invoke(lookup, map, intKeys, holder, new int[2]));
+    }
+
+    /**
+     * Compiled code calls AOT methods whose {@code VarHandle} call sites the builder JVM had
+     * already linked (see {@link TestFeature}). Ristretto must not inline them as ordinary calls to
+     * the static invokehandle adapters, which threw IncompatibleClassChangeError
+     * (elide-dev/graal#113).
+     */
+    @Test
+    public void compiledCodeCallsAOTMethodsWithVarHandleSites() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Method readAndSwap = loader.loadClass(AtomicUser.class.getName()).getMethod("readAndSwap", AtomicReferenceArray.class, AtomicReference.class, int.class);
+        int n = 16;
+        AtomicReferenceArray<Object> array = new AtomicReferenceArray<>(n);
+        AtomicReference<Object> reference = new AtomicReference<>();
+        int[] round = new int[1];
+        awaitCompiled("AtomicUser.readAndSwap", () -> {
+            int i = round[0]++ % n;
+            Object value = Integer.valueOf(round[0]);
+            array.lazySet(i, value);
+            reference.set(value);
+            int compiled = invoke(readAndSwap, array, reference, i);
+            assertEquals(Integer.valueOf(i), reference.get());
+            return compiled == 1;
+        });
     }
 
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
