@@ -58,6 +58,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -82,6 +83,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.TruffleContext;
+import com.oracle.truffle.api.test.ReflectionUtils;
 import com.oracle.truffle.api.TruffleLanguage.Env;
 import com.oracle.truffle.api.test.polyglot.MultiThreadedLanguage.LanguageContext;
 import com.oracle.truffle.api.test.polyglot.MultiThreadedLanguage.ThreadRequest;
@@ -104,6 +106,68 @@ public class MultiThreadedLanguageTest extends AbstractThreadedPolyglotTest {
             return context.eval(MultiThreadedLanguage.ID, "");
         } finally {
             MultiThreadedLanguage.runinside.set(null);
+        }
+    }
+
+    @Test
+    public void testWorkerCachesRespectGlobalInvalidation() throws Exception {
+        MultiThreadedLanguage.isThreadAccessAllowed = (req) -> true;
+        ExecutorService executor = createExecutor(2, vthreads);
+        CyclicBarrier barrier = new CyclicBarrier(3);
+        try (Context context = Context.create(MultiThreadedLanguage.ID)) {
+            context.initialize(MultiThreadedLanguage.ID);
+            Object receiver = ReflectionUtils.getField(context, "receiver");
+            context.enter();
+            try {
+                List<Future<?>> workers = new ArrayList<>();
+                for (int worker = 0; worker < 2; worker++) {
+                    int workerId = worker;
+                    workers.add(executor.submit(() -> {
+                        context.enter();
+                        try {
+                            barrier.await(10, TimeUnit.SECONDS);
+                            // Both workers have entered. Publishing the second must not evict the first.
+                            Object info = ReflectionUtils.invoke(receiver, "getCachedThread");
+                            assertSame(Thread.currentThread(), ReflectionUtils.invoke(info, "getThread"));
+                            barrier.await(10, TimeUnit.SECONDS);
+                            barrier.await(10, TimeUnit.SECONDS);
+                            Object invalidated = ReflectionUtils.invoke(receiver, "getCachedThread");
+                            assertNull(ReflectionUtils.invoke(invalidated, "getThread"));
+                            barrier.await(10, TimeUnit.SECONDS);
+                            if (workerId == 0) {
+                                context.leave();
+                                context.enter();
+                            }
+                            barrier.await(10, TimeUnit.SECONDS);
+                            if (workerId == 1) {
+                                // Another worker repopulating the cache must not revive this old epoch.
+                                Object stale = ReflectionUtils.invoke(receiver, "getCachedThread");
+                                Assert.assertNotSame(Thread.currentThread(), ReflectionUtils.invoke(stale, "getThread"));
+                            }
+                            barrier.await(10, TimeUnit.SECONDS);
+                        } finally {
+                            context.leave();
+                        }
+                        return null;
+                    }));
+                }
+                barrier.await(10, TimeUnit.SECONDS);
+                barrier.await(10, TimeUnit.SECONDS);
+                Object cached = ReflectionUtils.invoke(receiver, "getCachedThread");
+                Object empty = ReflectionUtils.getStaticField(cached.getClass(), "NULL");
+                synchronized (receiver) {
+                    ReflectionUtils.invoke(receiver, "setCachedThreadInfo", new Class<?>[]{cached.getClass()}, empty);
+                }
+                barrier.await(10, TimeUnit.SECONDS);
+                barrier.await(10, TimeUnit.SECONDS);
+                barrier.await(10, TimeUnit.SECONDS);
+                barrier.await(10, TimeUnit.SECONDS);
+                for (Future<?> worker : workers) {
+                    worker.get(15, TimeUnit.SECONDS);
+                }
+            } finally {
+                context.leave();
+            }
         }
     }
 

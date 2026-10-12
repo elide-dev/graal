@@ -453,6 +453,28 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
      * Do not modify only read. Use setCachedThreadInfo to modify.
      */
     private volatile PolyglotThreadInfo cachedThreadInfo = PolyglotThreadInfo.NULL;
+
+    /*
+     * Once concurrent access is initialized, an executor's workers must not evict each other's
+     * entry fast path. All lifecycle and thread-local-action invalidations still pass through
+     * setCachedThreadInfo(NULL). The epoch prevents an entry cached before that invalidation from
+     * becoming valid again when another worker repopulates the shared slot.
+     *
+     * ThreadLocal values must not retain a context through a long-lived host executor thread.
+     */
+    private volatile Object threadCacheEpoch;
+    private final ThreadLocal<CachedThread> currentThreadCache = new ThreadLocal<>();
+
+    private static final class CachedThread {
+        final Object epoch;
+        final java.lang.ref.WeakReference<PolyglotThreadInfo> info;
+
+        CachedThread(Object epoch, PolyglotThreadInfo info) {
+            this.epoch = epoch;
+            this.info = new java.lang.ref.WeakReference<>(info);
+        }
+    }
+
     @CompilationFinal private volatile Reference<Context> weakAPI;
     // Set for top level contexts, null for inner contexts
     private final TruffleContext strongCreatorTruffleContext;
@@ -1187,6 +1209,16 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         } else {
             info = cachedThreadInfo;
         }
+        if (info.getThread() != Thread.currentThread() && !singleThreaded) {
+            Object epoch = threadCacheEpoch;
+            CachedThread cached = currentThreadCache.get();
+            if (epoch != null && cached != null && cached.epoch == epoch) {
+                PolyglotThreadInfo local = cached.info.get();
+                if (local != null) {
+                    return local;
+                }
+            }
+        }
         return info;
     }
 
@@ -1205,13 +1237,27 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         return info;
     }
 
-    void setCachedThreadInfo(PolyglotThreadInfo info) {
+    void setCachedThreadInfo(PolyglotThreadInfo requestedInfo) {
+        PolyglotThreadInfo info = requestedInfo;
         if (info != PolyglotThreadInfo.NULL && (!shouldCacheThreadInfo() || threadLocalActions.hasActiveEvents())) {
-            // never set the cached thread when closed closing or invalid
-            cachedThreadInfo = PolyglotThreadInfo.NULL;
-        } else {
-            cachedThreadInfo = info;
+            info = PolyglotThreadInfo.NULL;
         }
+        if (info == PolyglotThreadInfo.NULL) {
+            // Invalidate every worker before publishing the shared-slot invalidation.
+            threadCacheEpoch = null;
+        } else if (!singleThreaded) {
+            Object epoch = threadCacheEpoch;
+            if (epoch == null) {
+                epoch = new Object();
+                threadCacheEpoch = epoch;
+            }
+            assert info.getThread() == Thread.currentThread();
+            CachedThread cached = currentThreadCache.get();
+            if (cached == null || cached.epoch != epoch || cached.info.get() != info) {
+                currentThreadCache.set(new CachedThread(epoch, info));
+            }
+        }
+        cachedThreadInfo = info;
     }
 
     synchronized void checkMultiThreadedAccess(Thread newThread) throws PolyglotThreadAccessException {
