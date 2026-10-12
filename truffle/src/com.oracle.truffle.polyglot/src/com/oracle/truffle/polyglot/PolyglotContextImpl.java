@@ -1211,7 +1211,7 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
         }
         if (info.getThread() != Thread.currentThread() && !singleThreaded) {
             Object epoch = threadCacheEpoch;
-            CachedThread cached = currentThreadCache.get();
+            CachedThread cached = getCurrentThreadCache();
             if (epoch != null && cached != null && cached.epoch == epoch) {
                 PolyglotThreadInfo local = cached.info.get();
                 if (local != null) {
@@ -1220,6 +1220,12 @@ final class PolyglotContextImpl implements com.oracle.truffle.polyglot.PolyglotI
             }
         }
         return info;
+    }
+
+    @TruffleBoundary
+    private CachedThread getCurrentThreadCache() {
+        // ThreadLocal initialization must stay outside the Native Image runtime compilation graph.
+        return currentThreadCache.get();
     }
 
     PolyglotThreadInfo getCurrentThreadInfo() {
