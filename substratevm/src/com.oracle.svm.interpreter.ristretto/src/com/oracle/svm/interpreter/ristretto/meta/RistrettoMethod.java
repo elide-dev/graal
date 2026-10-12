@@ -59,6 +59,7 @@ import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
+import jdk.graal.compiler.core.common.PermanentBailoutException;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.nodes.PauseNode;
 import jdk.graal.compiler.nodes.extended.MembarNode;
@@ -980,7 +981,18 @@ public final class RistrettoMethod extends SubstrateMethod {
         if (rHandlers == null) {
             synchronized (this) {
                 if (rHandlers == null) {
-                    ExceptionHandler[] iHandlers = interpreterMethod.getExceptionHandlers();
+                    ExceptionHandler[] iHandlers = interpreterMethod.getExceptionHandlersOrNull();
+                    if (iHandlers == null) {
+                        if (!interpreterMethod.isConstructor() || !interpreterMethod.getDeclaringClass().isJavaLangObject()) {
+                            throw new PermanentBailoutException("No exception handler table for " + interpreterMethod);
+                        }
+                        /*
+                         * java.lang.Object::<init> keeps its bytecodes (a single return) without a
+                         * constant pool or handler table. Inlined AOT code reaches it through
+                         * super() calls.
+                         */
+                        iHandlers = InterpreterResolvedJavaMethod.EMPTY_EXCEPTION_HANDLERS;
+                    }
                     ExceptionHandler[] effectiveRHandlers = new ExceptionHandler[iHandlers.length];
                     for (int i = 0; i < iHandlers.length; i++) {
                         final ExceptionHandler iHandler = iHandlers[i];

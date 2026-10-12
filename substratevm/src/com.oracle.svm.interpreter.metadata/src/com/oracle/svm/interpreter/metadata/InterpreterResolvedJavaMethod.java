@@ -841,6 +841,15 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
         return ParserSymbols.ParserNames._init_ == getSymbolicName() && !isStatic();
     }
 
+    /**
+     * Returns the exception handler table, or null if this AOT method has none (it keeps no
+     * bytecodes, or it is java.lang.Object::<init>). Subclasses that compute the table lazily
+     * return it.
+     */
+    public ExceptionHandler[] getExceptionHandlersOrNull() {
+        return exceptionHandlers;
+    }
+
     @Override
     public ExceptionHandler[] getExceptionHandlers() {
         ExceptionHandler[] result = exceptionHandlers;

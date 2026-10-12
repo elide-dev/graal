@@ -733,6 +733,24 @@ public final class BuildTimeInterpreterUniverse {
         }
     }
 
+    /**
+     * Builds the constant pools of {@code selectedTypes} only, without weeding out methods: the
+     * caller already decided which methods of these types keep their bytecodes (see
+     * {@link RistrettoInlinableAOTMethods}).
+     */
+    public void createConstantPools(HostedUniverse hUniverse, Collection<InterpreterResolvedObjectType> selectedTypes) {
+        setSnippetReflectionProvider(hUniverse.getSnippetReflection());
+
+        this.classToMethods = methods.values().stream().collect(Collectors.groupingBy(InterpreterResolvedJavaMethod::getDeclaringClass));
+        this.classToFields = fields.values().stream().collect(Collectors.groupingBy(InterpreterResolvedJavaField::getDeclaringClass));
+
+        for (InterpreterResolvedObjectType type : selectedTypes) {
+            // TODO(peterssen): GR-68564 Obtain proper major/minor version for this type.
+            BuildTimeConstantPool buildTimeConstantPool = BuildTimeConstantPool.create(type, ClassFile.MAJOR_VERSION, ClassFile.MINOR_VERSION);
+            type.setConstantPool(buildTimeConstantPool.snapshot());
+        }
+    }
+
     public List<InterpreterResolvedJavaMethod> allDeclaredMethods(InterpreterResolvedObjectType type) {
         return classToMethods.getOrDefault(type, Collections.emptyList());
     }

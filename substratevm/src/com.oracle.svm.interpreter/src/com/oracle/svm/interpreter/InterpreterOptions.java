@@ -32,6 +32,7 @@ import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
 import com.oracle.svm.guest.staging.option.RuntimeOptionValidation;
 import com.oracle.svm.hosted.pltgot.PLTGOTOptions;
+import com.oracle.svm.shared.option.AccumulatingLocatableMultiOptionValue;
 import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.shared.option.SubstrateOptionsParser;
 
@@ -67,6 +68,22 @@ public class InterpreterOptions {
 
     @Option(help = "Enables backdoors in interpreter for testing", type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> InterpreterBackdoor = new HostedOptionKey<>(false);
+
+    @Option(help = "Lets Ristretto inline AOT-compiled methods of the classes in RistrettoInlinableAOTClasses: they keep their bytecode, " +
+                    "with a constant pool resolved at image build time.", type = OptionType.Expert)//
+    public static final HostedOptionKey<Boolean> RistrettoInlineAOTMethods = new HostedOptionKey<>(true);
+
+    @Option(help = "Class name prefixes of the AOT-compiled classes whose methods Ristretto may inline (see RistrettoInlineAOTMethods). " +
+                    "Methods that are substituted or intrinsified, or that use code not in the image, are left out.", type = OptionType.Expert)//
+    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> RistrettoInlinableAOTClasses = new HostedOptionKey<>(
+                    AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter(
+                                    "java.util.concurrent.atomic.",
+                                    "java.util.concurrent.ConcurrentHashMap",
+                                    "java.util.concurrent.ConcurrentLinkedQueue",
+                                    "java.util.HashMap",
+                                    "java.util.ArrayList",
+                                    "java.util.ArrayDeque",
+                                    "java.util.Objects"));
 
     public static boolean interpreterEnabled() {
         return DebuggerWithInterpreter.getValue() || RuntimeClassLoading.isSupported();

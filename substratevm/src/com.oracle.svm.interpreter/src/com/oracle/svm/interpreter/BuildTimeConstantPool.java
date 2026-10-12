@@ -52,6 +52,7 @@ import com.oracle.graal.pointsto.constraints.UnsupportedFeatureException;
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.graal.pointsto.util.AnalysisError;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.HostedUniverse;
@@ -131,9 +132,21 @@ final class BuildTimeConstantPool {
         return poolBuilder.appendCachedString(string);
     }
 
+    /**
+     * Ristretto reads the symbolic class, name and descriptor of constant pool entries (for example
+     * to compute deoptimization layouts of invokes), so with Ristretto the entries of resolved
+     * elements also carry them. The interpreter only uses the cached element.
+     */
+    private static boolean withSymbols() {
+        return SubstrateOptions.useRistretto();
+    }
+
     public int typeConstant(JavaType type) {
         if (!(type instanceof InterpreterResolvedJavaType || type instanceof UnresolvedJavaType)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaType or UnresolvedJavaType");
+        }
+        if (withSymbols() && type instanceof InterpreterResolvedJavaType resolved) {
+            return poolBuilder.appendSymbolicClass(resolved.getSymbolicName(), type);
         }
         return poolBuilder.appendCachedType(type);
     }
@@ -142,12 +155,19 @@ final class BuildTimeConstantPool {
         if (!(method instanceof InterpreterResolvedJavaMethod || method instanceof UnresolvedJavaMethod)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaMethod or UnresolvedJavaMethod");
         }
+        if (withSymbols() && method instanceof InterpreterResolvedJavaMethod resolved) {
+            return poolBuilder.appendSymbolicMethod(resolved.getDeclaringClass().isInterface(), resolved.getDeclaringClass().getSymbolicName(), resolved.getSymbolicName(),
+                            resolved.getSymbolicSignature(), method);
+        }
         return poolBuilder.appendCachedMethod(false, method);
     }
 
     public int field(JavaField field) {
         if (!(field instanceof InterpreterResolvedJavaField || field instanceof UnresolvedJavaField)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaField or UnresolvedJavaField");
+        }
+        if (withSymbols() && field instanceof InterpreterResolvedJavaField resolved) {
+            return poolBuilder.appendSymbolicField(resolved.getDeclaringClass().getSymbolicName(), resolved.getSymbolicName(), resolved.getSymbolicType(), field);
         }
         return poolBuilder.appendCachedField(field);
     }
@@ -431,7 +451,8 @@ final class BuildTimeConstantPool {
                         // error at runtime.
                         if (originalJavaMethod != null) {
                             JavaMethod interpreterMethod = BuildTimeInterpreterUniverse.singleton().methodOrUnresolved(originalJavaMethod);
-                            if (interpreterMethod instanceof InterpreterResolvedJavaMethod iMethod) {
+                            if (interpreterMethod instanceof InterpreterResolvedJavaMethod iMethod && iMethod.getNativeEntryPointHolderConstant() == null) {
+                                /* Crema already set the entry points, some to its own substitutions. */
                                 iMethod.setNativeEntryPoint(InterpreterResolvedJavaMethod.createMethodRef((ResolvedJavaMethod) originalJavaMethod));
                                 InterpreterUtil.log("[hydrate] setting method ref for %s", interpreterMethod);
                             }
