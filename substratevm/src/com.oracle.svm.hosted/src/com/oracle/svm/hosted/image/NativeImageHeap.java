@@ -70,6 +70,7 @@ import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
+import com.oracle.svm.core.hub.DynamicHubExtension;
 import com.oracle.svm.core.hub.DynamicHubSupport;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.image.ImageHeap;
@@ -1260,7 +1261,8 @@ public final class NativeImageHeap implements ImageHeap {
             if (object.getObjectClass().equals(ImageCodeInfo.class)) {
                 result |= ImageCodeInfo.flag;
             }
-            if (object.getObject() != null && (object.getObject().getClass().equals(DynamicHub.class) || object.getObject().getClass().equals(DynamicHubCompanion.class))) {
+            if (object.getObject() != null && (object.getObject().getClass().equals(DynamicHub.class) || object.getObject().getClass().equals(DynamicHubCompanion.class) ||
+                            object.getObject().getClass().equals(DynamicHubExtension.class))) {
                 result |= DynamicHubs.flag;
             }
             result |= getByReason(firstReason, additionalReasonInfoHashMap, reasonSupport);
