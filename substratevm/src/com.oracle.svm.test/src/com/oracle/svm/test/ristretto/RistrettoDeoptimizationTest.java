@@ -25,6 +25,7 @@
 package com.oracle.svm.test.ristretto;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -36,6 +37,11 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.WrongMethodTypeException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +81,13 @@ import org.junit.Test;
 public class RistrettoDeoptimizationTest {
     static final String REQUIRE_RISTRETTO_PROPERTY = "com.oracle.svm.test.ristretto";
     static final long COMPILATION_TIMEOUT_NANOS = 120_000_000_000L;
+
+    /**
+     * The handles of {@link Handles}, in the order of its fields. The test binds them in image
+     * code (see {@link #bindHandles}): the interpreter can only call AOT methods with compiled
+     * code of their own, which the {@code java.lang.invoke} API need not have in the test image.
+     */
+    public static MethodHandle[] handles;
 
     /** Registers the class files of the run-time classes as resources. */
     public static final class TestFeature implements Feature {
@@ -232,12 +245,128 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class);
+    /** A run-time {@link Runnable} implementation, the receiver of an interface method handle. */
+    public static final class Counter implements Runnable {
+        public int runs;
+
+        @Override
+        public void run() {
+            runs++;
+        }
+    }
+
+    /**
+     * Calls constant method handles, bound to the run-time classes by
+     * {@link RistrettoDeoptimizationTest#bindHandles}. Ristretto compiles the calls as direct
+     * calls to their targets (elide-dev/graal#112).
+     */
+    public static final class Handles {
+        static final MethodHandle ADD;
+        static final MethodHandle VALUE;
+        static final MethodHandle RUN;
+        static final MethodHandle NEW_ONE;
+        static final MethodHandle NEW_KEY;
+        static final MethodHandle HOOKED;
+
+        static {
+            MethodHandle[] h = RistrettoDeoptimizationTest.handles;
+            ADD = h[0];
+            VALUE = h[1];
+            RUN = h[2];
+            NEW_ONE = h[3];
+            NEW_KEY = h[4];
+            HOOKED = h[5];
+        }
+
+        public static int add(int a, int b) {
+            return a + b;
+        }
+
+        /**
+         * Returns {@code x + 1}. Runs {@code hook} if it is not null and then adds 1 to
+         * {@code compiled[1]} when still running compiled.
+         */
+        public static int hooked(int x, Runnable hook, int[] compiled) {
+            if (hook != null) {
+                hook.run();
+                compiled[1] += Probe.compiled();
+            }
+            return x + 1;
+        }
+
+        /**
+         * Sums {@code 2 * i + 5 + holder.shape.value()} over {@code n} iterations through the
+         * constant handles, runs {@code counter} once per iteration, and counts the compiled
+         * iterations in {@code compiled[0]}.
+         */
+        public static long exact(Holder holder, int n, Counter counter, int[] compiled) throws Throwable {
+            long sum = 0;
+            for (int i = 0; i < n; i++) {
+                sum += (int) ADD.invokeExact(i, 1);
+                sum += (int) ADD.invoke(i, 2);
+                sum += (int) VALUE.invokeExact(holder.shape);
+                sum += ((One) NEW_ONE.invokeExact()).value();
+                sum += ((Key) NEW_KEY.invokeExact(1)).v;
+                RUN.invokeExact((Runnable) counter);
+                compiled[0] += Probe.compiled();
+            }
+            return sum;
+        }
+
+        /** Calls {@link #ADD} with one argument: a {@link WrongMethodTypeException}. */
+        public static int wrongType(int x, int[] compiled) throws Throwable {
+            compiled[0] += Probe.compiled();
+            return (int) ADD.invokeExact(x);
+        }
+
+        /** Calls {@link #VALUE} on {@code shape}: a {@link NullPointerException} when null. */
+        public static int value(Shape shape, int[] compiled) throws Throwable {
+            compiled[0] += Probe.compiled();
+            return (int) VALUE.invokeExact(shape);
+        }
+
+        /**
+         * Sums {@code holder.shape.value() + i + 1} over {@code n} iterations through the constant
+         * handles and runs {@code hook} inside {@link #hooked} halfway. {@code compiled[0]} and
+         * {@code compiled[2]} count the compiled iterations before and after the hook, and
+         * {@code compiled[1]} whether {@link #hooked} was still compiled after the hook.
+         */
+        public static long lazy(Holder holder, int n, Runnable hook, int[] compiled) throws Throwable {
+            long sum = 0;
+            for (int i = 0; i < n; i++) {
+                sum += (int) VALUE.invokeExact(holder.shape);
+                Runnable iterationHook = i == n / 2 ? hook : null;
+                sum += (int) HOOKED.invokeExact(i, iterationHook, compiled);
+                compiled[i < n / 2 ? 0 : 2] += Probe.compiled();
+            }
+            return sum;
+        }
+    }
+
+    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, Counter.class, Handles.class);
 
     @Before
     public void requireRistretto() {
         Assume.assumeTrue("Native Image only", ImageInfo.inImageRuntimeCode());
         Assume.assumeTrue("Run with -D" + REQUIRE_RISTRETTO_PROPERTY + "=true in an image with Ristretto", Boolean.getBoolean(REQUIRE_RISTRETTO_PROPERTY));
+    }
+
+    /**
+     * Binds the handles of {@link Handles} to the run-time classes of {@code loader} and returns
+     * its run-time {@link Handles} class, whose initializer picks them up.
+     */
+    private static Class<?> bindHandles(RuntimeClassLoader loader) throws ReflectiveOperationException {
+        MethodHandles.Lookup lookup = MethodHandles.lookup();
+        Class<?> handlesClass = loader.loadClass(Handles.class.getName());
+        Class<?> shapeClass = loader.loadClass(Shape.class.getName());
+        handles = new MethodHandle[]{
+                        lookup.findStatic(handlesClass, "add", MethodType.methodType(int.class, int.class, int.class)),
+                        lookup.findVirtual(shapeClass, "value", MethodType.methodType(int.class)),
+                        lookup.findVirtual(Runnable.class, "run", MethodType.methodType(void.class)),
+                        lookup.findConstructor(loader.loadClass(One.class.getName()), MethodType.methodType(void.class)),
+                        lookup.findConstructor(loader.loadClass(Key.class.getName()), MethodType.methodType(void.class, int.class)),
+                        lookup.findStatic(handlesClass, "hooked", MethodType.methodType(int.class, int.class, Runnable.class, int[].class))};
+        return handlesClass;
     }
 
     /**
@@ -375,6 +504,95 @@ public class RistrettoDeoptimizationTest {
         });
     }
 
+    /**
+     * Compiled code calls constant method handles to static, virtual, interface and constructor
+     * targets directly (elide-dev/graal#112): the results, a {@link WrongMethodTypeException} for
+     * a call of the wrong type and a {@link NullPointerException} for a null receiver are those of
+     * the interpreter.
+     */
+    @Test
+    public void constantMethodHandleCallsCompileToDirectCalls() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Class<?> holderClass = loader.loadClass(Holder.class.getName());
+        Class<?> shapeClass = loader.loadClass(Shape.class.getName());
+        Object holder = holderClass.getConstructor().newInstance();
+        holderClass.getField("shape").set(holder, loader.loadClass(One.class.getName()).getConstructor().newInstance());
+        Class<?> counterClass = loader.loadClass(Counter.class.getName());
+        Object counter = counterClass.getConstructor().newInstance();
+        Class<?> handlesClass = bindHandles(loader);
+        Method exact = handlesClass.getMethod("exact", holderClass, int.class, counterClass, int[].class);
+        Method wrongType = handlesClass.getMethod("wrongType", int.class, int[].class);
+        Method value = handlesClass.getMethod("value", shapeClass, int[].class);
+
+        int n = 100;
+        /* Each iteration adds 2 * i + 5 + One.value(). */
+        long expected = (long) n * (n - 1) + 6L * n;
+        awaitCompiled("Handles.exact", () -> {
+            int[] compiled = new int[1];
+            assertEquals(expected, (long) invoke(exact, holder, n, counter, compiled));
+            return compiled[0] == n;
+        });
+        assertTrue("the interface handle must run the counter", (int) counterClass.getField("runs").get(counter) >= n);
+
+        int[] compiled = new int[1];
+        assertThrows(WrongMethodTypeException.class, () -> invokeThrowing(wrongType, 1, compiled));
+        awaitCompiled("Handles.wrongType", () -> {
+            int[] c = new int[1];
+            assertThrows(WrongMethodTypeException.class, () -> invokeThrowing(wrongType, 1, c));
+            return c[0] == 1;
+        });
+
+        Object one = holderClass.getField("shape").get(holder);
+        assertThrows(NullPointerException.class, () -> invokeThrowing(value, null, new int[1]));
+        awaitCompiled("Handles.value", () -> {
+            int[] c = new int[1];
+            assertEquals(1, (int) invoke(value, one, c));
+            return c[0] == 1;
+        });
+        assertThrows(NullPointerException.class, () -> invokeThrowing(value, null, new int[1]));
+    }
+
+    /**
+     * Compiled code calls a constant method handle to {@link Handles#hooked}, whose hook loads a
+     * second {@link Shape} and so invalidates the code, which called {@link Shape#value()} through
+     * another constant handle assuming a single shape. The frame of the inlined target and the
+     * guest frame both resume in the interpreter.
+     */
+    @Test
+    public void deoptimizationInConstantMethodHandleTargetResumesInInterpreter() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Class<?> holderClass = loader.loadClass(Holder.class.getName());
+        Object holder = holderClass.getConstructor().newInstance();
+        holderClass.getField("shape").set(holder, loader.loadClass(One.class.getName()).getConstructor().newInstance());
+        Method lazy = bindHandles(loader).getMethod("lazy", holderClass, int.class, Runnable.class, int[].class);
+
+        Runnable noHook = () -> {
+        };
+        awaitCompiled("Handles.lazy", () -> {
+            int[] compiled = new int[3];
+            long sum = invoke(lazy, holder, 10, noHook, compiled);
+            assertEquals(10 + 55, sum);
+            return compiled[0] == 5 && compiled[2] == 5;
+        });
+
+        Runnable loadSecondShape = () -> {
+            try {
+                holderClass.getField("shape").set(holder, loader.loadClass(Two.class.getName()).getConstructor().newInstance());
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        };
+        int n = 1000;
+        int[] compiled = new int[3];
+        long sum = invoke(lazy, holder, n, loadSecondShape, compiled);
+        /* The hook runs after the Shape call of its iteration, so n / 2 + 1 iterations see One. */
+        long expected = (n / 2 + 1) * 1L + (n / 2 - 1) * 2L + (long) n * (n + 1) / 2;
+        assertEquals("iterations after the hook must call Two.value()", expected, sum);
+        assertEquals("all iterations before the hook must run compiled", n / 2, compiled[0]);
+        assertEquals("the handle target must resume in the interpreter after the hook", 0, compiled[1]);
+        assertEquals("iterations after the hook must run in the interpreter", 0, compiled[2]);
+    }
+
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
     private static void awaitCompiled(String what, BooleanSupplier compiledCall) {
         long deadline = System.nanoTime() + COMPILATION_TIMEOUT_NANOS;
@@ -391,6 +609,15 @@ public class RistrettoDeoptimizationTest {
             return (T) method.invoke(null, args);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
+        }
+    }
+
+    /** Like {@link #invoke}, but rethrows the exception of the invoked method. */
+    private static Object invokeThrowing(Method method, Object... args) throws Throwable {
+        try {
+            return method.invoke(null, args);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
         }
     }
 

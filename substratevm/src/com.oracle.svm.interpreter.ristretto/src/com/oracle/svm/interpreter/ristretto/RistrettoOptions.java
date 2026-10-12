@@ -76,6 +76,10 @@ public class RistrettoOptions {
     @Option(help = "Report a diagnostic message for a Ristretto compilation that runs longer than this many seconds and prevent this watcher from exiting the VM (0 leaves the generic CompilationWatchDog configuration unchanged).")//
     public static final RuntimeOptionKey<Integer> JITCompilationWatchdogTimeoutSeconds = new RuntimeOptionKey<>(0, NON_NEGATIVE, null);
 
+    @Option(help = "Compile a call through a constant direct method handle (MethodHandle.invokeExact, or invoke with a matching type, on a static final handle) " +
+                    "as a direct call to the handle's target instead of running its lambda forms in the interpreter.")//
+    public static final RuntimeOptionKey<Boolean> JITInlineConstantMethodHandles = new RuntimeOptionKey<>(true);
+
     @Option(help = "Trace decisions about when to compile what.")//
     public static final RuntimeOptionKey<Boolean> JITTraceCompilationQueuing = new RuntimeOptionKey<>(false);
 

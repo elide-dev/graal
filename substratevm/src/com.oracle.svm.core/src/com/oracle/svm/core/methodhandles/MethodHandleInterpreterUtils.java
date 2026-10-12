@@ -59,4 +59,22 @@ public final class MethodHandleInterpreterUtils {
     public static Target_java_lang_invoke_MemberName getInternalMemberName(MethodHandle handle) {
         return SubstrateUtil.cast(handle, Target_java_lang_invoke_MethodHandle.class).internalMemberName();
     }
+
+    /**
+     * Returns the member of a direct method handle, or null for any other handle. A direct method
+     * handle ({@code DirectMethodHandle} and its nested subclasses for special, interface and
+     * constructor calls) invokes its member through a {@code linkTo*} intrinsic, whatever
+     * {@code LambdaForm} it carries. Only handles for invocable members are returned: field
+     * accessors are also direct method handles, but go through different lambda forms.
+     */
+    public static Target_java_lang_invoke_MemberName getDirectMemberName(MethodHandle handle) {
+        if (!Target_java_lang_invoke_DirectMethodHandle.class.isInstance(handle)) {
+            return null;
+        }
+        Target_java_lang_invoke_MemberName member = SubstrateUtil.cast(handle, Target_java_lang_invoke_DirectMethodHandle.class).member;
+        if (member == null || !member.isInvocable()) {
+            return null;
+        }
+        return member;
+    }
 }
