@@ -116,6 +116,11 @@ public class CremaResolvedJavaMethodImpl extends InterpreterResolvedJavaMethod i
     }
 
     @Override
+    public jdk.vm.ci.meta.ExceptionHandler[] getExceptionHandlersOrNull() {
+        return getExceptionHandlers();
+    }
+
+    @Override
     public jdk.vm.ci.meta.ExceptionHandler[] getExceptionHandlers() {
         /*
          * GR-70247 The interpreter should primarily use classfile.ExceptionHandler. This would

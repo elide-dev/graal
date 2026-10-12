@@ -212,7 +212,14 @@ public class RistrettoUtils {
         }
         // java.lang.Object::<init> can be inlined also at ristretto runtime, its special in that we
         // do not have its bytecode but its always available at runtime and its empty
-        return method.getDeclaringClass().isJavaLangObject() && method.isConstructor() && method.getSignature().getParameterCount(false) == 0;
+        if (method.getDeclaringClass().isJavaLangObject() && method.isConstructor() && method.getSignature().getParameterCount(false) == 0) {
+            return true;
+        }
+        /*
+         * AOT methods that kept their bytecodes with a build-time constant pool (see
+         * InterpreterOptions.RistrettoInlinableAOTClasses) can be inlined like runtime-loaded ones.
+         */
+        return method.getInterpretedCode() != null && method.getDeclaringClass().getConstantPool() != null;
     }
 
     /** Determines whether the given type has been loaded at runtime. */

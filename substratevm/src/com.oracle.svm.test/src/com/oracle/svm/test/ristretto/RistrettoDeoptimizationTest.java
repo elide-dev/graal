@@ -40,6 +40,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 
 import org.graalvm.nativeimage.ImageInfo;
@@ -146,7 +147,53 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class);
+    /**
+     * A map key whose hashCode and equals exist only in the run-time copy of this class. The first
+     * {@code hashCode()} call after {@link #hook} is set runs the hook.
+     */
+    public static final class Key {
+        public static Runnable hook;
+
+        public final int v;
+
+        public Key(int v) {
+            this.v = v;
+        }
+
+        @Override
+        public int hashCode() {
+            Runnable h = hook;
+            if (h != null) {
+                hook = null;
+                h.run();
+            }
+            return v * 31 + 7;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Key k && k.v == v;
+        }
+    }
+
+    public static final class MapUser {
+        /**
+         * Sums {@code map.get(key) * holder.shape.value()} over {@code keys} and counts the compiled
+         * iterations before and after the first {@link Key} in {@code compiled[0]} and
+         * {@code compiled[1]}. Ristretto inlines {@link ConcurrentHashMap#get}, an AOT method (see
+         * {@code -H:RistrettoInlinableAOTClasses}), which calls {@link Key#hashCode()}.
+         */
+        public static long lookup(ConcurrentHashMap<Object, Integer> map, Object[] keys, Holder holder, int[] compiled) {
+            long sum = 0;
+            for (Object key : keys) {
+                sum += map.get(key) * holder.shape.value();
+                compiled[key instanceof Key ? 1 : 0] += Probe.compiled();
+            }
+            return sum;
+        }
+    }
+
+    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class);
 
     @Before
     public void requireRistretto() {
@@ -211,6 +258,57 @@ public class RistrettoDeoptimizationTest {
         assertEquals("iterations after the hook must call Two.value()", n / 2 * 1 + n / 2 * 2, sum);
         assertEquals("all iterations before the hook must run compiled", n / 2, compiled[0]);
         assertEquals("iterations after the hook must run in the interpreter", 0, compiled[1]);
+    }
+
+    /**
+     * Compiled code inlined {@link ConcurrentHashMap#get} (an AOT method), which calls
+     * {@link Key#hashCode()}. The hook there loads a second {@link Shape} and invalidates the code
+     * while the inlined frame is active. Both frames resume in the interpreter, the AOT method from
+     * its retained bytecodes (elide-dev/graal#103).
+     */
+    @Test
+    public void deoptimizationInInlinedAOTMethodResumesInInterpreter() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Class<?> holderClass = loader.loadClass(Holder.class.getName());
+        Object holder = holderClass.getConstructor().newInstance();
+        holderClass.getField("shape").set(holder, loader.loadClass(One.class.getName()).getConstructor().newInstance());
+        Class<?> keyClass = loader.loadClass(Key.class.getName());
+        Method lookup = loader.loadClass(MapUser.class.getName()).getMethod("lookup", ConcurrentHashMap.class, Object[].class, holderClass, int[].class);
+
+        int n = 64;
+        ConcurrentHashMap<Object, Integer> map = new ConcurrentHashMap<>();
+        Object[] intKeys = new Object[n];
+        Object[] mixedKeys = new Object[n];
+        for (int i = 0; i < n; i++) {
+            intKeys[i] = i;
+            map.put(i, i);
+            Object key = keyClass.getConstructor(int.class).newInstance(i);
+            map.put(key, 2 * i);
+            mixedKeys[i] = i < n / 2 ? Integer.valueOf(i) : key;
+        }
+        awaitCompiled("MapUser.lookup", () -> {
+            int[] compiled = new int[2];
+            long sum = invoke(lookup, map, intKeys, holder, compiled);
+            assertEquals((long) n * (n - 1) / 2, sum);
+            return compiled[0] == n;
+        });
+
+        keyClass.getField("hook").set(null, (Runnable) () -> {
+            try {
+                holderClass.getField("shape").set(holder, loader.loadClass(Two.class.getName()).getConstructor().newInstance());
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        });
+        long expected = 0;
+        for (int i = 0; i < n; i++) {
+            expected += i < n / 2 ? i : 2 * i * 2;
+        }
+        int[] compiled = new int[2];
+        assertEquals("keys after the hook must use the value of Two", expected, (long) invoke(lookup, map, mixedKeys, holder, compiled));
+        assertEquals("Integer keys before the hook must run compiled", n / 2, compiled[0]);
+        assertEquals("Key iterations must run in the interpreter", 0, compiled[1]);
+        assertEquals("lookups after deoptimization", (long) n * (n - 1), (long) invoke(lookup, map, intKeys, holder, new int[2]));
     }
 
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
