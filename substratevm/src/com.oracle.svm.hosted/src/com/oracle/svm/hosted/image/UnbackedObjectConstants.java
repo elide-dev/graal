@@ -65,6 +65,8 @@ public final class UnbackedObjectConstants {
 final class UnbackedObjectConstantsFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess a) {
-        ((DuringSetupAccessImpl) a).registerObjectToConstantReplacer(UnbackedObjectConstants::replace);
+        DuringSetupAccessImpl access = (DuringSetupAccessImpl) a;
+        var hostedValuesProvider = access.getUniverse().getHostedValuesProvider();
+        access.registerJVMCIObjectToConstantReplacer(constant -> UnbackedObjectConstants.replace(hostedValuesProvider.asObject(Object.class, constant)));
     }
 }
