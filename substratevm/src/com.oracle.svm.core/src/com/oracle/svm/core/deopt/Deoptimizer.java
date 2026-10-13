@@ -57,6 +57,7 @@ import com.oracle.svm.core.code.FrameInfoQueryResult.ValueInfo;
 import com.oracle.svm.core.code.UntetheredCodeInfo;
 import com.oracle.svm.core.collections.RingBuffer;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.deopt.DeoptimizedFrame.DeoptTargetTier;
 import com.oracle.svm.core.deopt.DeoptimizedFrame.RelockObjectData;
 import com.oracle.svm.core.graal.code.StubCallingConvention;
@@ -1620,7 +1621,7 @@ public final class Deoptimizer {
                             if (targetValue.getKind().isObject() && !targetValue.isCompressedReference()) {
                                 size = FrameAccess.uncompressedReferenceSize();
                             } else {
-                                size = ObjectLayout.singleton().sizeInBytes(con.getJavaKind());
+                                size = ObjectLayoutCompilerSupport.sizeInBytes(ObjectLayout.singleton(), con.getJavaKind());
                             }
                             int endOffset = totalOffset + size;
                             if (endOffset > newEndOfParams) {
@@ -1812,7 +1813,7 @@ public final class Deoptimizer {
         /** All references in deopt frames are compressed when compressed references are enabled. */
         private final int sizeofCompressedReference = ObjectLayout.singleton().getReferenceSize();
         private final int sizeofUncompressedReference = FrameAccess.uncompressedReferenceSize();
-        private final int arrayBaseOffset = ObjectLayout.singleton().getArrayBaseOffset(JavaKind.Byte);
+        private final int arrayBaseOffset = ObjectLayoutCompilerSupport.getArrayBaseOffset(ObjectLayout.singleton(), JavaKind.Byte);
 
         private static final ArrayIndexOutOfBoundsException arrayIndexOutOfBoundsException = new ArrayIndexOutOfBoundsException("TargetContent.offsetCheck");
 
