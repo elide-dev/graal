@@ -75,8 +75,11 @@ import jdk.vm.ci.meta.Signature;
  * phases may inline. The same replacement serves the {@code invokedynamic} adapter
  * {@code Invokers$Holder.linkToTargetMethod(args..., appendix)} and the constructor adapter
  * {@code DirectMethodHandle$Holder.newInvokeSpecial(mh, args...)} when their handle is constant.
- * Other handles (bound handles, type adapters, field accessors) keep the generic plugin's
- * behavior. {@link RistrettoOptions#JITInlineConstantMethodHandles} turns the replacement off.
+ * A constructor handle (the call site target of a capturing lambda, for one) becomes an allocation
+ * and the inlined constructor, since a constructor call returns nothing while the adapter returns
+ * the new instance (see {@link #tryEmitNewInvokeSpecial}). Other handles (bound handles, type
+ * adapters, field accessors) keep the generic plugin's behavior.
+ * {@link RistrettoOptions#JITInlineConstantMethodHandles} turns the replacement off.
  */
 public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandleWithExceptionPlugin {
     /** JDK holder for direct method-handle adapters. */
@@ -295,22 +298,35 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
     }
 
     /**
-     * Emits the allocation and constructor call of a direct method handle to {@code constructor},
-     * called with the constructor arguments {@code args}, in place of {@code adapter}.
+     * Emits the allocation and inlined constructor call of a direct method handle to
+     * {@code constructor}, called with the constructor arguments {@code args}, in place of
+     * {@code adapter}, and pushes the new instance as the adapter's result.
+     * <p>
+     * The constructor is inlined at once rather than emitted as a call: the adapter returns the
+     * new instance, but the constructor returns nothing, and the parser creates the frame state
+     * of a call with its own result on the operand stack, before this plugin can push the
+     * instance. The state is that of the bytecode after the adapter's: when that bytecode
+     * consumes the result (an {@code astore}, say), the parser rejects it as a stack underflow
+     * (elide-dev/graal#131); and a lazy deoptimization while the constructor is on the stack would
+     * take the result from the return register, which a constructor does not set. With the
+     * constructor inlined, the replacement has no call to attach a state to.
      */
     private static boolean tryEmitNewInvokeSpecial(GraphBuilderContext b, ResolvedJavaMethod adapter, ResolvedJavaMethod constructor, ValueNode[] args) {
         if (!constructor.isConstructor()) {
-            return false;
+            return trace(b, adapter, "the member is not a constructor");
         }
         ResolvedJavaType instanceType = constructor.getDeclaringClass();
         if (!instanceType.isInitialized() || instanceType.isAbstract() || instanceType.isInterface()) {
-            return false;
+            return trace(b, adapter, "the class of the constructor cannot be instantiated");
         }
         if (args.length != constructor.getSignature().getParameterCount(false)) {
-            return false;
+            return trace(b, adapter, "the argument count does not match");
         }
         if (adapter.getSignature().getReturnKind().getStackKind() != JavaKind.Object) {
-            return false;
+            return trace(b, adapter, "the adapter does not return an object");
+        }
+        if (!canForceInline(b, constructor)) {
+            return trace(b, adapter, "the constructor cannot be inlined");
         }
         ValueNode[] replacementArgs = new ValueNode[args.length + 1];
         replacementArgs[0] = b.add(createConstructorAllocation(instanceType, b.currentBlockCatchesOOME()));
@@ -318,9 +334,14 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
 
         maybeCastInvokeBasicArguments(b, constructor, replacementArgs, true);
         ValueNode newInstance = replacementArgs[0];
-        b.handleReplacedInvoke(InvokeKind.Special, constructor, replacementArgs, false);
+        ensureForcedInlineSucceeded(b, constructor, b.handleReplacedInvoke(InvokeKind.Special, constructor, replacementArgs, true));
         if (!b.hasParseTerminated()) {
+            /* The inlined constructor always throws otherwise, and the rest of the block is dead. */
             b.addPush(JavaKind.Object, newInstance);
+        }
+        if (RistrettoOptions.JITTraceCompilation.getValue()) {
+            Log.log().string("[Ristretto Compiler] Replaced ").string(adapter.format("%H.%n(%p)")).string(" in ").string(b.getMethod().format("%H.%n(%p)"))
+                            .string(" with an allocation and the inlined constructor ").string(constructor.format("%H.%n(%p)")).newline();
         }
         return true;
     }
@@ -411,19 +432,25 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
         }
     }
 
-    /** Reconciles the direct target return kind with the bypassed adapter signature. */
+    /**
+     * Reconciles the direct target return kind with the bypassed adapter signature: the target's
+     * result is on the operand stack in place of the adapter's. A result the adapter discards is
+     * popped; any other difference cannot be compiled.
+     */
     private static void adjustReturnKind(GraphBuilderContext b, ResolvedJavaMethod adapter, ResolvedJavaMethod target) {
         if (b.hasParseTerminated()) {
+            /* The inlined target always throws, and the rest of the block is dead. */
             return;
         }
 
         JavaKind adapterReturnKind = adapter.getSignature().getReturnKind().getStackKind();
         JavaKind targetReturnKind = target.getSignature().getReturnKind().getStackKind();
-        if (adapterReturnKind != targetReturnKind) {
-            b.pop(targetReturnKind);
-            if (adapterReturnKind != JavaKind.Void) {
-                throw b.bailout("Cannot bypass method-handle adapter with a different return kind");
-            }
+        if (adapterReturnKind == targetReturnKind) {
+            return;
         }
+        if (adapterReturnKind != JavaKind.Void) {
+            throw b.bailout("Cannot bypass method-handle adapter with a different return kind");
+        }
+        b.pop(targetReturnKind);
     }
 }
