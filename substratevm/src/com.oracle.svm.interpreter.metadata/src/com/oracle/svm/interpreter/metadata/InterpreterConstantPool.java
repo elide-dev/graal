@@ -290,15 +290,46 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         throw new ClassFormatError(message);
     }
 
+    /**
+     * Returns the type a constant pool entry refers to: the class of a class entry, or the holder
+     * class of a field or method reference. Ristretto's bytecode parser needs it for
+     * {@code invokeinterface}, also in the AOT bytecodes it inlines, whose classes have this
+     * build-time constant pool (elide-dev/graal#121).
+     */
+    @Override
+    public JavaType lookupReferencedType(int cpi, int opcode) {
+        int declaringClassCPI = -1;
+        switch (opcode) {
+            case Bytecodes.CHECKCAST:
+            case Bytecodes.INSTANCEOF:
+            case Bytecodes.NEW:
+            case Bytecodes.ANEWARRAY:
+            case Bytecodes.MULTIANEWARRAY:
+            case Bytecodes.LDC:
+            case Bytecodes.LDC_W:
+            case Bytecodes.LDC2_W:
+                declaringClassCPI = cpi;
+                break;
+            case Bytecodes.GETSTATIC:
+            case Bytecodes.PUTSTATIC:
+            case Bytecodes.GETFIELD:
+            case Bytecodes.PUTFIELD:
+            case Bytecodes.INVOKEVIRTUAL:
+            case Bytecodes.INVOKESPECIAL:
+            case Bytecodes.INVOKESTATIC:
+            case Bytecodes.INVOKEINTERFACE:
+                declaringClassCPI = memberClassIndex(cpi);
+                break;
+            default:
+                throw VMError.shouldNotReachHere("Unexpected opcode: " + opcode); // ExcludeFromJacocoGeneratedReport
+        }
+        return findClassAt(declaringClassCPI);
+    }
+
     // region Unimplemented methods
 
     @Override
     public void loadReferencedType(int cpi, int opcode) {
-        throw VMError.intentionallyUnimplemented();
-    }
-
-    @Override
-    public JavaType lookupReferencedType(int cpi, int opcode) {
         throw VMError.intentionallyUnimplemented();
     }
 

@@ -301,6 +301,14 @@ final class RistrettoInlinableAOTMethods {
                         return "uses bytecode " + bytecode;
                     }
                     case INVOKEVIRTUAL, INVOKEINTERFACE, INVOKESPECIAL, INVOKESTATIC -> {
+                        if (bytecode == INVOKEINTERFACE) {
+                            /*
+                             * Inlining these (HashMap.forEach, AtomicLong.getAndAccumulate and other
+                             * methods that call a functional interface) into OSR code can resume
+                             * with a null after deoptimization (elide-dev/graal#123).
+                             */
+                            return "invokeinterface at bci " + bci;
+                        }
                         JavaMethod callee = cp.lookupMethod(BytecodeStream.readCPI(code, bci), bytecode);
                         if (!(callee instanceof ResolvedJavaMethod resolvedCallee)) {
                             return "unresolved callee at bci " + bci;
