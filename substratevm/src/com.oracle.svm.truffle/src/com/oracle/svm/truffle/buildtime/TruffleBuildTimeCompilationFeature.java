@@ -395,6 +395,7 @@ public final class TruffleBuildTimeCompilationFeature implements InternalFeature
              */
             insertTruffleSafepoints(graph);
             int nodes = graph.getNodeCount();
+            AOTGraphHistogram.print(name, graph);
             Map<String, Integer> sites = allocationSites(graph);
             int allocations = sites.values().stream().mapToInt(Integer::intValue).sum();
             if (budget > 0 && nodes > budget) {
