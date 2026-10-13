@@ -39,7 +39,8 @@ import org.graalvm.word.impl.Word;
 
 /**
  * Foreign call bridges for the Shenandoah barriers emitted by the Graal AOT compiler (see
- * {@link com.oracle.svm.core.graal.amd64.AMD64SubstrateShenandoahBarrierSetLIRGenerator}).
+ * {@link com.oracle.svm.core.graal.amd64.AMD64SubstrateShenandoahBarrierSetLIRGenerator} and
+ * {@link com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierSetLIRGenerator}).
  *
  * The AOT-generated barrier code inlines a fast-path that tests the per-thread {@code gc_state} and
  * only calls these (uninterruptible, leaf) stubs on the slow path, i.e. when a barrier is actually
