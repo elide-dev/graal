@@ -37,6 +37,7 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
+import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -51,6 +52,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntBinaryOperator;
+import java.util.function.IntUnaryOperator;
 
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.hosted.Feature;
@@ -116,6 +119,9 @@ public class RistrettoDeoptimizationTest {
                 RuntimeReflection.register(AtomicReferenceArray.class.getMethod("get", int.class), AtomicReference.class.getMethod("compareAndSet", Object.class, Object.class),
                                 Objects.class.getMethod("requireNonNullElse", Object.class, Object.class));
                 RuntimeReflection.register(AtomicReferenceArray.class.getDeclaredField("AA"), AtomicReference.class.getDeclaredField("VALUE"));
+                /* The bootstrap method of the lambda call sites of Lambdas, which the interpreter links. */
+                RuntimeReflection.register(
+                                LambdaMetafactory.class.getMethod("metafactory", MethodHandles.Lookup.class, String.class, MethodType.class, MethodType.class, MethodHandle.class, MethodType.class));
             } catch (NoSuchMethodException | NoSuchFieldException e) {
                 throw new AssertionError(e);
             }
@@ -357,9 +363,55 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
+    /**
+     * Uses {@code invokedynamic} call sites: lambdas and method references. Ristretto must compile
+     * their methods (elide-dev/graal#131). String concatenation is an {@code invokedynamic} too,
+     * but its bootstrap method needs the lambda forms of {@code java.lang.invoke}, which the test
+     * image does not keep.
+     */
+    public static final class Lambdas {
+        public static int twice(int x) {
+            return 2 * x;
+        }
+
+        /**
+         * Sums {@code acc + i + seed} over {@code n} iterations through a capturing lambda, whose
+         * call site target is a constructor handle of the lambda class, and stores the lambda in a
+         * local (an {@code astore} right after the {@code invokedynamic}). Adds 1 to
+         * {@code compiled[0]} when compiled.
+         */
+        public static int capturing(int seed, int n, int[] compiled) {
+            int[] ref = {seed};
+            IntBinaryOperator op = (a, b) -> a + b + ref[0];
+            int acc = 0;
+            for (int i = 0; i < n; i++) {
+                acc = op.applyAsInt(acc, i);
+            }
+            compiled[0] += Probe.compiled();
+            return acc;
+        }
+
+        /**
+         * Runs {@code counter} {@code n} times through a bound method reference (capturing) and sums
+         * {@code 2 * i} through an unbound one (not capturing). Adds 1 to {@code compiled[0]} when
+         * compiled.
+         */
+        public static int methodReferences(Counter counter, int n, int[] compiled) {
+            Runnable run = counter::run;
+            IntUnaryOperator twice = Lambdas::twice;
+            int sum = 0;
+            for (int i = 0; i < n; i++) {
+                run.run();
+                sum += twice.applyAsInt(i);
+            }
+            compiled[0] += Probe.compiled();
+            return sum;
+        }
+    }
+
     static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class,
                     Counter.class,
-                    Handles.class);
+                    Handles.class, Lambdas.class);
 
     @Before
     public void requireRistretto() {
@@ -625,6 +677,37 @@ public class RistrettoDeoptimizationTest {
         assertEquals("all iterations before the hook must run compiled", n / 2, compiled[0]);
         assertEquals("the handle target must resume in the interpreter after the hook", 0, compiled[1]);
         assertEquals("iterations after the hook must run in the interpreter", 0, compiled[2]);
+    }
+
+    /**
+     * Compiled code uses {@code invokedynamic} call sites. The target of a capturing lambda's call
+     * site is a constructor handle of the lambda class; Ristretto replaced the call site by an
+     * allocation and a constructor call, but the parser verified the frame state of the call
+     * before the new instance was on the operand stack and bailed out of every method with such a
+     * lambda (elide-dev/graal#131). Method references link to other handle kinds.
+     */
+    @Test
+    public void compiledCodeUsesInvokeDynamicCallSites() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Class<?> lambdasClass = loader.loadClass(Lambdas.class.getName());
+        Class<?> counterClass = loader.loadClass(Counter.class.getName());
+        Object counter = counterClass.getConstructor().newInstance();
+        Method capturing = lambdasClass.getMethod("capturing", int.class, int.class, int[].class);
+        Method methodReferences = lambdasClass.getMethod("methodReferences", counterClass, int.class, int[].class);
+
+        int n = 8;
+        awaitCompiled("Lambdas.capturing", () -> {
+            int[] compiled = new int[1];
+            /* Each iteration adds i + 3. */
+            assertEquals(n * (n - 1) / 2 + 3 * n, (int) invoke(capturing, 3, n, compiled));
+            return compiled[0] == 1;
+        });
+        awaitCompiled("Lambdas.methodReferences", () -> {
+            int[] compiled = new int[1];
+            assertEquals(n * (n - 1), (int) invoke(methodReferences, counter, n, compiled));
+            return compiled[0] == 1;
+        });
+        assertTrue("the bound method reference must run the counter", (int) counterClass.getField("runs").get(counter) >= n);
     }
 
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
