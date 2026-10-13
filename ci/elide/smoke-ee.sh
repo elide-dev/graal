@@ -67,7 +67,9 @@ build_and_run() { # <name> <native-image args...>
   "./${name}"
 }
 
-build_and_run smoke-plain -J-Xlog:class+load=info:file=classload.log
+# A hosted option that only the fork has: the launcher must accept it (see rebuild_launcher in
+# build-ee.py, elide-dev/graal#122).
+build_and_run smoke-plain -J-Xlog:class+load=info:file=classload.log -H:-RistrettoInlineAOTMethods
 # The image builder must use the fork's compiler (lib/jvmci/graal.jar, see build-ee.py) under the
 # enterprise compiler.
 if [ -f "${HOME_DIR}/lib/jvmci/graal.jar" ]; then
