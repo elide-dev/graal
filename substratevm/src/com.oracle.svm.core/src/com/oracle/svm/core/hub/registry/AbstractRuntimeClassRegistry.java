@@ -339,7 +339,8 @@ public abstract sealed class AbstractRuntimeClassRegistry extends AbstractClassR
         try (var _ = ClassLoading.allowArbitraryClassLoading()) {
             return loadClass(superName);
         } catch (ClassNotFoundException e) {
-            NoClassDefFoundError error = new NoClassDefFoundError(superName.toString());
+            /* Like HotSpot, name the missing class by its internal name, not its descriptor. */
+            NoClassDefFoundError error = new NoClassDefFoundError(TypeSymbols.toClassNameEntry(superName).toString());
             error.initCause(e);
             throw error;
         } finally {

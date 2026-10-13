@@ -42,6 +42,7 @@ import com.oracle.svm.core.monitor.MonitorSupport;
 import com.oracle.svm.espresso.classfile.ConstantPool;
 import com.oracle.svm.espresso.classfile.descriptors.Symbol;
 import com.oracle.svm.espresso.classfile.descriptors.Type;
+import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
 import com.oracle.svm.interpreter.debug.DebuggerEvents;
 import com.oracle.svm.interpreter.debug.EventKind;
 import com.oracle.svm.interpreter.debug.SteppingControl;
@@ -77,6 +78,7 @@ import jdk.vm.ci.meta.JavaKind;
 /// semantic accessors for locals, operand-stack slots, locks, and stack-walking state.
 /// The profiling and debugger state is installed when interpretation starts because frames
 /// reconstructed for deoptimization exist before their interpreter execution begins.
+@InternalVMMethod
 public final class InterpreterFrame {
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
