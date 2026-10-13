@@ -52,6 +52,7 @@ import com.oracle.svm.espresso.classfile.descriptors.Type;
 import com.oracle.svm.espresso.classfile.descriptors.TypeSymbols;
 import com.oracle.svm.espresso.shared.resolver.CallKind;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
+import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
 import com.oracle.svm.interpreter.metadata.serialization.VisibleForSerialization;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterAnalysis;
 import com.oracle.svm.shared.util.SubstrateUtil;
@@ -76,7 +77,12 @@ import jdk.vm.ci.meta.UnresolvedJavaType;
  * <p>
  * This class doesn't support runtime resolution on purpose, but supports pre-resolved entries
  * instead for AOT types.
+ * <p>
+ * Constant pool resolution runs on behalf of the interpreted method, so, like the interpreter loop
+ * itself, its frames are hidden from stack traces: an error it raises leads with the guest frame,
+ * as on HotSpot.
  */
+@InternalVMMethod
 public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.meta.ConstantPool {
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
@@ -642,8 +648,10 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
      * or CLASS entry. It is used to throw the correct exception on subsequent accesses to that
      * entry.
      */
+    @InternalVMMethod
     public static final class StickyConstantError {
         private final LinkageError originalException;
+        private boolean originalThrown;
         private Constructor<? extends LinkageError> cachedConstructor;
 
         public StickyConstantError(LinkageError originalException) {
@@ -651,10 +659,20 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         }
 
         /**
-         * Throws an exception when a failed DYNAMIC or CLASS entry is accessed again. It tries to create a
-         * fresh exception to give an accurate stack trace.
+         * Throws an exception when a failed DYNAMIC or CLASS entry is accessed. The access that
+         * failed the resolution throws the exception that resolution raised, like HotSpot does; its
+         * stack trace is the accurate one. Later accesses get a fresh exception with the same
+         * message and cause, so that their stack traces are accurate too.
          */
         LinkageError throwOnAccess() {
+            if (!originalThrown) {
+                /*
+                 * Threads that raced to resolve the entry may all throw the original exception.
+                 * That is harmless: it only means a stack trace from one of the failing accesses.
+                 */
+                originalThrown = true;
+                throw originalException;
+            }
             if (originalException.getClass().getClassLoader() == null) {
                 /*
                  * Create a fresh exception for boot class loader exceptions. We avoid doing this
@@ -662,21 +680,58 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
                  * and getCause implementations. See JDK-8349141.
                  */
                 String message = originalException.getMessage();
-                var constructor = getConstructor();
-                if (constructor != null) {
-                    try {
-                        LinkageError error = constructor.newInstance(message);
-                        Throwable cause = originalException.getCause();
-                        if (cause != null) {
-                            error.initCause(cause);
+                LinkageError error = newLinkageError(originalException.getClass(), message);
+                if (error == null) {
+                    var constructor = getConstructor();
+                    if (constructor != null) {
+                        try {
+                            error = constructor.newInstance(message);
+                        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                            throw VMError.shouldNotReachHere(e);
                         }
-                        throw error;
-                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-                        VMError.shouldNotReachHere(e);
                     }
+                }
+                if (error != null) {
+                    Throwable cause = originalException.getCause();
+                    if (cause != null) {
+                        error.initCause(cause);
+                    }
+                    throw error;
                 }
             }
             throw originalException;
+        }
+
+        /**
+         * Creates the errors that the VM itself raises during resolution directly, so that the
+         * fresh exception's stack trace leads with the guest frame, not with reflection frames.
+         * Returns null for any other type.
+         */
+        private static LinkageError newLinkageError(Class<? extends LinkageError> type, String message) {
+            if (type == NoClassDefFoundError.class) {
+                return new NoClassDefFoundError(message);
+            } else if (type == NoSuchMethodError.class) {
+                return new NoSuchMethodError(message);
+            } else if (type == NoSuchFieldError.class) {
+                return new NoSuchFieldError(message);
+            } else if (type == IllegalAccessError.class) {
+                return new IllegalAccessError(message);
+            } else if (type == AbstractMethodError.class) {
+                return new AbstractMethodError(message);
+            } else if (type == IncompatibleClassChangeError.class) {
+                return new IncompatibleClassChangeError(message);
+            } else if (type == ClassCircularityError.class) {
+                return new ClassCircularityError(message);
+            } else if (type == ClassFormatError.class) {
+                return new ClassFormatError(message);
+            } else if (type == VerifyError.class) {
+                return new VerifyError(message);
+            } else if (type == BootstrapMethodError.class) {
+                return new BootstrapMethodError(message);
+            } else if (type == LinkageError.class) {
+                return new LinkageError(message);
+            }
+            return null;
         }
 
         private Constructor<? extends LinkageError> getConstructor() {
@@ -686,10 +741,10 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
                     cachedConstructor = exceptionType.getConstructor(String.class);
                 } catch (NoSuchMethodException e) {
                     /*
-                     * The only boot classes known to miss the String constructor are native image's
-                     * Missing*RegistrationError.
+                     * Either the type has no String constructor (native image's
+                     * Missing*RegistrationError), or the image has no reflection metadata for it.
+                     * The original exception is thrown again in both cases.
                      */
-                    assert exceptionType.getName().startsWith("Missing") && exceptionType.getName().endsWith("RegistrationError");
                     return null;
                 }
                 /*

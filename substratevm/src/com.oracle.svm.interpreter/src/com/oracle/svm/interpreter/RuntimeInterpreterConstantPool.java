@@ -43,6 +43,7 @@ import com.oracle.svm.espresso.classfile.descriptors.Symbol;
 import com.oracle.svm.espresso.classfile.descriptors.Type;
 import com.oracle.svm.espresso.classfile.descriptors.TypeSymbols;
 import com.oracle.svm.espresso.shared.meta.SignaturePolymorphicIntrinsic;
+import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
 import com.oracle.svm.interpreter.metadata.AccessChecks;
 import com.oracle.svm.interpreter.metadata.CremaResolvedObjectType;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool;
@@ -57,6 +58,7 @@ import jdk.vm.ci.meta.UnresolvedJavaField;
 import jdk.vm.ci.meta.UnresolvedJavaMethod;
 import jdk.vm.ci.meta.UnresolvedJavaType;
 
+@InternalVMMethod
 public final class RuntimeInterpreterConstantPool extends InterpreterConstantPool {
 
     public RuntimeInterpreterConstantPool(InterpreterResolvedObjectType holder, ParserKlass parserKlass) {
@@ -402,7 +404,6 @@ public final class RuntimeInterpreterConstantPool extends InterpreterConstantPoo
             return resolvedType;
         }
     }
-
 
     @Override
     public String lookupUtf8(int cpi) {

@@ -1466,7 +1466,8 @@ public class CremaSupportImpl implements CremaSupport {
         try {
             Class<?> result = loadClass(elementalType, (InterpreterResolvedJavaType) accessingClass);
             if (result == null) {
-                throw new NoClassDefFoundError(elementalType.toString());
+                /* The boot loader reports a missing class by returning null. */
+                throw noClassDefFoundError(elementalType, new ClassNotFoundException(TypeSymbols.binaryName(elementalType)));
             }
             if (arrayDimensions > 0) {
                 while (arrayDimensions-- > 0) {
@@ -1475,10 +1476,19 @@ public class CremaSupportImpl implements CremaSupport {
             }
             return result;
         } catch (ClassNotFoundException e) {
-            NoClassDefFoundError error = new NoClassDefFoundError(elementalType.toString());
-            error.initCause(e);
-            throw error;
+            throw noClassDefFoundError(elementalType, e);
         }
+    }
+
+    /**
+     * The error HotSpot raises when resolving a class fails: its message is the internal name of
+     * the class ({@code java/lang/Thread}, not the descriptor {@code Ljava/lang/Thread;}), and the
+     * loader's {@link ClassNotFoundException} is its cause (elide-dev/bali#227).
+     */
+    private static NoClassDefFoundError noClassDefFoundError(Symbol<Type> elementalType, ClassNotFoundException cause) {
+        NoClassDefFoundError error = new NoClassDefFoundError(TypeSymbols.toClassNameEntry(elementalType).toString());
+        error.initCause(cause);
+        return error;
     }
 
     @Override
