@@ -42,6 +42,7 @@ import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueType;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.graal.nodes.NewPodInstanceNode;
 import com.oracle.svm.core.heap.Pod;
 import com.oracle.svm.core.heap.ReferenceAccess;
@@ -244,7 +245,7 @@ public class DeoptState {
             JavaKind kind = value.getKind();
             JavaConstant con = readValue(value, sourceFrame);
             Deoptimizer.writeValueInMaterializedObj(obj, curOffset, con, sourceFrame);
-            curOffset = curOffset.add(objectLayout.sizeInBytes(kind));
+            curOffset = curOffset.add(ObjectLayoutCompilerSupport.sizeInBytes(objectLayout, kind));
             curIdx++;
         }
         return obj;
