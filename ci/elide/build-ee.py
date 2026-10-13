@@ -18,7 +18,7 @@ cannot be upgraded. Changes to comments or formatting, which only move line numb
 
 LinkCheck.java then checks that the enterprise code (the jars only Oracle's build has, and the
 enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
-modules.
+modules. Last, the native-image launcher is rebuilt so that it accepts the fork's hosted options.
 
   build-ee.py <version> <platform> <ce-home> <out-dir>
 
@@ -205,6 +205,36 @@ def link_check(graal, ee_home, fork_jars, enterprise_jars):
     print(result.stdout, end="")
     if result.returncode != 0:
         fail("the enterprise code does not link against the fork's code (see the problems above)")
+
+
+def rebuild_launcher(ee_home):
+    """Rebuilds the native-image launcher from the overlaid jars.
+
+    Oracle's launcher is a native image that validates -H: options against the option names it
+    was built with, so it refuses every hosted option that only the fork has (for example
+    -H:-RistrettoInlineAOTMethods, elide-dev/graal#122). The rebuilt launcher knows the options of
+    both the fork's and the enterprise jars. Oracle's launcher builds it under another name: Windows
+    cannot overwrite a running executable.
+    """
+    bin_dir = os.path.join(ee_home, "lib", "svm", "bin")
+    suffix = ".exe" if os.name == "nt" else ""
+    launcher = os.path.join(bin_dir, "native-image" + suffix)
+    oracle_launcher = os.path.join(bin_dir, "native-image-oracle" + suffix)
+    os.replace(launcher, oracle_launcher)
+    with tempfile.TemporaryDirectory(prefix="native-image-launcher-") as work:
+        result = subprocess.run([oracle_launcher, "--macro:native-image-launcher"], cwd=work, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode != 0 or not os.path.exists(launcher):
+        print(result.stdout)
+        fail("cannot rebuild the native-image launcher (see the build output above)")
+    os.remove(oracle_launcher)
+    for leftover in ("native-image.debug", "native-image.pdb", "gdb-debughelpers.py", "sources"):
+        path = os.path.join(bin_dir, leftover)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+    print("rebuilt the native-image launcher with the fork's options")
 
 
 DRIVER_JAR = "lib/graalvm/svm-driver.jar"
@@ -395,6 +425,7 @@ def main():
     merge_driver_flags(ee_home, oracle_driver_flags)
     upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
+    rebuild_launcher(ee_home)
 
     revision = run("git", "rev-parse", "HEAD", cwd=graal).strip()
     release = os.path.join(ee_home, "release")
