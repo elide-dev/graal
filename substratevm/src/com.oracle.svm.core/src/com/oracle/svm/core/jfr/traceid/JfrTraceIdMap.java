@@ -34,6 +34,7 @@ import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.shared.BuildPhaseProvider.ReadyForCompilation;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
+import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
@@ -46,10 +47,28 @@ import jdk.graal.compiler.api.replacements.Fold;
 
 /**
  * Map for storing trace ids. Initialized before compilation with static class count from analysis.
+ *
+ * Classes that are loaded at run time (see {@code RuntimeClassLoading}) get type ids above the
+ * image-time maximum, so their trace ids live in a chunked extension that grows as type ids are
+ * handed out. Chunks are never replaced once published and the outer array is copied on growth,
+ * which keeps the uninterruptible readers free of locks: they only read a volatile reference and
+ * then index into immutable-shaped arrays.
  */
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = Duplicable.class, other = PartiallyLayerAware.class)
 public class JfrTraceIdMap {
+    /** Trace id of a class that is not present in the map (TYPE_NONE in HotSpot's JFR). */
+    static final long NO_ID = 0;
+
+    private static final int RUNTIME_CHUNK_SHIFT = 10;
+    private static final int RUNTIME_CHUNK_SIZE = 1 << RUNTIME_CHUNK_SHIFT;
+    private static final int RUNTIME_CHUNK_MASK = RUNTIME_CHUNK_SIZE - 1;
+
     @UnknownObjectField(availability = ReadyForCompilation.class) private long[] traceIDs;
+    /** The highest trace id assigned at image build time; run-time ids continue above it. */
+    @UnknownPrimitiveField(availability = ReadyForCompilation.class) private long maxHostedTraceId;
+
+    /** Trace ids of run-time loaded types, indexed by {@code index - traceIDs.length}. */
+    private volatile long[][] runtimeChunks;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrTraceIdMap() {
@@ -75,6 +94,7 @@ public class JfrTraceIdMap {
     void setId(int index, long id) {
         assert traceIDs[index] == -1;
         traceIDs[index] = id;
+        maxHostedTraceId = Math.max(maxHostedTraceId, JfrTraceId.fromRawTraceId(id));
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -86,14 +106,73 @@ public class JfrTraceIdMap {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     long getId(Class<?> clazz) {
-        long id = traceIDs[getIndex(clazz)];
-        assert id != -1;
-        return id;
+        int index = getIndex(clazz);
+        long[] hostedIds = traceIDs;
+        if (index < hostedIds.length) {
+            long id = hostedIds[index];
+            assert id != -1;
+            return id;
+        }
+        long[] chunk = getRuntimeChunk(index - hostedIds.length);
+        if (chunk == null) {
+            return NO_ID;
+        }
+        return chunk[(index - hostedIds.length) & RUNTIME_CHUNK_MASK];
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     void setId(Class<?> clazz, long id) {
-        traceIDs[getIndex(clazz)] = id;
+        int index = getIndex(clazz);
+        long[] hostedIds = traceIDs;
+        if (index < hostedIds.length) {
+            hostedIds[index] = id;
+            return;
+        }
+        long[] chunk = getRuntimeChunk(index - hostedIds.length);
+        if (chunk != null) {
+            chunk[(index - hostedIds.length) & RUNTIME_CHUNK_MASK] = id;
+        }
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private long[] getRuntimeChunk(int runtimeIndex) {
+        long[][] chunks = runtimeChunks;
+        int chunkIndex = runtimeIndex >>> RUNTIME_CHUNK_SHIFT;
+        if (chunks == null || chunkIndex >= chunks.length) {
+            return null;
+        }
+        return chunks[chunkIndex];
+    }
+
+    /**
+     * Makes sure that the map has a slot for the given type id, which was just handed out for a
+     * type that is loaded at run time, and that the slot carries a unique trace id. Must be called
+     * before any {@link Class} with that type id can be referenced by a JFR event.
+     */
+    void ensureRuntimeTypeId(int typeID) {
+        int runtimeIndex = typeID + 1 - traceIDs.length;
+        if (runtimeIndex < 0 || getRuntimeChunk(runtimeIndex) != null) {
+            return;
+        }
+        synchronized (this) {
+            long[][] chunks = runtimeChunks;
+            int chunkIndex = runtimeIndex >>> RUNTIME_CHUNK_SHIFT;
+            int oldLength = chunks == null ? 0 : chunks.length;
+            if (chunkIndex < oldLength) {
+                return;
+            }
+            long[][] newChunks = chunks == null ? new long[chunkIndex + 1][] : Arrays.copyOf(chunks, chunkIndex + 1);
+            for (int i = oldLength; i <= chunkIndex; i++) {
+                long[] chunk = new long[RUNTIME_CHUNK_SIZE];
+                long firstId = maxHostedTraceId + 1 + ((long) i << RUNTIME_CHUNK_SHIFT);
+                for (int j = 0; j < RUNTIME_CHUNK_SIZE; j++) {
+                    chunk[j] = JfrTraceId.toRawTraceId(firstId + j);
+                }
+                newChunks[i] = chunk;
+            }
+            /* The volatile store publishes the fully initialized chunks to uninterruptible readers. */
+            runtimeChunks = newChunks;
+        }
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
