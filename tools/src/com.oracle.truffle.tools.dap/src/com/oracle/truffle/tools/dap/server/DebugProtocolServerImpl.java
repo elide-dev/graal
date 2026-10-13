@@ -39,7 +39,6 @@ import com.oracle.truffle.api.debug.SuspendedEvent;
 import com.oracle.truffle.api.debug.SuspensionFilter;
 import com.oracle.truffle.api.instrumentation.ContextsListener;
 import com.oracle.truffle.api.instrumentation.EventBinding;
-import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
@@ -92,38 +91,23 @@ import com.oracle.truffle.tools.dap.types.VariablesResponse;
 import org.graalvm.shadowed.org.json.JSONArray;
 import org.graalvm.shadowed.org.json.JSONObject;
 
-import java.io.IOException;
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * A {@link DebugProtocolServer} implementation using TCP sockets as transportation layer for the
- * JSON-RPC requests.
+ * Implements a single debugger client's DAP session.
  */
 public final class DebugProtocolServerImpl extends DebugProtocolServer {
 
     private static final StepConfig STEP_CONFIG = StepConfig.newBuilder().suspendAnchors(SourceElement.ROOT, SuspendAnchor.AFTER).build();
-    // How long engine disposal waits for a client to disconnect after the terminated event.
-    private static final long DISCONNECT_GRACE_SECONDS = 2;
 
     private final ExecutionContext context;
     private volatile DebugProtocolClient client;
@@ -131,9 +115,8 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
     private final Enabler ioEnabler;
     private volatile boolean launched;  // true when launched, false when attached
     private volatile boolean disposed = false;
-    private final List<Runnable> runOnDispose = new CopyOnWriteArrayList<>();
+    private final AtomicReference<EventBinding<?>> startupBinding = new AtomicReference<>();
     private final List<URI> sourcePath;
-    private volatile OneTimeExecutor clientConnectionExecutor;
 
     private DebugProtocolServerImpl(ExecutionContext context, final boolean debugBreak, final boolean waitAttached, @SuppressWarnings("unused") final boolean inspectInitialization,
                     final List<URI> sourcePath) {
@@ -145,7 +128,7 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
             debuggerSession.suspendNextExecution();
         }
         if (debugBreak || waitAttached) {
-            final AtomicReference<EventBinding<?>> execEnter = new AtomicReference<>();
+            final AtomicReference<EventBinding<?>> execEnter = startupBinding;
             final AtomicBoolean disposeBinding = new AtomicBoolean(false);
             execEnter.set(context.getEnv().getInstrumenter().attachContextsListener(new ContextsListener() {
                 @Override
@@ -193,7 +176,10 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
                 }
             }, true));
             if (disposeBinding.get()) {
-                execEnter.get().dispose();
+                EventBinding<?> binding = execEnter.getAndSet(null);
+                if (binding != null) {
+                    binding.dispose();
+                }
             }
         }
         InstrumentInfo instrumentInfo = context.getEnv().getInstruments().get(OutputConsumerInstrument.ID);
@@ -272,40 +258,21 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
 
     @Override
     public CompletableFuture<Void> disconnect(DisconnectArguments args, Consumer<? super Void> responseConsumer) {
-        Boolean terminate = args.getTerminateDebuggee();
-        // Answered before the program resumes: once resumed it can finish, and its process exit,
-        // before a later response is written.
-        return CompletableFuture.runAsync(() -> endSession(() -> responseConsumer.accept(null), terminate != null ? terminate : launched));
-    }
-
-    /**
-     * Ends the debugging session once, for whichever of a disconnect request, a dropped connection
-     * or engine disposal comes first: resumes the program, or cancels it when {@code terminate}.
-     * {@code beforeResume} always runs.
-     */
-    private void endSession(Runnable beforeResume, boolean terminate) {
-        DebuggerSession session;
-        synchronized (this) {
-            if (disposed) {
-                beforeResume.run();
-                return;
+        Boolean terminateDebuggee = args.getTerminateDebuggee();
+        boolean terminate = terminateDebuggee != null ? terminateDebuggee : launched;
+        return CompletableFuture.runAsync(() -> {
+            // Answered before the program resumes: once resumed it can finish, and its process
+            // exit, before a later response is written.
+            responseConsumer.accept(null);
+            dispose();
+            if (terminate) {
+                // Cancel all contexts to terminate the execution
+                AllContextsCancel cancel = new AllContextsCancel();
+                EventBinding<ContextsListener> binding = context.getEnv().getInstrumenter().attachContextsListener(cancel, true);
+                cancel.waitForAllCanceled();
+                binding.dispose();
             }
-            disposed = true;
-            session = debuggerSession;
-            debuggerSession = null;
-        }
-        beforeResume.run();
-        ioEnabler.disable();
-        if (session != null) {
-            session.close();
-        }
-        context.dispose();
-        if (terminate) {
-            AllContextsCancel cancel = new AllContextsCancel();
-            EventBinding<ContextsListener> binding = context.getEnv().getInstrumenter().attachContextsListener(cancel, true);
-            cancel.waitForAllCanceled();
-            binding.dispose();
-        }
+        });
     }
 
     /**
@@ -320,24 +287,28 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
     }
 
     public void dispose() {
-        boolean active;
-        synchronized (this) {
-            active = !disposed;
-            disposed = true;
-        }
-        DebugProtocolClient theClient = client;
-        if (active && theClient != null) {
-            theClient.terminated(TerminatedEvent.EventBody.create());
-        }
-        for (Runnable r : runOnDispose) {
-            r.run();
-        }
-        // Joined after a disconnect too: system threads must end before the engine closes.
-        clientConnectionExecutor.shutDownAndJoin();
+        dispose(false);
     }
 
-    private void onDispose(Runnable r) {
-        runOnDispose.add(r);
+    synchronized void dispose(boolean notifyClient) {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        ioEnabler.disable();
+        DebuggerSession session = debuggerSession;
+        debuggerSession = null;
+        if (session != null) {
+            session.close();
+        }
+        context.dispose();
+        EventBinding<?> binding = startupBinding.getAndSet(null);
+        if (binding != null) {
+            binding.dispose();
+        }
+        if (notifyClient && client != null) {
+            client.terminated(TerminatedEvent.EventBody.create());
+        }
     }
 
     @Override
@@ -595,22 +566,14 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
     }
 
     @Override
-    protected void connect(DebugProtocolClient clnt) {
+    protected synchronized void connect(DebugProtocolClient clnt) {
+        if (disposed) {
+            return;
+        }
         this.client = clnt;
         if (debuggerSession == null) {
-            DebuggerSession session = startDebuggerSession();
-            boolean isDisposed;
-            synchronized (this) {
-                isDisposed = disposed;
-                if (!isDisposed) {
-                    debuggerSession = session;
-                }
-            }
-            if (isDisposed) {
-                session.close();
-            } else {
-                context.initSession(session);
-            }
+            debuggerSession = startDebuggerSession();
+            context.initSession(debuggerSession);
         }
         context.initClient(client);
     }
@@ -633,118 +596,6 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
                 context.getLogger().log(level, msg, thrown);
             }
         };
-    }
-
-    /**
-     * The executors created by Executors do not allow to join the threads in the pool. System
-     * threads must be joined before Engine close and ExecutorService.awaitTermination() does not
-     * guarantee threads termination.
-     */
-    private static class OneTimeExecutor implements Executor {
-
-        private final TruffleInstrument.Env env;
-        private final String threadName;
-        private Reference<Thread> thread;
-        private boolean shutDown;
-
-        OneTimeExecutor(TruffleInstrument.Env env, String threadName) {
-            this.env = env;
-            this.threadName = threadName;
-        }
-
-        public synchronized void execute(Runnable command) {
-            if (shutDown) {
-                return;
-            }
-            if (thread != null) {
-                throw new IllegalStateException("This is a one-time executor.");
-            }
-            Thread t = env.createSystemThread(command);
-            t.setName(threadName);
-            t.start();
-            thread = new WeakReference<>(t);
-        }
-
-        synchronized void shutDownAndJoin() {
-            Thread t = (thread != null) ? thread.get() : null;
-            if (t != null) {
-                t.interrupt();
-                try {
-                    t.join();
-                } catch (InterruptedException ex) {
-                    // Interrupted
-                }
-            }
-            shutDown = true;
-        }
-    }
-
-    public CompletableFuture<?> start(final ServerSocket serverSocket) {
-        clientConnectionExecutor = new OneTimeExecutor(context.getEnv(), "DAP client connection thread");
-        context.getInfo().println("[Graal DAP] Starting server and listening on " + serverSocket.getLocalSocketAddress());
-        return CompletableFuture.runAsync(new Runnable() {
-
-            @Override
-            public void run() {
-                AtomicBoolean terminated = new AtomicBoolean(false);
-                try {
-                    if (serverSocket.isClosed()) {
-                        context.getErr().println("[Graal DAP] Server socket is closed.");
-                        return;
-                    }
-
-                    onDispose(() -> {
-                        terminated.set(true);
-                        try {
-                            serverSocket.close();
-                        } catch (IOException e) {
-                            context.getErr().println("[Graal DAP] Error while closing the server socket: " + e.getLocalizedMessage());
-                        }
-                    });
-                    if (disposed) {
-                        // Disposed in the mean time.
-                        return;
-                    }
-                    try (Socket clientSocket = serverSocket.accept()) {
-                        // The server debugs for one client: refuse later ones instead of leaving
-                        // them unanswered in the backlog.
-                        serverSocket.close();
-                        context.getInfo().println("[Graal DAP] Client connected on " + clientSocket.getRemoteSocketAddress());
-
-                        OneTimeExecutor dapRequestExecutor = new OneTimeExecutor(context.getEnv(), "DAP request handler");
-                        Future<?> listenFuture = Session.connect(DebugProtocolServerImpl.this, clientSocket.getInputStream(), clientSocket.getOutputStream(), dapRequestExecutor);
-                        try {
-                            listenFuture.get();
-                            // The client left without a disconnect request: end the session as
-                            // its default disconnect would.
-                            endSession(() -> {
-                            }, launched);
-                        } catch (InterruptedException e) {
-                            // Engine disposal: give the client time to read the terminated event
-                            // and disconnect, then stop reading from it.
-                            try {
-                                listenFuture.get(DISCONNECT_GRACE_SECONDS, TimeUnit.SECONDS);
-                            } catch (InterruptedException | ExecutionException | TimeoutException ex) {
-                                // Closing regardless.
-                            }
-                            clientSocket.shutdownInput();
-                        } catch (ExecutionException e) {
-                            context.getErr().println("[Graal DAP] Error: " + e.getCause());
-                        } finally {
-                            dapRequestExecutor.shutDownAndJoin();
-                        }
-                    }
-                } catch (IOException e) {
-                    if (terminated.get() && (e instanceof SocketException)) {
-                        // We've terminated the socket, thus we ignore any exceptions from it.
-                        // serverSocket.accept() will always throw "Socket closed" exception
-                        // when serverSocket.close() is called.
-                    } else {
-                        context.getErr().println("[Graal DAP] Error while connecting to client: " + e.getLocalizedMessage());
-                    }
-                }
-            }
-        }, clientConnectionExecutor);
     }
 
     private DebuggerSession startDebuggerSession() {
@@ -800,7 +651,7 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
         @Override
         public void outputText(String text) {
             DebugProtocolClient debugClient = context.getClient();
-            if (client != null) {
+            if (debugClient != null) {
                 OutputEvent.EventBody event = OutputEvent.EventBody.create(text);
                 event.setCategory(category);
                 debugClient.output(event);
