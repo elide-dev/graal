@@ -108,6 +108,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -120,6 +122,8 @@ import java.util.logging.Level;
 public final class DebugProtocolServerImpl extends DebugProtocolServer {
 
     private static final StepConfig STEP_CONFIG = StepConfig.newBuilder().suspendAnchors(SourceElement.ROOT, SuspendAnchor.AFTER).build();
+    // How long engine disposal waits for a client to disconnect after the terminated event.
+    private static final long DISCONNECT_GRACE_SECONDS = 2;
 
     private final ExecutionContext context;
     private volatile DebugProtocolClient client;
@@ -217,6 +221,7 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
         final CompletableFuture<Capabilities> future = CompletableFuture.completedFuture(Capabilities.create() //
                         .setExceptionBreakpointFilters(Arrays.asList(exceptionBreakpointFilters)) //
                         .setSupportsConfigurationDoneRequest(true) //
+                        .setSupportTerminateDebuggee(true) //
                         .setSupportsFunctionBreakpoints(true) //
                         .setSupportsConditionalBreakpoints(true) //
                         .setSupportsHitConditionalBreakpoints(true) //
@@ -238,8 +243,11 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
 
     @Override
     public CompletableFuture<Void> launch(LaunchRequestArguments args) {
+        // On the request thread, so this precedes `configurationDone`, which starts the program.
+        context.configurePathMappings(args.get("pathMappings"), args.get("localRoot"), args.get("remoteRoot"));
+        launched = true;
+        suspendOnEntry(args.get("stopOnEntry"));
         return CompletableFuture.runAsync(() -> {
-            context.configurePathMappings(args.get("pathMappings"), args.get("localRoot"), args.get("remoteRoot"));
             JSONObject info = (JSONObject) args.get("graalVMLaunchInfo");
             if (info != null) {
                 StringBuilder sb = new StringBuilder(info.getString("exec"));
@@ -250,55 +258,81 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
                 client.output(OutputEvent.EventBody.create(sb.toString()));
             }
             client.output(OutputEvent.EventBody.create("Debugger attached.").setCategory("stderr"));
-            launched = true;
         });
     }
 
     @Override
     public CompletableFuture<Void> attach(AttachRequestArguments args) {
+        context.configurePathMappings(args.get("pathMappings"), args.get("localRoot"), args.get("remoteRoot"));
+        suspendOnEntry(args.get("stopOnEntry"));
         return CompletableFuture.runAsync(() -> {
-            context.configurePathMappings(args.get("pathMappings"), args.get("localRoot"), args.get("remoteRoot"));
             client.output(OutputEvent.EventBody.create("Debugger attached.").setCategory("stderr"));
         });
     }
 
     @Override
     public CompletableFuture<Void> disconnect(DisconnectArguments args, Consumer<? super Void> responseConsumer) {
-        return CompletableFuture.runAsync(() -> {
-            DebuggerSession session;
-            synchronized (DebugProtocolServerImpl.this) {
-                disposed = true;
-                session = debuggerSession;
-                debuggerSession = null;
+        Boolean terminate = args.getTerminateDebuggee();
+        // Answered before the program resumes: once resumed it can finish, and its process exit,
+        // before a later response is written.
+        return CompletableFuture.runAsync(() -> endSession(() -> responseConsumer.accept(null), terminate != null ? terminate : launched));
+    }
+
+    /**
+     * Ends the debugging session once, for whichever of a disconnect request, a dropped connection
+     * or engine disposal comes first: resumes the program, or cancels it when {@code terminate}.
+     * {@code beforeResume} always runs.
+     */
+    private void endSession(Runnable beforeResume, boolean terminate) {
+        DebuggerSession session;
+        synchronized (this) {
+            if (disposed) {
+                beforeResume.run();
+                return;
             }
-            ioEnabler.disable();
-            if (session != null) {
-                session.close();
-            }
-            context.dispose();
-            responseConsumer.accept(null);
-            if (launched) {
-                // Cancel all contexts to terminate the execution
-                AllContextsCancel cancel = new AllContextsCancel();
-                EventBinding<ContextsListener> binding = context.getEnv().getInstrumenter().attachContextsListener(cancel, true);
-                cancel.waitForAllCanceled();
-                binding.dispose();
-            }
-        });
+            disposed = true;
+            session = debuggerSession;
+            debuggerSession = null;
+        }
+        beforeResume.run();
+        ioEnabler.disable();
+        if (session != null) {
+            session.close();
+        }
+        context.dispose();
+        if (terminate) {
+            AllContextsCancel cancel = new AllContextsCancel();
+            EventBinding<ContextsListener> binding = context.getEnv().getInstrumenter().attachContextsListener(cancel, true);
+            cancel.waitForAllCanceled();
+            binding.dispose();
+        }
+    }
+
+    /**
+     * Honors a launch or attach request's {@code stopOnEntry}. The program is held until
+     * {@code configurationDone}, so its next statement is its first.
+     */
+    private void suspendOnEntry(Object stopOnEntry) {
+        DebuggerSession session = debuggerSession;
+        if (Boolean.TRUE.equals(stopOnEntry) && session != null) {
+            session.suspendNextExecution();
+        }
     }
 
     public void dispose() {
-        if (disposed) {
-            return;
+        boolean active;
+        synchronized (this) {
+            active = !disposed;
+            disposed = true;
         }
-        disposed = true;
         DebugProtocolClient theClient = client;
-        if (theClient != null) {
+        if (active && theClient != null) {
             theClient.terminated(TerminatedEvent.EventBody.create());
         }
         for (Runnable r : runOnDispose) {
             r.run();
         }
+        // Joined after a disconnect too: system threads must end before the engine closes.
         clientConnectionExecutor.shutDownAndJoin();
     }
 
@@ -672,14 +706,30 @@ public final class DebugProtocolServerImpl extends DebugProtocolServer {
                         return;
                     }
                     try (Socket clientSocket = serverSocket.accept()) {
+                        // The server debugs for one client: refuse later ones instead of leaving
+                        // them unanswered in the backlog.
+                        serverSocket.close();
                         context.getInfo().println("[Graal DAP] Client connected on " + clientSocket.getRemoteSocketAddress());
 
                         OneTimeExecutor dapRequestExecutor = new OneTimeExecutor(context.getEnv(), "DAP request handler");
                         Future<?> listenFuture = Session.connect(DebugProtocolServerImpl.this, clientSocket.getInputStream(), clientSocket.getOutputStream(), dapRequestExecutor);
                         try {
                             listenFuture.get();
-                        } catch (InterruptedException | ExecutionException e) {
-                            context.getErr().println("[Graal DAP] Error: " + e.getLocalizedMessage());
+                            // The client left without a disconnect request: end the session as
+                            // its default disconnect would.
+                            endSession(() -> {
+                            }, launched);
+                        } catch (InterruptedException e) {
+                            // Engine disposal: give the client time to read the terminated event
+                            // and disconnect, then stop reading from it.
+                            try {
+                                listenFuture.get(DISCONNECT_GRACE_SECONDS, TimeUnit.SECONDS);
+                            } catch (InterruptedException | ExecutionException | TimeoutException ex) {
+                                // Closing regardless.
+                            }
+                            clientSocket.shutdownInput();
+                        } catch (ExecutionException e) {
+                            context.getErr().println("[Graal DAP] Error: " + e.getCause());
                         } finally {
                             dapRequestExecutor.shutDownAndJoin();
                         }
