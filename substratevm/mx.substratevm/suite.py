@@ -1569,10 +1569,6 @@ suite = {
                     "jdk.internal.reflect",
                     "sun.security.util",
                 ],
-                "jdk.internal.vm.ci" : [
-                    "jdk.vm.ci.meta",
-                    "jdk.vm.ci.meta.annotation",
-                ],
             },
             "checkstyle": "com.oracle.svm.core",
             "javaCompliance" : "21+",
