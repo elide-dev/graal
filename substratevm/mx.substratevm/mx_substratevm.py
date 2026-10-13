@@ -66,7 +66,6 @@ import sys
 
 importlib.import_module('mx_substratevm_benchmark')
 importlib.import_module('mx_substratevm_namespace')
-import mx_substratevm_graalos_support # pylint: disable=unused-import
 from mx_sdk_shaded import ShadedLibraryProject # pylint: disable=unused-import
 suite = mx.suite('substratevm')
 svmSuites = [suite]
