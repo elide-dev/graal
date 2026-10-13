@@ -60,6 +60,7 @@ import com.oracle.svm.guest.staging.log.Log;
 import com.oracle.svm.guest.staging.option.RuntimeOptionParser;
 import com.oracle.svm.guest.staging.option.RuntimeOptionValues;
 import com.oracle.svm.hosted.image.PreserveOptionsSupport;
+import com.oracle.svm.interpreter.InterpreterKnownCompiledEntryPoints;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaField;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaType;
@@ -202,7 +203,14 @@ public class RistrettoUtils {
         } else {
             throw GraalError.shouldNotReachHere("Unknown interpreter method " + method);
         }
-        return iMethod.hasNativeEntryPoint();
+        /*
+         * An image method that the compile queue never compiled on its own (every image caller
+         * inlined it, say) keeps a native entry point that is only the "not compiled" sentinel.
+         * Treating it as compiled would emit a direct call to the sentinel, which takes the VM down.
+         * Calling it through the interpreter stub instead raises a NoSuchMethodError the program
+         * can handle (elide-dev/runtime#2508).
+         */
+        return InterpreterKnownCompiledEntryPoints.hasCompiledCode(iMethod);
     }
 
     public static boolean canInlineAOT(InterpreterResolvedJavaMethod method) {

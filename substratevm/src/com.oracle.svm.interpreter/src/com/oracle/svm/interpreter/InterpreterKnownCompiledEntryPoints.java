@@ -130,6 +130,21 @@ public class InterpreterKnownCompiledEntryPoints {
     }
 
     /**
+     * Whether {@code method} has compiled code in the image that the interpreter, or code that
+     * Ristretto compiles, can call. An image method keeps a native entry point even when the
+     * compile queue never compiled it on its own (for example because every image caller inlined
+     * it); that entry point is then the {@linkplain #getMethodNotCompiledHandler() sentinel}, which
+     * must not be called.
+     */
+    public static boolean hasCompiledCode(InterpreterResolvedJavaMethod method) {
+        if (!method.hasNativeEntryPoint()) {
+            return false;
+        }
+        CFunctionPointer entryPoint = method.getNativeEntryPoint();
+        return entryPoint.isNonNull() && !entryPoint.equal(getMethodNotCompiledHandler());
+    }
+
+    /**
      * The common no-argument, void-return signature used by the throwing stubs in this class.
      */
     public static PreparedSignature getStubSignature() {

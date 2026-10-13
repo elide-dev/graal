@@ -7,5 +7,11 @@
     "allPublicMethods" : true,
     "allDeclaredClasses" : true,
     "allPublicClasses" : true
+  },
+  {
+    "name" : "com.oracle.svm.test.RuntimeClassLoadingUncompiledAOTMethodTest$InlinedBase"
+  },
+  {
+    "name" : "com.oracle.svm.test.RuntimeClassLoadingUncompiledAOTMethodTest$UncalledBase"
   }
 ]

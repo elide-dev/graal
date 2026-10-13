@@ -30,7 +30,9 @@ import static com.oracle.svm.interpreter.InterpreterFeature.assertionsEnabled;
 import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.VTBL_NO_DISPATCH;
 import static com.oracle.svm.util.GuestAnnotationAccess.newAnnotationValue;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Isolate;
@@ -39,6 +41,7 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.Pointer;
 
+import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
@@ -57,6 +60,7 @@ import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.classloading.RuntimeClassLoadingFeature;
 import com.oracle.svm.hosted.code.CEntryPointCallStubSupport;
 import com.oracle.svm.hosted.code.CEntryPointData;
+import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedInstanceClass;
 import com.oracle.svm.hosted.meta.HostedMethod;
@@ -94,6 +98,9 @@ public class CremaFeature implements InternalFeature {
     private AnalysisMethod enterCremaJNIMethodVarargsNonVirtualWrapper;
     private AnalysisMethod enterCremaJNIMethodArrayNonVirtualWrapper;
     private AnalysisMethod enterCremaJNIMethodVaListNonVirtualWrapper;
+
+    /** Constructors registered as roots by {@link #keepInlinedSuperConstructorsCompiled}. */
+    private final Set<AnalysisMethod> rootedSuperConstructors = new HashSet<>();
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
@@ -170,6 +177,8 @@ public class CremaFeature implements InternalFeature {
         AnalysisUniverse aUniverse = ((FeatureImpl.AfterAnalysisAccessImpl) access).getUniverse();
         BuildTimeInterpreterUniverse btiUniverse = BuildTimeInterpreterUniverse.singleton();
 
+        keepSuperConstructorsCompiled(aUniverse, btiUniverse);
+
         if (assertionsEnabled()) {
             for (AnalysisType analysisType : aUniverse.getTypes()) {
                 if (!analysisType.isReachable()) {
@@ -180,10 +189,74 @@ public class CremaFeature implements InternalFeature {
         }
     }
 
+    /**
+     * Whether run-time loaded subclasses of the declaring class can call {@code method} as their
+     * super constructor.
+     */
+    private static boolean isSuperConstructorCandidate(AnalysisMethod method) {
+        if (!method.isConstructor() || method.isPrivate()) {
+            return false;
+        }
+        AnalysisType declaringClass = method.getDeclaringClass();
+        return !declaringClass.isFinalFlagSet() && !declaringClass.isHidden();
+    }
+
+    /**
+     * A class loaded at run time can extend any non-final image class, and its constructors must
+     * then call a constructor of that class. The interpreter calls an image method through the
+     * method's compiled code, because image methods keep no bytecodes; so a constructor that image
+     * code calls must keep compiled code of its own, even when every image caller inlines it (the
+     * usual fate of a trivial constructor), or a run-time loaded subclass could not be instantiated
+     * (elide-dev/runtime#2508).
+     * <p>
+     * Inlining before analysis leaves such a constructor reachable but never invoked on its own,
+     * with no graph the compile queue could compile. Registering it as a root here makes the
+     * analysis parse it, and the compile queue then compiles it as an entry point. A special-invoke
+     * root links only once the analysis sees an instance of the declaring class or of a subclass,
+     * which it may never do (the inlined allocation may have been dead), so the constructor is
+     * registered as implementation-invoked outright, as {@link BigBang#forcedAddRootMethod} does
+     * for the constructors of abstract classes: run-time class loading implies the open type world,
+     * whose analysis saturates the flows of such a method, so its code is sound for any subclass.
+     * Constructors that image code never calls are left alone: calling one raises a
+     * {@link NoSuchMethodError} that names the metadata which keeps it.
+     *
+     * @return whether a root was registered, which requires another analysis iteration
+     */
+    private boolean keepInlinedSuperConstructorsCompiled(FeatureImpl.DuringAnalysisAccessImpl access) {
+        boolean added = false;
+        for (AnalysisMethod method : access.getUniverse().getMethods()) {
+            if (isSuperConstructorCandidate(method) && method.isInlined() && !method.isSimplyImplementationInvoked() && !method.isDirectRootMethod() && rootedSuperConstructors.add(method)) {
+                String reason = "Constructor of a subclassable image class that image code inlines; run-time loaded subclasses call it";
+                access.getBigBang().forcedAddRootMethod(method, true, reason);
+                method.registerAsImplementationInvoked(reason);
+                added = true;
+            }
+        }
+        return added;
+    }
+
+    /**
+     * The compile queue compiles a method only when compiled code still calls it after inlining, so
+     * a constructor that the analysis linked can still end up without compiled code of its own.
+     * Compile the super constructor candidates the analysis linked on their own, see
+     * {@link #keepInlinedSuperConstructorsCompiled}.
+     */
+    private static void keepSuperConstructorsCompiled(AnalysisUniverse aUniverse, BuildTimeInterpreterUniverse btiUniverse) {
+        for (AnalysisMethod method : aUniverse.getMethods()) {
+            if (isSuperConstructorCandidate(method) && method.isSimplyImplementationInvoked() && btiUniverse.getMethod(method) != null) {
+                SubstrateCompilationDirectives.singleton().registerForcedCompilation(method);
+            }
+        }
+    }
+
     @Override
     public void duringAnalysis(DuringAnalysisAccess access) {
+        FeatureImpl.DuringAnalysisAccessImpl accessImpl = (FeatureImpl.DuringAnalysisAccessImpl) access;
         if (RistrettoInlinableAOTMethods.isEnabled()) {
-            RistrettoInlinableAOTMethods.registerCallees((FeatureImpl.DuringAnalysisAccessImpl) access);
+            RistrettoInlinableAOTMethods.registerCallees(accessImpl);
+        }
+        if (keepInlinedSuperConstructorsCompiled(accessImpl)) {
+            accessImpl.requireAnalysisIteration();
         }
     }
 

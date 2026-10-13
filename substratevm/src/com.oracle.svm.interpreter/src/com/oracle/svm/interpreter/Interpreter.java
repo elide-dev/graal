@@ -380,8 +380,12 @@ public final class Interpreter {
                 }
             } else if (!method.isAbstract()) {
                 if (!declaringClass.getHub().isPreserved()) {
-                    throw VMError.shouldNotReachHere(MetadataUtil.fmt("Trying to interpret AOT method with no preserved bytecodes: %s.%nConsider using '-H:Preserve=package=%s'", method,
-                                    declaringClass.getHub().getPackageName()));
+                    /*
+                     * Code that Ristretto compiled calls an image method without compiled code
+                     * through the interpreter stub, which lands here. Report it like the
+                     * interpreter does (elide-dev/runtime#2508).
+                     */
+                    throw InterpreterToVM.uncompiledAOTMethodError(method);
                 } else {
                     throw VMError.shouldNotReachHere(MetadataUtil.fmt("Should not reach interpreter for AOT method in preserved type: %s", method));
                 }

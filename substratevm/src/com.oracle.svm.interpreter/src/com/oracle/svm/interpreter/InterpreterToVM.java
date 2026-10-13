@@ -1049,34 +1049,36 @@ public final class InterpreterToVM {
         }
     }
 
+    /**
+     * The error for a call from run-time loaded code to an image method that has neither compiled
+     * code nor bytecodes: the static analysis saw no call to it, or every image caller inlined it,
+     * so the compile queue never compiled it on its own, and image methods keep no bytecodes. The
+     * image lacks a definition the call site needs, so this is a {@link NoSuchMethodError} that
+     * the program can handle, like a resolution failure on HotSpot, instead of a fatal VM error
+     * (elide-dev/runtime#2508).
+     */
+    @NeverInline("Error construction")
+    static NoSuchMethodError uncompiledAOTMethodError(InterpreterResolvedJavaMethod target) {
+        InterpreterResolvedObjectType declaringClass = target.getDeclaringClass();
+        return new NoSuchMethodError(MetadataUtil.fmt(
+                        "Cannot call %s.%s%s: the image has no compiled code for this method (the static analysis saw no call to it, or every call was inlined), " +
+                                        "and image methods keep no bytecodes for the interpreter. Keep it compiled with reflection metadata for the method, or with '-H:Preserve=package=%s'.",
+                        declaringClass.toClassName(), target.getName(), target.getSignature().toMethodDescriptor(), declaringClass.getHub().getPackageName()));
+    }
+
     @AlwaysInline("Fold invocation tracing in the dispatch entry")
     private static boolean shouldCallAOTEntryPoint(boolean stayInInterpreter, InterpreterResolvedJavaMethod target, boolean trace) {
         boolean canBeInterpreterInvoked = target.hasBytecodes() ||
                         (RuntimeClassLoading.isSupported() && target.isSignaturePolymorphicIntrinsic());
-        boolean canBeAOTCalled = target.hasNativeEntryPoint() &&
-                        target.getNativeEntryPoint().isNonNull() &&
-                        !target.getNativeEntryPoint().equal(InterpreterKnownCompiledEntryPoints.getMethodNotCompiledHandler());
+        boolean canBeAOTCalled = InterpreterKnownCompiledEntryPoints.hasCompiledCode(target);
 
         if (!canBeInterpreterInvoked && !canBeAOTCalled) {
-            String source;
-            String reason = "Unable to call method because it can neither be interpreted, nor does it have a valid native entry point.";
-
             if (target instanceof CremaResolvedJavaMethodImpl) {
-                source = "runtime-loaded";
                 assert !target.isNative() : "Shouldn't be called for native methods.";
-            } else {
-                source = "AOT";
-                String dotPkg = target.getDeclaringClass().getHub().getPackageName();
-                if (!target.getDeclaringClass().getHub().isPreserved()) {
-                    reason = MetadataUtil.fmt("Class %s was not preserved during image build.%nConsider using '-H:Preserve=package=%s'.", target.getDeclaringClass().toClassName(), dotPkg);
-                }
-                if (target.getNativeEntryPoint().equal(InterpreterKnownCompiledEntryPoints.getMethodNotCompiledHandler())) {
-                    reason = MetadataUtil.fmt(
-                                    "Trying to dispatch to compiled code for AOT method %s but it was not compiled because it was not seen as reachable by analysis.%nConsider using '-H:Preserve=package=%s'",
-                                    target, dotPkg);
-                }
+                InterpreterUtil.guarantee(false, "Unable to call runtime-loaded method: %s%nUnable to call method because it can neither be interpreted, nor does it have a valid native entry point.",
+                                target);
             }
-            InterpreterUtil.guarantee(false, "Unable to call %s method: %s%n%s", source, target, reason);
+            throw SemanticJavaException.raise(uncompiledAOTMethodError(target));
         }
 
         if (!canBeInterpreterInvoked) {
