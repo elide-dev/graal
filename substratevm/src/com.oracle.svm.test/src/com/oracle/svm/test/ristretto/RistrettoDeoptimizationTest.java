@@ -46,6 +46,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -112,7 +113,8 @@ public class RistrettoDeoptimizationTest {
              * VarHandle fields keep a location (as with -H:Preserve), so their bytecodes are kept.
              */
             try {
-                RuntimeReflection.register(AtomicReferenceArray.class.getMethod("get", int.class), AtomicReference.class.getMethod("compareAndSet", Object.class, Object.class));
+                RuntimeReflection.register(AtomicReferenceArray.class.getMethod("get", int.class), AtomicReference.class.getMethod("compareAndSet", Object.class, Object.class),
+                                Objects.class.getMethod("requireNonNullElse", Object.class, Object.class));
                 RuntimeReflection.register(AtomicReferenceArray.class.getDeclaredField("AA"), AtomicReference.class.getDeclaredField("VALUE"));
             } catch (NoSuchMethodException | NoSuchFieldException e) {
                 throw new AssertionError(e);
@@ -245,6 +247,18 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
+    public static final class ConstantUser {
+        /**
+         * Returns {@code value}, or {@code fallback} when it is null, and 1 in {@code compiled[0]}
+         * when compiled. {@link Objects#requireNonNullElse} is an AOT method that loads a string
+         * constant ({@code "defaultObj"}) with {@code ldc}.
+         */
+        public static Object pick(Object value, Object fallback, int[] compiled) {
+            compiled[0] = Probe.compiled();
+            return Objects.requireNonNullElse(value, fallback);
+        }
+    }
+
     /** A run-time {@link Runnable} implementation, the receiver of an interface method handle. */
     public static final class Counter implements Runnable {
         public int runs;
@@ -343,7 +357,9 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, Counter.class, Handles.class);
+    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class,
+                    Counter.class,
+                    Handles.class);
 
     @Before
     public void requireRistretto() {
@@ -502,6 +518,24 @@ public class RistrettoDeoptimizationTest {
             assertEquals(Integer.valueOf(i), reference.get());
             return compiled == 1;
         });
+    }
+
+    /**
+     * Compiled code calls an AOT method that loads a string constant. Its build-time constant pool
+     * stores the string as a pre-resolved appendix entry, which Ristretto failed to read with a
+     * fatal "Unknown tag INVOKEDYNAMIC" when it inlined the method (elide-dev/graal#122).
+     */
+    @Test
+    public void compiledCodeCallsAOTMethodsWithStringConstants() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Method pick = loader.loadClass(ConstantUser.class.getName()).getMethod("pick", Object.class, Object.class, int[].class);
+        Object fallback = new Object();
+        awaitCompiled("ConstantUser.pick", () -> {
+            int[] compiled = new int[1];
+            assertTrue(invoke(pick, null, fallback, compiled) == fallback);
+            return compiled[0] == 1;
+        });
+        assertThrows(NullPointerException.class, () -> invokeThrowing(pick, null, null, new int[1]));
     }
 
     /**

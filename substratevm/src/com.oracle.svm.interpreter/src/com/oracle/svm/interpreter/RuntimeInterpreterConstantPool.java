@@ -403,7 +403,6 @@ public final class RuntimeInterpreterConstantPool extends InterpreterConstantPoo
         }
     }
 
-
     @Override
     public String lookupUtf8(int cpi) {
         return utf8At(cpi).toString();

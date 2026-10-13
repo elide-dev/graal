@@ -241,6 +241,20 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
                     default -> throw VMError.shouldNotReachHere("Unexpected dynamic constant type " + dynamicType(cpi));
                 };
             }
+            case INVOKEDYNAMIC -> {
+                /*
+                 * The build-time constant pool of an AOT class stores the object constants of its
+                 * LDCs as pre-resolved appendix entries (see BuildTimeConstantPool), which
+                 * Ristretto reads when it parses (or inlines) an AOT method (elide-dev/graal#122).
+                 * A weak constant whose object did not make it into the image heap is reported as
+                 * unresolved, so the compiled code deoptimizes there like the interpreter fails.
+                 */
+                Object appendix = objAt(cpi);
+                if (appendix instanceof ReferenceConstant<?> referenceConstant) {
+                    appendix = referenceConstant.isNonNull() && !referenceConstant.isOpaque() ? referenceConstant.getReferent() : null;
+                }
+                yield appendix == null ? null : SubstrateObjectConstant.forObject(appendix);
+            }
             default -> throw VMError.shouldNotReachHere("Unknown tag " + tag);
         };
     }
