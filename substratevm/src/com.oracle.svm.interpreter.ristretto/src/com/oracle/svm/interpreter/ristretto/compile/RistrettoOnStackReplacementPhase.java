@@ -29,52 +29,43 @@ import static jdk.graal.compiler.phases.common.DeadCodeEliminationPhase.Optional
 import java.util.Optional;
 
 import com.oracle.svm.interpreter.ristretto.RistrettoOSRSupport;
-import com.oracle.svm.interpreter.ristretto.RistrettoUtils;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.PermanentBailoutException;
+import jdk.graal.compiler.core.common.type.Stamp;
+import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.iterators.NodeIterable;
 import jdk.graal.compiler.nodeinfo.InputType;
-import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
-import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.EntryMarkerNode;
 import jdk.graal.compiler.nodes.EntryProxyNode;
 import jdk.graal.compiler.nodes.FixedNode;
-import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.FrameState;
-import jdk.graal.compiler.nodes.InvokeNode;
 import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.ParameterNode;
 import jdk.graal.compiler.nodes.StartNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.debug.ControlFlowAnchored;
-import jdk.graal.compiler.nodes.extended.StateSplitProxyNode;
-import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.nodes.loop.Loop;
 import jdk.graal.compiler.nodes.util.GraphUtil;
 import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.common.DeadCodeEliminationPhase;
 import jdk.graal.compiler.phases.common.util.OnStackReplacementUtils;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
-import jdk.graal.compiler.core.common.type.Stamp;
-import jdk.graal.compiler.core.common.type.StampFactory;
-import jdk.graal.compiler.core.common.type.StampPair;
 import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * Rewrites a parsed Ristretto OSR graph so execution starts at the bytecode backedge target.
  *
  * HotSpot OSR reads locals and locks from VM-managed OSR buffer nodes. Ristretto enters compiled code
- * from the Java interpreter instead, so the compiled graph must call {@link RistrettoOSRSupport}
- * helpers that read a thread-local transfer state prepared by the interpreter:
+ * from the Java interpreter instead, and the compiled graph reads the live state from the interpreter
+ * frame that {@link RistrettoOSRSupport} records in a thread local before the entry:
  *
  * <ol>
  * <li>Peel containing loops until the entry marker is reachable from the graph start.</li>
  * <li>Replace the old start with an OSR start at the entry marker.</li>
- * <li>Replace local and lock entry proxies with {@link RistrettoOSRSupport} getter calls.</li>
+ * <li>Replace local and lock entry proxies with {@link RistrettoOSRLocalNode}s.</li>
  * <li>Remove the old invocation-entry CFG.</li>
  * </ol>
  *
@@ -96,12 +87,10 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * clones one loop iteration so the graph has a legal preheader immediately before the loop body.
  *
  * After the start rewrite, the code before the loop is no longer part of the compiled entry path. The
- * rewritten graph instead starts at a synthetic OSR entry and materializes the live state there:
+ * rewritten graph instead starts at a synthetic OSR entry whose frame state holds the live state:
  *
  * <pre>
- * nativeOSREntryPoint();
- * int i = osrLocal(1);
- * int sum = osrLocal(2);
+ * nativeOSREntryPoint();   // state: i = osrLocal(1), sum = osrLocal(2)
  * peeledOsrEntryMarker();
  * while (i < limit) {
  *     sum += i;
@@ -110,8 +99,12 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * return sum;
  * </pre>
  *
- * The loop peeling and start replacement mirror HotSpot's {@code OnStackReplacementPhase}, but the
- * value materialization contract is Ristretto-specific because there is no HotSpot OSR buffer.
+ * The OSR locals stay floating until {@link RistrettoOSRLocalLoweringPhase} loads them from the
+ * interpreter frame at the front of the graph, after all deoptimization points are fixed. So the
+ * entry state and every state derived from it name the transferred values, and a deoptimization
+ * anywhere in the compiled code, even one that an optimization moved up to the entry, resumes the
+ * interpreter with the locals it had (elide-dev/graal#129). The loop peeling and start replacement
+ * mirror HotSpot's {@code OnStackReplacementPhase}.
  */
 public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierContext> {
     @Override
@@ -139,27 +132,24 @@ public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierCo
             throw new PermanentBailoutException("Ristretto OSR currently supports only empty expression stacks.");
         }
 
-        FrameState entryState = duplicateWithDefaultEntryProxies(graph, osrState);
-        StartReplacement startReplacement = replaceStartAtOSREntry(graph, osr, entryState);
-        FixedWithNextNode insertionPoint = startReplacement.osrStart();
-        insertionPoint = appendOSRLocalLoads(graph, insertionPoint, osrState, entryState);
-        StateSplitProxyNode lastRestoreState = appendOSRLockLoads(graph, insertionPoint, osrState, entryState);
-        if (lastRestoreState != null) {
-            lastRestoreState.setStateAfter(osrState.duplicate());
-        }
-        verifyOSREntryProxiesReplaced(osrState);
-        finishOSREntryRewrite(graph, osr, startReplacement);
+        StartNode oldStart = graph.start();
+        StartNode osrStart = replaceStartAtOSREntry(graph, osr, osrState);
+        replaceEntryProxies(graph, osrState);
+        osr.replaceAtUsages(osrStart, InputType.Guard);
+        osr.replaceAtUsages(osrStart, InputType.Anchor);
+        GraphUtil.killCFG(oldStart);
+        new DeadCodeEliminationPhase(Required).apply(graph);
+        verifyEntryRewrite(graph);
     }
 
     /**
      * Replaces the invocation-entry start with a new start immediately before the OSR entry marker.
      *
      * The parsed graph still contains the normal method-entry control flow. Ristretto OSR needs a graph
-     * start at the peeled loop header instead, so this method detaches the entry marker, gives the new
-     * start the marker's frame state, and leaves the old start available for later CFG deletion.
+     * start at the peeled loop header instead, so this method detaches the entry marker and gives the
+     * new start the marker's frame state. The old start is left for the caller to delete.
      */
-    private static StartReplacement replaceStartAtOSREntry(StructuredGraph graph, EntryMarkerNode osr, FrameState osrState) {
-        StartNode oldStart = graph.start();
+    private static StartNode replaceStartAtOSREntry(StructuredGraph graph, EntryMarkerNode osr, FrameState osrState) {
         StartNode osrStart = graph.add(new StartNode());
         FixedNode next = osr.next();
         osr.setStateAfter(null);
@@ -167,7 +157,7 @@ public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierCo
         osrStart.setNext(next);
         osrStart.setStateAfter(osrState);
         graph.setStart(osrStart);
-        return new StartReplacement(oldStart, osrStart);
+        return osrStart;
     }
 
     private static void ensurePeelableRistrettoOSRLoop(Loop loop) {
@@ -179,73 +169,37 @@ public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierCo
     }
 
     /**
-     * Replaces each local entry proxy with a call that loads the matching slot from the transfer state.
+     * Replaces each local and lock entry proxy of the entry state with an OSR local node.
      *
-     * The helper call state uses a neutral entry state so the helper result does not become part of
-     * its own deoptimization metadata. Later frame states use the anchored helper result, which keeps
-     * deoptimization from OSR-compiled code faithful to the transferred interpreter frame.
+     * The stamp of a proxy may be too precise for the values the interpreter transfers (a branch
+     * that assigns the local may not have been parsed, for example), so the OSR locals get the
+     * unrestricted stamp of their kind, as in HotSpot.
      */
-    private static FixedWithNextNode appendOSRLocalLoads(StructuredGraph graph, FixedWithNextNode insertionPoint, FrameState osrState, FrameState invokeState) {
-        FixedWithNextNode current = insertionPoint;
+    private static void replaceEntryProxies(StructuredGraph graph, FrameState osrState) {
         for (int i = 0; i < osrState.localsSize(); i++) {
-            ValueNode value = osrState.localAt(i);
-            if (value instanceof EntryProxyNode proxy) {
-                LocalLoad replacement = appendLocalLoad(graph, current, invokeState, i, proxy.getStackKind(), proxy.stamp(NodeView.DEFAULT), false);
-                current = replacement.insertionPoint();
-                proxy.replaceAndDelete(replacement.value());
+            if (osrState.localAt(i) instanceof EntryProxyNode proxy) {
+                proxy.replaceAndDelete(createOSRLocal(graph, i, proxy, false));
             }
         }
-        return current;
-    }
-
-    /**
-     * Replaces each lock entry proxy with a call that reloads the transferred monitor object.
-     *
-     * Lock proxies are object-typed but use a separate helper because they are indexed by lock depth
-     * rather than by local slot.
-     */
-    private static StateSplitProxyNode appendOSRLockLoads(StructuredGraph graph, FixedWithNextNode insertionPoint, FrameState osrState, FrameState invokeState) {
-        FixedWithNextNode current = insertionPoint;
-        StateSplitProxyNode lastRestoreState = current instanceof StateSplitProxyNode stateSplit ? stateSplit : null;
         for (int i = 0; i < osrState.locksSize(); i++) {
-            ValueNode value = osrState.lockAt(i);
-            if (value instanceof EntryProxyNode proxy) {
-                LocalLoad replacement = appendLocalLoad(graph, current, invokeState, i, JavaKind.Object, proxy.stamp(NodeView.DEFAULT), true);
-                current = replacement.insertionPoint();
-                lastRestoreState = replacement.insertionPoint();
-                proxy.replaceAndDelete(replacement.value());
+            if (osrState.lockAt(i) instanceof EntryProxyNode proxy) {
+                proxy.replaceAndDelete(createOSRLocal(graph, i, proxy, true));
             }
         }
-        return lastRestoreState;
     }
 
-    /**
-     * Redirects marker usages to the new start and removes the obsolete invocation-entry CFG.
-     */
-    private static void finishOSREntryRewrite(StructuredGraph graph, EntryMarkerNode osr, StartReplacement startReplacement) {
-        osr.replaceAtUsages(startReplacement.osrStart(), InputType.Guard);
-        osr.replaceAtUsages(startReplacement.osrStart(), InputType.Anchor);
-        GraphUtil.killCFG(startReplacement.oldStart());
-        new DeadCodeEliminationPhase(Required).apply(graph);
-        verifyNoMethodParametersRemain(graph);
+    private static ValueNode createOSRLocal(StructuredGraph graph, int index, EntryProxyNode proxy, boolean lock) {
+        JavaKind kind = lock ? JavaKind.Object : proxy.getStackKind();
+        Stamp stamp = kind == JavaKind.Object ? proxy.stamp(NodeView.DEFAULT).unrestricted() : StampFactory.forKind(kind);
+        return graph.addOrUnique(new RistrettoOSRLocalNode(index, kind, lock, stamp));
     }
 
-    private static void verifyNoMethodParametersRemain(StructuredGraph graph) {
+    private static void verifyEntryRewrite(StructuredGraph graph) {
         if (graph.getNodes(ParameterNode.TYPE).count() != 0) {
             throw new PermanentBailoutException("Ristretto OSR graph still references Java method parameters after entry rewrite.");
         }
-    }
-
-    private static void verifyOSREntryProxiesReplaced(FrameState osrState) {
-        for (int i = 0; i < osrState.localsSize(); i++) {
-            if (osrState.localAt(i) instanceof EntryProxyNode) {
-                throw new PermanentBailoutException("Ristretto OSR graph still references entry proxy for local %d after entry rewrite.", i);
-            }
-        }
-        for (int i = 0; i < osrState.locksSize(); i++) {
-            if (osrState.lockAt(i) instanceof EntryProxyNode) {
-                throw new PermanentBailoutException("Ristretto OSR graph still references entry proxy for lock %d after entry rewrite.", i);
-            }
+        if (graph.getNodes().filter(EntryProxyNode.class).isNotEmpty()) {
+            throw new PermanentBailoutException("Ristretto OSR graph still references entry proxies after entry rewrite.");
         }
     }
 
@@ -266,75 +220,6 @@ public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierCo
     }
 
     /**
-     * Appends one helper call that materializes an interpreter local or lock object at OSR entry.
-     *
-     * <pre>
-     * slot constant -> RistrettoOSRSupport.get*Local/getLockObject
-     * helper invoke -> value proxy preserving the OSR entry frame state
-     * </pre>
-     */
-    private static LocalLoad appendLocalLoad(StructuredGraph graph, FixedWithNextNode insertionPoint, FrameState invokeState, int slot, JavaKind kind, Stamp proxyStamp, boolean lock) {
-        JavaKind stackKind = kind.getStackKind();
-        InvokeNode invoke = createLocalLoadInvoke(graph, slot, stackKind, proxyStamp, lock);
-        invoke.setStateAfter(createHelperStateAfter(graph, invokeState, invoke, stackKind));
-        graph.addAfterFixed(insertionPoint, invoke);
-        StateSplitProxyNode restoreState = anchorLocalLoadResult(graph, invoke, invokeState);
-        return new LocalLoad(restoreState, restoreState);
-    }
-
-    private static InvokeNode createLocalLoadInvoke(StructuredGraph graph, int slot, JavaKind stackKind, Stamp proxyStamp, boolean lock) {
-        ResolvedJavaMethod targetMethod = lookupGetter(stackKind, lock);
-        ConstantNode slotNode = ConstantNode.forInt(slot, graph);
-        Stamp returnStamp = localLoadReturnStamp(stackKind, proxyStamp);
-        MethodCallTargetNode callTarget = graph.add(new MethodCallTargetNode(InvokeKind.Static, targetMethod, new ValueNode[]{slotNode}, StampPair.createSingle(returnStamp), null));
-        return graph.add(new InvokeNode(callTarget, graph.getEntryBCI()));
-    }
-
-    private static Stamp localLoadReturnStamp(JavaKind stackKind, Stamp proxyStamp) {
-        Stamp returnStamp = stackKind == JavaKind.Object ? StampFactory.object() : StampFactory.forKind(stackKind);
-        if (stackKind == JavaKind.Object && proxyStamp != null) {
-            returnStamp = proxyStamp.unrestricted();
-        }
-        return returnStamp;
-    }
-
-    private static FrameState createHelperStateAfter(StructuredGraph graph, FrameState invokeState, InvokeNode invoke, JavaKind stackKind) {
-        return invokeState.duplicateModified(graph, invoke.bci(), invokeState.getStackState(), JavaKind.Void, new JavaKind[]{stackKind}, new ValueNode[]{invoke}, null, false);
-    }
-
-    private static StateSplitProxyNode anchorLocalLoadResult(StructuredGraph graph, InvokeNode invoke, FrameState invokeState) {
-        StateSplitProxyNode restoreState = graph.add(new StateSplitProxyNode(invoke));
-        restoreState.setStateAfter(invokeState);
-        graph.addAfterFixed(invoke, restoreState);
-        return restoreState;
-    }
-
-    /**
-     * Creates the frame state used by OSR entry helper calls.
-     *
-     * The parsed OSR state contains entry proxies for values that are not materialized until the helper
-     * calls below run. Helper-call states therefore use neutral values for those proxies; otherwise the
-     * helper result could become part of its own state and form a deoptimization-state cycle.
-     */
-    private static FrameState duplicateWithDefaultEntryProxies(StructuredGraph graph, FrameState osrState) {
-        return graph.add(osrState.duplicate((index, value) -> {
-            assert index >= 0;
-            return value instanceof EntryProxyNode proxy ? defaultFrameStateValue(graph, proxy.getStackKind()) : value;
-        }));
-    }
-
-    private static ValueNode defaultFrameStateValue(StructuredGraph graph, JavaKind kind) {
-        return ConstantNode.defaultForKind(kind.getStackKind(), graph);
-    }
-
-    /**
-     * Resolves the preserved Ristretto helper that loads one OSR local or lock slot.
-     */
-    private static ResolvedJavaMethod lookupGetter(JavaKind kind, boolean lock) {
-        return RistrettoUtils.lookupOSRGetter(kind, lock);
-    }
-
-    /**
      * Returns the unique OSR entry marker emitted by graph building.
      */
     private static EntryMarkerNode getEntryMarker(StructuredGraph graph) {
@@ -347,17 +232,5 @@ public final class RistrettoOnStackReplacementPhase extends BasePhase<HighTierCo
             throw new PermanentBailoutException("Ristretto OSR graph has multiple entry markers.");
         }
         return osr;
-    }
-
-    /**
-     * Result of appending a local-load helper call and the fixed node that follows it.
-     */
-    private record LocalLoad(ValueNode value, StateSplitProxyNode insertionPoint) {
-    }
-
-    /**
-     * The old invocation start plus the replacement start that now owns the OSR entry state.
-     */
-    private record StartReplacement(StartNode oldStart, StartNode osrStart) {
     }
 }

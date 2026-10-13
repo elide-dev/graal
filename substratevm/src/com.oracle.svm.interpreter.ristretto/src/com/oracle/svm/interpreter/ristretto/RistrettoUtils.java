@@ -27,6 +27,7 @@ package com.oracle.svm.interpreter.ristretto;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -71,6 +72,7 @@ import com.oracle.svm.interpreter.ristretto.compile.RistrettoGraphBuilderPlugins
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoInstalledCode;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoMethodHandleWithExceptionPlugin;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoNoDeoptPhase;
+import com.oracle.svm.interpreter.ristretto.compile.RistrettoOSRLocalLoweringPhase;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoOnStackReplacementPhase;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoSpeculationLog;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoSpeculationLog.CompilationSpeculationLog;
@@ -93,7 +95,6 @@ import jdk.graal.compiler.code.CompilationResult;
 import jdk.graal.compiler.core.CompilationWatchDog;
 import jdk.graal.compiler.core.CompilationWrapper;
 import jdk.graal.compiler.core.GraalCompiler;
-import jdk.graal.compiler.core.common.PermanentBailoutException;
 import jdk.graal.compiler.core.target.Backend;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.GraalError;
@@ -113,11 +114,13 @@ import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.OptimisticOptimizations;
 import jdk.graal.compiler.phases.Phase;
 import jdk.graal.compiler.phases.PhaseSuite;
+import jdk.graal.compiler.phases.common.FrameStateAssignmentPhase;
 import jdk.graal.compiler.phases.common.HighTierLoweringPhase;
 import jdk.graal.compiler.phases.common.LowTierLoweringPhase;
 import jdk.graal.compiler.phases.common.LoweringPhase;
 import jdk.graal.compiler.phases.common.MidTierLoweringPhase;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
+import jdk.graal.compiler.phases.tiers.MidTierContext;
 import jdk.graal.compiler.phases.tiers.Suites;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.printer.GraalDebugHandlersFactory;
@@ -131,7 +134,6 @@ import jdk.vm.ci.meta.Assumptions.ConcreteMethod;
 import jdk.vm.ci.meta.Assumptions.ConcreteSubtype;
 import jdk.vm.ci.meta.Assumptions.LeafType;
 import jdk.vm.ci.meta.Assumptions.NoFinalizableSubclass;
-import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
@@ -145,8 +147,6 @@ public class RistrettoUtils {
      * jdk.vm.ci.runtime package into the interpreter module.
      */
     public static final int INVOCATION_ENTRY_BCI = -1;
-
-    private static OSRGetters osrGetters;
 
     /**
      * Forces the given type to be preserved in the native image and registered for runtime
@@ -260,65 +260,6 @@ public class RistrettoUtils {
             return DynamicHub.toClass(DynamicHubProvider.getHub(sharedType));
         }
         throw VMError.shouldNotReachHere("Unexpected declaring class for runtime Java declaring-class lookup: " + declaringClass);
-    }
-
-    /**
-     * Returns the preserved Ristretto OSR helper method that loads one interpreter local or lock
-     * object from the active OSR transfer state.
-     *
-     * The lookup is cached in {@link RistrettoUtils} instead of the OSR graph phase so the preserved
-     * helper API has a single owner. The cache is initialized lazily: resolving the helpers touches
-     * {@link DynamicHub#fromClass(Class)}, which must only happen when runtime compilation actually
-     * needs OSR helper methods.
-     */
-    public static ResolvedJavaMethod lookupOSRGetter(JavaKind kind, boolean lock) {
-        OSRGetters getters = osrGetters();
-        if (lock) {
-            return getters.lockObject();
-        }
-        switch (kind) {
-            case Int:
-                return getters.intLocal();
-            case Float:
-                return getters.floatLocal();
-            case Long:
-                return getters.longLocal();
-            case Double:
-                return getters.doubleLocal();
-            case Object:
-                return getters.objectLocal();
-            default:
-                throw new PermanentBailoutException("Unsupported Ristretto OSR local kind: %s", kind);
-        }
-    }
-
-    private static synchronized OSRGetters osrGetters() {
-        if (osrGetters == null) {
-            osrGetters = new OSRGetters(resolveOSRGetter("getIntLocal", "(I)I"),
-                            resolveOSRGetter("getFloatLocal", "(I)F"),
-                            resolveOSRGetter("getLongLocal", "(I)J"),
-                            resolveOSRGetter("getDoubleLocal", "(I)D"),
-                            resolveOSRGetter("getObjectLocal", "(I)Ljava/lang/Object;"),
-                            resolveOSRGetter("getLockObject", "(I)Ljava/lang/Object;"));
-        }
-        return osrGetters;
-    }
-
-    private static ResolvedJavaMethod resolveOSRGetter(String methodName, String descriptor) {
-        InterpreterResolvedObjectType osrSupportType = (InterpreterResolvedObjectType) DynamicHub.fromClass(RistrettoOSRSupport.class).getInterpreterType();
-        if (osrSupportType == null) {
-            throw VMError.shouldNotReachHere("Ristretto OSR support type is not preserved for runtime compilation.");
-        }
-        for (InterpreterResolvedJavaMethod method : osrSupportType.getAllDeclaredMethods()) {
-            if (method.getName().equals(methodName) && method.getSignature().toMethodDescriptor().equals(descriptor)) {
-                return RistrettoMethod.getOrCreate(method);
-            }
-        }
-        throw VMError.shouldNotReachHere("Could not find Ristretto OSR local getter " + methodName + descriptor + ".");
-    }
-
-    private record OSRGetters(ResolvedJavaMethod intLocal, ResolvedJavaMethod floatLocal, ResolvedJavaMethod longLocal,
-                    ResolvedJavaMethod doubleLocal, ResolvedJavaMethod objectLocal, ResolvedJavaMethod lockObject) {
     }
 
     public static CompilationResult compile(DebugContext debug, final SubstrateMethod method) {
@@ -854,6 +795,14 @@ public class RistrettoUtils {
         if (!RistrettoOptions.useDeoptimization()) {
             effectiveSuites.getLowTier().appendPhase(new RistrettoNoDeoptPhase());
         }
+        /*
+         * OSR locals are loaded from the interpreter frame at the front of the graph once every
+         * deoptimization point is fixed and has its frame state, so that no deoptimization can
+         * precede the loads (see RistrettoOSRLocalLoweringPhase).
+         */
+        ListIterator<BasePhase<? super MidTierContext>> afterFrameStateAssignment = effectiveSuites.getMidTier().findPhase(FrameStateAssignmentPhase.class, true);
+        GraalError.guarantee(afterFrameStateAssignment != null, "Ristretto suites have no frame state assignment phase");
+        afterFrameStateAssignment.add(new RistrettoOSRLocalLoweringPhase());
         assert assertVerifyRistrettoJVMCI(effectiveSuites);
         return effectiveSuites;
     }
