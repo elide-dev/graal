@@ -44,8 +44,10 @@ import com.oracle.svm.graal.hosted.DeoptimizationFeature;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.meta.HostedMetaAccess;
+import com.oracle.svm.hosted.thread.VMThreadLocalCollector;
 import com.oracle.svm.interpreter.CremaFeature;
 import com.oracle.svm.interpreter.InterpreterFeature;
+import com.oracle.svm.interpreter.InterpreterFrame;
 import com.oracle.svm.interpreter.RistrettoInterpreterSupport;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedObjectType;
@@ -129,6 +131,7 @@ public final class RistrettoFeature implements InternalFeature {
         if (RistrettoOptions.useDeoptimization()) {
             ImageSingletons.add(RistrettoDeoptimizationSupport.class, new RistrettoDeoptimizationSupport());
         }
+        ImageSingletons.add(RistrettoOSRFrameLayout.class, new RistrettoOSRFrameLayout());
     }
 
     /**
@@ -138,7 +141,8 @@ public final class RistrettoFeature implements InternalFeature {
     public void beforeAnalysis(BeforeAnalysisAccess a) {
         FeatureImpl.BeforeAnalysisAccessImpl access = (FeatureImpl.BeforeAnalysisAccessImpl) a;
         RistrettoUtils.forcePreserveType(access.getBigBang(), RistrettoDirectives.class);
-        RistrettoUtils.forcePreserveType(access.getBigBang(), RistrettoOSRSupport.class);
+        /* OSR code reads the entering interpreter frame from this thread local. */
+        RistrettoOSRFrameLayout.singleton().setCurrentFrame(ImageSingletons.lookup(VMThreadLocalCollector.class).forFastThreadLocal(RistrettoOSRSupport.currentFrameThreadLocal()));
         /*
          * The low-level Ristretto fast path reads these fields via offsets recorded in
          * InterpreterExecutionOffsets. Analysis does not necessarily observe those reads as normal
@@ -178,6 +182,7 @@ public final class RistrettoFeature implements InternalFeature {
     public void beforeCompilation(BeforeCompilationAccess a) {
         FeatureImpl.BeforeCompilationAccessImpl config = (FeatureImpl.BeforeCompilationAccessImpl) a;
         initializeExecutionOffsets(config);
+        initializeOSRFrameLayout(config);
         if (RistrettoOptions.useDeoptimization()) {
             config.registerAsImmutable(ImageSingletons.lookup(RistrettoDeoptimizationSupport.class));
             HostedMetaAccess metaAccess = config.getMetaAccess();
@@ -194,6 +199,15 @@ public final class RistrettoFeature implements InternalFeature {
                             new MethodPointer(metaAccess.lookupJavaMethod(interpEntryShort)),
                             new MethodPointer(metaAccess.lookupJavaMethod(interpEntryChar)));
         }
+    }
+
+    /** Where OSR code finds the locals and locks of the interpreter frame that enters it. */
+    private static void initializeOSRFrameLayout(FeatureImpl.BeforeCompilationAccessImpl access) {
+        var frameType = access.getMetaAccess().lookupJavaType(InterpreterFrame.class);
+        RistrettoOSRFrameLayout.singleton().setFieldOffsets(
+                        JVMCIReflectionUtil.getUniqueDeclaredField(frameType, "references").getOffset(),
+                        JVMCIReflectionUtil.getUniqueDeclaredField(frameType, "primitives").getOffset(),
+                        JVMCIReflectionUtil.getUniqueDeclaredField(frameType, "locks").getOffset());
     }
 
     private static void initializeExecutionOffsets(FeatureImpl.BeforeCompilationAccessImpl access) {

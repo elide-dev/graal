@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.interpreter.ristretto;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalFactory;
@@ -63,10 +65,11 @@ import com.oracle.svm.shared.util.VMError;
  *
  * OSR is attempted just before the interpreter jumps back to BCI 12. At that point the interpreter
  * records the current {@link InterpreterFrame} in {@link #CURRENT_OSR_FRAME}; the OSR graph starts at BCI
- * 12, calls {@code getIntLocal(1)} and {@code getIntLocal(2)} to materialize {@code i} and {@code sum},
- * and then executes the rest of the loop in compiled code. Monitor entries remain on that frame, so
- * compiled code can reload the active lock objects while unwinding synchronized regions that were
- * entered by the interpreter.
+ * 12, loads {@code i} and {@code sum} from local slots 1 and 2 of that frame (see
+ * {@link com.oracle.svm.interpreter.ristretto.compile.RistrettoOSRLocalLoweringPhase} and
+ * {@link RistrettoOSRFrameLayout}), and then executes the rest of the loop in compiled code. Monitor
+ * entries remain on that frame, so compiled code can reload the active lock objects while unwinding
+ * synchronized regions that were entered by the interpreter.
  */
 @InternalVMMethod
 public final class RistrettoOSRSupport {
@@ -190,43 +193,9 @@ public final class RistrettoOSRSupport {
         }
     }
 
-    /*
-     * These helpers are resolved by name and descriptor in RistrettoUtils and invoked from generated
-     * OSR graphs; ordinary Java call-site searches only see the lookup strings.
-     */
-    public static int getIntLocal(int slot) {
-        return currentFrame().getLocalInt(slot);
-    }
-
-    public static float getFloatLocal(int slot) {
-        return currentFrame().getLocalFloat(slot);
-    }
-
-    public static long getLongLocal(int slot) {
-        return currentFrame().getLocalLong(slot);
-    }
-
-    public static double getDoubleLocal(int slot) {
-        return currentFrame().getLocalDouble(slot);
-    }
-
-    public static Object getObjectLocal(int slot) {
-        return currentFrame().getLocalObject(slot);
-    }
-
-    public static Object getLockObject(int index) {
-        Object lock = currentFrame().getLock(index);
-        if (lock == null) {
-            throw VMError.shouldNotReachHere("No active Ristretto OSR lock at index " + index);
-        }
-        return lock;
-    }
-
-    private static InterpreterFrame currentFrame() {
-        InterpreterFrame frame = CURRENT_OSR_FRAME.get();
-        if (frame == null) {
-            throw VMError.shouldNotReachHere("No current Ristretto OSR frame");
-        }
-        return frame;
+    /** The thread local that OSR code reads the entering interpreter frame from. */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static FastThreadLocalObject<InterpreterFrame> currentFrameThreadLocal() {
+        return CURRENT_OSR_FRAME;
     }
 }

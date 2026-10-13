@@ -51,6 +51,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntBinaryOperator;
 import java.util.function.IntUnaryOperator;
@@ -122,7 +123,18 @@ public class RistrettoDeoptimizationTest {
                 /* The bootstrap method of the lambda call sites of Lambdas, which the interpreter links. */
                 RuntimeReflection.register(
                                 LambdaMetafactory.class.getMethod("metafactory", MethodHandles.Lookup.class, String.class, MethodType.class, MethodType.class, MethodHandle.class, MethodType.class));
-            } catch (NoSuchMethodException | NoSuchFieldException e) {
+                /*
+                 * The updater methods that Updater calls, and the Unsafe accessors they call:
+                 * compiled on their own, and with the Unsafe field keeping a location, those make
+                 * AtomicReferenceFieldUpdaterImpl.get and set inlinable (see
+                 * RistrettoInlinableAOTMethods).
+                 */
+                Class<?> unsafe = Class.forName("jdk.internal.misc.Unsafe");
+                RuntimeReflection.register(AtomicReferenceFieldUpdater.class.getMethod("newUpdater", Class.class, Class.class, String.class),
+                                AtomicReferenceFieldUpdater.class.getMethod("get", Object.class), AtomicReferenceFieldUpdater.class.getMethod("set", Object.class, Object.class),
+                                unsafe.getMethod("getReferenceVolatile", Object.class, long.class), unsafe.getMethod("putReferenceVolatile", Object.class, long.class, Object.class));
+                RuntimeReflection.register(Class.forName("java.util.concurrent.atomic.AtomicReferenceFieldUpdater$AtomicReferenceFieldUpdaterImpl").getDeclaredField("U"));
+            } catch (ReflectiveOperationException e) {
                 throw new AssertionError(e);
             }
         }
@@ -262,6 +274,50 @@ public class RistrettoDeoptimizationTest {
         public static Object pick(Object value, Object fallback, int[] compiled) {
             compiled[0] = Probe.compiled();
             return Objects.requireNonNullElse(value, fallback);
+        }
+    }
+
+    public static final class Updater {
+        public static final int ROUNDS = 500_000;
+
+        static final AtomicReferenceFieldUpdater<Updater, Object> JOB = AtomicReferenceFieldUpdater.newUpdater(Updater.class, Object.class, "job");
+
+        public volatile Object job;
+
+        /**
+         * Sums the {@link Integer} jobs of 64 updaters over {@link #ROUNDS} rounds in one long loop,
+         * so that Ristretto enters it through OSR, and counts the compiled rounds in
+         * {@code compiled[0]}. {@link AtomicReferenceFieldUpdater#get} and
+         * {@link AtomicReferenceFieldUpdater#set} are AOT methods that Ristretto inlines.
+         * {@link #finish} has not run when the OSR compilation of the loop starts, so the compiled
+         * code deoptimizes on the loop exit, and that deoptimization is moved up to the OSR entry.
+         */
+        public static long run(int[] compiled) {
+            Updater[] updaters = new Updater[64];
+            for (int i = 0; i < updaters.length; i++) {
+                updaters[i] = new Updater();
+                updaters[i].job = Integer.valueOf(i);
+            }
+            long seen = 0;
+            long failures = 0;
+            for (int round = 0; round < ROUNDS; round++) {
+                Updater updater = updaters[round & 63];
+                try {
+                    Object job = JOB.get(updater);
+                    if (job != null) {
+                        seen += ((Integer) job).intValue();
+                    }
+                    JOB.set(updater, job);
+                    compiled[0] += Probe.compiled();
+                } catch (RuntimeException e) {
+                    failures++;
+                }
+            }
+            return finish(seen, failures);
+        }
+
+        static long finish(long seen, long failures) {
+            return failures == 0 ? seen : -failures;
         }
     }
 
@@ -410,7 +466,7 @@ public class RistrettoDeoptimizationTest {
     }
 
     static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class,
-                    Counter.class,
+                    Updater.class, Counter.class,
                     Handles.class, Lambdas.class);
 
     @Before
@@ -708,6 +764,30 @@ public class RistrettoDeoptimizationTest {
             return compiled[0] == 1;
         });
         assertTrue("the bound method reference must run the counter", (int) counterClass.getField("runs").get(counter) >= n);
+    }
+
+    /**
+     * Ristretto compiles the loop of {@link Updater#run} through OSR, with the AOT methods
+     * {@link AtomicReferenceFieldUpdater#get} and {@link AtomicReferenceFieldUpdater#set} inlined.
+     * The compiled code deoptimizes at a call site that the interpreter had not linked when the
+     * code was compiled, and that deoptimization is moved up to the entry of the compiled code. The
+     * interpreter must resume with the locals it transferred to the compiled code, not with nulls
+     * (elide-dev/graal#129).
+     */
+    @Test
+    public void deoptimizationAtOSREntryResumesWithTransferredLocals() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Method run = loader.loadClass(Updater.class.getName()).getMethod("run", int[].class);
+        long expected = 0;
+        for (int round = 0; round < Updater.ROUNDS; round++) {
+            expected += round & 63;
+        }
+        long deadline = System.nanoTime() + COMPILATION_TIMEOUT_NANOS;
+        int[] compiled = new int[1];
+        while (compiled[0] == 0) {
+            assertTrue("Ristretto did not run Updater.run through OSR", System.nanoTime() < deadline);
+            assertEquals(expected, (long) invoke(run, compiled));
+        }
     }
 
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
