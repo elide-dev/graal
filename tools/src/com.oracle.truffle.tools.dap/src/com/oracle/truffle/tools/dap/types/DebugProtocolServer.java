@@ -429,7 +429,8 @@ public class DebugProtocolServer {
             final int seq = request.getSeq();
             final String command = request.getCommand();
             try {
-                final JSONObject args = request.getArguments() instanceof JSONObject ? (JSONObject) request.getArguments() : null;
+                // Arguments are optional for most requests, `disconnect` among them.
+                final JSONObject args = request.getArguments() instanceof JSONObject ? (JSONObject) request.getArguments() : new JSONObject();
                 CompletableFuture<?> future = null;
                 switch (command) {
                     case "cancel":
