@@ -70,10 +70,30 @@ public class JfrTraceId {
         return JfrTraceIdMap.singleton().getId(clazz);
     }
 
+    /**
+     * Returns the trace id of the class, or {@link JfrTraceIdMap#NO_ID} if the class has no entry
+     * in the trace id map (TYPE_NONE in HotSpot's JFR).
+     */
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static long getTraceId(Class<?> clazz) {
-        long id = getTraceIdRaw(clazz);
-        return id >>> TRACE_ID_SHIFT;
+        return fromRawTraceId(getTraceIdRaw(clazz));
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    static long fromRawTraceId(long rawId) {
+        return rawId >>> TRACE_ID_SHIFT;
+    }
+
+    static long toRawTraceId(long traceId) {
+        return traceId << TRACE_ID_SHIFT;
+    }
+
+    /**
+     * Reserves a trace id for a type that is loaded at run time. Must be called when the type id is
+     * handed out, before the corresponding {@link Class} can be referenced by a JFR event.
+     */
+    public static void assignRuntimeTypeId(int typeID) {
+        JfrTraceIdMap.singleton().ensureRuntimeTypeId(typeID);
     }
 
     @Uninterruptible(reason = "Result is only valid until epoch changes.", callerMustBe = true)
@@ -117,7 +137,7 @@ public class JfrTraceId {
             return;
         }
         long typeId = getTypeId(clazz);
-        JfrTraceIdMap.singleton().setId(index, typeId << TRACE_ID_SHIFT);
+        JfrTraceIdMap.singleton().setId(index, toRawTraceId(typeId));
 
         if ((jdk.internal.event.Event.class == clazz || jdk.jfr.Event.class == clazz) &&
                         clazz.getClassLoader() == null || clazz.getClassLoader() == ClassLoader.getSystemClassLoader()) {

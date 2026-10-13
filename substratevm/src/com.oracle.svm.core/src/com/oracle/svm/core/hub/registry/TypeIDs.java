@@ -37,6 +37,8 @@ import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubSupport;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.jfr.HasJfrSupport;
+import com.oracle.svm.core.jfr.traceid.JfrTraceId;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.ApplicationLayerOnly;
@@ -79,6 +81,10 @@ public class TypeIDs {
     public int nextTypeId() {
         int result = nextTypeId.getAndIncrement();
         VMError.guarantee(result > 0);
+        if (HasJfrSupport.get()) {
+            /* JFR events reference classes by trace id, so the new type needs one too. */
+            JfrTraceId.assignRuntimeTypeId(result);
+        }
         return result;
     }
 

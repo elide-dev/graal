@@ -137,6 +137,10 @@ public class JfrTypeRepository implements JfrRepository {
     @Uninterruptible(reason = "Locking without transition and result is only valid until epoch changes.", callerMustBe = true)
     public long getClassId(Class<?> clazz) {
         long classId = JfrTraceId.getTraceId(clazz);
+        if (classId == 0L) {
+            /* The class has no trace id, so it cannot be referenced from the constant pool. */
+            return 0L;
+        }
         ClassInfoRaw classInfoRaw = StackValue.get(ClassInfoRaw.class);
         classInfoRaw.setId(classId);
         classInfoRaw.setHash(getIdHash(classId));
