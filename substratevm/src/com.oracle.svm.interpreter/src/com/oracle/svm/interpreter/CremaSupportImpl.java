@@ -50,6 +50,7 @@ import static com.oracle.svm.espresso.classfile.Constants.ACC_SUPER;
 import static com.oracle.svm.espresso.classfile.Constants.JVM_ACC_WRITTEN_FLAGS;
 import static com.oracle.svm.espresso.shared.meta.SignaturePolymorphicIntrinsic.InvokeGeneric;
 import static com.oracle.svm.interpreter.Interpreter.unbasic;
+import static com.oracle.svm.interpreter.InterpreterStubSection.MAX_VTABLE_STUBS;
 import static com.oracle.svm.interpreter.InterpreterStubSection.getCremaStubForVTableIndex;
 import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.ITBL_SELECTION_FAILURE;
 import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.VTBL_UNINITIALIZED;
@@ -171,6 +172,7 @@ import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.BasedOnJDKFile;
 import com.oracle.svm.shared.util.VMError;
 
+import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.nodes.extended.MembarNode;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
@@ -361,6 +363,8 @@ public class CremaSupportImpl implements CremaSupport {
 
         Class<?>[] dispatchTransitiveSuperInterfaces = getSortedTransitiveSuperInterfaces(superClass, superInterfaces);
         AbstractCremaDispatchTable dispatchTable = createDispatchTable(parsed, classLoader, superClass, dispatchTransitiveSuperInterfaces);
+        int[] iTableStartingIndices = computeITableStartingIndices(dispatchTable, dispatchTransitiveSuperInterfaces);
+        checkDispatchTableSupported(externalName, isInterface, dispatchTable, dispatchTransitiveSuperInterfaces, iTableStartingIndices);
 
         /*
          * Compute the type check slots depending on the kind of type
@@ -402,7 +406,7 @@ public class CremaSupportImpl implements CremaSupport {
 
         /* Compute type check data, which might be based on interface hashing. */
         int[] typeCheckInterfaceIDs = getTypeCheckInterfaceIDs(dispatchTransitiveSuperInterfaces, isInterface ? interfaceID : DynamicHub.NO_INTERFACE_ID);
-        TypeCheckData typeCheckData = computeTypeCheckData(typeID, isInterface, numClassTypes, typeCheckSuperHub, dispatchTable, typeCheckInterfaceIDs, dispatchTransitiveSuperInterfaces);
+        TypeCheckData typeCheckData = computeTypeCheckData(typeID, isInterface, numClassTypes, typeCheckSuperHub, typeCheckInterfaceIDs, iTableStartingIndices);
 
         int[] openTypeWorldTypeCheckSlots = typeCheckData.openTypeWorldTypeCheckSlots();
         int[] openTypeWorldInterfaceHashTable = typeCheckData.openTypeWorldInterfaceHashTable();
@@ -544,16 +548,19 @@ public class CremaSupportImpl implements CremaSupport {
         }
     }
 
-    private static TypeCheckData computeTypeCheckData(int typeID, boolean typeIsInterface, short numClassTypes, DynamicHub superHub,
-                    AbstractCremaDispatchTable dispatchTable, int[] typeCheckInterfaceIDs, Class<?>[] dispatchTransitiveSuperInterfaces) {
-        /*
-         * The dispatch table will look like:
-         * @formatter:off
-         * [vtable..., itable(I1)..., itable(I2)...]
-         *             ^ idx1         ^ idx2
-         * @formatter:on
-         * First compute idx* in iTableStartingIndices
-         */
+    /**
+     * Computes where each transitive superinterface's itable starts in the dispatch table, which
+     * looks like:
+     *
+     * <pre>
+     * [vtable..., itable(I1)..., itable(I2)...]
+     *             ^ idx1         ^ idx2
+     * </pre>
+     *
+     * Returns the indices in the order of {@code dispatchTransitiveSuperInterfaces}, or
+     * {@code null} when no interface methods are implemented.
+     */
+    private static int[] computeITableStartingIndices(AbstractCremaDispatchTable dispatchTable, Class<?>[] dispatchTransitiveSuperInterfaces) {
         int dispatchTableLength = dispatchTable.vtableLength();
         int[] iTableStartingIndices = new int[dispatchTransitiveSuperInterfaces.length];
         for (int i = 0; i < dispatchTransitiveSuperInterfaces.length; i++) {
@@ -563,10 +570,41 @@ public class CremaSupportImpl implements CremaSupport {
         }
         if (dispatchTableLength == dispatchTable.vtableLength()) {
             // no interface methods are implemented
-            iTableStartingIndices = null;
+            return null;
         }
+        return iTableStartingIndices;
+    }
 
-        return computeTypeCheckData(typeID, typeIsInterface, numClassTypes, superHub, typeCheckInterfaceIDs, iTableStartingIndices);
+    /**
+     * Rejects a class whose dispatch table this image cannot represent, with a
+     * {@link LinkageError} the loading program can handle. Two limits apply: the image holds a
+     * fixed number of interpreter dispatch stubs (see
+     * {@link InterpreterStubSection#MAX_VTABLE_STUBS}), and with interface hashing the hub encodes
+     * each itable's offset as a short. Both used to be enforced by VM guarantees once hub
+     * allocation had started, which took the whole process down (elide-dev/runtime#2163). This runs
+     * before anything is allocated for the class, so a failure leaves no partial state behind.
+     */
+    private static void checkDispatchTableSupported(String externalName, boolean isInterface, AbstractCremaDispatchTable dispatchTable, Class<?>[] dispatchTransitiveSuperInterfaces,
+                    int[] iTableStartingIndices) {
+        dispatchTable.checkInterpreterStubCapacity(externalName, dispatchTransitiveSuperInterfaces);
+
+        /* Mirrors the encoding in DynamicHubUtils.computeOpenTypeWorldTypeCheckData. */
+        boolean implementsMethods = !isInterface && iTableStartingIndices != null;
+        if (implementsMethods && SubstrateOptions.useInterfaceHashing()) {
+            long vTableBaseOffset = KnownOffsets.singleton().getVTableBaseOffset();
+            long vTableEntrySize = KnownOffsets.singleton().getVTableEntrySize();
+            for (int i = 0; i < dispatchTransitiveSuperInterfaces.length; i++) {
+                Class<?> iface = dispatchTransitiveSuperInterfaces[i];
+                if (DynamicHub.fromClass(iface).getInterfaceID() <= SubstrateOptions.interfaceHashingMaxId()) {
+                    long offset = vTableBaseOffset + iTableStartingIndices[i] * vTableEntrySize;
+                    if (!NumUtil.isShort(offset)) {
+                        throw new LinkageError("Cannot link class " + externalName + ": the dispatch table of interface " + iface.getName() + " starts at offset " + offset +
+                                        " in the dynamic hub, beyond the " + Short.MAX_VALUE + " bytes that interface hashing can address" +
+                                        " (an image built with -H:-UseInterfaceHashing does not have this limit)");
+                    }
+                }
+            }
+        }
     }
 
     private static int[] getTypeCheckInterfaceIDs(Class<?>[] transitiveSuperInterfaces, int currentInterfaceID) {
@@ -1280,6 +1318,13 @@ public class CremaSupportImpl implements CremaSupport {
         protected abstract List<InterpreterResolvedJavaMethod> createInterpreterVTable(Class<?>[] interfaces);
 
         /**
+         * Throws a {@link LinkageError} if an entry of the SVM vtable that this table describes
+         * would need an interpreter dispatch stub beyond the fixed number the image contains. Must
+         * be called before the {@link DynamicHub} is allocated.
+         */
+        public abstract void checkInterpreterStubCapacity(String externalName, Class<?>[] interfaces);
+
+        /**
          * The index in the vtable at which the implicit interface methods started to be added.
          */
         public abstract int mirandaMethodsStart();
@@ -1324,6 +1369,11 @@ public class CremaSupportImpl implements CremaSupport {
         public int svmVTableLength(Class<?>[] interfaces) {
             // No need to create a svm vtable in the dynamic hub of interfaces.
             return 0;
+        }
+
+        @Override
+        public void checkInterpreterStubCapacity(String externalName, Class<?>[] interfaces) {
+            // Interfaces have no svm vtable, so they use no stubs.
         }
 
         @Override
@@ -1404,6 +1454,54 @@ public class CremaSupportImpl implements CremaSupport {
                 result += getItableFor(intf).size();
             }
             return result;
+        }
+
+        @Override
+        public void checkInterpreterStubCapacity(String externalName, Class<?>[] interfaces) {
+            if (!needsSvmVTable()) {
+                return;
+            }
+            int length = concatenatedTableLength(interfaces);
+            if (length <= MAX_VTABLE_STUBS) {
+                return;
+            }
+            /* Walk the entries in the order in which fillVTable sees them: vtable, then itables. */
+            int index = 0;
+            for (var entry : table.getVtable()) {
+                checkInterpreterStubAvailable(externalName, length, index++, entry);
+            }
+            for (Class<?> intf : interfaces) {
+                for (var entry : getItableFor(intf)) {
+                    checkInterpreterStubAvailable(externalName, length, index++, entry);
+                }
+            }
+        }
+
+        private static void checkInterpreterStubAvailable(String externalName, int length, int index,
+                        TableEntryRef<InterpreterResolvedJavaType, InterpreterResolvedJavaMethod, InterpreterResolvedJavaField> ref) {
+            if (index < MAX_VTABLE_STUBS || !needsInterpreterStub(ref)) {
+                return;
+            }
+            TableEntry<InterpreterResolvedJavaType, InterpreterResolvedJavaMethod, InterpreterResolvedJavaField> entry = ref.getEntry();
+            throw new LinkageError("Cannot link class " + externalName + ": its dispatch table has " + length + " entries, but this image can only dispatch to interpreted methods from the first " +
+                            MAX_VTABLE_STUBS + " entries (entry " + index + " is " + entry.getSymbolicName() + entry.getSymbolicSignature() + ")");
+        }
+
+        /**
+         * Mirrors the choice that {@code fillVTable} makes between a method's compiled entry point
+         * and the interpreter stub for its slot.
+         */
+        private static boolean needsInterpreterStub(TableEntryRef<InterpreterResolvedJavaType, InterpreterResolvedJavaMethod, InterpreterResolvedJavaField> ref) {
+            if (ref.isSelectionFailure() || ref.isNonPublicInterfaceSelection()) {
+                /* Dispatches to a compiled stub that throws the linkage error. */
+                return false;
+            }
+            TableEntry<InterpreterResolvedJavaType, InterpreterResolvedJavaMethod, InterpreterResolvedJavaField> entry = ref.getEntry();
+            if (entry instanceof CremaPartialMethod partialMethod) {
+                /* Abstract methods of this class get the compiled AbstractMethodError stub. */
+                return !Modifier.isAbstract(partialMethod.getModifiers());
+            }
+            return !((InterpreterResolvedJavaMethod) entry).hasNativeEntryPoint();
         }
 
         @Override

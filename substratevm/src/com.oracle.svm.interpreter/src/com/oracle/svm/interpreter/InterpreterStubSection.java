@@ -155,6 +155,9 @@ public abstract class InterpreterStubSection {
     /*
      * On AMD64, the 16-byte trampoline, 4,094 16-byte stubs, and the 13-byte .fini section
      * fit in one 64-KiB interval. One more stub would move .fini into the next interval.
+     *
+     * A runtime-loaded class whose dispatch table needs a stub beyond this limit fails to link
+     * (CremaSupportImpl.checkDispatchTableSupported), so the guarantee below never fires for it.
      */
     static final int MAX_VTABLE_STUBS = 4 * 1024 - 2;
 
