@@ -25,6 +25,7 @@
 package com.oracle.svm.interpreter.ristretto.meta;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 
 import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
 import com.oracle.svm.core.methodhandles.MethodHandleInterpreterUtils;
@@ -82,6 +83,35 @@ public final class RistrettoMethodHandleAccessProvider implements MethodHandleAc
             }
         }
         return null;
+    }
+
+    /**
+     * Returns the member of a constant direct method handle (see
+     * {@link MethodHandleInterpreterUtils#getDirectMemberName}), or null when the constant is not
+     * one. The member's reference kind tells how the handle invokes it.
+     */
+    public Target_java_lang_invoke_MemberName resolveDirectMemberName(JavaConstant methodHandle) {
+        Object value = snippetReflectionProvider.asObject(Object.class, methodHandle);
+        if (value instanceof MethodHandle handle) {
+            return MethodHandleInterpreterUtils.getDirectMemberName(handle);
+        }
+        return null;
+    }
+
+    /**
+     * Returns whether the constant handle has the constant method type: the identity that
+     * {@code Invokers.checkExactType} requires and for which {@code MethodHandle.asType} returns
+     * the handle itself.
+     */
+    public boolean isHandleOfType(JavaConstant methodHandle, JavaConstant methodType) {
+        Object handle = snippetReflectionProvider.asObject(Object.class, methodHandle);
+        Object type = snippetReflectionProvider.asObject(Object.class, methodType);
+        return handle instanceof MethodHandle mh && type instanceof MethodType && mh.type() == type;
+    }
+
+    /** Returns the compiler view of the method that {@code memberName} refers to. */
+    public ResolvedJavaMethod resolveMemberTarget(Target_java_lang_invoke_MemberName memberName) {
+        return asRistrettoMethod(memberName);
     }
 
     @Override
