@@ -1336,6 +1336,14 @@ public class SubstrateOptions {
     /** Query these options only through an appropriate method. */
     public static class ConcealedOptions {
 
+        /**
+         * Former location of {@link SubstrateOptions#MaxJavaStackTraceDepth}, kept as an alias of
+         * that option for Oracle's prebuilt enterprise code, which still links against it (the EE
+         * distribution overlays this fork's classes on Oracle's, and LinkCheck verifies that the
+         * enterprise classes resolve). Not an {@link Option} of its own.
+         */
+        public static final RuntimeOptionKey<Integer> MaxJavaStackTraceDepth = SubstrateOptions.MaxJavaStackTraceDepth;
+
         @Option(help = "Activate runtime compilation in separate isolates (enable support during image build with option SupportCompileInIsolates).") //
         public static final RuntimeOptionKey<Boolean> CompileInIsolates = new RuntimeOptionKey<>(true, RelevantForCompilationIsolates);
 
