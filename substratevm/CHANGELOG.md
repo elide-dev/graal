@@ -9,6 +9,7 @@ This changelog summarizes major changes to GraalVM Native Image.
   Built-in JNI method resolution now links the exact short or signature-suffixed long JNI symbol exported by a static library, enabling overloaded native methods that export only long names.
   With class-loader-aware loading, Native Image generates a no-op `JNI_OnLoad_<library>` symbol for a registered static JNI library without an initialization entry point, allowing the JDK to recognize the library as built-in.
 * (GR-80731) Added runtime support for `IgnoreUnrecognizedVMOptions`, `UnlockDiagnosticVMOptions`.
+* (GR-80621) Added runtime support for `AbortVMOnCompilationFailure` through the Graal compiler's `CompilationFailureAction` option when runtime compilation is available.
 * (GR-80328) Native Images built with `--enable-monitoring=jvmstat` can attach to file-backed JVMStat performance data from other HotSpot and Native Image processes on Linux and macOS. JDK tools such as `jstack`, `jinfo`, `jps`, and `jstat` can run on Crema to inspect other JVM processes.
 * (GR-80571) Added an unboxed calling convention for compiled Truffle-to-Truffle calls.
 * (GR-79971) Unrecognized Native Image options starting with `-` or `--` now produce an error instead of being interpreted as a main class or output filename.
