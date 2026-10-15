@@ -279,20 +279,20 @@ public final class RuntimeInterpreterConstantPool extends InterpreterConstantPoo
 
     private Object resolveClassMethodRefConstant(int methodIndex, InterpreterResolvedObjectType accessingClass) {
         assert accessingClass != null;
-        assert tagAt(methodIndex) == Tag.METHOD_REF;
+        assert this.tagAt(methodIndex) == Tag.METHOD_REF;
 
-        Object entry = this.cachedEntries[methodIndex];
+        Object entry = this.peekCachedEntry(methodIndex);
 
         Symbol<Name> methodName = null;
         Symbol<Signature> methodSignature = null;
         InterpreterResolvedJavaType holder = null;
 
         if (entry == null) {
-            // CP comes from dynamically loaded .class file.
+            // CP comes from a dynamically loaded .class file.
             methodName = this.methodName(methodIndex);
             methodSignature = this.methodSignature(methodIndex);
             int memberClassIndex = this.memberClassIndex(methodIndex);
-            holder = resolvedTypeAt(accessingClass, memberClassIndex);
+            holder = this.resolvedTypeAt(accessingClass, memberClassIndex);
         } else if (entry instanceof UnresolvedJavaMethod unresolvedJavaMethod) {
             Throwable cause = unresolvedJavaMethod.getCause();
             if (cause != null) {

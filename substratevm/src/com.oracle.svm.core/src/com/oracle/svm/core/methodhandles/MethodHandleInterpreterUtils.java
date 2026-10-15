@@ -60,16 +60,6 @@ public final class MethodHandleInterpreterUtils {
     }
 
     /**
-     * Returns the member represented by a direct method handle. The substituted
-     * {@link Target_java_lang_invoke_MethodHandle} keeps this state package-private, while the
-     * Ristretto method-handle plugin lives outside the core package. This helper exposes the
-     * operation without widening access to the substitution field itself.
-     */
-    public static Target_java_lang_invoke_MemberName getInternalMemberName(MethodHandle handle) {
-        return SubstrateUtil.cast(handle, Target_java_lang_invoke_MethodHandle.class).internalMemberName();
-    }
-
-    /**
      * Returns the member of a direct method handle, or null for any other handle. A direct method
      * handle ({@code DirectMethodHandle} and its nested subclasses for special, interface and
      * constructor calls) invokes its member through a {@code linkTo*} intrinsic, whatever

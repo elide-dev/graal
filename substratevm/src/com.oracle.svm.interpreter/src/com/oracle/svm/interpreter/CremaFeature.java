@@ -317,6 +317,7 @@ public class CremaFeature implements InternalFeature {
             RistrettoInlinableAOTMethods.prepare(accessImpl.getUniverse());
         }
         BuildTimeInterpreterUniverse iUniverse = BuildTimeInterpreterUniverse.singleton();
+
         for (HostedType type : accessImpl.getUniverse().getTypes()) {
             if (type.isPrimitive() || type.isArray()) {
                 continue;
@@ -344,6 +345,10 @@ public class CremaFeature implements InternalFeature {
             InterpreterResolvedJavaField iField = iUniverse.getField(hostedField.getWrapped());
             if (iField == null) {
                 assert !hostedField.isAccessed() : "No interpreter field for " + hostedField;
+                continue;
+            }
+            if (iField.isArtificiallyReachable()) {
+                VMError.guarantee(iField.isUnmaterializedConstant());
                 continue;
             }
             iUniverse.initializeJavaFieldFromHosted(hostedField, iField);

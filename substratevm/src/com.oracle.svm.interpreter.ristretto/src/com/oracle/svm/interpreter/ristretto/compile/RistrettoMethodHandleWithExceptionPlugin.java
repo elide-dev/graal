@@ -42,8 +42,6 @@ import jdk.graal.compiler.nodes.Invoke;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import jdk.graal.compiler.nodes.java.LoadFieldNode;
-import jdk.graal.compiler.nodes.java.NewInstanceNode;
-import jdk.graal.compiler.nodes.java.NewInstanceWithExceptionNode;
 import jdk.graal.compiler.nodes.util.ConstantFoldUtil;
 import jdk.graal.compiler.replacements.MethodHandleWithExceptionPlugin;
 import jdk.graal.compiler.replacements.nodes.MacroInvokable;
@@ -53,7 +51,6 @@ import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.MethodHandleAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
-import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.Signature;
 
 /**
@@ -73,25 +70,21 @@ import jdk.vm.ci.meta.Signature;
  * carries, so no lambda form bytecodes are needed. The call is an ordinary invoke at the guest's
  * bytecode index, which deoptimization treats like any other invoke, and which Ristretto's later
  * phases may inline. The same replacement serves the {@code invokedynamic} adapter
- * {@code Invokers$Holder.linkToTargetMethod(args..., appendix)} and the constructor adapter
- * {@code DirectMethodHandle$Holder.newInvokeSpecial(mh, args...)} when their handle is constant.
- * A constructor handle (the call site target of a capturing lambda, for one) becomes an allocation
- * and the inlined constructor, since a constructor call returns nothing while the adapter returns
- * the new instance (see {@link #tryEmitNewInvokeSpecial}). Other handles (bound handles, type
- * adapters, field accessors) keep the generic plugin's behavior.
+ * {@code Invokers$Holder.linkToTargetMethod(args..., appendix)} when its handle is constant.
+ * A constructor handle (the call site target of a capturing lambda, for one) is left to the
+ * constructor adapter {@code DirectMethodHandle$Holder.newInvokeSpecial(mh, args...)}, whose
+ * bytecodes are preserved (see {@code RistrettoPreserveBytecodeSupport}): inlined, it allocates
+ * the instance and invokes the constructor. Other handles (bound handles, type adapters, field
+ * accessors) keep the generic plugin's behavior.
  * {@link RistrettoOptions#JITInlineConstantMethodHandles} turns the replacement off.
  */
 public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandleWithExceptionPlugin {
-    /** JDK holder for direct method-handle adapters. */
-    private static final String DIRECT_METHOD_HANDLE_HOLDER = "java.lang.invoke.DirectMethodHandle$Holder";
     /** JDK holder for linked-invoker adapters. */
     private static final String INVOKERS_HOLDER = "java.lang.invoke.Invokers$Holder";
     /** Name prefix of the hidden classes that the JDK spins for lambda forms at run time. */
     private static final String LAMBDA_FORM_CLASS_PREFIX = "java.lang.invoke.LambdaForm$MH";
     /** Linked-invoker adapter replaced when its appendix is constant. */
     private static final String LINK_TO_TARGET_METHOD = "linkToTargetMethod";
-    /** Direct-method-handle adapter that allocates and invokes a constructor. */
-    private static final String NEW_INVOKE_SPECIAL = "newInvokeSpecial";
     /** Linker adapter of {@code MethodHandle.invokeExact} ({@code LambdaForm.Kind.EXACT_LINKER}). */
     private static final String INVOKE_EXACT_MT = "invokeExact_MT";
     /** Linker adapter of {@code MethodHandle.invoke} ({@code LambdaForm.Kind.GENERIC_LINKER}). */
@@ -116,9 +109,6 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
             return true;
         }
         if (tryHandleLinkedTargetMethod(b, method, args)) {
-            return true;
-        }
-        if (tryHandleNewInvokeSpecial(b, method, args)) {
             return true;
         }
         return super.handleInvoke(b, method, args);
@@ -256,7 +246,13 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
         }
         byte referenceKind = member.getReferenceKind();
         if (referenceKind == Target_java_lang_invoke_MethodHandleNatives_Constants.REF_newInvokeSpecial) {
-            return tryEmitNewInvokeSpecial(b, adapter, target, args);
+            /*
+             * The constructor adapter DirectMethodHandle$Holder.newInvokeSpecial keeps its
+             * bytecodes (see RistrettoPreserveBytecodeSupport), so ordinary inlining of the
+             * invoker reaches it, and it allocates the instance and invokes the constructor through
+             * the generic plugin's linkToSpecial handling.
+             */
+            return trace(b, adapter, "the member is a constructor, whose adapter is inlined from its preserved bytecodes");
         }
         InvokeKind invokeKind;
         if (referenceKind == Target_java_lang_invoke_MethodHandleNatives_Constants.REF_invokeStatic) {
@@ -350,79 +346,9 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
         return true;
     }
 
-    /**
-     * Replaces a constant {@code newInvokeSpecial} adapter with allocation and a direct constructor
-     * invoke.
-     */
-    private boolean tryHandleNewInvokeSpecial(GraphBuilderContext b, ResolvedJavaMethod method, ValueNode[] args) {
-        if (!isNewInvokeSpecial(method) || args.length == 0 || !(methodHandleAccess instanceof RistrettoMethodHandleAccessProvider ristrettoMethodHandleAccess)) {
-            return false;
-        }
-
-        JavaConstant methodHandle = asConstant(b, args[0]);
-        if (methodHandle == null) {
-            return false;
-        }
-
-        ResolvedJavaMethod constructor = ristrettoMethodHandleAccess.resolveInternalMemberTarget(methodHandle);
-        if (constructor == null) {
-            return false;
-        }
-        return tryEmitNewInvokeSpecial(b, method, constructor, Arrays.copyOfRange(args, 1, args.length));
-    }
-
-    /**
-     * Emits the allocation and inlined constructor call of a direct method handle to
-     * {@code constructor}, called with the constructor arguments {@code args}, in place of
-     * {@code adapter}, and pushes the new instance as the adapter's result.
-     * <p>
-     * The constructor is inlined at once rather than emitted as a call: the adapter returns the
-     * new instance, but the constructor returns nothing, and the parser creates the frame state
-     * of a call with its own result on the operand stack, before this plugin can push the
-     * instance. The state is that of the bytecode after the adapter's: when that bytecode
-     * consumes the result (an {@code astore}, say), the parser rejects it as a stack underflow
-     * (elide-dev/graal#131); and a lazy deoptimization while the constructor is on the stack would
-     * take the result from the return register, which a constructor does not set. With the
-     * constructor inlined, the replacement has no call to attach a state to.
-     */
-    private static boolean tryEmitNewInvokeSpecial(GraphBuilderContext b, ResolvedJavaMethod adapter, ResolvedJavaMethod constructor, ValueNode[] args) {
-        if (!constructor.isConstructor()) {
-            return trace(b, adapter, "the member is not a constructor");
-        }
-        ResolvedJavaType instanceType = constructor.getDeclaringClass();
-        if (!instanceType.isInitialized() || instanceType.isAbstract() || instanceType.isInterface()) {
-            return trace(b, adapter, "the class of the constructor cannot be instantiated");
-        }
-        if (args.length != constructor.getSignature().getParameterCount(false)) {
-            return trace(b, adapter, "the argument count does not match");
-        }
-        if (adapter.getSignature().getReturnKind().getStackKind() != JavaKind.Object) {
-            return trace(b, adapter, "the adapter does not return an object");
-        }
-        if (!canForceInline(b, constructor)) {
-            return trace(b, adapter, "the constructor cannot be inlined");
-        }
-        ValueNode[] replacementArgs = new ValueNode[args.length + 1];
-        replacementArgs[0] = b.add(createConstructorAllocation(instanceType, b.currentBlockCatchesOOME()));
-        System.arraycopy(args, 0, replacementArgs, 1, args.length);
-
-        maybeCastInvokeBasicArguments(b, constructor, replacementArgs, true);
-        ValueNode newInstance = replacementArgs[0];
-        ensureForcedInlineSucceeded(b, constructor, b.handleReplacedInvoke(InvokeKind.Special, constructor, replacementArgs, true));
-        if (!b.hasParseTerminated()) {
-            /* The inlined constructor always throws otherwise, and the rest of the block is dead. */
-            b.addPush(JavaKind.Object, newInstance);
-        }
-        if (RistrettoOptions.JITTraceCompilation.getValue()) {
-            Log.log().string("[Ristretto Compiler] Replaced ").string(adapter.format("%H.%n(%p)")).string(" in ").string(b.getMethod().format("%H.%n(%p)"))
-                            .string(" with an allocation and the inlined constructor ").string(constructor.format("%H.%n(%p)")).newline();
-        }
-        return true;
-    }
-
-    /** Checks the prerequisites for a forced inline or a Ristretto-eliminated adapter. */
+    /** Checks the prerequisites for a forced inline. */
     private static boolean canForceInline(GraphBuilderContext b, ResolvedJavaMethod target) {
-        if (!target.hasBytecodes() && !b.getReplacements().hasSubstitution(target, b.getOptions()) && !isNewInvokeSpecial(target)) {
+        if (!target.hasBytecodes() && !b.getReplacements().hasSubstitution(target, b.getOptions())) {
             return false;
         }
         return b.recursiveInliningDepth(target) <= MaximumRecursiveInlining.getValue(b.getOptions());
@@ -465,23 +391,12 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
                         INVOKERS_HOLDER.equals(method.getDeclaringClass().toJavaName(true));
     }
 
-    /** Returns whether {@code method} is the JDK direct-constructor adapter. */
-    private static boolean isNewInvokeSpecial(ResolvedJavaMethod method) {
-        return method.isStatic() &&
-                        NEW_INVOKE_SPECIAL.equals(method.getName()) &&
-                        DIRECT_METHOD_HANDLE_HOLDER.equals(method.getDeclaringClass().toJavaName(true));
-    }
-
     /** Moves the linked-invoker appendix into the invoke-basic receiver position. */
     private static ValueNode[] toInvokeBasicArguments(ValueNode[] linkedInvokerArgs) {
         ValueNode[] replacementArgs = new ValueNode[linkedInvokerArgs.length];
         replacementArgs[0] = linkedInvokerArgs[linkedInvokerArgs.length - 1];
         System.arraycopy(linkedInvokerArgs, 0, replacementArgs, 1, linkedInvokerArgs.length - 1);
         return replacementArgs;
-    }
-
-    private static ValueNode createConstructorAllocation(ResolvedJavaType instanceType, boolean catchesOOME) {
-        return catchesOOME ? new NewInstanceWithExceptionNode(instanceType, true) : new NewInstanceNode(instanceType, true);
     }
 
     /**
