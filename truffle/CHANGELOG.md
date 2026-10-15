@@ -14,6 +14,7 @@ This changelog summarizes major changes between Truffle versions relevant to lan
 * GR-79950: Added `DynamicObject.SetAllPropertyFlagsNode` for updating flags of multiple existing properties without assigning their values. It supports uniform flags, per-key flags, and remove/add masks.
 * GR-80293: Added `HostCompilerDirectives.BytecodeInterpreterHandlerConfig.Argument.expandedType()` to select an exact concrete class for virtual argument expansion. Added `Argument.Field.validWhen()` and `valid()` to control incoming field validity by template state.
 * GR-79562: Bytecode DSL: Added `GenerateBytecode.unwindExceptions` to select exceptions that run finally cleanup while bypassing guest catches and exception interception, preserving exception identity across suspension and resumption.
+* GR-80124: Added `PropertyGetter.getShape()` to expose the shape accepted by a property getter.
 
 ## Version 25.4
 * (Elide fork) On Native Image built with `-H:+VMContinuationsWithRuntimeCompilation`, polyglot contexts run on continuation-backed virtual threads with runtime compilation. Instead of the "one platform thread per VirtualThread" warning, the engine warns that virtual threads whose caller frames were accessed in write or materialize mode stay pinned to their carrier thread.
