@@ -40,6 +40,7 @@ import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.NonmovableObjectArray;
 import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
@@ -140,6 +141,18 @@ public class ImageCodeInfo {
             }
         }
         return null;
+    }
+
+    /** Reports the chunks of compressed frame information that the current run inflated. */
+    public static final class HeapBlobProfileSource implements HeapBlobProfile.Source {
+        @Override
+        public void record(HeapBlobProfile.Recorder recorder) {
+            CodeInfo info = CodeInfoTable.getFirstImageCodeInfo();
+            CompressedBlob blob = getFrameInfoBlob(info);
+            if (blob != null) {
+                CodeInfoAccess.recordInflatedFrameInfoChunks(info, blob, recorder);
+            }
+        }
     }
 
     @Uninterruptible(reason = "Executes during isolate creation.")
@@ -393,10 +406,11 @@ public class ImageCodeInfo {
          */
         public void compressFrameInfo(int maxSliceBytes) {
             byte[] encodings = hostedFrameInfoEncodings;
-            if (encodings == null || !HeapBlobCompression.isAvailable() || !ImageLayerBuildingSupport.lastImageBuild() || !HeapBlobCompression.singleton().shouldCompress(encodings.length)) {
+            String kind = HeapBlobProfile.FRAME_INFORMATION;
+            if (encodings == null || !HeapBlobCompression.isAvailable() || !ImageLayerBuildingSupport.lastImageBuild() || !HeapBlobCompression.singleton().shouldCompress(encodings.length, kind)) {
                 return;
             }
-            CompressedBlob blob = HeapBlobCompression.singleton().compressUniform(encodings, "frame information");
+            CompressedBlob blob = HeapBlobCompression.singleton().compressUniform(encodings, kind);
             if (blob != null && maxSliceBytes <= blob.getChunkLength(0)) {
                 frameInfoBlob = blob;
                 frameInfoEncodings = null;

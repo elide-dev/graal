@@ -35,6 +35,7 @@ import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.HeapBlobMemory;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.core.AssertionsSupport;
@@ -471,6 +472,24 @@ public final class CodeInfoAccess {
         int last = blob.getChunkIndex((int) windowEnd);
         if (last != first) {
             ensureFrameInfoChunk(impl, blob, states, last);
+        }
+    }
+
+    /**
+     * Reports the chunks of compressed frame information that were inflated so far, with the hash of
+     * their contents, for heap-blob profiles.
+     */
+    static void recordInflatedFrameInfoChunks(CodeInfo info, CompressedBlob blob, HeapBlobProfile.Recorder recorder) {
+        CodeInfoImpl impl = cast(info);
+        NonmovableArray<Integer> states = impl.getFrameInfoChunkStates();
+        if (states.isNull()) {
+            return;
+        }
+        for (int chunk = 0; chunk < blob.getChunkCount(); chunk++) {
+            if (NonmovableArrays.getInt(states, chunk) == FRAME_INFO_CHUNK_READY) {
+                Pointer data = NonmovableArrays.addressOf(impl.getFrameInfoEncodings(), blob.getChunkStart(chunk));
+                recorder.chunk(HeapBlobProfile.FRAME_INFORMATION, chunk, HeapBlobProfile.hash(data, blob.getChunkLength(chunk)));
+            }
         }
     }
 

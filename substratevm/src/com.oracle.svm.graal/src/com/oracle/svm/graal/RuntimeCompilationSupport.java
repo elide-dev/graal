@@ -41,6 +41,7 @@ import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
 import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.hosted.compress.BlobCompressor;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterAnalysis;
 import com.oracle.svm.core.SubstrateTarget;
@@ -261,8 +262,8 @@ public class RuntimeCompilationSupport {
     public static void setFinalGraphEncoding(byte[] graphEncoding, int[] recordStarts, Object[] graphObjects, NodeClassMap graphNodeTypes) {
         setGraphEncoding(null, graphEncoding, graphObjects, graphNodeTypes);
         RuntimeCompilationSupport support = get();
-        if (recordStarts.length > 0 && BlobCompressor.shouldCompressBlob(graphEncoding.length)) {
-            CompressedBlob blob = BlobCompressor.compressAligned(graphEncoding, recordStarts, "graph encodings");
+        if (recordStarts.length > 0 && BlobCompressor.shouldCompressBlob(graphEncoding.length, HeapBlobProfile.GRAPH_ENCODINGS)) {
+            CompressedBlob blob = BlobCompressor.compressAligned(graphEncoding, recordStarts, HeapBlobProfile.GRAPH_ENCODINGS);
             if (blob != null) {
                 support.compressedGraphEncoding = blob;
                 support.graphEncoding = null;
@@ -363,6 +364,23 @@ public class RuntimeCompilationSupport {
             inflatedGraphChunks[chunk] = result;
         }
         return result;
+    }
+
+    /** Reports the chunks of compressed graph encodings that the current run inflated. */
+    public static final class HeapBlobProfileSource implements HeapBlobProfile.Source {
+        @Override
+        public void record(HeapBlobProfile.Recorder recorder) {
+            get().recordInflatedGraphChunks(recorder);
+        }
+    }
+
+    private synchronized void recordInflatedGraphChunks(HeapBlobProfile.Recorder recorder) {
+        byte[][] chunks = inflatedGraphChunks;
+        for (int chunk = 0; chunks != null && chunk < chunks.length; chunk++) {
+            if (chunks[chunk] != null) {
+                recorder.chunk(HeapBlobProfile.GRAPH_ENCODINGS, chunk, HeapBlobProfile.hash(chunks[chunk], 0, chunks[chunk].length));
+            }
+        }
     }
 
     public static StructuredGraph decodeGraph(DebugContext debug, String name, CompilationIdentifier compilationId, SharedRuntimeMethod method, StructuredGraph caller) {

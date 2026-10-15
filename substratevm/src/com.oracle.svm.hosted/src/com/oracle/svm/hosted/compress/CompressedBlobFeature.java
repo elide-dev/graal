@@ -26,18 +26,34 @@ package com.oracle.svm.hosted.compress;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
+import com.oracle.svm.core.code.ImageCodeInfo;
+import com.oracle.svm.core.code.RuntimeMetadataEncoding;
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.CompressedBlobOptions;
 import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.jdk.Resources;
+import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 
-/** Makes {@link BlobCompressor} available to core code through {@link HeapBlobCompression}. */
+/**
+ * Makes {@link BlobCompressor} available to core code through {@link HeapBlobCompression}, and
+ * lets images that store blobs compressed record a {@link HeapBlobProfile}.
+ */
 @AutomaticallyRegisteredFeature
 public final class CompressedBlobFeature implements InternalFeature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         ImageSingletons.add(HeapBlobCompression.class, new BlobCompressor());
+        if (CompressedBlobOptions.includeProfiling() && BlobCompressor.isEnabled() && !ImageLayerBuildingSupport.buildingImageLayer()) {
+            ImageSingletons.add(HeapBlobProfile.class, new HeapBlobProfile());
+            HeapBlobProfile.addSource(new ImageCodeInfo.HeapBlobProfileSource());
+            HeapBlobProfile.addSource(new RuntimeMetadataEncoding.HeapBlobProfileSource());
+            HeapBlobProfile.addSource(new Resources.HeapBlobProfileSource());
+        }
     }
 
     @Override
@@ -51,10 +67,14 @@ public final class CompressedBlobFeature implements InternalFeature {
             access.registerAsInHeap(CompressedBlob[].class);
             access.registerAsInHeap(ZstdDictionary.class);
         }
+        if (HeapBlobProfile.isSupported()) {
+            RuntimeSupport.getRuntimeSupport().addTearDownHook(new HeapBlobProfile.TearDownHook());
+        }
     }
 
     @Override
     public void afterHeapLayout(AfterHeapLayoutAccess access) {
         BlobCompressor.printStats();
+        BlobCompressor.reportUnmatchedProfileEntries();
     }
 }

@@ -61,6 +61,7 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
 
 import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.core.ClassLoaderSupport.ConditionWithOrigin;
@@ -354,6 +355,20 @@ public final class Resources {
         MapCursor<ModuleResourceKey, ConditionalRuntimeValue<ResourceStorageEntryBase>> entries = resources.getEntries();
         while (entries.advance()) {
             action.accept(entries.getKey(), entries.getValue());
+        }
+    }
+
+    /** Reports the embedded resources that the current run read, for heap-blob profiles. */
+    public static final class HeapBlobProfileSource implements HeapBlobProfile.Source {
+        @Override
+        public void record(HeapBlobProfile.Recorder recorder) {
+            for (Resources layer : layeredSingletons()) {
+                layer.forEachResource((key, value) -> {
+                    if (value.getValue() instanceof ResourceStorageEntry entry && entry.isReadAndCompressible()) {
+                        recorder.resource(key.getModuleName(), key.resource());
+                    }
+                });
+            }
         }
     }
 
@@ -1323,9 +1338,12 @@ final class ResourcesFeature implements InternalFeature {
          * read-only.
          */
         List<ResourceStorageEntry> entries = new ArrayList<>();
-        for (ConditionalRuntimeValue<ResourceStorageEntryBase> entry : Resources.currentLayer().resources().getValues()) {
-            if (entry.getValueUnconditionally() instanceof ResourceStorageEntry storageEntry) {
+        List<Resources.ModuleResourceKey> keys = new ArrayList<>();
+        var cursor = Resources.currentLayer().resources().getEntries();
+        while (cursor.advance()) {
+            if (cursor.getValue().getValueUnconditionally() instanceof ResourceStorageEntry storageEntry) {
                 entries.add(storageEntry);
+                keys.add(cursor.getKey());
             }
         }
         /*
@@ -1334,7 +1352,7 @@ final class ResourcesFeature implements InternalFeature {
          */
         HeapBlobCompression compression = null;
         ZstdDictionary dictionary = null;
-        if (HeapBlobCompression.isAvailable() && HeapBlobCompression.singleton().shouldCompress(Long.MAX_VALUE)) {
+        if (HeapBlobCompression.isAvailable() && HeapBlobCompression.singleton().shouldCompress(Long.MAX_VALUE, HeapBlobProfile.EMBEDDED_RESOURCES)) {
             compression = HeapBlobCompression.singleton();
             List<byte[]> samples = new ArrayList<>();
             long sampleBytes = 0;
@@ -1351,8 +1369,11 @@ final class ResourcesFeature implements InternalFeature {
                 dictionary.registerAsImmutable(access::registerAsImmutable);
             }
         }
-        for (ResourceStorageEntry storageEntry : entries) {
-            storageEntry.compressForImage(compression, dictionary);
+        for (int i = 0; i < entries.size(); i++) {
+            ResourceStorageEntry storageEntry = entries.get(i);
+            /* Resources that a profiled run read are stored raw (-H:HeapBlobProfile). */
+            boolean hot = compression != null && compression.isHotResource(keys.get(i).getModuleName(), keys.get(i).resource());
+            storageEntry.compressForImage(compression, dictionary, hot);
             storageEntry.registerAsImmutable(access::registerAsImmutable);
         }
     }
