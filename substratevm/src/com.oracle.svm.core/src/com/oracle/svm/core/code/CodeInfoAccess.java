@@ -405,8 +405,12 @@ public final class CodeInfoAccess {
     @Uninterruptible(reason = "Executes during isolate creation.")
     static void setCompressedFrameInfo(CodeInfo info, CompressedBlob blob) {
         CodeInfoImpl impl = cast(info);
-        /* Accounted as image heap: it is image-heap content, and the Code category must start at 0. */
-        NonmovableArray<Byte> encodings = NonmovableArrays.createByteArray(blob.getUncompressedLength(), NmtCategory.ImageHeap);
+        /*
+         * Accounted as image heap: it is image-heap content, and the Code category must start at 0.
+         * Chunks are always inflated before they are read, so the array is not zeroed: zeroing it
+         * would fault in all of its pages at isolate creation even if no chunk is ever inflated.
+         */
+        NonmovableArray<Byte> encodings = NonmovableArrays.createUninitializedByteArray(blob.getUncompressedLength(), NmtCategory.ImageHeap);
         NonmovableArray<Integer> states = NonmovableArrays.createIntArray(blob.getChunkCount(), NmtCategory.ImageHeap);
         UnmanagedMemoryUtil.fill(NonmovableArrays.getArrayBase(states), Word.unsigned(blob.getChunkCount()).multiply(Integer.BYTES), (byte) 0);
         impl.setFrameInfoEncodings(encodings);

@@ -84,9 +84,14 @@ public final class NonmovableArrays {
     private static final OutOfMemoryError OUT_OF_MEMORY_ERROR = new OutOfMemoryError("Could not allocate nonmovable array");
     private static final NegativeArraySizeException NEGATIVE_ARRAY_SIZE_EXCEPTION = new NegativeArraySizeException();
 
-    @SuppressWarnings("unchecked")
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static <T extends NonmovableArray<?>> T createArray(int length, Class<?> arrayType, NmtCategory nmtCategory) {
+        return createArray(length, arrayType, nmtCategory, true);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static <T extends NonmovableArray<?>> T createArray(int length, Class<?> arrayType, NmtCategory nmtCategory, boolean zeroed) {
         if (SubstrateUtil.HOSTED) {
             Class<?> componentType = arrayType.getComponentType();
             Object array = Array.newInstance(componentType, length);
@@ -98,7 +103,7 @@ public final class NonmovableArrays {
         DynamicHub hub = SubstrateUtil.cast(arrayType, DynamicHub.class);
         assert LayoutEncoding.isArray(hub.getLayoutEncoding());
         UnsignedWord size = LayoutEncoding.getArrayAllocationSize(hub.getLayoutEncoding(), length);
-        Pointer array = NullableNativeMemory.calloc(size, nmtCategory);
+        Pointer array = zeroed ? NullableNativeMemory.calloc(size, nmtCategory) : NullableNativeMemory.malloc(size, nmtCategory);
         if (array.isNull()) {
             throw OUT_OF_MEMORY_ERROR;
         }
@@ -107,7 +112,7 @@ public final class NonmovableArrays {
         Word encodedHeader = header.encodeAsUnmanagedObjectHeader(hub);
         header.initializeHeaderOfNewObjectOffHeap(array, encodedHeader, true);
         array.writeInt(ObjectLayout.singleton().getArrayLengthOffset(), length, NamedLocationIdentity.OFF_HEAP_LOCATION);
-        // already zero-initialized thanks to calloc()
+        // already zero-initialized thanks to calloc(), unless the caller asked for uninitialized memory
         trackUnmanagedArray((NonmovableArray<?>) array);
         return (T) array;
     }
@@ -187,6 +192,16 @@ public final class NonmovableArrays {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static NonmovableArray<Byte> createByteArray(int nbytes, NmtCategory nmtCategory) {
         return createArray(nbytes, byte[].class, nmtCategory);
+    }
+
+    /**
+     * Allocates a byte array whose elements are not initialized, for callers that write every
+     * element before reading it. Unlike {@link #createByteArray}, the allocation does not touch the
+     * memory, so pages that are never written are never faulted in.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static NonmovableArray<Byte> createUninitializedByteArray(int nbytes, NmtCategory nmtCategory) {
+        return createArray(nbytes, byte[].class, nmtCategory, false);
     }
 
     /**
