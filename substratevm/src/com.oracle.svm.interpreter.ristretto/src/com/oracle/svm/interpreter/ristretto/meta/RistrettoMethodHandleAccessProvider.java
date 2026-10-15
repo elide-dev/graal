@@ -26,6 +26,7 @@ package com.oracle.svm.interpreter.ristretto.meta;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 
 import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
 import com.oracle.svm.core.methodhandles.MethodHandleInterpreterUtils;
@@ -107,6 +108,21 @@ public final class RistrettoMethodHandleAccessProvider implements MethodHandleAc
         Object handle = snippetReflectionProvider.asObject(Object.class, methodHandle);
         Object type = snippetReflectionProvider.asObject(Object.class, methodType);
         return handle instanceof MethodHandle mh && type instanceof MethodType && mh.type() == type;
+    }
+
+    /**
+     * Returns the member that the guard {@code VarHandleGuards.guard_*} links to for the constant
+     * var handle {@code varHandle} and the constant access descriptor {@code accessDescriptor}, or
+     * null if the guard would do anything else (see
+     * {@link MethodHandleInterpreterUtils#getVarHandleGuardMember}).
+     */
+    public Target_java_lang_invoke_MemberName resolveVarHandleGuardMember(JavaConstant varHandle, JavaConstant accessDescriptor, boolean resultDiscarded, boolean returnsReference) {
+        Object handle = snippetReflectionProvider.asObject(Object.class, varHandle);
+        Object descriptor = snippetReflectionProvider.asObject(Object.class, accessDescriptor);
+        if (handle instanceof VarHandle vh && descriptor != null) {
+            return MethodHandleInterpreterUtils.getVarHandleGuardMember(vh, descriptor, resultDiscarded, returnsReference);
+        }
+        return null;
     }
 
     /** Returns the compiler view of the method that {@code memberName} refers to. */

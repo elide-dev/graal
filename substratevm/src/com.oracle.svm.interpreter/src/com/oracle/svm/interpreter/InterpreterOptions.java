@@ -83,7 +83,17 @@ public class InterpreterOptions {
                                     "java.util.HashMap",
                                     "java.util.ArrayList",
                                     "java.util.ArrayDeque",
-                                    "java.util.Objects"));
+                                    "java.util.Objects",
+                                    /* The access methods of field and array var handles (elide-dev/komodo#127). */
+                                    "java.lang.invoke.VarHandleBooleans",
+                                    "java.lang.invoke.VarHandleBytes",
+                                    "java.lang.invoke.VarHandleShorts",
+                                    "java.lang.invoke.VarHandleChars",
+                                    "java.lang.invoke.VarHandleInts",
+                                    "java.lang.invoke.VarHandleLongs",
+                                    "java.lang.invoke.VarHandleFloats",
+                                    "java.lang.invoke.VarHandleDoubles",
+                                    "java.lang.invoke.VarHandleReferences"));
 
     public static boolean interpreterEnabled() {
         return DebuggerWithInterpreter.getValue() || RuntimeClassLoading.isSupported();

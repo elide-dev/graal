@@ -25,6 +25,8 @@
 package com.oracle.svm.core.methodhandles;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.core.heap.Heap;
@@ -72,6 +74,55 @@ public final class MethodHandleInterpreterUtils {
             return null;
         }
         Target_java_lang_invoke_MemberName member = SubstrateUtil.cast(handle, Target_java_lang_invoke_DirectMethodHandle.class).member;
+        if (member == null || !member.isInvocable()) {
+            return null;
+        }
+        return member;
+    }
+
+    /** Name prefix of the JDK's direct var handle classes, such as {@code VarHandleInts$FieldInstanceReadWrite}. */
+    private static final String DIRECT_VAR_HANDLE_CLASS_PREFIX = "java.lang.invoke.VarHandle";
+
+    /**
+     * Returns the member that {@code VarHandleGuards.guard_*} invokes through
+     * {@code MethodHandle.linkToStatic} for {@code handle} and the access descriptor
+     * {@code accessDescriptor} (the guard's appendix), or null if the guard would do anything else:
+     * throw a {@code WrongMethodTypeException}, adapt the handle's type with {@code asType}, or
+     * resolve the member first.
+     * <p>
+     * The checks are those of the guard: the handle is direct ({@code VarHandle.checkAccessModeThenIsDirect}
+     * is not overridden: {@code IndirectVarHandle} and {@code LazyInitializingVarHandle} override it),
+     * an exact handle has the call site's type, and the erased type of the access mode is the call
+     * site's erased type. A guard of a call site that returns void also accepts the access mode's
+     * type with a void return, and discards the member's result ({@code resultDiscarded}). A guard
+     * that returns a reference casts the result to the call site's return type; such a call site
+     * is only accepted when the cast cannot fail, that is when the handle's variable type is a
+     * subtype of the call site's return type.
+     */
+    public static Target_java_lang_invoke_MemberName getVarHandleGuardMember(VarHandle handle, Object accessDescriptor, boolean resultDiscarded, boolean returnsReference) {
+        if (!handle.getClass().getName().startsWith(DIRECT_VAR_HANDLE_CLASS_PREFIX) || !Target_java_lang_invoke_VarHandle_AccessDescriptor.class.isInstance(accessDescriptor)) {
+            return null;
+        }
+        Target_java_lang_invoke_VarHandle_AccessDescriptor ad = SubstrateUtil.cast(accessDescriptor, Target_java_lang_invoke_VarHandle_AccessDescriptor.class);
+        VarHandle.AccessMode accessMode = VarHandle.AccessMode.values()[ad.mode];
+        if (handle.hasInvokeExactBehavior() && handle.accessModeType(accessMode) != ad.symbolicMethodTypeExact) {
+            return null;
+        }
+        Target_java_lang_invoke_VarForm form = SubstrateUtil.cast(handle, Target_java_lang_invoke_VarHandle.class).vform;
+        if (form == null || form.memberName_table == null) {
+            return null;
+        }
+        MethodType erased = ad.symbolicMethodTypeErased;
+        if (form.methodType_table[ad.type] != erased) {
+            MethodType[] voidTypes = form.methodType_V_table;
+            if (!resultDiscarded || voidTypes == null || voidTypes[ad.type] != erased) {
+                return null;
+            }
+        }
+        if (returnsReference && !ad.returnType.isAssignableFrom(handle.varType())) {
+            return null;
+        }
+        Target_java_lang_invoke_MemberName member = form.memberName_table[ad.mode];
         if (member == null || !member.isInvocable()) {
             return null;
         }

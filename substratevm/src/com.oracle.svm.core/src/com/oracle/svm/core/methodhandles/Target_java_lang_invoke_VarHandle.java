@@ -25,10 +25,13 @@
 package com.oracle.svm.core.methodhandles;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 
 import com.oracle.svm.core.annotate.Alias;
+import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
 
 @TargetClass(className = "java.lang.invoke.VarHandle")
 final class Target_java_lang_invoke_VarHandle {
@@ -46,4 +49,24 @@ final class Target_java_lang_invoke_VarHandle {
 
     @Alias
     native MethodHandle getMethodHandle(int mode);
+
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    Target_java_lang_invoke_VarForm vform;
+}
+
+@TargetClass(className = "java.lang.invoke.VarForm")
+final class Target_java_lang_invoke_VarForm {
+    // Checkstyle: stop field name check
+    /** The erased method type of each {@code VarHandle.AccessType}. */
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    MethodType[] methodType_table;
+
+    /** The same types returning void, created on first use. */
+    @Alias //
+    MethodType[] methodType_V_table;
+
+    /** The implementation method of each {@code VarHandle.AccessMode}, resolved on first use. */
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    Target_java_lang_invoke_MemberName[] memberName_table;
+    // Checkstyle: resume field name check
 }

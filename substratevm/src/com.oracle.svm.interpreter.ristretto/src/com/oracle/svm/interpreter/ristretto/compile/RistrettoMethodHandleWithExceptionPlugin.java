@@ -96,6 +96,10 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
     private static final String INVOKE_EXACT_MT = "invokeExact_MT";
     /** Linker adapter of {@code MethodHandle.invoke} ({@code LambdaForm.Kind.GENERIC_LINKER}). */
     private static final String INVOKE_MT = "invoke_MT";
+    /** JDK holder of the linker adapters of {@code VarHandle} access modes. */
+    private static final String VAR_HANDLE_GUARDS = "java.lang.invoke.VarHandleGuards";
+    /** Name prefix of the {@code VarHandle} linker adapters in {@link #VAR_HANDLE_GUARDS}. */
+    private static final String VAR_HANDLE_GUARD_PREFIX = "guard_";
 
     /** Creates a Ristretto method-handle plugin with the generic plugin's deoptimization policy. */
     public RistrettoMethodHandleWithExceptionPlugin(MethodHandleAccessProvider methodHandleAccess, boolean safeForDeoptimization) {
@@ -106,6 +110,9 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
     @Override
     public boolean handleInvoke(GraphBuilderContext b, ResolvedJavaMethod method, ValueNode[] args) {
         if (tryHandleConstantInvoker(b, method, args)) {
+            return true;
+        }
+        if (tryHandleVarHandleGuard(b, method, args)) {
             return true;
         }
         if (tryHandleLinkedTargetMethod(b, method, args)) {
@@ -144,6 +151,73 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
         }
         ValueNode[] invokeArgs = Arrays.copyOfRange(args, 1, args.length - 1);
         return tryInvokeDirectMember(b, method, access, handle, invokeArgs);
+    }
+
+    /**
+     * Replaces the linker adapter of a {@code VarHandle} access with a call to the handle's access
+     * method when the handle is constant.
+     * <p>
+     * The interpreter links a {@code VarHandle.getVolatile(...)} site (or any other access mode) to
+     * a guard, {@code VarHandleGuards.guard_L_I(handle, args..., accessDescriptor)} for example,
+     * with the access descriptor as appendix. The guard checks the handle against the descriptor
+     * and invokes the access method of the handle's {@code VarForm}, such as
+     * {@code VarHandleInts$FieldInstanceReadWrite.getVolatile(VarHandle, Object)}, through
+     * {@code MethodHandle.linkToStatic}. Guards are AOT methods, and their {@code linkToStatic}
+     * goes through the interpreter's call path, which boxes the arguments into arrays on every
+     * access (elide-dev/komodo#127). When the handle is constant, the plugin does the guard's
+     * checks now and emits a static call to the access method, which Ristretto may inline into a
+     * memory access with the access mode's ordering.
+     */
+    private boolean tryHandleVarHandleGuard(GraphBuilderContext b, ResolvedJavaMethod method, ValueNode[] args) {
+        if (!RistrettoOptions.JITInlineConstantVarHandles.getValue() || args.length < 2 || !isVarHandleGuard(method)) {
+            return false;
+        }
+        if (!(methodHandleAccess instanceof RistrettoMethodHandleAccessProvider access)) {
+            return false;
+        }
+        JavaConstant handle = asConstant(b, args[0]);
+        JavaConstant accessDescriptor = asConstant(b, args[args.length - 1]);
+        if (handle == null || handle.isNull() || accessDescriptor == null) {
+            return trace(b, method, handle == null || handle.isNull() ? "the var handle is not constant" : "the access descriptor is not constant");
+        }
+        JavaKind guardReturnKind = method.getSignature().getReturnKind();
+        Target_java_lang_invoke_MemberName member = access.resolveVarHandleGuardMember(handle, accessDescriptor, guardReturnKind == JavaKind.Void, guardReturnKind == JavaKind.Object);
+        if (member == null) {
+            return trace(b, method, "the guard does not link the var handle's access method directly");
+        }
+        ResolvedJavaMethod target = access.resolveMemberTarget(member);
+        if (target == null || !target.isStatic() || member.getReferenceKind() != Target_java_lang_invoke_MethodHandleNatives_Constants.REF_invokeStatic) {
+            return trace(b, method, "the access method is not a static method");
+        }
+        if (!target.getDeclaringClass().isInitialized()) {
+            return trace(b, method, "the class of the access method is not initialized");
+        }
+        if (args.length - 1 != target.getSignature().getParameterCount(false)) {
+            return trace(b, method, "the argument count does not match");
+        }
+        JavaKind targetReturnKind = target.getSignature().getReturnKind();
+        if (guardReturnKind != JavaKind.Void && guardReturnKind.getStackKind() != targetReturnKind.getStackKind()) {
+            return trace(b, method, "the return kind does not match");
+        }
+        ValueNode[] invokeArgs = Arrays.copyOf(args, args.length - 1);
+        /* The access method reads the handle's final fields, which fold for a constant handle. */
+        invokeArgs[0] = ConstantNode.forConstant(handle, b.getMetaAccess(), b.getGraph());
+        maybeCastInvokeBasicArguments(b, target, invokeArgs, false);
+        /*
+         * The access methods are @ForceInline, which Ristretto does not see: inline them here when
+         * their bytecodes are kept (see RistrettoInlinableAOTMethods), and call them otherwise.
+         */
+        boolean inline = target.canBeInlined() && canForceInline(b, target);
+        Invokable replacement = b.handleReplacedInvoke(InvokeKind.Static, target, invokeArgs, inline);
+        if (inline) {
+            ensureForcedInlineSucceeded(b, target, replacement);
+        }
+        adjustReturnKind(b, method, target);
+        if (RistrettoOptions.JITTraceCompilation.getValue()) {
+            Log.log().string("[Ristretto Compiler] Replaced ").string(method.format("%H.%n(%p)")).string(" in ").string(b.getMethod().format("%H.%n(%p)"))
+                            .string(inline ? " with the inlined access method " : " with a call to the access method ").string(target.format("%H.%n(%p)")).newline();
+        }
+        return true;
     }
 
     /**
@@ -377,6 +451,11 @@ public final class RistrettoMethodHandleWithExceptionPlugin extends MethodHandle
         }
         String holder = method.getDeclaringClass().toJavaName(true);
         return INVOKERS_HOLDER.equals(holder) || holder.startsWith(LAMBDA_FORM_CLASS_PREFIX);
+    }
+
+    /** Returns whether {@code method} is a linker adapter of a {@code VarHandle} access mode. */
+    private static boolean isVarHandleGuard(ResolvedJavaMethod method) {
+        return method.isStatic() && method.getName().startsWith(VAR_HANDLE_GUARD_PREFIX) && VAR_HANDLE_GUARDS.equals(method.getDeclaringClass().toJavaName(true));
     }
 
     /** Returns whether {@code method} is the JDK linked target-method adapter. */
