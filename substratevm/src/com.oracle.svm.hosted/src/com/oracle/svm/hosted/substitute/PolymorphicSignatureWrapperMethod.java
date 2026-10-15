@@ -28,6 +28,7 @@ import static com.oracle.svm.shared.util.VMError.shouldNotReachHere;
 import static com.oracle.svm.shared.util.VMError.shouldNotReachHereUnexpectedInput;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,25 +36,36 @@ import java.util.List;
 import com.oracle.graal.pointsto.infrastructure.GraphProvider;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.HostedProviders;
+import com.oracle.svm.jvmci.shared.code.SubstrateCallingConventionKind;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
+import com.oracle.svm.core.hub.crema.CremaSupport;
 import com.oracle.svm.core.invoke.MethodHandleUtils;
 import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
+import com.oracle.svm.core.nodes.SubstrateIndirectCallTargetNode;
 import com.oracle.svm.hosted.phases.HostedGraphKit;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.util.AnnotatedWrapper;
 import com.oracle.svm.util.OriginalMethodProvider;
 
+import jdk.graal.compiler.core.common.type.StampFactory;
+import jdk.graal.compiler.core.common.type.StampPair;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.nodes.CallTargetNode;
+import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
+import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.StateSplit;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.UnwindNode;
 import jdk.graal.compiler.nodes.ValueNode;
+import jdk.graal.compiler.nodes.calc.IntegerEqualsNode;
+import jdk.graal.compiler.nodes.extended.BranchProbabilityNode;
 import jdk.graal.compiler.nodes.java.NewArrayNode;
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.ExceptionHandler;
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.LineNumberTable;
 import jdk.vm.ci.meta.LocalVariableTable;
 import jdk.vm.ci.meta.ProfilingInfo;
@@ -97,6 +109,10 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
         ValueNode receiver = null;
         if (!substitutionBaseMethod.isStatic()) {
             receiver = args.removeFirst();
+        }
+
+        if (RuntimeClassLoading.isSupported()) {
+            emitDirectCallFastPath(kit, method, receiver, args);
         }
 
         ValueNode parameterArray = kit.append(new NewArrayNode(kit.getMetaAccess().lookupJavaType(Object.class), kit.createInt(args.size()), true));
@@ -205,6 +221,49 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
         kit.createReturn(retVal, returnKind);
 
         return kit.finalizeGraph();
+    }
+
+    /**
+     * With runtime class loading, {@code invokeBasic}, {@code linkToStatic} and
+     * {@code linkToSpecial} go to {@code CremaSupport}, which boxes the arguments, resolves the
+     * target from the member name and dispatches through the interpreter, even when the target has
+     * compiled code. When the target has a direct call entry (see {@code MethodHandleLinkage}), call
+     * it with the arguments instead (elide-dev/graal#112): the callee ignores the trailing member
+     * name of a {@code linkTo*} call, and the arguments have the basic types of the target's
+     * lambda form, as the caller of these intrinsics guarantees. The boxing path follows.
+     */
+    private void emitDirectCallFastPath(HostedGraphKit kit, AnalysisMethod method, ValueNode receiver, List<ValueNode> args) {
+        Method reader = CremaSupport.singleton().getDirectCallEntryReader(substitutionBaseMethod.getName());
+        if (reader == null || args.isEmpty()) {
+            return;
+        }
+        ValueNode[] readerArgs = switch (substitutionBaseMethod.getName()) {
+            case "linkToStatic" -> new ValueNode[]{args.getLast()};
+            case "linkToSpecial" -> new ValueNode[]{args.getFirst(), args.getLast()};
+            default -> new ValueNode[]{receiver};
+        };
+        InvokeWithExceptionNode entry = kit.createInvokeWithExceptionAndUnwind(kit.getMetaAccess().lookupJavaMethod(reader), CallTargetNode.InvokeKind.Static, kit.getFrameState(), kit.bci(),
+                        readerArgs);
+
+        kit.startIf(IntegerEqualsNode.create(entry, ConstantNode.forIntegerKind(kit.getWordTypes().getWordKind(), 0, kit.getGraph()), NodeView.DEFAULT), BranchProbabilityNode.SLOW_PATH_PROFILE);
+        kit.elsePart();
+        List<ValueNode> callArgs = new ArrayList<>();
+        if (receiver != null) {
+            callArgs.add(receiver);
+        }
+        callArgs.addAll(args);
+        Signature signature = method.getSignature();
+        JavaType[] parameterTypes = signature.toParameterTypes(receiver != null ? method.getDeclaringClass() : null);
+        StampPair returnStamp = StampFactory.forDeclaredType(kit.getAssumptions(), signature.getReturnType(null), false);
+        CallTargetNode callTarget = new SubstrateIndirectCallTargetNode(entry, callArgs.toArray(ValueNode.EMPTY_ARRAY), returnStamp, parameterTypes, null,
+                        SubstrateCallingConventionKind.Java.toType(true), CallTargetNode.InvokeKind.Static);
+        InvokeWithExceptionNode invoke = kit.startInvokeWithException(callTarget, kit.getFrameState(), kit.bci());
+        kit.exceptionPart();
+        kit.append(new UnwindNode(kit.exceptionObject()));
+        kit.endInvokeWithException();
+        JavaKind returnKind = signature.getReturnKind();
+        kit.createReturn(returnKind == JavaKind.Void ? null : invoke, returnKind);
+        kit.endIf();
     }
 
     @Override

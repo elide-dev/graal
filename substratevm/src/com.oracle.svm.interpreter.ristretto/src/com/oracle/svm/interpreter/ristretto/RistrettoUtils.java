@@ -70,6 +70,7 @@ import com.oracle.svm.interpreter.metadata.RuntimeLoadedClassHierarchy;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoGraphBuilderPhase;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoGraphBuilderPlugins;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoInstalledCode;
+import com.oracle.svm.interpreter.ristretto.compile.RistrettoMethodHandleLinkagePhase;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoMethodHandleWithExceptionPlugin;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoNoDeoptPhase;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoOSRLocalLoweringPhase;
@@ -795,6 +796,15 @@ public class RistrettoUtils {
         if (!RistrettoOptions.useDeoptimization()) {
             effectiveSuites.getLowTier().appendPhase(new RistrettoNoDeoptPhase());
         }
+        /*
+         * Method-handle intrinsics that are still calls after inlining call their linked target
+         * directly when they can (elide-dev/graal#112). Their macro nodes become calls here, as
+         * they would in high-tier lowering.
+         */
+        ListIterator<BasePhase<? super HighTierContext>> beforeHighTierLowering = effectiveSuites.getHighTier().findPhase(HighTierLoweringPhase.class);
+        GraalError.guarantee(beforeHighTierLowering != null, "Ristretto suites have no high-tier lowering phase");
+        beforeHighTierLowering.previous();
+        beforeHighTierLowering.add(new RistrettoMethodHandleLinkagePhase());
         /*
          * OSR locals are loaded from the interpreter frame at the front of the graph once every
          * deoptimization point is fixed and has its frame state, so that no deoptimization can

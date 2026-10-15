@@ -63,6 +63,7 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -170,6 +171,7 @@ import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.BasedOnJDKFile;
+import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.NumUtil;
@@ -2048,6 +2050,7 @@ public class CremaSupportImpl implements CremaSupport {
     public Object invokeBasic(Target_java_lang_invoke_MemberName memberName, Object methodHandle, Object[] args) {
         // This is AOT-compiled code calling MethodHandle.invokeBasic
         InterpreterResolvedJavaMethod vmentry = InterpreterResolvedJavaMethod.fromMemberName(memberName);
+        InterpreterToVM.publishImageMethodDirectCallEntry(vmentry);
         Object[] basicArgs = new Object[args.length + 1];
         basicArgs[0] = methodHandle;
         System.arraycopy(args, 0, basicArgs, 1, args.length);
@@ -2083,6 +2086,7 @@ public class CremaSupportImpl implements CremaSupport {
         Target_java_lang_invoke_MemberName mnTarget = (Target_java_lang_invoke_MemberName) args[args.length - 1];
         InterpreterResolvedJavaMethod target = InterpreterResolvedJavaMethod.fromMemberName(mnTarget);
         InterpreterUnresolvedSignature signature = target.getSignature();
+        InterpreterToVM.publishImageMethodDirectCallEntry(target);
         Object[] basicArgs = unbasic(args, signature, false);
         logIntrinsic("[from compiled] linkToStatic ", target, basicArgs);
         try {
@@ -2100,6 +2104,11 @@ public class CremaSupportImpl implements CremaSupport {
         Target_java_lang_invoke_MemberName mnTarget = (Target_java_lang_invoke_MemberName) args[args.length - 1];
         InterpreterResolvedJavaMethod target = InterpreterResolvedJavaMethod.fromMemberName(mnTarget);
         InterpreterUnresolvedSignature signature = target.getSignature();
+        InterpreterToVM.publishImageMethodDirectCallEntry(target);
+        if (args[0] == null) {
+            /* As on HotSpot: the callee would get a null receiver. */
+            throw new NullPointerException();
+        }
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToSpecial ", target, basicArgs);
         try {
@@ -2213,6 +2222,20 @@ public class CremaSupportImpl implements CremaSupport {
     @Override
     public long getDirectCallEntryOffset() {
         return InterpreterResolvedJavaMethod.DIRECT_CALL_ENTRY_OFFSET;
+    }
+
+    @Override
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public Method getDirectCallEntryReader(String intrinsicName) {
+        if (!InterpreterOptions.CremaDirectMethodHandleLinkage.getValue()) {
+            return null;
+        }
+        return switch (intrinsicName) {
+            case "linkToStatic" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToStaticEntry", Object.class);
+            case "linkToSpecial" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToSpecialEntry", Object.class, Object.class);
+            case "invokeBasic" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "invokeBasicEntry", Object.class);
+            default -> null;
+        };
     }
 
     @Override

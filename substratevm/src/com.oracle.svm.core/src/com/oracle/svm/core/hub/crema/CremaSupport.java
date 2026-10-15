@@ -28,6 +28,7 @@ import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_
 
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -204,6 +205,18 @@ public interface CremaSupport {
      * Ristretto has installed code, or 0 while calls must go through the enter-direct stub.
      */
     long getDirectCallEntryOffset();
+
+    /**
+     * Returns the method that image code calls to read the direct call entry of the target of a
+     * {@code MethodHandle.invokeBasic}, {@code linkToStatic} or {@code linkToSpecial} call, with
+     * the arguments of that call, or null for other intrinsics (elide-dev/graal#112). It returns 0
+     * when the call must take the slow path, and reads the entry without a safepoint, so that the
+     * caller can call the entry before invalidated code withdraws it.
+     */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    default Method getDirectCallEntryReader(String intrinsicName) {
+        return null;
+    }
 
     /** Gets the JNI upcall wrapper entry point for {@code variant} and {@code nonVirtual}. */
     @Platforms(Platform.HOSTED_ONLY.class)

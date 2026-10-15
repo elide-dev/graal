@@ -85,6 +85,10 @@ public class RistrettoOptions {
                     "method through the interpreter.")//
     public static final RuntimeOptionKey<Boolean> JITInlineConstantVarHandles = new RuntimeOptionKey<>(true);
 
+    @Option(help = "Let a MethodHandle.invokeBasic, linkToStatic or linkToSpecial call that is not resolved at compile time call the method " +
+                    "its member name resolves to directly when that has compiled code, instead of through the interpreter.")//
+    public static final RuntimeOptionKey<Boolean> JITFastMethodHandleLinkage = new RuntimeOptionKey<>(true);
+
     @Option(help = "Trace decisions about when to compile what.")//
     public static final RuntimeOptionKey<Boolean> JITTraceCompilationQueuing = new RuntimeOptionKey<>(false);
 

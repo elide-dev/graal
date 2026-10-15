@@ -45,6 +45,7 @@ import com.oracle.svm.jvmci.shared.code.SubstrateCallingConventionKind;
 import com.oracle.svm.core.graal.meta.KnownOffsets;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
 import com.oracle.svm.core.graal.nodes.CGlobalDataLoadAddressNode;
+import com.oracle.svm.core.graal.nodes.DirectCallEntryMethodCallTargetNode;
 import com.oracle.svm.core.graal.nodes.FloatingWordCastNode;
 import com.oracle.svm.core.graal.nodes.LoadMethodByIndexNode;
 import com.oracle.svm.core.graal.nodes.LoadOpenTypeWorldDispatchTableStartingOffset;
@@ -475,7 +476,13 @@ public abstract class NonSnippetLowerings {
                              * ignores the hidden argument.
                              */
                             ValueNode entryOffset = ConstantNode.forIntegerKind(wordKind, CremaSupport.singleton().getDirectCallEntryOffset(), graph);
-                            AddressNode entryAddress = graph.unique(new OffsetAddressNode(targetInterpreterMethodNode, entryOffset));
+                            /*
+                             * A method-handle intrinsic calls the method it links to directly when
+                             * that has compiled code. Otherwise the entry holder is the intrinsic,
+                             * which never has a direct call entry, and the call takes the stub.
+                             */
+                            ValueNode entryHolder = callTarget instanceof DirectCallEntryMethodCallTargetNode linked ? linked.getEntryHolder() : targetInterpreterMethodNode;
+                            AddressNode entryAddress = graph.unique(new OffsetAddressNode(entryHolder, entryOffset));
                             ReadNode compiledEntry = graph.add(new ReadNode(entryAddress, LocationIdentity.ANY_LOCATION, StampFactory.forKind(JavaKind.Long), BarrierType.NONE, MemoryOrderMode.PLAIN));
                             graph.addBeforeFixed(node, compiledEntry);
                             LogicNode noCompiledEntry = graph.unique(new IntegerEqualsNode(compiledEntry, ConstantNode.forLong(0L, graph)));
