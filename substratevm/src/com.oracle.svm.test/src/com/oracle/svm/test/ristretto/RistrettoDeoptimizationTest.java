@@ -98,9 +98,12 @@ public class RistrettoDeoptimizationTest {
     public static final class TestFeature implements Feature {
         @Override
         public void beforeAnalysis(BeforeAnalysisAccess access) {
-            for (Class<?> c : RUNTIME_CLASSES) {
-                RuntimeResourceAccess.addResource(RistrettoDeoptimizationTest.class.getModule(), classFileName(c));
+            for (List<Class<?>> classes : List.of(RUNTIME_CLASSES, RistrettoVarHandleTest.RUNTIME_CLASSES)) {
+                for (Class<?> c : classes) {
+                    RuntimeResourceAccess.addResource(RistrettoDeoptimizationTest.class.getModule(), classFileName(c));
+                }
             }
+            RistrettoVarHandleTest.beforeAnalysis();
             /*
              * Links the VarHandle call sites of the AOT methods that AtomicUser calls in the
              * builder JVM, where JVMCI then resolves them to their invokehandle adapters
@@ -791,7 +794,7 @@ public class RistrettoDeoptimizationTest {
     }
 
     /** Calls {@code compiledCall} until it reports compiled execution 100 times in a row. */
-    private static void awaitCompiled(String what, BooleanSupplier compiledCall) {
+    static void awaitCompiled(String what, BooleanSupplier compiledCall) {
         long deadline = System.nanoTime() + COMPILATION_TIMEOUT_NANOS;
         int consecutive = 0;
         while (consecutive < 100) {
@@ -801,7 +804,7 @@ public class RistrettoDeoptimizationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T invoke(Method method, Object... args) {
+    static <T> T invoke(Method method, Object... args) {
         try {
             return (T) method.invoke(null, args);
         } catch (ReflectiveOperationException e) {
@@ -810,7 +813,7 @@ public class RistrettoDeoptimizationTest {
     }
 
     /** Like {@link #invoke}, but rethrows the exception of the invoked method. */
-    private static Object invokeThrowing(Method method, Object... args) throws Throwable {
+    static Object invokeThrowing(Method method, Object... args) throws Throwable {
         try {
             return method.invoke(null, args);
         } catch (InvocationTargetException e) {
@@ -818,11 +821,14 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    private static String classFileName(Class<?> c) {
+    static String classFileName(Class<?> c) {
         return c.getName().replace('.', '/') + ".class";
     }
 
-    /** Defines fresh copies of {@link #RUNTIME_CLASSES}, with {@link Probe#compiled()} rewritten. */
+    /**
+     * Defines fresh copies of {@link #RUNTIME_CLASSES} (or of other classes whose class files
+     * {@link TestFeature} registers), with {@link Probe#compiled()} rewritten.
+     */
     static final class RuntimeClassLoader extends ClassLoader {
         private static final ClassDesc PROBE = ClassDesc.of(Probe.class.getName());
         private static final ClassDesc DIRECTIVES = ClassDesc.of("com.oracle.svm.interpreter.ristretto.RistrettoDirectives");
@@ -830,8 +836,12 @@ public class RistrettoDeoptimizationTest {
         private final Map<String, byte[]> classFiles = new HashMap<>();
 
         RuntimeClassLoader() throws IOException {
+            this(RUNTIME_CLASSES);
+        }
+
+        RuntimeClassLoader(List<Class<?>> runtimeClasses) throws IOException {
             super(RistrettoDeoptimizationTest.class.getClassLoader());
-            for (Class<?> c : RUNTIME_CLASSES) {
+            for (Class<?> c : runtimeClasses) {
                 try (InputStream in = RistrettoDeoptimizationTest.class.getModule().getResourceAsStream(classFileName(c))) {
                     assertTrue("missing class file of " + c.getName(), in != null);
                     classFiles.put(c.getName(), rewriteProbe(in.readAllBytes()));

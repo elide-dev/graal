@@ -80,6 +80,11 @@ public class RistrettoOptions {
                     "as a direct call to the handle's target instead of running its lambda forms in the interpreter.")//
     public static final RuntimeOptionKey<Boolean> JITInlineConstantMethodHandles = new RuntimeOptionKey<>(true);
 
+    @Option(help = "Compile an access through a constant VarHandle (VarHandle.getVolatile and the other access modes on a static final handle) " +
+                    "as a call to the handle's access method, which Ristretto may inline, instead of a call to its guard, which links to the access " +
+                    "method through the interpreter.")//
+    public static final RuntimeOptionKey<Boolean> JITInlineConstantVarHandles = new RuntimeOptionKey<>(true);
+
     @Option(help = "Trace decisions about when to compile what.")//
     public static final RuntimeOptionKey<Boolean> JITTraceCompilationQueuing = new RuntimeOptionKey<>(false);
 

@@ -56,14 +56,19 @@ import org.graalvm.nativeimage.Platforms;
 import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
 import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
 import com.oracle.graal.pointsto.heap.ImageHeapScanner;
+import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.util.AnalysisError;
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.fieldvaluetransformer.FieldOffsetFieldValueTransformer;
 import com.oracle.svm.hosted.FeatureImpl;
+import com.oracle.svm.hosted.ameta.FieldValueInterceptionSupport;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.HostedUniverse;
+import com.oracle.svm.hosted.meta.MaterializedConstantFields;
+import com.oracle.svm.hosted.substitute.FieldValueTransformation;
 import com.oracle.svm.hosted.substitute.SubstitutionMethod;
 import com.oracle.svm.interpreter.metadata.BytecodeStream;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool;
@@ -75,6 +80,7 @@ import com.oracle.svm.interpreter.metadata.ReferenceConstant;
 import com.oracle.svm.util.GuestAccess;
 import com.oracle.svm.util.JVMCIReflectionUtil;
 
+import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.ExceptionHandler;
@@ -133,6 +139,7 @@ final class RistrettoInlinableAOTMethods {
 
     private static final Set<AnalysisMethod> scannedCandidates = ConcurrentHashMap.newKeySet();
     private static final Set<AnalysisMethod> pendingCallees = ConcurrentHashMap.newKeySet();
+    private static final Set<AnalysisField> materializedFields = ConcurrentHashMap.newKeySet();
 
     /**
      * Small methods such as {@code ConcurrentHashMap.spread} are inlined wherever they are called,
@@ -142,7 +149,14 @@ final class RistrettoInlinableAOTMethods {
      * deoptimizes, the interpreter resumes the candidate and must call it. So the statically bound
      * callees of reachable candidates are compiled on their own. Virtual callees are dispatched
      * through the vtable, whose entries are always compiled. A callee is compiled once the analysis
-     * links it: instance methods only when their class is instantiated.
+     * links it: instance methods only when their class is instantiated. A native callee that an
+     * invocation plugin implements (most {@code Unsafe} accessors, which the {@code VarHandle}
+     * access methods call) is compiled from its plugin.
+     * <p>
+     * Static final fields are folded into the code that reads them, so they normally have no
+     * location either, and neither Ristretto nor the interpreter could read them. The static final
+     * fields that candidates read ({@code MethodHandleStatics.UNSAFE} in every {@code VarHandle}
+     * access method, say) are kept in memory.
      */
     static void registerCallees(FeatureImpl.DuringAnalysisAccessImpl access) {
         boolean added = false;
@@ -154,6 +168,10 @@ final class RistrettoInlinableAOTMethods {
             ConstantPool cp = method.getConstantPool();
             for (int bci = 0; bci < BytecodeStream.endBCI(code); bci = BytecodeStream.nextBCI(code, bci)) {
                 int bytecode = BytecodeStream.currentBC(code, bci);
+                if (bytecode == GETSTATIC) {
+                    added |= materializeStaticFinalField(cp, method, BytecodeStream.readCPI(code, bci));
+                    continue;
+                }
                 if (bytecode != INVOKEVIRTUAL && bytecode != INVOKESPECIAL && bytecode != INVOKESTATIC) {
                     continue;
                 }
@@ -163,8 +181,8 @@ final class RistrettoInlinableAOTMethods {
                 } catch (LinkageError | RuntimeException | AnalysisError e) {
                     continue;
                 }
-                if (callee instanceof AnalysisMethod aCallee && (bytecode != INVOKEVIRTUAL || aCallee.canBeStaticallyBound()) && !aCallee.isNative() && !aCallee.isAbstract() &&
-                                aCallee.getCode() != null) {
+                if (callee instanceof AnalysisMethod aCallee && (bytecode != INVOKEVIRTUAL || aCallee.canBeStaticallyBound()) && !aCallee.isAbstract() &&
+                                (aCallee.isNative() ? isImplementedByPlugin(access, aCallee) : aCallee.getCode() != null)) {
                     if (!aCallee.isDirectRootMethod()) {
                         access.registerAsRoot(aCallee, true, "Callee of an AOT method that Ristretto may inline");
                         added = true;
@@ -182,6 +200,52 @@ final class RistrettoInlinableAOTMethods {
         if (added) {
             access.requireAnalysisIteration();
         }
+    }
+
+    /**
+     * Whether the analysis compiles the native method {@code method} from an invocation plugin,
+     * which it does for a plugin that is not inline-only.
+     */
+    private static boolean isImplementedByPlugin(FeatureImpl.DuringAnalysisAccessImpl access, AnalysisMethod method) {
+        InvocationPlugin plugin = access.getBigBang().getProviders(method).getGraphBuilderPlugins().getInvocationPlugins().lookupInvocation(method, access.getBigBang().getOptions());
+        return plugin != null && !plugin.inlineOnly();
+    }
+
+    /**
+     * Keeps the static final field that a candidate reads at constant pool index {@code cpi} in
+     * memory, so that it gets a location. Returns whether the field was not accessed before.
+     * <p>
+     * Only the fields of classes initialized at build time are folded: the others already have a
+     * location. The value of a field must be known when the image heap is written: the field
+     * offsets that the JDK stores in static final fields ({@code AtomicLong.VALUE}, say) are known
+     * once the fields are laid out, but some fields never have a value at build time, such as
+     * those whose reads are replaced by accessors ({@code Striped64.NCPU}).
+     */
+    private static boolean materializeStaticFinalField(ConstantPool cp, AnalysisMethod method, int cpi) {
+        JavaField field;
+        try {
+            field = cp.lookupField(cpi, method, GETSTATIC);
+        } catch (LinkageError | RuntimeException | AnalysisError e) {
+            return false;
+        }
+        if (!(field instanceof AnalysisField aField) || !aField.isStatic() || !aField.isFinal() || aField.isGuaranteeFolded() || !aField.getDeclaringClass().isInitialized()) {
+            return false;
+        }
+        if (!FieldValueInterceptionSupport.singleton().isValueAvailable(aField, null) && !isFieldOffset(aField)) {
+            return false;
+        }
+        if (!materializedFields.add(aField)) {
+            return false;
+        }
+        InterpreterUtil.log("[ristretto-inline-aot] keeping static final field %s in memory", aField);
+        boolean added = aField.registerAsAccessed("Static final field read by an AOT method that Ristretto may inline");
+        MaterializedConstantFields.singleton().register(aField);
+        return added;
+    }
+
+    /** Whether the value of {@code field} is a field offset, which the builder computes once it lays out fields. */
+    private static boolean isFieldOffset(AnalysisField field) {
+        return field.getFieldValueInterceptor() instanceof FieldValueTransformation transformation && transformation.getFieldValueTransformer() instanceof FieldOffsetFieldValueTransformer;
     }
 
     /** Whether {@code method} keeps its bytecodes until {@link #prepare} decides. */

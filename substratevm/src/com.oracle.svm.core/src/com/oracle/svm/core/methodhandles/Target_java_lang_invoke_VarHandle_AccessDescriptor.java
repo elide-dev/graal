@@ -37,4 +37,17 @@ final class Target_java_lang_invoke_VarHandle_AccessDescriptor {
 
     @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
     int mode;
+
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    MethodType symbolicMethodTypeExact;
+
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    MethodType symbolicMethodTypeErased;
+
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    Class<?> returnType;
+
+    /** The ordinal of the access mode's {@code VarHandle.AccessType}. */
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    int type;
 }
