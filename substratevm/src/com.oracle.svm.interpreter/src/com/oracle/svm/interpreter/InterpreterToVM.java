@@ -1050,6 +1050,21 @@ public final class InterpreterToVM {
     }
 
     /**
+     * Lets compiled method-handle linkers call {@code target} directly (elide-dev/graal#112). A
+     * {@code linkToStatic}, {@code linkToSpecial} or {@code invokeBasic} in compiled code (see
+     * {@code PolymorphicSignatureWrapperMethod} and {@code NonSnippetLowerings}) calls the direct
+     * call entry of the method its member name resolves to, if there is one, instead of going
+     * through {@link #dispatchInvocation}. Ristretto publishes that entry for the run-time loaded
+     * methods it compiles; this publishes it for an image method with compiled code, whose entry
+     * point never changes. It is called once the slow path has resolved {@code target}.
+     */
+    static void publishImageMethodDirectCallEntry(InterpreterResolvedJavaMethod target) {
+        if (target.getDirectCallEntry() == 0 && !(target instanceof CremaResolvedJavaMethodImpl) && InterpreterKnownCompiledEntryPoints.hasCompiledCode(target)) {
+            target.publishDirectCallEntry(target.getNativeEntryPoint().rawValue());
+        }
+    }
+
+    /**
      * The error for a call from run-time loaded code to an image method that has neither compiled
      * code nor bytecodes: the static analysis saw no call to it, or every image caller inlined it,
      * so the compile queue never compiled it on its own, and image methods keep no bytecodes. The

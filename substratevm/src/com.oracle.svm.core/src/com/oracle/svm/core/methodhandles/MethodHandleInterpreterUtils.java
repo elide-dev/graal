@@ -24,10 +24,17 @@
  */
 package com.oracle.svm.core.methodhandles;
 
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.VarHandle;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
+
+import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
@@ -84,6 +91,17 @@ public final class MethodHandleInterpreterUtils {
     private static final String DIRECT_VAR_HANDLE_CLASS_PREFIX = "java.lang.invoke.VarHandle";
 
     /**
+     * Returns the member name of the method that {@code handle}'s lambda form runs, or null when
+     * the lambda form of a handle in the image heap has not been prepared yet (see
+     * {@link #extractVMEntry}). Unlike that method, this never prepares the lambda form.
+     */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static Target_java_lang_invoke_MemberName peekVMEntry(Object handle) {
+        Target_java_lang_invoke_LambdaForm form = SubstrateUtil.cast(handle, Target_java_lang_invoke_MethodHandle.class).form;
+        return form == null ? null : form.vmentry;
+    }
+
+    /**
      * Returns the member that {@code VarHandleGuards.guard_*} invokes through
      * {@code MethodHandle.linkToStatic} for {@code handle} and the access descriptor
      * {@code accessDescriptor} (the guard's appendix), or null if the guard would do anything else:
@@ -127,5 +145,14 @@ public final class MethodHandleInterpreterUtils {
             return null;
         }
         return member;
+    }
+
+    /**
+     * Returns a new member name that is not resolved, for runtime-compiled code that needs one in
+     * place of a missing lambda form entry (see {@code RistrettoMethodHandleLinkagePhase}).
+     */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static Object newUnresolvedMemberName() {
+        return ReflectionUtil.newInstance(ReflectionUtil.lookupConstructor(ReflectionUtil.lookupClass("java.lang.invoke.MemberName")));
     }
 }

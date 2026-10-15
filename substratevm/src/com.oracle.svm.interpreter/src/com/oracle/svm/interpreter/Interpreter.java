@@ -638,6 +638,7 @@ public final class Interpreter {
                     MethodHandle mh = (MethodHandle) frame.getThis();
                     Target_java_lang_invoke_MemberName vmentry = MethodHandleInterpreterUtils.extractVMEntry(mh);
                     InterpreterResolvedJavaMethod target = InterpreterResolvedJavaMethod.fromMemberName(vmentry);
+                    InterpreterToVM.publishImageMethodDirectCallEntry(target);
                     InterpreterUnresolvedSignature signature = method.getSignature();
                     Object[] calleeArgs = rebasic(frame.getArguments(), signature, !method.isStatic());
                     // This should integrate with the debugger GR-70801
@@ -653,8 +654,15 @@ public final class Interpreter {
                     Object[] arguments = frame.getArguments();
                     Target_java_lang_invoke_MemberName memberName = (Target_java_lang_invoke_MemberName) arguments[arguments.length - 1];
                     InterpreterResolvedJavaMethod resolutionSeed = InterpreterResolvedJavaMethod.fromMemberName(memberName);
+                    if (intrinsic == SignaturePolymorphicIntrinsic.LinkToStatic || intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial) {
+                        InterpreterToVM.publishImageMethodDirectCallEntry(resolutionSeed);
+                    }
                     InterpreterUnresolvedSignature signature = resolutionSeed.getSignature();
                     boolean hasReceiver = intrinsic != SignaturePolymorphicIntrinsic.LinkToStatic;
+                    if (intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial && arguments[0] == null) {
+                        /* As on HotSpot: the callee would get a null receiver. */
+                        throw new NullPointerException();
+                    }
                     Object[] basicArgs = unbasic(arguments, signature, hasReceiver);
                     // This should integrate with the debugger GR-70801
                     traceLinkTo(resolutionSeed, intrinsic, indent);

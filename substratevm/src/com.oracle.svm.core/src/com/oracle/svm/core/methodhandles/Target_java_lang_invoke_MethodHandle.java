@@ -80,6 +80,9 @@ final class Target_java_lang_invoke_MethodHandle {
     @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
     MethodType type;
 
+    @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+    Target_java_lang_invoke_LambdaForm form;
+
     @Alias
     native Target_java_lang_invoke_MemberName internalMemberName();
 

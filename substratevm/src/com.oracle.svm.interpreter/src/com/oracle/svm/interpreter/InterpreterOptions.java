@@ -95,6 +95,10 @@ public class InterpreterOptions {
                                     "java.lang.invoke.VarHandleDoubles",
                                     "java.lang.invoke.VarHandleReferences"));
 
+    @Option(help = "Let image code call the compiled target of a MethodHandle.invokeBasic, linkToStatic or linkToSpecial call directly, " +
+                    "instead of boxing the arguments and dispatching through the interpreter (elide-dev/graal#112).", type = OptionType.Expert)//
+    public static final HostedOptionKey<Boolean> CremaDirectMethodHandleLinkage = new HostedOptionKey<>(true);
+
     public static boolean interpreterEnabled() {
         return DebuggerWithInterpreter.getValue() || RuntimeClassLoading.isSupported();
     }
