@@ -297,6 +297,14 @@ The `native-image` builder compresses these blobs with [Zstandard](https://githu
 Frame information and graph encodings are stored in chunks with a shared dictionary, so a stack trace or a runtime compilation inflates only the chunks it touches.
 Use `-H:-CompressHeapBlobs` to store all blobs uncompressed, and `-H:HeapBlobMinimumSize` to change the size below which a blob is stored uncompressed.
 
+If your application reads some of these blobs on every start, you can keep them uncompressed with a heap-blob profile, so that startup does not inflate them.
+To record a profile, build the executable with `-H:+HeapBlobProfiling` and run it with `-XX:RecordHeapBlobProfile=<file>`.
+The executable writes the blobs, chunks, and resources that the run read to the file when it exits.
+Then build again with `-H:HeapBlobProfile=<file>`, which also implies `-H:+HeapBlobProfiling`.
+Chunk entries only match chunks with the same contents, so record the profile with an executable built from the same sources and options.
+The builder warns about entries that match nothing in the image.
+With `-H:+PrintHeapBlobCompression`, the build output also lists the blobs and chunks stored uncompressed because of the profile, and the blobs below the size limit.
+
 ##### <a name="glossary-heap-alignment"></a>Heap Alignment
 Additional space reserved to align the heap for the [selected garbage collector](#glossary-gc).
 The heap alignment may also contain GC-specific data structures.

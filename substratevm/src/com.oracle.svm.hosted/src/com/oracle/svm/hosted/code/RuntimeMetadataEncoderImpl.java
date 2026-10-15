@@ -25,6 +25,7 @@
 package com.oracle.svm.hosted.code;
 
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.hosted.DeleteGuestValue;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.ALL_FLAGS_MASK;
 import static com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.ALL_NEST_MEMBERS_FLAG;
@@ -994,7 +995,8 @@ public class RuntimeMetadataEncoderImpl implements RuntimeMetadataEncoder {
     private static void install(UnsafeArrayTypeWriter encodingBuffer) {
         int encodingSize = TypeConversion.asS4(encodingBuffer.getBytesWritten());
         byte[] dataEncoding = encodingBuffer.toArray(new byte[encodingSize]);
-        CompressedBlob compressed = BlobCompressor.shouldCompressBlob(encodingSize) ? BlobCompressor.compressWholeBlob(dataEncoding, "reflection metadata") : null;
+        String kind = HeapBlobProfile.REFLECTION_METADATA;
+        CompressedBlob compressed = BlobCompressor.shouldCompressBlob(encodingSize, kind) ? BlobCompressor.compressWholeBlob(dataEncoding, kind) : null;
         if (compressed != null) {
             RuntimeMetadataEncoding.currentLayer().setCompressedEncoding(compressed);
         } else {

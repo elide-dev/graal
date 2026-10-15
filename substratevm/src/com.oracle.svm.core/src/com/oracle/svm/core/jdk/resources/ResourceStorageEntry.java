@@ -33,6 +33,7 @@ import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.HeapBlobCompression;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
@@ -57,6 +58,8 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
     /** The uncompressed contents, kept for build-time consumers of entries stored compressed. */
     @Platforms(Platform.HOSTED_ONLY.class) private byte[][] hostedData;
     private int[] rootIds;
+    /** Whether the contents were read at run time, for heap-blob profiles. */
+    private boolean read;
 
     public ResourceStorageEntry(boolean isDirectory, boolean fromJar) {
         this.isDirectory = isDirectory;
@@ -79,6 +82,9 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
     public byte[][] getData() {
         if (SubstrateUtil.HOSTED) {
             return hostedData;
+        }
+        if (HeapBlobProfile.isSupported() && !read) {
+            read = true;
         }
         byte[][] result = data;
         if (result == null) {
@@ -198,13 +204,37 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
     public static final int MIN_COMPRESSED_RESOURCE_SIZE = 512;
 
     /**
+     * Whether the contents were read at run time and could be stored compressed, i.e., whether a
+     * heap-blob profile should name this entry.
+     */
+    public boolean isReadAndCompressible() {
+        if (!read) {
+            return false;
+        }
+        if (compressedData != null) {
+            return true;
+        }
+        byte[][] contents = data;
+        if (contents == null || contents.length == 0) {
+            return false;
+        }
+        for (byte[] datum : contents) {
+            if (datum.length < MIN_COMPRESSED_RESOURCE_SIZE) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Decides how the contents are stored in the image, after compilation: slots that are large
      * enough are compressed individually with the shared dictionary and inflated on first access,
      * everything else is stored as is. An entry is either entirely compressed or entirely raw so
-     * that run-time code only has to handle two shapes.
+     * that run-time code only has to handle two shapes. Entries that a profiled run read
+     * ({@code hot}) are stored raw.
      */
     @Platforms(Platform.HOSTED_ONLY.class)
-    public void compressForImage(HeapBlobCompression compression, ZstdDictionary dictionary) {
+    public void compressForImage(HeapBlobCompression compression, ZstdDictionary dictionary, boolean hot) {
         boolean compress = compression != null && hostedData.length > 0;
         if (compress) {
             for (byte[] datum : hostedData) {
@@ -214,9 +244,17 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
                 }
             }
         }
+        if (compress && hot) {
+            long length = 0;
+            for (byte[] datum : hostedData) {
+                length += datum.length;
+            }
+            compression.reportStoredRawForProfile(HeapBlobProfile.EMBEDDED_RESOURCES, length);
+            compress = false;
+        }
         CompressedBlob[] blobs = compress ? new CompressedBlob[hostedData.length] : null;
         for (int i = 0; compress && i < blobs.length; i++) {
-            blobs[i] = compression.compressWhole(hostedData[i], dictionary, "embedded resources");
+            blobs[i] = compression.compressWhole(hostedData[i], dictionary, HeapBlobProfile.EMBEDDED_RESOURCES);
             compress = blobs[i] != null;
         }
         if (compress) {
