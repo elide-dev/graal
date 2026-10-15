@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.hosted.compress;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -40,6 +42,9 @@ import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.CompressedBlobOptions;
 import com.oracle.svm.core.compress.HeapBlobCompression;
 import com.oracle.svm.core.compress.ZstdDictionary;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.shared.option.SubstrateOptionsParser;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
@@ -50,6 +55,9 @@ import com.oracle.svm.shared.util.VMError;
  * Build-time side of {@link CompressedBlob}: splits a byte array into chunks, optionally trains a
  * zstd dictionary over them, and compresses every chunk as an independent frame. Compression runs
  * in the image builder through zstd-jni; images only link the zstd decoder.
+ * <p>
+ * With a heap-blob profile ({@link CompressedBlobOptions#HeapBlobProfile}), blobs and chunks that a
+ * profiled run read are stored raw instead, see {@link HostedHeapBlobProfile}.
  */
 @Platforms(Platform.HOSTED_ONLY.class)
 @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class)
@@ -61,16 +69,24 @@ public final class BlobCompressor implements HeapBlobCompression {
     private static final int MIN_DICTIONARY_SIZE = 4 * 1024;
     private static final int MAX_DICTIONARY_SIZE = 110 * 1024;
 
-    /** Per-kind statistics, reported in the build output. */
-    public record Stats(AtomicLong uncompressed, AtomicLong compressed, AtomicLong dictionaries, AtomicLong blobs) {
+    /**
+     * Per-kind statistics, reported in the build output. {@code profileRaw*} count the blobs or
+     * chunks stored raw because a profiled run read them, {@code belowFloor*} the blobs smaller
+     * than {@link CompressedBlobOptions#HeapBlobMinimumSize}.
+     */
+    public record Stats(AtomicLong uncompressed, AtomicLong compressed, AtomicLong dictionaries, AtomicLong blobs,
+                    AtomicLong profileRawBlobs, AtomicLong profileRawChunks, AtomicLong profileRawBytes, AtomicLong belowFloorBlobs, AtomicLong belowFloorBytes) {
         Stats() {
-            this(new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong());
+            this(new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong());
         }
     }
 
     private static final Map<String, Stats> STATS = new ConcurrentHashMap<>();
 
     private static volatile boolean unavailabilityReported;
+
+    /** The profile from {@link CompressedBlobOptions#HeapBlobProfile}, loaded on first use. */
+    private static volatile HostedHeapBlobProfile profile;
 
     BlobCompressor() {
     }
@@ -94,14 +110,75 @@ public final class BlobCompressor implements HeapBlobCompression {
         return isEnabled() && length >= CompressedBlobOptions.HeapBlobMinimumSize.getValue();
     }
 
+    /** Like {@link #shouldCompressBlob(long)}, and reports blobs below the size floor. */
+    public static boolean shouldCompressBlob(long length, String kind) {
+        if (!isEnabled()) {
+            return false;
+        }
+        if (length < CompressedBlobOptions.HeapBlobMinimumSize.getValue()) {
+            Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
+            stats.belowFloorBlobs.incrementAndGet();
+            stats.belowFloorBytes.addAndGet(length);
+            return false;
+        }
+        return true;
+    }
+
     @Override
-    public boolean shouldCompress(long length) {
-        return shouldCompressBlob(length);
+    public boolean shouldCompress(long length, String kind) {
+        return shouldCompressBlob(length, kind);
     }
 
     @Override
     public CompressedBlob compressWhole(byte[] data, String kind) {
         return compressWholeBlob(data, kind);
+    }
+
+    @Override
+    public boolean isHotResource(String module, String name) {
+        return profile().isHotResource(module, name);
+    }
+
+    @Override
+    public void reportStoredRawForProfile(String kind, long length) {
+        recordStoredRawForProfile(kind, length);
+    }
+
+    private static void recordStoredRawForProfile(String kind, long length) {
+        Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
+        stats.profileRawBlobs.incrementAndGet();
+        stats.profileRawBytes.addAndGet(length);
+    }
+
+    /** The heap-blob profile of this build; empty without {@code -H:HeapBlobProfile}. */
+    public static HostedHeapBlobProfile profile() {
+        HostedHeapBlobProfile result = profile;
+        if (result == null) {
+            synchronized (BlobCompressor.class) {
+                result = profile;
+                if (result == null) {
+                    result = loadProfile();
+                    profile = result;
+                }
+            }
+        }
+        return result;
+    }
+
+    private static HostedHeapBlobProfile loadProfile() {
+        List<Path> files = CompressedBlobOptions.HeapBlobProfile.getValue().values();
+        if (files.isEmpty()) {
+            return HostedHeapBlobProfile.parse("", "<none>");
+        }
+        if (ImageLayerBuildingSupport.buildingImageLayer()) {
+            LogUtils.warning("Ignoring " + SubstrateOptionsParser.commandArgument(CompressedBlobOptions.HeapBlobProfile, "") + ": heap-blob profiles are not supported for layered images.");
+            return HostedHeapBlobProfile.parse("", "<none>");
+        }
+        try {
+            return HostedHeapBlobProfile.load(files);
+        } catch (IOException | IllegalArgumentException e) {
+            throw UserError.abort(e, "Cannot read the heap-blob profile %s: %s", files, e.getMessage());
+        }
     }
 
     @Override
@@ -130,7 +207,7 @@ public final class BlobCompressor implements HeapBlobCompression {
 
     @Override
     public CompressedBlob compressWhole(byte[] data, ZstdDictionary dictionary, String kind) {
-        return compress(data, new int[]{0, data.length}, dictionary, kind);
+        return compress(data, new int[]{0, data.length}, null, dictionary, kind);
     }
 
     public static Map<String, Stats> getStats() {
@@ -178,8 +255,18 @@ public final class BlobCompressor implements HeapBlobCompression {
         return compress(data, chunkStarts, true, kind);
     }
 
-    /** Compresses {@code data} as a single frame, for blobs that are only ever inflated whole. */
+    /**
+     * Compresses {@code data} as a single frame, for blobs that are only ever inflated whole.
+     * Returns null, i.e., the blob is stored raw, if a profiled run read it.
+     */
     public static CompressedBlob compressWholeBlob(byte[] data, String kind) {
+        if (profile().isHotWhole(kind)) {
+            Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
+            stats.uncompressed.addAndGet(data.length);
+            stats.compressed.addAndGet(data.length);
+            recordStoredRawForProfile(kind, data.length);
+            return null;
+        }
         return compress(data, new int[]{0, data.length}, false, kind);
     }
 
@@ -190,14 +277,48 @@ public final class BlobCompressor implements HeapBlobCompression {
     }
 
     private static CompressedBlob compress(byte[] data, int[] chunkStarts, boolean allowDictionary, String kind) {
+        return compress(data, chunkStarts, allowDictionary, kind, profile());
+    }
+
+    /**
+     * Compresses chunks of {@code data}; chunks that {@code blobProfile} marks as read by a profiled
+     * run are stored raw. Returns null if the blob is better stored raw as a whole. Public for tests;
+     * the build uses the profile of {@link CompressedBlobOptions#HeapBlobProfile}.
+     */
+    public static CompressedBlob compress(byte[] data, int[] chunkStarts, boolean allowDictionary, String kind, HostedHeapBlobProfile blobProfile) {
         int chunkCount = chunkStarts.length - 1;
-        ZstdDictionary dictionary = null;
-        if (allowDictionary && CompressedBlobOptions.HeapBlobDictionaries.getValue() && chunkCount >= MIN_CHUNKS_FOR_DICTIONARY) {
-            byte[][] samples = new byte[chunkCount][];
-            for (int chunk = 0; chunk < chunkCount; chunk++) {
-                samples[chunk] = Arrays.copyOfRange(data, chunkStarts[chunk], chunkStarts[chunk + 1]);
+        boolean[] rawChunks = chunkCount > 1 ? blobProfile.hotChunks(kind, data, chunkStarts) : null;
+        int rawChunkCount = 0;
+        long rawBytes = 0;
+        for (int chunk = 0; rawChunks != null && chunk < chunkCount; chunk++) {
+            if (rawChunks[chunk]) {
+                rawChunkCount++;
+                rawBytes += chunkStarts[chunk + 1] - chunkStarts[chunk];
             }
-            byte[] trained = trainDictionary(samples, data.length);
+        }
+        if (rawChunkCount == 0) {
+            rawChunks = null;
+        } else if (rawChunkCount == chunkCount) {
+            /* The profiled run read every chunk: store the blob raw as a whole. */
+            Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
+            stats.uncompressed.addAndGet(data.length);
+            stats.compressed.addAndGet(data.length);
+            stats.profileRawChunks.addAndGet(rawChunkCount);
+            stats.profileRawBytes.addAndGet(rawBytes);
+            return null;
+        }
+
+        ZstdDictionary dictionary = null;
+        int coldChunkCount = chunkCount - rawChunkCount;
+        if (allowDictionary && CompressedBlobOptions.HeapBlobDictionaries.getValue() && coldChunkCount >= MIN_CHUNKS_FOR_DICTIONARY) {
+            /* Raw chunks never use the dictionary, so it is trained on the compressed ones only. */
+            byte[][] samples = new byte[coldChunkCount][];
+            for (int chunk = 0, sample = 0; chunk < chunkCount; chunk++) {
+                if (rawChunks == null || !rawChunks[chunk]) {
+                    samples[sample++] = Arrays.copyOfRange(data, chunkStarts[chunk], chunkStarts[chunk + 1]);
+                }
+            }
+            byte[] trained = trainDictionary(samples, data.length - rawBytes);
             if (trained != null) {
                 dictionary = new ZstdDictionary(trained);
                 Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
@@ -205,10 +326,10 @@ public final class BlobCompressor implements HeapBlobCompression {
                 stats.dictionaries.addAndGet(trained.length);
             }
         }
-        return compress(data, chunkStarts, dictionary, kind);
+        return compress(data, chunkStarts, rawChunks, dictionary, kind);
     }
 
-    private static CompressedBlob compress(byte[] data, int[] chunkStarts, ZstdDictionary dictionary, String kind) {
+    private static CompressedBlob compress(byte[] data, int[] chunkStarts, boolean[] rawChunks, ZstdDictionary dictionary, String kind) {
         int chunkCount = chunkStarts.length - 1;
         int level = CompressedBlobOptions.HeapBlobCompressionLevel.getValue();
         final byte[] dict = dictionary == null ? null : dictionary.getBytes();
@@ -216,6 +337,10 @@ public final class BlobCompressor implements HeapBlobCompression {
         byte[][] frames = new byte[chunkCount][];
         IntStream.range(0, chunkCount).parallel().forEach(chunk -> {
             byte[] input = Arrays.copyOfRange(data, chunkStarts[chunk], chunkStarts[chunk + 1]);
+            if (rawChunks != null && rawChunks[chunk]) {
+                frames[chunk] = input;
+                return;
+            }
             byte[] output = new byte[Math.toIntExact(ZstdJni.compressBound(input.length))];
             long written = dict == null ? ZstdJni.compress(output, input, level) : ZstdJni.compressUsingDict(output, input, dict, level);
             if (ZstdJni.isError(written)) {
@@ -239,14 +364,25 @@ public final class BlobCompressor implements HeapBlobCompression {
 
         Stats stats = STATS.computeIfAbsent(kind, _ -> new Stats());
         stats.uncompressed.addAndGet(data.length);
-        if (compressed.length > data.length * (1 - MIN_SAVINGS)) {
+        int rawChunkCount = 0;
+        long rawBytes = 0;
+        for (int chunk = 0; rawChunks != null && chunk < chunkCount; chunk++) {
+            if (rawChunks[chunk]) {
+                rawChunkCount++;
+                rawBytes += frames[chunk].length;
+            }
+        }
+        /* Raw chunks are stored as they are, so only the compressed ones must save enough. */
+        if (compressed.length - rawBytes > (data.length - rawBytes) * (1 - MIN_SAVINGS)) {
             /* Already compressed or incompressible data: not worth the inflation at run time. */
             stats.compressed.addAndGet(data.length);
             return null;
         }
         stats.compressed.addAndGet(compressed.length);
         stats.blobs.incrementAndGet();
-        return CompressedBlob.create(compressed, chunkStarts, chunkCompressedEnds, dictionary);
+        stats.profileRawChunks.addAndGet(rawChunkCount);
+        stats.profileRawBytes.addAndGet(rawBytes);
+        return CompressedBlob.create(compressed, chunkStarts, chunkCompressedEnds, rawChunks, dictionary);
     }
 
     /** Prints the per-kind statistics when {@code -H:+PrintHeapBlobCompression} is set. */
@@ -258,6 +394,41 @@ public final class BlobCompressor implements HeapBlobCompression {
             Stats stats = entry.getValue();
             LogUtils.info(String.format("Heap blob compression: %s: %d blobs, %,d -> %,d bytes (%.1f%%), dictionaries %,d bytes", entry.getKey(), stats.blobs.get(),
                             stats.uncompressed.get(), stats.compressed.get(), stats.uncompressed.get() == 0 ? 100.0 : 100.0 * stats.compressed.get() / stats.uncompressed.get(), stats.dictionaries.get()));
+            if (stats.profileRawBlobs.get() > 0 || stats.profileRawChunks.get() > 0) {
+                String counts = describeCounts(stats.profileRawBlobs.get(), stats.profileRawChunks.get());
+                LogUtils.info(String.format("Heap blob compression: %s: stored raw because the profiled run read them: %s%,d bytes", entry.getKey(), counts, stats.profileRawBytes.get()));
+            }
+            long belowFloorBlobs = stats.belowFloorBlobs.get();
+            if (belowFloorBlobs > 0) {
+                LogUtils.info(String.format("Heap blob compression: %s: stored raw below the size floor: %d blobs, %,d bytes", entry.getKey(), belowFloorBlobs, stats.belowFloorBytes.get()));
+            }
+        }
+    }
+
+    private static String describeCounts(long blobs, long chunks) {
+        StringBuilder sb = new StringBuilder();
+        if (blobs > 0) {
+            sb.append(blobs).append(blobs == 1 ? " blob, " : " blobs, ");
+        }
+        if (chunks > 0) {
+            sb.append(chunks).append(chunks == 1 ? " chunk, " : " chunks, ");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Warns about profile entries that matched nothing in the image: the blobs they name stayed
+     * compressed although the profiled run read them.
+     */
+    public static void reportUnmatchedProfileEntries() {
+        HostedHeapBlobProfile current = profile;
+        if (current == null || current.isEmpty()) {
+            return;
+        }
+        List<String> unmatched = current.describeUnmatched();
+        if (!unmatched.isEmpty()) {
+            LogUtils.warning("Heap-blob profile entries that match nothing in this image, so the blobs they name stay compressed: " + String.join(", ", unmatched) +
+                            ". Chunk entries only match chunks with identical contents; record the profile with an image built from the same sources and options.");
         }
     }
 

@@ -68,6 +68,7 @@ import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.core.ParsingReason;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.graal.RuntimeCompilationCanaryFeature;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
@@ -421,6 +422,7 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
             throw UserError.abort("Runtime compilation is currently unimplemented on the LLVM backend (GR-43073).");
         }
         ImageSingletons.add(RuntimeCompilationSupport.class, new RuntimeCompilationSupport());
+        HeapBlobProfile.addSource(new RuntimeCompilationSupport.HeapBlobProfileSource());
         /*
          * Check if there is already a RuntimeCompiledMethodSupport registered. If so a dependent
          * feature like for example Truffle installed specific hooks for runtime compilation. Else

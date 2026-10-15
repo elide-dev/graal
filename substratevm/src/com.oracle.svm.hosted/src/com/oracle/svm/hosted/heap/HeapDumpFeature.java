@@ -40,6 +40,7 @@ import org.graalvm.nativeimage.impl.HeapDumpSupport;
 
 import com.oracle.svm.core.VMInspectionOptions;
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.encoder.SymbolEncoder;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.heap.dump.HProfType;
@@ -132,7 +133,8 @@ public class HeapDumpFeature implements InternalFeature {
             AfterCompilationAccessImpl accessImpl = (AfterCompilationAccessImpl) access;
             byte[] metadata = encodeMetadata(accessImpl.getTypes());
             /* Only ever read when a heap dump is written, so keep it compressed in the image. */
-            CompressedBlob compressed = BlobCompressor.shouldCompressBlob(metadata.length) ? BlobCompressor.compressWholeBlob(metadata, "heap dump metadata") : null;
+            String kind = HeapBlobProfile.HEAP_DUMP_METADATA;
+            CompressedBlob compressed = BlobCompressor.shouldCompressBlob(metadata.length, kind) ? BlobCompressor.compressWholeBlob(metadata, kind) : null;
             if (compressed != null) {
                 HeapDumpMetadata.HeapDumpEncodedData.setCompressedData(compressed);
                 compressed.registerAsImmutable(access::registerAsImmutable);

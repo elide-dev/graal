@@ -46,8 +46,8 @@ public interface HeapBlobCompression {
         return ImageSingletons.lookup(HeapBlobCompression.class);
     }
 
-    /** Whether a blob of the given size is worth compressing. */
-    boolean shouldCompress(long length);
+    /** Whether a blob of the given size is worth compressing; reports blobs below the size floor. */
+    boolean shouldCompress(long length, String kind);
 
     /** Compresses {@code data} as a single frame that is only ever inflated whole. */
     CompressedBlob compressWhole(byte[] data, String kind);
@@ -64,4 +64,13 @@ public interface HeapBlobCompression {
 
     /** Compresses {@code data} as a single frame using a shared dictionary (may be null). */
     CompressedBlob compressWhole(byte[] data, ZstdDictionary dictionary, String kind);
+
+    /**
+     * Whether a profiled run read the given embedded resource ({@code module} is null for the
+     * class path), so that it should be stored raw.
+     */
+    boolean isHotResource(String module, String name);
+
+    /** Reports a blob that is stored raw because a profiled run read it, for the build output. */
+    void reportStoredRawForProfile(String kind, long length);
 }

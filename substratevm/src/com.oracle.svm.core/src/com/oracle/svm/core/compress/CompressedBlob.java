@@ -36,6 +36,7 @@ import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.guest.staging.log.Log;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
@@ -51,6 +52,11 @@ import com.oracle.svm.shared.util.VMError;
  * The blob itself and its arrays live in the image heap and never move, so their addresses can be
  * handed to the decoder without pinning. Inflation into unmanaged memory is uninterruptible, which
  * makes it usable from the code-info decoders; inflation into Java arrays pins the target.
+ *
+ * Individual chunks can be stored raw (see {@link HeapBlobProfile}): their bytes are kept verbatim
+ * in {@link #compressed}, and "inflating" them is a plain copy. A raw chunk is marked by
+ * {@link #RAW_CHUNK} in its {@link #chunkCompressedEnds} entry, so blobs without raw chunks have
+ * the same layout as before.
  */
 public final class CompressedBlob {
     /*
@@ -63,10 +69,16 @@ public final class CompressedBlob {
     @UnknownObjectField(availability = AfterCompilation.class) private byte[] compressed;
     /** Uncompressed start offset of each chunk; one extra entry holds the total uncompressed length. */
     @UnknownObjectField(availability = AfterCompilation.class) private int[] chunkStarts;
-    /** End offset (exclusive) of each chunk's frame within {@link #compressed}. */
+    /**
+     * End offset (exclusive) of each chunk's frame within {@link #compressed}, with
+     * {@link #RAW_CHUNK} set for chunks stored uncompressed.
+     */
     @UnknownObjectField(availability = AfterCompilation.class) private int[] chunkCompressedEnds;
     /** Optional zstd dictionary shared by all chunks, possibly also by other blobs. */
     @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private ZstdDictionary dictionary;
+
+    /** Marks a chunk whose bytes are stored uncompressed. Offsets never use the sign bit. */
+    private static final int RAW_CHUNK = 0x80000000;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     private CompressedBlob(byte[] compressed, int[] chunkStarts, int[] chunkCompressedEnds, ZstdDictionary dictionary) {
@@ -85,9 +97,29 @@ public final class CompressedBlob {
      */
     @Platforms(Platform.HOSTED_ONLY.class)
     public static CompressedBlob create(byte[] compressed, int[] chunkStarts, int[] chunkCompressedEnds, ZstdDictionary dictionary) {
+        return create(compressed, chunkStarts, chunkCompressedEnds, null, dictionary);
+    }
+
+    /**
+     * Creates a blob from already compressed chunks, some of which may be stored raw.
+     *
+     * @param rawChunks for every chunk whether its bytes are stored uncompressed in
+     *            {@code compressed}; null if all chunks are compressed
+     */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static CompressedBlob create(byte[] compressed, int[] chunkStarts, int[] chunkCompressedEnds, boolean[] rawChunks, ZstdDictionary dictionary) {
         VMError.guarantee(chunkStarts.length == chunkCompressedEnds.length + 1, "Chunk tables must describe the same number of chunks");
         VMError.guarantee(chunkCompressedEnds.length == 0 || chunkCompressedEnds[chunkCompressedEnds.length - 1] == compressed.length, "Chunk frames must cover the compressed data");
-        return new CompressedBlob(compressed, chunkStarts, chunkCompressedEnds, dictionary);
+        VMError.guarantee(rawChunks == null || rawChunks.length == chunkCompressedEnds.length, "Raw chunk flags must describe every chunk");
+        int[] ends = chunkCompressedEnds.clone();
+        for (int chunk = 0; rawChunks != null && chunk < ends.length; chunk++) {
+            if (rawChunks[chunk]) {
+                int frameLength = ends[chunk] - (chunk == 0 ? 0 : chunkCompressedEnds[chunk - 1]);
+                VMError.guarantee(frameLength == chunkStarts[chunk + 1] - chunkStarts[chunk], "A raw chunk must be stored with its uncompressed length");
+                ends[chunk] |= RAW_CHUNK;
+            }
+        }
+        return new CompressedBlob(compressed, chunkStarts, ends, dictionary);
     }
 
     /** The byte arrays this blob stores in the image heap, for build-time size reporting. */
@@ -140,6 +172,22 @@ public final class CompressedBlob {
         return chunkStarts[chunk + 1] - chunkStarts[chunk];
     }
 
+    /** Whether the chunk is stored uncompressed, so that "inflating" it is a plain copy. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public boolean isRawChunk(int chunk) {
+        return (chunkCompressedEnds[chunk] & RAW_CHUNK) != 0;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private int getFrameEnd(int chunk) {
+        return chunkCompressedEnds[chunk] & ~RAW_CHUNK;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private int getFrameStart(int chunk) {
+        return chunk == 0 ? 0 : getFrameEnd(chunk - 1);
+    }
+
     /** Returns the index of the chunk that contains the given uncompressed offset. */
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public int getChunkIndex(int uncompressedOffset) {
@@ -163,9 +211,14 @@ public final class CompressedBlob {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void inflateChunkTo(int chunk, Pointer dst, UnsignedWord dstCapacity) {
         assert Heap.getHeap().isInImageHeap(compressed) : "Compressed blobs must live in the image heap";
-        int srcStart = chunk == 0 ? 0 : chunkCompressedEnds[chunk - 1];
-        int srcLength = chunkCompressedEnds[chunk] - srcStart;
+        int srcStart = getFrameStart(chunk);
+        int srcLength = getFrameEnd(chunk) - srcStart;
         Pointer src = arrayData(compressed).add(srcStart);
+        if (isRawChunk(chunk)) {
+            assert dstCapacity.aboveOrEqual(srcLength) : "Destination too small for a raw chunk";
+            UnmanagedMemoryUtil.copy(src, dst, Word.unsigned(srcLength));
+            return;
+        }
 
         PointerBase dctx = Zstd.ZSTD_createDCtx();
         if (dctx.isNull()) {

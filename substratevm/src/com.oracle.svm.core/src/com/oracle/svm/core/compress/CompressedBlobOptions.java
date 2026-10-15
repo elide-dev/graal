@@ -24,6 +24,12 @@
  */
 package com.oracle.svm.core.compress;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
+
+import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
+import com.oracle.svm.shared.option.AccumulatingLocatableMultiOptionValue;
+import com.oracle.svm.shared.option.BundleMember;
 import com.oracle.svm.shared.option.HostedOptionKey;
 
 import jdk.graal.compiler.options.Option;
@@ -49,8 +55,27 @@ public final class CompressedBlobOptions {
     @Option(help = "Image-heap blobs smaller than this many bytes are stored uncompressed.")//
     public static final HostedOptionKey<Integer> HeapBlobMinimumSize = new HostedOptionKey<>(32 * 1024);
 
-    @Option(help = "Print the uncompressed and compressed size of every kind of image-heap blob at the end of the build.")//
+    @Option(help = "Print the uncompressed and compressed size of every kind of image-heap blob, and which blobs are stored raw and why, at the end of the build.")//
     public static final HostedOptionKey<Boolean> PrintHeapBlobCompression = new HostedOptionKey<>(false);
+
+    @Option(help = "Include support for recording a heap-blob profile with -XX:RecordHeapBlobProfile=<file>, for -H:HeapBlobProfile. Implied by -H:HeapBlobProfile, " +
+                    "so that the image a profile was recorded with and the image built from it contain the same code.")//
+    public static final HostedOptionKey<Boolean> HeapBlobProfiling = new HostedOptionKey<>(false);
+
+    @Option(help = "Heap-blob profiles recorded with -XX:RecordHeapBlobProfile (comma-separated files). Blobs and chunks that a profiled run read are stored uncompressed, " +
+                    "so that startup does not inflate them; without a profile, every blob is stored as -H:CompressHeapBlobs decides.")//
+    @BundleMember(role = BundleMember.Role.Input)//
+    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Paths> HeapBlobProfile = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Paths.buildWithCommaDelimiter());
+
+    @Option(help = "Write a profile of the compressed image-heap blobs that this run reads to the given file when the isolate tears down, for -H:HeapBlobProfile. " +
+                    "Requires an image built with -H:+HeapBlobProfiling.")//
+    public static final RuntimeOptionKey<String> RecordHeapBlobProfile = new RuntimeOptionKey<>(null);
+
+    /** Whether images include support for recording heap-blob profiles. */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static boolean includeProfiling() {
+        return HeapBlobProfiling.getValue() || !HeapBlobProfile.getValue().values().isEmpty();
+    }
 
     private CompressedBlobOptions() {
     }
