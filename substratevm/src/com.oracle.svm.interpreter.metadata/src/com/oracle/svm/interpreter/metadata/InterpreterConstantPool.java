@@ -38,7 +38,9 @@ import java.util.function.Function;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.hub.crema.CremaSupport;
 import com.oracle.svm.core.hub.registry.SymbolsSupport;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
@@ -75,8 +77,8 @@ import jdk.vm.ci.meta.UnresolvedJavaType;
  * JVMCI's {@link jdk.vm.ci.meta.ConstantPool} is not designed to be used in a performance-sensitive
  * bytecode interpreter, so a Espresso-like CP implementation is used instead for performance.
  * <p>
- * This class doesn't support runtime resolution on purpose, but supports pre-resolved entries
- * instead for AOT types.
+ * AOT types use pre-resolved entries. Runtime-loaded types resolve their entries through
+ * the runtime constant-pool subclass.
  * <p>
  * Constant pool resolution runs on behalf of the interpreted method, so, like the interpreter loop
  * itself, its frames are hidden from stack traces: an error it raises leads with the guest frame,
@@ -210,6 +212,25 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
             case DOUBLE -> JavaConstant.forDouble(this.doubleAt(cpi));
             case STRING -> SubstrateObjectConstant.forObject(resolvedAt(cpi, holder));
             case CLASS -> objAt(cpi);
+            case INVOKEDYNAMIC -> {
+                /*
+                 * Hosted ldc object constants use the internal INVOKEDYNAMIC tag. For image-heap
+                 * object constants, BuildTimeConstantPool.ldcConstant calls weakObjectConstant,
+                 * which calls ConstantPoolBuilder.appendCachedAppendix to store this tag.
+                 * Hydration rewrites the ldc operand to that synthetic pool entry. JVMCI graph
+                 * parsing requires its non-opaque referent. Actual invokedynamic bytecodes use
+                 * lookupMethod and lookupAppendix instead.
+                 */
+                VMError.guarantee(SubstrateOptions.useRistretto(), "Hosted object constants must only be exposed to JVMCI graph parsing by Ristretto");
+                JavaConstant entry = (JavaConstant) objAt(cpi);
+                if (entry instanceof ReferenceConstant<?> referenceConstant) {
+                    if (referenceConstant.isOpaque()) {
+                        throw VMError.shouldNotReachHere("Cannot expose opaque image heap constant to JVMCI graph parsing");
+                    }
+                    yield SubstrateObjectConstant.forObject(referenceConstant.getReferent());
+                }
+                yield entry;
+            }
             case METHODHANDLE, METHODTYPE -> {
                 /*
                  * A non-resolving JVMCI lookup reports a cold entry as null. Do not wrap the cache
@@ -247,20 +268,6 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
                     default -> throw VMError.shouldNotReachHere("Unexpected dynamic constant type " + dynamicType(cpi));
                 };
             }
-            case INVOKEDYNAMIC -> {
-                /*
-                 * The build-time constant pool of an AOT class stores the object constants of its
-                 * LDCs as pre-resolved appendix entries (see BuildTimeConstantPool), which
-                 * Ristretto reads when it parses (or inlines) an AOT method (elide-dev/graal#122).
-                 * A weak constant whose object did not make it into the image heap is reported as
-                 * unresolved, so the compiled code deoptimizes there like the interpreter fails.
-                 */
-                Object appendix = objAt(cpi);
-                if (appendix instanceof ReferenceConstant<?> referenceConstant) {
-                    appendix = referenceConstant.isNonNull() && !referenceConstant.isOpaque() ? referenceConstant.getReferent() : null;
-                }
-                yield appendix == null ? null : SubstrateObjectConstant.forObject(appendix);
-            }
             default -> throw VMError.shouldNotReachHere("Unknown tag " + tag);
         };
     }
@@ -276,7 +283,19 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
     @Override
     public JavaConstant lookupAppendix(int cpi, int opcode) {
         assert opcode == INVOKEDYNAMIC;
-        return (JavaConstant) objAt(cpi);
+        JavaConstant appendix = (JavaConstant) objAt(cpi);
+        /*
+         * Image-heap constants store invokedynamic appendices as ReferenceConstant wrappers while
+         * preserving AOT bytecodes. Runtime graph parsing expects the actual object constant, so
+         * expose only non-opaque referents.
+         */
+        if (appendix instanceof ReferenceConstant<?> referenceConstant) {
+            if (referenceConstant.isOpaque()) {
+                throw VMError.shouldNotReachHere("Cannot expose opaque image heap appendix to JVMCI graph parsing");
+            }
+            return SubstrateObjectConstant.forObject(referenceConstant.getReferent());
+        }
+        return appendix;
     }
 
     @VisibleForSerialization
@@ -301,6 +320,27 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         return cachedEntries[cpi];
     }
 
+    /**
+     * Returns the method currently published for {@code cpi} without resolving or linking it.
+     *
+     * A linked-invoke wrapper retains the original resolved method so that sites which share a
+     * member reference but have different invoke opcodes can retain independent linkage metadata.
+     * Consumers that only need stable method metadata must look through that wrapper rather than
+     * attempting to decode the intentionally incomplete symbolic member reference.
+     */
+    public JavaMethod peekCachedMethod(int cpi) {
+        Object entry = peekCachedEntry(cpi);
+        if (entry instanceof LinkedInvokeCacheEntry linkedInvokeCacheEntry) {
+            entry = linkedInvokeCacheEntry.resolvedMethod;
+        }
+        return entry instanceof JavaMethod method ? method : null;
+    }
+
+    /** Returns whether this retained member reference keeps a symbolic name-and-type payload. */
+    public boolean hasSymbolicMemberNameAndType(int cpi) {
+        return memberNameAndTypeIndex(cpi) != 0;
+    }
+
     public InterpreterResolvedObjectType getHolder() {
         return holder;
     }
@@ -310,12 +350,13 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         throw new ClassFormatError(message);
     }
 
-    /**
-     * Returns the type a constant pool entry refers to: the class of a class entry, or the holder
-     * class of a field or method reference. Ristretto's bytecode parser needs it for
-     * {@code invokeinterface}, also in the AOT bytecodes it inlines, whose classes have this
-     * build-time constant pool (elide-dev/graal#121).
-     */
+    // region Unimplemented methods
+
+    @Override
+    public void loadReferencedType(int cpi, int opcode) {
+        throw VMError.intentionallyUnimplemented();
+    }
+
     @Override
     public JavaType lookupReferencedType(int cpi, int opcode) {
         int declaringClassCPI = -1;
@@ -339,6 +380,9 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
             case Bytecodes.INVOKESTATIC:
             case Bytecodes.INVOKEINTERFACE:
                 declaringClassCPI = memberClassIndex(cpi);
+                if (declaringClassCPI == 0) {
+                    return cachedMemberDeclaringClass(cpi);
+                }
                 break;
             default:
                 throw VMError.shouldNotReachHere("Unexpected opcode: " + opcode); // ExcludeFromJacocoGeneratedReport
@@ -346,11 +390,18 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         return findClassAt(declaringClassCPI);
     }
 
-    // region Unimplemented methods
-
-    @Override
-    public void loadReferencedType(int cpi, int opcode) {
-        throw VMError.intentionallyUnimplemented();
+    private JavaType cachedMemberDeclaringClass(int cpi) {
+        Object entry = peekCachedEntry(cpi);
+        if (entry instanceof LinkedInvokeCacheEntry linkedInvokeCacheEntry) {
+            entry = linkedInvokeCacheEntry.resolvedMethod;
+        }
+        if (entry instanceof JavaMethod method) {
+            return method.getDeclaringClass();
+        }
+        if (entry instanceof JavaField field) {
+            return field.getDeclaringClass();
+        }
+        throw VMError.shouldNotReachHere("Missing cached member at constant pool index " + cpi); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
@@ -373,16 +424,8 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
     protected Object resolve(int cpi, @SuppressWarnings("unused") InterpreterResolvedObjectType accessingClass) {
         assert cpi != 0; // guaranteed by the caller
 
-        @SuppressWarnings("unused")
-        Tag tag = tagAt(cpi); // CPI bounds check
-
-        Object entry = cachedEntries[cpi];
+        Object entry = cachedEntries[cpi]; // CPI bounds check
         if (isUnresolved(entry)) {
-            /*
-             * Runtime resolution is deliberately unsupported for AOT types (using base
-             * InterpreterConstantPool). This can be relaxed in the future e.g. by attaching a
-             * RuntimeInterpreterConstantPool instead.
-             */
             throw new UnsupportedResolutionException();
         }
 
@@ -830,9 +873,13 @@ public class InterpreterConstantPool extends ConstantPool implements jdk.vm.ci.m
         return super.longAt(index);
     }
 
+    /** Returns hydrated type metadata without loading; uncached entries require runtime loading. */
     public JavaType findClassAt(int cpi) {
-        if (peekCachedEntry(cpi) instanceof InterpreterResolvedObjectType type) {
+        if (peekCachedEntry(cpi) instanceof JavaType type) {
             return type;
+        }
+        if (!RuntimeClassLoading.isSupported()) {
+            throw VMError.intentionallyUnimplemented();
         }
         Symbol<Name> nameSymbol = className(cpi);
         ByteSequence typeBytes = TypeSymbols.nameToType(nameSymbol);
