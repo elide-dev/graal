@@ -44,6 +44,7 @@ import java.lang.invoke.MethodType;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +122,7 @@ public class RistrettoDeoptimizationTest {
              * VarHandle fields keep a location (as with -H:Preserve), so their bytecodes are kept.
              */
             try {
+                RuntimeReflection.register(ArrayList.class.getConstructor(), ArrayList.class.getMethod("add", Object.class), ArrayList.class.getMethod("size"));
                 RuntimeReflection.register(AtomicReferenceArray.class.getMethod("get", int.class), AtomicReference.class.getMethod("compareAndSet", Object.class, Object.class),
                                 Objects.class.getMethod("requireNonNullElse", Object.class, Object.class));
                 RuntimeReflection.register(AtomicReferenceArray.class.getDeclaredField("AA"), AtomicReference.class.getDeclaredField("VALUE"));
@@ -266,6 +268,17 @@ public class RistrettoDeoptimizationTest {
                 throw new AssertionError("compareAndSet failed at " + i);
             }
             return Probe.compiled();
+        }
+    }
+
+    public static final class CollectionUser {
+        public static int grow(int n, int[] compiled) {
+            ArrayList<Integer> list = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                list.add(i);
+            }
+            compiled[0] = Probe.compiled();
+            return list.size();
         }
     }
 
@@ -470,6 +483,7 @@ public class RistrettoDeoptimizationTest {
     }
 
     static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class,
+                    CollectionUser.class,
                     Updater.class, Counter.class,
                     Handles.class, Lambdas.class);
 
@@ -629,6 +643,21 @@ public class RistrettoDeoptimizationTest {
             int compiled = invoke(readAndSwap, array, reference, i);
             assertEquals(Integer.valueOf(i), reference.get());
             return compiled == 1;
+        });
+    }
+
+    /**
+     * AOT collection methods execute natively and never publish interpreter LinkedInvoke entries.
+     * Their already-resolved constant pools must still allow the caller to stay compiled.
+     */
+    @Test
+    public void compiledCodeStaysCompiledAcrossAOTCollectionCalls() throws Exception {
+        RuntimeClassLoader loader = new RuntimeClassLoader();
+        Method grow = loader.loadClass(CollectionUser.class.getName()).getMethod("grow", int.class, int[].class);
+        awaitCompiled("CollectionUser.grow", () -> {
+            int[] compiled = new int[1];
+            assertEquals(8, (int) invoke(grow, 8, compiled));
+            return compiled[0] == 1;
         });
     }
 
