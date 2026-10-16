@@ -170,7 +170,7 @@ public final class RistrettoConstantPool implements ConstantPool {
             if (method instanceof InterpreterResolvedJavaMethod resolvedMethod) {
                 return RistrettoMethod.getOrCreate(resolvedMethod);
             }
-            return method;
+            return method != null ? method : createUnresolvedMethod(cpi);
         }
         Object cachedEntry = interpreterConstantPool.peekCachedEntry(cpi);
         if (cachedEntry instanceof UnresolvedJavaMethod unresolvedJavaMethod) {

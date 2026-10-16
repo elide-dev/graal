@@ -482,7 +482,8 @@ public class RistrettoDeoptimizationTest {
         }
     }
 
-    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class, CollectionUser.class,
+    static final List<Class<?>> RUNTIME_CLASSES = List.of(Shape.class, One.class, Two.class, Holder.class, Rare.class, Hot.class, Key.class, MapUser.class, AtomicUser.class, ConstantUser.class,
+                    CollectionUser.class,
                     Updater.class, Counter.class,
                     Handles.class, Lambdas.class);
 
