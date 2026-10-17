@@ -357,7 +357,8 @@ public class SubstrateOptions {
 
     @Option(help = "Comma-separated list of class name prefixes (packages) whose methods are compiled with the code-size settings of -Os " +
                     "while the rest of the image keeps the selected optimization level, for example 'jdk.graal.compiler.,org.graalvm.shadowed.'.", type = OptionType.User)//
-    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> OptimizeForSizePackages = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());
+    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> OptimizeForSizePackages = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings
+                    .buildWithCommaDelimiter());
 
     /** Whether the methods of the given class are compiled with the code-size settings of -Os. */
     public static boolean isOptimizedForSize(String className) {

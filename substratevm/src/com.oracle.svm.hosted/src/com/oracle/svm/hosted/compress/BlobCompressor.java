@@ -256,8 +256,11 @@ public final class BlobCompressor implements HeapBlobCompression {
         }
         for (Map.Entry<String, Stats> entry : new TreeMap<>(STATS).entrySet()) {
             Stats stats = entry.getValue();
+            long uncompressed = stats.uncompressed.get();
+            long compressed = stats.compressed.get();
+            double ratio = uncompressed == 0 ? 100.0 : 100.0 * compressed / uncompressed;
             LogUtils.info(String.format("Heap blob compression: %s: %d blobs, %,d -> %,d bytes (%.1f%%), dictionaries %,d bytes", entry.getKey(), stats.blobs.get(),
-                            stats.uncompressed.get(), stats.compressed.get(), stats.uncompressed.get() == 0 ? 100.0 : 100.0 * stats.compressed.get() / stats.uncompressed.get(), stats.dictionaries.get()));
+                            uncompressed, compressed, ratio, stats.dictionaries.get()));
         }
     }
 
