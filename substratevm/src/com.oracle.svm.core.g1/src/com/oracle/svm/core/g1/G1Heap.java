@@ -690,6 +690,33 @@ public final class G1Heap extends Heap {
         return G1Library.getUsedMemoryAfterLastGC();
     }
 
+    /** See {@link G1CommittedMemoryProvider#getMaxMemory()}. */
+    static long getMaxMemory() {
+        return G1CommittedMemoryProvider.singleton().getMaxMemory();
+    }
+
+    /**
+     * Returns the committed memory of the collected Java heap, capped at {@link #getMaxMemory()} so
+     * that the committed memory never exceeds the reported maximum.
+     */
+    static long getTotalMemory() {
+        return Math.min(G1Library.getTotalMemory(), getMaxMemory());
+    }
+
+    /**
+     * Returns the free memory within {@link #getTotalMemory()}. If the committed memory was capped,
+     * the free memory is reduced accordingly.
+     */
+    static long getFreeMemory() {
+        long total = G1Library.getTotalMemory();
+        long free = G1Library.getFreeMemory();
+        long excess = total - getMaxMemory();
+        if (excess > 0) {
+            return Math.max(0, free - excess);
+        }
+        return free;
+    }
+
     @Override
     @Uninterruptible(reason = "Ensure that no GC can occur between modification of the object and this call.", callerMustBe = true)
     public void dirtyAllReferencesOf(Object obj) {
@@ -847,17 +874,17 @@ public final class G1Heap extends Heap {
 final class Target_java_lang_Runtime {
     @Substitute
     private long freeMemory() {
-        return G1Library.getFreeMemory();
+        return G1Heap.getFreeMemory();
     }
 
     @Substitute
     private long totalMemory() {
-        return G1Library.getTotalMemory();
+        return G1Heap.getTotalMemory();
     }
 
     @Substitute
     private long maxMemory() {
-        return G1Library.getMaxMemory();
+        return G1Heap.getMaxMemory();
     }
 
     @Substitute

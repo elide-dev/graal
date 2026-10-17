@@ -54,7 +54,10 @@ import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.core.os.ImageHeapProvider;
 import com.oracle.svm.core.os.VirtualMemoryProvider;
 import com.oracle.svm.core.util.PointerUtils;
+import com.oracle.svm.guest.staging.IsolateArgumentAccess;
+import com.oracle.svm.guest.staging.IsolateArgumentParser;
 import com.oracle.svm.guest.staging.IsolateArguments;
+import com.oracle.svm.guest.staging.SubstrateGCOptions;
 import com.oracle.svm.guest.staging.c.function.CEntryPointErrors;
 import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
@@ -99,6 +102,7 @@ public class G1CommittedMemoryProvider extends AbstractCommittedMemoryProvider {
     private Pointer reservedBegin;
     private UnsignedWord reservedSize;
     private UnsignedWord maxHeapSize;
+    private UnsignedWord requestedMaxJavaHeapSize;
     private UnsignedWord physicalMemorySize;
 
     private Pointer metaspaceBegin;
@@ -126,6 +130,7 @@ public class G1CommittedMemoryProvider extends AbstractCommittedMemoryProvider {
         // don't fill the last image heap region completely. This reduces the file size.
         UnsignedWord imageHeapSize = UnsignedUtils.roundUp(AbstractImageHeapProvider.getImageHeapSizeInFile(), Word.unsigned(getRegionSize()));
         UnsignedWord heapBaseAlignment = Word.unsigned(Heap.getHeap().getHeapBaseAlignment());
+        UnsignedWord requestedMaxJavaHeapSize = Word.unsigned(IsolateArgumentAccess.readLong(arguments, IsolateArgumentParser.getOptionIndex(SubstrateGCOptions.MaxHeapSize)));
 
         int heapOptionStructSize = SizeOf.get(G1HeapOptions.class);
         G1HeapOptions heapOptions = StackValue.get(G1HeapOptions.class);
@@ -162,23 +167,26 @@ public class G1CommittedMemoryProvider extends AbstractCommittedMemoryProvider {
         CEntryPointSnippets.initBaseRegisters(heapBaseOut.read());
 
         Pointer collectedHeapBegin = PointerUtils.roundUp(imageHeapEndOut.read(), Word.unsigned(getRegionSize()));
-        return initialize0(reservedMemory, heapAddressSpaceSize, collectedHeapBegin, newMaxHeapSize, heapOptions);
+        return initialize0(reservedMemory, heapAddressSpaceSize, collectedHeapBegin, newMaxHeapSize, requestedMaxJavaHeapSize, heapOptions);
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE)
     @NeverInline("Force loading of a new instance reference, now that the heap base is initialized.")
     @SuppressWarnings("hiding")
-    private static int initialize0(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, G1HeapOptions heapOptions) {
+    private static int initialize0(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, UnsignedWord requestedMaxJavaHeapSize,
+                    G1HeapOptions heapOptions) {
         G1CommittedMemoryProvider provider = singleton();
-        return provider.initializeFields(reservedBegin, reservedSize, collectedHeapBegin, maxHeapSize, heapOptions);
+        return provider.initializeFields(reservedBegin, reservedSize, collectedHeapBegin, maxHeapSize, requestedMaxJavaHeapSize, heapOptions);
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     @SuppressWarnings("hiding")
-    private int initializeFields(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, G1HeapOptions heapOptions) {
+    private int initializeFields(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, UnsignedWord requestedMaxJavaHeapSize,
+                    G1HeapOptions heapOptions) {
         this.reservedBegin = reservedBegin;
         this.reservedSize = reservedSize;
         this.maxHeapSize = maxHeapSize;
+        this.requestedMaxJavaHeapSize = requestedMaxJavaHeapSize;
         this.physicalMemorySize = heapOptions.physicalMemorySize();
 
         initializeMetaspaceFields();
@@ -227,6 +235,29 @@ public class G1CommittedMemoryProvider extends AbstractCommittedMemoryProvider {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public UnsignedWord getMaxHeapSize() {
         return maxHeapSize;
+    }
+
+    /**
+     * Returns the maximum size of the collected Java heap as reported to Java code, i.e., by
+     * {@link Runtime#maxMemory()} and by the heap memory usage of the {@code MemoryMXBean}.
+     * <p>
+     * The G1 library sizes the G1 managed heap (metaspace, image heap, and collected Java heap) as
+     * one unit and aligns that sum to its heap alignment. The padding added by this alignment ends
+     * up in the collected Java heap, so the maximum capacity reported by the G1 library can exceed
+     * the maximum heap size requested via {@code -Xmx} or {@code -XX:MaxHeapSize} by less than one
+     * heap alignment unit, depending on the sizes of the image heap and the metaspace. To match
+     * HotSpot, where the maximum memory is the configured maximum heap size, the result is capped
+     * at the requested maximum heap size, rounded up to the region size. The GC itself still uses
+     * the full capacity. If no maximum heap size was requested, the ergonomically chosen capacity
+     * of the G1 library is returned.
+     */
+    public long getMaxMemory() {
+        long result = G1Library.getMaxMemory();
+        UnsignedWord requested = requestedMaxJavaHeapSize;
+        if (requested.notEqual(0) && requested.belowThan(Word.unsigned(result))) {
+            result = UnsignedUtils.roundUp(requested, Word.unsigned(getRegionSize())).rawValue();
+        }
+        return result;
     }
 
     public UnsignedWord getPhysicalMemorySize() {
