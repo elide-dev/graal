@@ -39,7 +39,6 @@ import com.oracle.svm.interpreter.RuntimeInterpreterConstantPool;
 import com.oracle.svm.interpreter.SuccessfulCallSiteLink;
 import com.oracle.svm.interpreter.metadata.Bytecodes;
 import com.oracle.svm.interpreter.metadata.CremaMethodAccess;
-import com.oracle.svm.interpreter.metadata.CremaResolvedJavaMethodImpl;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool.LinkedInvoke;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedInvokeGenericJavaMethod;
@@ -157,21 +156,6 @@ public final class RistrettoConstantPool implements ConstantPool {
             GraalError.guarantee(!(linkedInvoke.seedMethod instanceof InterpreterResolvedInvokeGenericJavaMethod),
                             "Linked invoke at cpi %d (%s) must contain its normalized adapter invoker, not %s", cpi, Bytecodes.nameOf(opcode), linkedInvoke.seedMethod);
             return RistrettoMethod.getOrCreate(linkedInvoke.seedMethod);
-        }
-        if (!(compilerMethod.getInterpreterMethod() instanceof CremaResolvedJavaMethodImpl)) {
-            /*
-             * Preserved AOT bytecodes have a constant pool resolved and validated by the image
-             * builder. Their native execution does not enter Interpreter.linkInvoke, so waiting
-             * for a runtime LinkedInvoke would leave even hot AOT calls permanently unresolved.
-             * Read the already-resolved pool without doing symbolic resolution. The hosted AOT
-             * eligibility check rejects signature-polymorphic sites and incompatible invoke kinds.
-             * Runtime-loaded bytecodes still require the interpreter's published linked seed.
-             */
-            JavaMethod method = interpreterConstantPool.lookupMethod(cpi, opcode);
-            if (method instanceof InterpreterResolvedJavaMethod resolvedMethod) {
-                return RistrettoMethod.getOrCreate(resolvedMethod);
-            }
-            return method != null ? method : createUnresolvedMethod(cpi);
         }
         Object cachedEntry = interpreterConstantPool.peekCachedEntry(cpi);
         if (cachedEntry instanceof InterpreterResolvedJavaMethod resolvedJavaMethod) {

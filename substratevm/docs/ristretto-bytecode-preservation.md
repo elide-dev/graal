@@ -43,6 +43,18 @@ receiver type. Wildcards do not instantiate arbitrary classes or make every matc
 reachable. Exact selections are resolved before analysis and rooted in the first `duringAnalysis`
 callback, after ordinary roots are visible to the additional-reachability policy.
 
+## Default selection in Elide's fork
+
+Elide's fork selects hot JDK classes by default, so that an image needs no option to let Ristretto
+inline their methods (elide-dev/graal#103): the class name prefixes of
+`-H:RistrettoInlinableAOTClasses` (the `java.util.concurrent.atomic` package, `ConcurrentHashMap`,
+`ConcurrentLinkedQueue`, `HashMap`, `ArrayList`, `ArrayDeque`, `Objects` and the `VarHandle` access
+method classes by default) are added to the application selection as wildcard patterns
+(`java.util.HashMap*.*` for the prefix `java.util.HashMap`), so they only match methods that
+analysis already reaches and skip unsupported bodies. `-H:-RistrettoInlineAOTMethods` drops these
+defaults; `-H:JITPreserveBytecodesForRuntime` adds to them either way. The two fork options are
+aliases of a selection that upstream expresses only through `JITPreserveBytecodesForRuntime`.
+
 ## Eligible bodies
 
 Preservation keeps original bytecodes, so operations removed or rewritten by AOT optimization

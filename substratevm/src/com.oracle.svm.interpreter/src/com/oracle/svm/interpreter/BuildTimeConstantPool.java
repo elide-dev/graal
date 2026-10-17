@@ -159,21 +159,9 @@ final class BuildTimeConstantPool {
         return poolBuilder.appendCachedString(string);
     }
 
-    /**
-     * Ristretto reads the symbolic class, name and descriptor of constant pool entries (for example
-     * to compute deoptimization layouts of invokes), so with Ristretto the entries of resolved
-     * elements also carry them. The interpreter only uses the cached element.
-     */
-    private static boolean withSymbols() {
-        return SubstrateOptions.useRistretto();
-    }
-
     public int typeConstant(JavaType type) {
         if (!(type instanceof InterpreterResolvedJavaType || type instanceof UnresolvedJavaType)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaType or UnresolvedJavaType");
-        }
-        if (withSymbols() && type instanceof InterpreterResolvedJavaType resolved) {
-            return poolBuilder.appendSymbolicClass(resolved.getSymbolicName(), type);
         }
         return poolBuilder.appendCachedType(type);
     }
@@ -181,10 +169,6 @@ final class BuildTimeConstantPool {
     public int method(JavaMethod method) {
         if (!(method instanceof InterpreterResolvedJavaMethod || method instanceof UnresolvedJavaMethod)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaMethod or UnresolvedJavaMethod");
-        }
-        if (withSymbols() && method instanceof InterpreterResolvedJavaMethod resolved) {
-            return poolBuilder.appendSymbolicMethod(resolved.getDeclaringClass().isInterface(), resolved.getDeclaringClass().getSymbolicName(), resolved.getSymbolicName(),
-                            resolved.getSymbolicSignature(), method);
         }
         return poolBuilder.appendCachedMethod(false, method);
     }
@@ -211,9 +195,6 @@ final class BuildTimeConstantPool {
     public int field(JavaField field) {
         if (!(field instanceof InterpreterResolvedJavaField || field instanceof UnresolvedJavaField)) {
             throw new IllegalArgumentException("Type must be either InterpreterResolvedJavaField or UnresolvedJavaField");
-        }
-        if (withSymbols() && field instanceof InterpreterResolvedJavaField resolved) {
-            return poolBuilder.appendSymbolicField(resolved.getDeclaringClass().getSymbolicName(), resolved.getSymbolicName(), resolved.getSymbolicType(), field);
         }
         return poolBuilder.appendCachedField(field);
     }
