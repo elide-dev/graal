@@ -183,6 +183,26 @@ public class DAPServerLifecycleTest {
     }
 
     @Test
+    public void testLaunchDisconnectHonorsTerminateDebuggee() throws Exception {
+        try (TestServer server = new TestServer(false, false); Socket socket = server.connect()) {
+            server.evaluate().get(5, TimeUnit.SECONDS);
+            request(socket, "initialize", 1);
+            request(socket, "launch", 2);
+            request(socket, "configurationDone", 3);
+            request(socket, "disconnect", 4, new JSONObject().put("restart", false).put("terminateDebuggee", false));
+            assertConnectionClosed(socket);
+            try (Socket nextClient = server.connect()) {
+                request(nextClient, "initialize", 1);
+                // The launched program keeps running: the client asked not to terminate it.
+                server.evaluate().get(5, TimeUnit.SECONDS);
+                request(nextClient, "attach", 2);
+                request(nextClient, "configurationDone", 3);
+                request(nextClient, "disconnect", 4);
+            }
+        }
+    }
+
+    @Test
     public void testStartupSuspendIsNotRearmed() throws Exception {
         try (TestServer server = new TestServer(true, false); Socket socket = server.connect()) {
             CompletableFuture<?> evaluation = server.evaluate();
@@ -244,7 +264,8 @@ public class DAPServerLifecycleTest {
         if ("initialize".equals(command)) {
             arguments.put("adapterID", "graalvm");
         } else if ("disconnect".equals(command)) {
-            arguments.put("restart", false).put("terminateDebuggee", false);
+            // No terminateDebuggee: the default applies (cancel after launch, resume after attach).
+            arguments.put("restart", false);
         }
         return request(socket, command, sequence, arguments);
     }
