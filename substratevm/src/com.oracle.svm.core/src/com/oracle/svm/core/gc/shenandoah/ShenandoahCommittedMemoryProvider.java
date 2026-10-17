@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.core.gc.shenandoah;
 
-import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegionSize;
 
 import org.graalvm.nativeimage.ImageSingletons;
@@ -37,12 +37,8 @@ import org.graalvm.nativeimage.c.type.WordPointer;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.IsolateArguments;
-import com.oracle.svm.core.NeverInline;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.Uninterruptible;
-import com.oracle.svm.core.UnmanagedMemoryUtil;
-import com.oracle.svm.core.c.function.CEntryPointErrors;
+import com.oracle.svm.core.VMInspectionOptions;
 import com.oracle.svm.core.container.Container;
 import com.oracle.svm.core.container.ContainerLibrary;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
@@ -50,25 +46,39 @@ import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahH
 import com.oracle.svm.core.graal.snippets.CEntryPointSnippets;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.heap.ReferenceAccess;
+import com.oracle.svm.core.nmt.NativeMemoryTracking;
+import com.oracle.svm.core.nmt.NmtCategory;
 import com.oracle.svm.core.os.AbstractCommittedMemoryProvider;
 import com.oracle.svm.core.os.AbstractImageHeapProvider;
 import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.core.os.ImageHeapProvider;
 import com.oracle.svm.core.os.VirtualMemoryProvider;
-import com.oracle.svm.core.snippets.KnownIntrinsics;
-import com.oracle.svm.core.util.UnsignedUtils;
+import com.oracle.svm.core.util.PointerUtils;
+import com.oracle.svm.shared.NeverInline;
+import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
+import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.UnsignedUtils;
+import com.oracle.svm.guest.staging.IsolateArguments;
+import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
+import com.oracle.svm.guest.staging.c.function.CEntryPointErrors;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.core.common.CompressEncoding;
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * Reserves one contiguous block of memory in which the image heap and the collected Java heap are
  * placed. The layout of this block of memory is as follows:
  *
  * <pre>
- * | null regions |  image heap   |     collected Java heap      |
- * | (protected)  | closed | open | size determined by -Xms/-Xmx |
+ * | null regions | metaspace |  image heap   |     collected Java heap      |
+ * |              |           | closed | open | size determined by -Xms/-Xmx |
+ * |                       Shenandoah managed heap                           |
  * ^
  * heapBase
  * </pre>
@@ -85,15 +95,25 @@ import jdk.graal.compiler.word.Word;
  * address space, which can reduce the maximum size of the Java heap.</li>
  * </ul>
  */
+@SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class, other = DisallowLayered.class)
 public class ShenandoahCommittedMemoryProvider extends AbstractCommittedMemoryProvider {
     private Pointer reservedBegin;
     private UnsignedWord reservedSize;
     private UnsignedWord maxHeapSize;
     private UnsignedWord physicalMemorySize;
 
+    private Pointer metaspaceBegin;
+    private Pointer metaspaceEnd;
+    private UnsignedWord collectedHeapSize;
+
     @Platforms(Platform.HOSTED_ONLY.class)
     public ShenandoahCommittedMemoryProvider() {
         assert SubstrateOptions.SpawnIsolates.getValue();
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static ShenandoahCommittedMemoryProvider singleton() {
+        return (ShenandoahCommittedMemoryProvider) CommittedMemoryProvider.get();
     }
 
     @Override
@@ -102,7 +122,8 @@ public class ShenandoahCommittedMemoryProvider extends AbstractCommittedMemoryPr
         int argc = arguments.getArgc();
         CCharPointerPointer argv = arguments.getArgv();
 
-        UnsignedWord nullRegionSize = Word.unsigned(ShenandoahHeap.get().getImageHeapOffsetInAddressSpace());
+        UnsignedWord nullRegionSize = Word.unsigned(ShenandoahHeap.getNullRegionSize());
+        UnsignedWord metaspaceSize = Word.unsigned(ShenandoahHeap.getReservedMetaspaceSize());
         // The image heap size in the file may be smaller than the image heap at run-time because we
         // don't fill the last image heap region completely. This reduces the file size.
         UnsignedWord imageHeapSize = UnsignedUtils.roundUp(AbstractImageHeapProvider.getImageHeapSizeInFile(), Word.unsigned(getRegionSize()));
@@ -117,14 +138,14 @@ public class ShenandoahCommittedMemoryProvider extends AbstractCommittedMemoryPr
         int containerActiveProcessorCount = isContainerized ? ContainerLibrary.getActiveProcessorCount() : 0;
 
         ShenandoahLibrary.parseOptions(ShenandoahLibrary.VERSION, argc, argv, ShenandoahOptions.HOSTED_ARGUMENTS.get(), ShenandoahOptions.RUNTIME_ARGUMENTS.get(),
-                        ReferenceAccess.singleton().getMaxAddressSpaceSize(), heapBaseAlignment, nullRegionSize, imageHeapSize,
+                        ReferenceAccess.singleton().getMaxAddressSpaceSize(), heapBaseAlignment, nullRegionSize, metaspaceSize, imageHeapSize,
                         getCompressedReferenceShift(), isContainerized, containerMemoryLimitInBytes, containerActiveProcessorCount, heapOptions);
 
         UnsignedWord heapAddressSpaceSize = heapOptions.heapAddressSpaceSize();
         UnsignedWord newMaxHeapSize = heapOptions.maxHeapSize();
         assert heapAddressSpaceSize.belowOrEqual(ReferenceAccess.singleton().getMaxAddressSpaceSize()) : "must be";
 
-        if (heapAddressSpaceSize.belowThan(nullRegionSize.add(imageHeapSize))) {
+        if (heapAddressSpaceSize.belowThan(imageHeapSize.add(Heap.getHeap().getImageHeapOffsetInAddressSpace()))) {
             return CEntryPointErrors.INSUFFICIENT_ADDRESS_SPACE;
         }
 
@@ -141,19 +162,52 @@ public class ShenandoahCommittedMemoryProvider extends AbstractCommittedMemoryPr
         }
 
         CEntryPointSnippets.initBaseRegisters(heapBaseOut.read());
-        return initialize0(reservedMemory, heapAddressSpaceSize, newMaxHeapSize, heapOptions);
+
+        Pointer collectedHeapBegin = PointerUtils.roundUp(imageHeapEndOut.read(), Word.unsigned(getRegionSize()));
+        return initialize0(reservedMemory, heapAddressSpaceSize, collectedHeapBegin, newMaxHeapSize, heapOptions);
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE)
     @NeverInline("Force loading of a new instance reference, now that the heap base is initialized.")
     @SuppressWarnings("hiding")
-    private static int initialize0(Pointer reservedBegin, UnsignedWord reservedSize, UnsignedWord maxHeapSize, ShenandoahHeapOptions heapOptions) {
-        ShenandoahCommittedMemoryProvider instance = getInstance();
-        instance.reservedBegin = reservedBegin;
-        instance.reservedSize = reservedSize;
-        instance.maxHeapSize = maxHeapSize;
-        instance.physicalMemorySize = heapOptions.physicalMemorySize();
+    private static int initialize0(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, ShenandoahHeapOptions heapOptions) {
+        ShenandoahCommittedMemoryProvider provider = singleton();
+        return provider.initializeFields(reservedBegin, reservedSize, collectedHeapBegin, maxHeapSize, heapOptions);
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    @SuppressWarnings("hiding")
+    private int initializeFields(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin, UnsignedWord maxHeapSize, ShenandoahHeapOptions heapOptions) {
+        this.reservedBegin = reservedBegin;
+        this.reservedSize = reservedSize;
+        this.maxHeapSize = maxHeapSize;
+        this.physicalMemorySize = heapOptions.physicalMemorySize();
+
+        initializeMetaspaceFields();
+        initializeCollectedHeapFields(reservedBegin, reservedSize, collectedHeapBegin);
         return CEntryPointErrors.NO_ERROR;
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    protected void initializeMetaspaceFields() {
+        int metaspaceSize = ShenandoahHeap.getReservedMetaspaceSize();
+        this.metaspaceBegin = KnownIntrinsics.heapBase().add(ShenandoahHeap.getMetaspaceOffsetInAddressSpace());
+        this.metaspaceEnd = metaspaceBegin.add(metaspaceSize);
+
+        if (VMInspectionOptions.hasNativeMemoryTrackingSupport() && metaspaceSize > 0) {
+            NativeMemoryTracking.singleton().trackReserve(metaspaceSize, NmtCategory.Metaspace);
+        }
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    @SuppressWarnings("hiding")
+    private void initializeCollectedHeapFields(Pointer reservedBegin, UnsignedWord reservedSize, Pointer collectedHeapBegin) {
+        this.collectedHeapSize = reservedSize.subtract(collectedHeapBegin.subtract(reservedBegin));
+
+        if (VMInspectionOptions.hasNativeMemoryTrackingSupport()) {
+            UnsignedWord collectedHeapSize = reservedSize.subtract(collectedHeapBegin.subtract(reservedBegin));
+            NativeMemoryTracking.singleton().trackReserve(collectedHeapSize, NmtCategory.JavaHeap);
+        }
     }
 
     @Uninterruptible(reason = "Still being initialized.")
@@ -161,20 +215,15 @@ public class ShenandoahCommittedMemoryProvider extends AbstractCommittedMemoryPr
         return VirtualMemoryProvider.get().reserve(heapAddressSpaceSize, heapBaseAlignment, false);
     }
 
-    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
-    public static ShenandoahCommittedMemoryProvider getInstance() {
-        return (ShenandoahCommittedMemoryProvider) CommittedMemoryProvider.get();
+    @Override
+    public UnsignedWord getCollectedHeapAddressSpaceSize() {
+        return collectedHeapSize;
     }
 
     @Override
-    public UnsignedWord getCollectedHeapAddressSpaceSize() {
-        Pointer collectedHeapStart = KnownIntrinsics.heapBase().add(getCollectedHeapOffsetInAddressSpace());
-        assert collectedHeapStart.aboveOrEqual(reservedBegin);
-        return reservedSize.subtract(collectedHeapStart.subtract(reservedBegin));
-    }
-
-    private static UnsignedWord getCollectedHeapOffsetInAddressSpace() {
-        return UnsignedUtils.roundUp(ImageHeapProvider.get().getImageHeapEndOffsetInAddressSpace(), Word.unsigned(getRegionSize()));
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public boolean isInMetaspace(Pointer ptr) {
+        return ptr.aboveOrEqual(metaspaceBegin) && ptr.belowThan(metaspaceEnd);
     }
 
     @Override

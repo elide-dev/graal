@@ -41,33 +41,48 @@ import jdk.vm.ci.code.CodeUtil;
  * an array of values (i.e., one value per debug-level).
  */
 public class ShenandoahConstants {
-    private static final int TLAB_TOP_OFFSET = 384;
-    private static final int TLAB_END_OFFSET = 400;
+    /*
+     * TLAB top/end byte offsets within the barrier-and-allocation-data blob
+     * (ShenandoahThreadLocalData). Since [GR-79705]/[GR-79854], the TLAB top/end live in the
+     * SVMThreadLocalAllocBufferData embedded right after {@code _gc_state} (no longer inside the C++
+     * JavaThread's ThreadLocalAllocBuffer), and the allocation fast path reads them off
+     * {@link ShenandoahHeap#barrierAndAllocationDataTL}{@code .getAddress()} (see
+     * {@link com.oracle.svm.core.gc.shenandoah.graal.ShenandoahAllocationSupport#getThreadLocalData}),
+     * so these offsets are blob-relative. Validated at startup against
+     * ShenandoahInitState.tlab{Top,End}Offset().
+     */
+    private static final int TLAB_TOP_OFFSET = 8;
+    private static final int TLAB_END_OFFSET = 16;
     private static final byte DIRTY_CARD_VALUE = 0;
-    private static final int[] JAVA_THREAD_SIZE = {560, 592, 592}; // product, fastdebug, debug
+    // sizeof(GCThreadLocalData) for Shenandoah (uint64_t[17] = 136 bytes); validated at startup.
+    private static final int SHENANDOAH_BARRIER_AND_ALLOCATION_DATA_SIZE = 136;
+    private static final int[] JAVA_THREAD_SIZE = {208, 240, 240}; // product, fastdebug, debug
 
     /*
      * Byte offsets of the SATB mark queue's {@code _index} and {@code _buf} fields, relative to the
      * per-thread {@code gc_state} byte (see {@link #gcStateOffset()}). Both fields live in the same
      * ShenandoahThreadLocalData blob as gc_state, so the inlined SATB pre-write barrier can address
-     * them off the thread register at {@code gcStateOffset() + <rel>}. These must match the C++
-     * ShenandoahThreadLocalData layout; they are validated at startup against ShenandoahInitState
-     * (see ShenandoahHeap validation).
+     * them off the thread register at {@code gcStateOffset() + <rel>}. Since [GR-79705]/[GR-79854]
+     * the SVMThreadLocalAllocBufferData {@code _tlab} (16 bytes) was inserted between gc_state and
+     * the SATB queue, which shifted these relative offsets up by that amount. These must match the
+     * C++ ShenandoahThreadLocalData layout; they are validated at startup against ShenandoahInitState.
      */
-    private static final int SATB_INDEX_OFFSET_REL = 8;
-    private static final int SATB_BUFFER_OFFSET_REL = 16;
+    private static final int SATB_INDEX_OFFSET_REL = 32;
+    private static final int SATB_BUFFER_OFFSET_REL = 40;
 
     /*
-     * Offset of the C++ Thread::_gc_data blob (which holds ShenandoahThreadLocalData, whose first
-     * field is gc_state) within the embedded JavaThread. javaThreadTL points at the START of the
-     * JavaThread, but gc_state lives at JavaThread+gc_data_offset, so gcStateOffset() must add this.
-     * The value is validated at startup against ShenandoahInitState.gcStateOffset().
+     * Offset of the per-thread {@code gc_state} byte within the barrier-and-allocation-data blob
+     * (ShenandoahThreadLocalData). {@code gc_state} is the first field of that blob, so the offset is
+     * 0. Since [GR-79705]/[GR-79854], {@link ShenandoahHeap#barrierAndAllocationDataTL} points at the
+     * START of the blob (the pre-[GR-79705] layout instead pointed at the embedded JavaThread and had
+     * to add the C++ {@code Thread::_gc_data} displacement), so {@link #gcStateOffset()} needs no
+     * extra displacement. Validated at startup against ShenandoahInitState.gcStateOffset().
      */
-    private static final int[] JAVA_THREAD_GC_STATE_OFFSET = {8, 8, 8}; // product, fastdebug, debug
+    private static final int GC_STATE_OFFSET_REL = 0;
 
     @Fold
-    public static int javaThreadGcStateOffset() {
-        return JAVA_THREAD_GC_STATE_OFFSET[debugLevelIndex()];
+    public static int gcStateOffsetRel() {
+        return GC_STATE_OFFSET_REL;
     }
 
     @Fold
@@ -78,6 +93,11 @@ public class ShenandoahConstants {
     @Fold
     public static int tlabEndOffset() {
         return TLAB_END_OFFSET;
+    }
+
+    @Fold
+    public static int barrierAndAllocationDataSize() {
+        return SHENANDOAH_BARRIER_AND_ALLOCATION_DATA_SIZE;
     }
 
     @Fold
@@ -133,10 +153,11 @@ public class ShenandoahConstants {
     /**
      * Offset (from the current {@code IsolateThread}) of the per-thread Shenandoah {@code _gc_state}
      * byte. It is the first field of the {@code ShenandoahThreadLocalData} blob mirrored by
-     * {@link ShenandoahHeap#javaThreadTL}, so its offset equals the offset of that thread local.
+     * {@link ShenandoahHeap#barrierAndAllocationDataTL}, so its offset equals the offset of that
+     * thread local (plus {@link #gcStateOffsetRel()}, which is 0).
      */
     public static int gcStateOffset() {
-        return VMThreadLocalOffsetProvider.getOffset(ShenandoahHeap.javaThreadTL) + javaThreadGcStateOffset();
+        return VMThreadLocalOffsetProvider.getOffset(ShenandoahHeap.barrierAndAllocationDataTL) + gcStateOffsetRel();
     }
 
     /**
@@ -156,11 +177,21 @@ public class ShenandoahConstants {
 
     /**
      * Offset (from the current {@code IsolateThread}) of the per-thread word holding the base of the
-     * Shenandoah collection-set fast-test map (see {@link ShenandoahHeap#csetMapAddressTL}). Used by
-     * the inlined CAS heal barrier to test collection-set membership without a runtime call.
+     * Shenandoah collection-set fast-test map. Since the cset co-location change this lives inside the
+     * barrier-and-allocation-data block (field {@code _cset_map} of ShenandoahThreadLocalData, right
+     * after the TLAB and next to {@code gc_state}), so the inlined load-reference and CAS-heal
+     * barriers read it off the thread register from the same block/line as gc_state. Validated at
+     * startup against ShenandoahInitState.csetMapOffset().
      */
+    private static final int CSET_MAP_OFFSET_REL = 24;
+
+    @Fold
+    public static int csetMapOffsetRel() {
+        return CSET_MAP_OFFSET_REL;
+    }
+
     public static int csetMapAddressOffset() {
-        return VMThreadLocalOffsetProvider.getOffset(ShenandoahHeap.csetMapAddressTL);
+        return gcStateOffset() + CSET_MAP_OFFSET_REL;
     }
 
     /*
@@ -170,7 +201,7 @@ public class ShenandoahConstants {
      * and only generational images contain the inlined card-marking barrier that reads it).
      * Validated at startup against ShenandoahInitState.cardTableOffset().
      */
-    private static final int CARD_TABLE_OFFSET_REL = 32;
+    private static final int CARD_TABLE_OFFSET_REL = 56;
 
     @Fold
     public static int cardTableOffsetRel() {

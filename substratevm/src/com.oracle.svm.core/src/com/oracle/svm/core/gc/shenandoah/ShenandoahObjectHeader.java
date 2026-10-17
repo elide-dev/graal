@@ -24,28 +24,28 @@
  */
 package com.oracle.svm.core.gc.shenandoah;
 
-import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.AlwaysInline;
-import com.oracle.svm.core.Uninterruptible;
-import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.shared.AlwaysInline;
+import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.heap.ReferenceAccess;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.image.ImageHeapObject;
-import com.oracle.svm.core.snippets.KnownIntrinsics;
-import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.api.directives.GraalDirectives;
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.replacements.ReplacementsUtil;
-import jdk.graal.compiler.word.ObjectAccess;
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.ObjectAccess;
+import org.graalvm.word.impl.Word;
 import jdk.vm.ci.code.CodeUtil;
 
 /** The object header consists of a 32/64 bit mark word and a 32 bit hub pointer. */
@@ -57,7 +57,7 @@ public class ShenandoahObjectHeader extends ObjectHeader {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public ShenandoahObjectHeader() {
-        numAlignmentBits = CodeUtil.log2(ConfigurationValues.getObjectLayout().getAlignment());
+        numAlignmentBits = CodeUtil.log2(ObjectLayout.singleton().getAlignment());
         if (useCompressedReferences()) {
             /*
              * Use 27 bits for the hub pointer, and 37 bits for the mark word and other VM-internal
@@ -104,7 +104,7 @@ public class ShenandoahObjectHeader extends ObjectHeader {
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     private Word encodeAsObjectHeader(DynamicHub hub) {
-        Word heapBaseRelativeAddress = Word.objectToUntrackedPointer(hub).subtract(KnownIntrinsics.heapBase());
+        Word heapBaseRelativeAddress = Word.objectToUntrackedWord(hub).subtract(KnownIntrinsics.heapBase());
         assertInHubAddressSpace(heapBaseRelativeAddress);
 
         if (useCompressedReferences()) {
@@ -250,7 +250,7 @@ public class ShenandoahObjectHeader extends ObjectHeader {
     }
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
-    private boolean isInHubAddressSpace(long heapBaseRelativeAddress) {
+    public boolean isInHubAddressSpace(long heapBaseRelativeAddress) {
         long hubAddressSpaceSize = getHubAddressSpaceSize();
         return Long.compareUnsigned(hubAddressSpaceSize, heapBaseRelativeAddress) > 0;
     }

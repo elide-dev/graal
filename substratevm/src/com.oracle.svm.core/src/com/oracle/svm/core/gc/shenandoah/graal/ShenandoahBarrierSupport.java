@@ -24,18 +24,18 @@
  */
 package com.oracle.svm.core.gc.shenandoah.graal;
 
-import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 import static jdk.graal.compiler.core.common.spi.ForeignCallDescriptor.CallSideEffect.HAS_SIDE_EFFECT;
 
 import org.graalvm.word.Pointer;
 
-import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
-import com.oracle.svm.core.snippets.SubstrateForeignCallTarget;
+import com.oracle.svm.guest.staging.snippets.SubstrateForeignCallTarget;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * Foreign call bridges for the Shenandoah barriers emitted by the Graal AOT compiler (see
@@ -95,7 +95,7 @@ public final class ShenandoahBarrierSupport {
     @SubstrateForeignCallTarget(stubCallingConvention = true, fullyUninterruptible = true)
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static Object loadReferenceBarrier(Object obj, Word loadAddr) {
-        Word resolved = ShenandoahLibrary.loadReferenceBarrierStub(Word.objectToUntrackedPointer(obj), loadAddr);
+        Word resolved = ShenandoahLibrary.loadReferenceBarrierStub(Word.objectToUntrackedWord(obj), loadAddr);
         return ((Pointer) resolved).toObject();
     }
 
@@ -108,7 +108,7 @@ public final class ShenandoahBarrierSupport {
     @SubstrateForeignCallTarget(stubCallingConvention = true, fullyUninterruptible = true)
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static Object loadReferenceBarrierWeak(Object obj, Word loadAddr) {
-        Word resolved = ShenandoahLibrary.loadReferenceBarrierWeakStub(Word.objectToUntrackedPointer(obj), loadAddr);
+        Word resolved = ShenandoahLibrary.loadReferenceBarrierWeakStub(Word.objectToUntrackedWord(obj), loadAddr);
         return ((Pointer) resolved).toObject();
     }
 
@@ -120,7 +120,7 @@ public final class ShenandoahBarrierSupport {
     @SubstrateForeignCallTarget(stubCallingConvention = true, fullyUninterruptible = true)
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public static Object loadReferenceBarrierPhantom(Object obj, Word loadAddr) {
-        Word resolved = ShenandoahLibrary.loadReferenceBarrierPhantomStub(Word.objectToUntrackedPointer(obj), loadAddr);
+        Word resolved = ShenandoahLibrary.loadReferenceBarrierPhantomStub(Word.objectToUntrackedWord(obj), loadAddr);
         return ((Pointer) resolved).toObject();
     }
 

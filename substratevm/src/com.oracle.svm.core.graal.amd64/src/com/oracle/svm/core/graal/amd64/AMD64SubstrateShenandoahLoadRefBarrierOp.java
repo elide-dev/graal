@@ -109,9 +109,9 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
         this.loadAddress = loadAddress;
         this.tmp = tmp;
         this.tmp2 = tmp2;
-        this.callArg0 = (AllocatableValue) callTarget.getOutgoingCallingConvention().getArgument(0);
-        this.callArg1 = (AllocatableValue) callTarget.getOutgoingCallingConvention().getArgument(1);
-        this.callRet = (AllocatableValue) callTarget.getOutgoingCallingConvention().getReturn();
+        this.callArg0 = callTarget.getOutgoingCallingConvention().getArgument(0);
+        this.callArg1 = callTarget.getOutgoingCallingConvention().getArgument(1);
+        this.callRet = callTarget.getOutgoingCallingConvention().getReturn();
         this.callTarget = callTarget;
         this.strength = strength;
         this.notNull = notNull;

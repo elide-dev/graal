@@ -26,28 +26,29 @@ package com.oracle.svm.core.gc.shenandoah;
 
 import static com.oracle.svm.core.gc.shared.NativeGCOptions.K;
 import static com.oracle.svm.core.gc.shared.NativeGCOptions.M;
-import static com.oracle.svm.core.option.RuntimeOptionKey.RuntimeOptionKeyFlag.IsolateCreationOnly;
+import static com.oracle.svm.guest.staging.option.RuntimeOptionKey.RuntimeOptionKeyFlag.IsolateCreationOnly;
+import static com.oracle.svm.shared.option.HostedOptionKey.HostedOptionKeyFlag.DoNotPassToNativeGC;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
-import com.oracle.svm.core.option.RuntimeOptionKey;
+import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 
-import com.oracle.svm.core.SubstrateGCOptions;
+import com.oracle.svm.guest.staging.SubstrateGCOptions;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.c.CGlobalData;
-import com.oracle.svm.core.c.CGlobalDataFactory;
+import com.oracle.svm.shared.util.SubstrateUtil;
+import com.oracle.svm.guest.staging.c.CGlobalData;
+import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.core.gc.shared.NativeGCDebugLevel;
 import com.oracle.svm.core.gc.shared.NativeGCOptions;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.HostedArgumentsSupplier;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.NativeGCHostedOptionKey;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.NativeGCRuntimeOptionKey;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.RuntimeArgumentsSupplier;
-import com.oracle.svm.core.option.HostedOptionKey;
-import com.oracle.svm.core.option.SubstrateOptionKey;
+import com.oracle.svm.shared.option.HostedOptionKey;
+import com.oracle.svm.shared.option.SubstrateOptionKey;
 import com.oracle.svm.core.util.UserError;
 
 import jdk.graal.compiler.api.replacements.Fold;
@@ -61,7 +62,7 @@ public class ShenandoahOptions {
     private static final String SUPPORTED_REGION_SIZES = "Supported values are 256k, 512k, 1m, 2m, 4m, 8m, 16m, or 32m";
 
     @Option(help = "Specifies the debug level of the linked Shenandoah GC [product, fastdebug, or debug]", type = OptionType.Debug) //
-    protected static final HostedOptionKey<String> ShenandoahDebugLevel = new ShenandoahHostedOptionKey<>("product", false);
+    protected static final HostedOptionKey<String> ShenandoahDebugLevel = new ShenandoahHostedOptionKey<>("product", DoNotPassToNativeGC);
 
     @Fold
     public static NativeGCDebugLevel getDebugLevel() {
@@ -118,7 +119,7 @@ public class ShenandoahOptions {
     public static final CGlobalData<CCharPointer> RUNTIME_ARGUMENTS = CGlobalDataFactory.createBytes(new RuntimeArgumentsSupplier(getOptionFields()));
 
     public static ArrayList<Field> getOptionFields() {
-        Class<?>[] optionClasses = {SubstrateGCOptions.class, SubstrateGCOptions.TlabOptions.class, NativeGCOptions.class, ShenandoahOptions.class};
+        Class<?>[] optionClasses = {SubstrateGCOptions.class, SubstrateGCOptions.ConcealedOptions.class, NativeGCOptions.class, ShenandoahOptions.class};
         return NativeGCOptions.getOptionFields(optionClasses);
     }
 
@@ -144,35 +145,30 @@ public class ShenandoahOptions {
     }
 
     private static class ShenandoahHostedOptionKey<T> extends NativeGCHostedOptionKey<T> {
-        ShenandoahHostedOptionKey(T defaultValue, Consumer<HostedOptionKey<T>> validation) {
-            this(defaultValue, true, validation);
+        ShenandoahHostedOptionKey(T defaultValue, HostedOptionKeyFlag... flags) {
+            this(defaultValue, null, flags);
         }
 
-        ShenandoahHostedOptionKey(T defaultValue, boolean passToCpp) {
-            this(defaultValue, passToCpp, null);
-        }
-
-        ShenandoahHostedOptionKey(T defaultValue, boolean passToCpp, Consumer<HostedOptionKey<T>> validation) {
-            super(defaultValue, passToCpp, validation);
+        ShenandoahHostedOptionKey(T defaultValue, Consumer<HostedOptionKey<T>> validation, HostedOptionKeyFlag... flags) {
+            super(defaultValue, validation, flags);
         }
 
         @Override
-        public void validate() {
+        public void validateAfterParsing() {
             validateShenandoahOption(this);
-            super.validate();
+            super.validateAfterParsing();
         }
     }
 
     @SuppressWarnings("unused")
     private static class ShenandoahRuntimeOptionKey<T> extends NativeGCRuntimeOptionKey<T> {
         ShenandoahRuntimeOptionKey(T defaultValue, RuntimeOptionKeyFlag... flags) {
-            super(defaultValue, flags);
+            super(defaultValue, ShenandoahRuntimeOptionKey::validateShenandoahAndNativeGCOption, flags);
         }
 
-        @Override
-        public void validate() {
-            validateShenandoahOption(this);
-            super.validate();
+        private static void validateShenandoahAndNativeGCOption(RuntimeOptionKey<?> optionKey) {
+            validateShenandoahOption(optionKey);
+            validateNativeGCOption(optionKey);
         }
     }
 }

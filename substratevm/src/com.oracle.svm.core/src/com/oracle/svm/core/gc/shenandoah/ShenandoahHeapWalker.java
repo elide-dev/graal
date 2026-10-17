@@ -31,15 +31,15 @@ import org.graalvm.word.Pointer;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahRegionBoundaries;
 import com.oracle.svm.core.heap.ObjectVisitor;
-import com.oracle.svm.core.heap.RestrictHeapAccess;
-import com.oracle.svm.core.heap.RestrictHeapAccess.Access;
+import com.oracle.svm.guest.staging.core.heap.RestrictHeapAccess;
+import com.oracle.svm.guest.staging.core.heap.RestrictHeapAccess.Access;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.memory.NullableNativeMemory;
 import com.oracle.svm.core.nmt.NmtCategory;
 import com.oracle.svm.core.thread.RecurringCallbackSupport;
 import com.oracle.svm.core.thread.VMOperation;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 public class ShenandoahHeapWalker {
     private static final OutOfMemoryError OUT_OF_MEMORY_ERROR = new OutOfMemoryError("Ran out of native memory while preparing the heap walk.");
@@ -47,22 +47,31 @@ public class ShenandoahHeapWalker {
     public static void walkCollectedHeap(ObjectVisitor visitor) {
         RecurringCallbackSupport.suspendCallbackTimer("Recurring callbacks could allocate.");
         try {
-            walkCollectedHeap0(visitor);
+            ShenandoahImageHeapInfo imageHeapInfo = ShenandoahHeap.getImageHeapInfo();
+            int fromRegion = ShenandoahMetaspace.getRegionCount() + imageHeapInfo.getNumRegions();
+            ShenandoahCommittedMemoryProvider memoryProvider = ImageSingletons.lookup(ShenandoahCommittedMemoryProvider.class);
+            walkRegions(visitor, fromRegion, memoryProvider.getMaxRegions());
+        } finally {
+            RecurringCallbackSupport.resumeCallbackTimer();
+        }
+    }
+
+    public static void walkMetaspace(ObjectVisitor visitor) {
+        RecurringCallbackSupport.suspendCallbackTimer("Recurring callbacks could allocate.");
+        try {
+            walkRegions(visitor, 0, ShenandoahMetaspace.getRegionCount());
         } finally {
             RecurringCallbackSupport.resumeCallbackTimer();
         }
     }
 
     @RestrictHeapAccess(access = Access.NO_ALLOCATION, reason = "Allocations could change the heap regions")
-    private static void walkCollectedHeap0(ObjectVisitor visitor) {
+    private static void walkRegions(ObjectVisitor visitor, int fromRegion, int toRegion) {
         assert RecurringCallbackSupport.isCallbackUnsupportedOrTimerSuspended();
         VMOperation.guaranteeInProgressAtSafepoint("must only be executed at a safepoint");
 
         ShenandoahCommittedMemoryProvider memoryProvider = ImageSingletons.lookup(ShenandoahCommittedMemoryProvider.class);
         int maxRegions = memoryProvider.getMaxRegions();
-
-        ShenandoahImageHeapInfo imageHeapInfo = ShenandoahHeap.getImageHeapInfo();
-        int fromRegion = imageHeapInfo.getNumRegions();
 
         ShenandoahRegionBoundaries regionBoundaries = NullableNativeMemory.calloc(Word.unsigned(maxRegions).multiply(SizeOf.get(ShenandoahRegionBoundaries.class)), NmtCategory.GC);
         if (regionBoundaries.isNull()) {
@@ -71,7 +80,7 @@ public class ShenandoahHeapWalker {
 
         try {
             ShenandoahLibrary.getRegionBoundaries(regionBoundaries);
-            for (int i = fromRegion; i < maxRegions; i++) {
+            for (int i = fromRegion; i < toRegion; i++) {
                 ShenandoahRegionBoundaries bounds = regionBoundaries.addressOf(i);
                 if (bounds.bottom().equal(0)) {
                     continue;

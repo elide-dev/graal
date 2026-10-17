@@ -43,11 +43,6 @@ public class ShenandoahGC implements GC {
     }
 
     @Override
-    public void collectCompletely(GCCause cause) {
-        ShenandoahLibrary.collect(cause.getId());
-    }
-
-    @Override
     public void collectionHint(boolean fullGC) {
         /* Ignore collection hints. */
     }

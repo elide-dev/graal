@@ -124,7 +124,7 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
         this.preval = preval;
         this.buf = buf;
         this.preValue = preValue;
-        this.callArg = (AllocatableValue) callTarget.getOutgoingCallingConvention().getArgument(0);
+        this.callArg = callTarget.getOutgoingCallingConvention().getArgument(0);
         this.callTarget = callTarget;
         this.loadWordSized = loadWordSized;
         this.narrow = narrow;

@@ -28,7 +28,7 @@ import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegi
 
 import java.util.ArrayList;
 
-import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahHeap;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahImageHeapInfo;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahRegionType;
@@ -122,7 +122,7 @@ public class ShenandoahImageHeapRegions {
     private void ensureAlignment(ShenandoahImageHeapPartition partition, int alignment) {
         assert alignment > 0 && alignment <= regionSize;
         assert regionSize % alignment == 0 : "we assume that region starts are always aligned";
-        assert alignment % ConfigurationValues.getObjectLayout().getAlignment() == 0 : "alignment must be a multiple of the object alignment";
+        assert alignment % ObjectLayout.singleton().getAlignment() == 0 : "alignment must be a multiple of the object alignment";
 
         ShenandoahImageHeapRegion lastRegion = regions.getLast();
         if (alignment == regionSize || lastRegion.getType().isHumongous()) {

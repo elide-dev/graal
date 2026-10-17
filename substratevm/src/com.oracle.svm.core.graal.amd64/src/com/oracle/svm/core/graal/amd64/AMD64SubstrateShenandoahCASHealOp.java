@@ -138,7 +138,7 @@ public class AMD64SubstrateShenandoahCASHealOp extends AMD64LIRInstruction {
         this.tmp2 = tmp2;
         this.tmp3 = tmp3;
         this.tmp4 = tmp4;
-        this.callArg = (AllocatableValue) callTarget.getOutgoingCallingConvention().getArgument(0);
+        this.callArg = callTarget.getOutgoingCallingConvention().getArgument(0);
         this.raxTemp = AMD64.rax.asValue(LIRKind.value(AMD64Kind.QWORD));
         this.callTarget = callTarget;
         this.loadWordSized = loadWordSized;

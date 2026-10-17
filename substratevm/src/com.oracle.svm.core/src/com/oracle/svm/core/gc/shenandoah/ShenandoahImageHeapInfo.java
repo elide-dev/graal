@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.core.gc.shenandoah;
 
-import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegionSize;
 
 import org.graalvm.nativeimage.Platform;
@@ -32,14 +32,14 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.BuildPhaseProvider.AfterHeapLayout;
-import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.shared.BuildPhaseProvider.AfterHeapLayout;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.heap.Heap;
-import com.oracle.svm.core.heap.UnknownObjectField;
-import com.oracle.svm.core.heap.UnknownPrimitiveField;
-import com.oracle.svm.core.snippets.KnownIntrinsics;
+import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
+import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
+import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * Stores some high-level information about the regions of the image heap. This data is passed to

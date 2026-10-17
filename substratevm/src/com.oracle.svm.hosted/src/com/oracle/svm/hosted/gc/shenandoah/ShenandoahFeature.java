@@ -34,18 +34,21 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.impl.PinnedObjectSupport;
 
+import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.svm.core.GCRelatedMXBeans;
+import com.oracle.svm.core.SubstrateDiagnostics;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.SubstrateTargetDescription;
-import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayout.IdentityHashMode;
-import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.gc.shared.graal.NativeGCAllocationSupport;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahCommittedMemoryProvider;
+import com.oracle.svm.core.gc.shenandoah.ShenandoahConstants;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahHeap;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahImageHeapInfo;
+import com.oracle.svm.core.gc.shenandoah.ShenandoahMetaspace;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahObjectHeader;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahOptions;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahPinnedObjectSupport;
@@ -53,6 +56,8 @@ import com.oracle.svm.core.gc.shenandoah.ShenandoahRelatedMXBeans;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahAllocationSupport;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.graal.pointsto.ObjectScanner;
+import com.oracle.graal.pointsto.heap.ImageHeapScanner;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSetProvider;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
@@ -64,23 +69,36 @@ import com.oracle.svm.core.heap.AllocationFeature;
 import com.oracle.svm.core.heap.BarrierSetProvider;
 import com.oracle.svm.core.heap.FillerArray;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.image.ImageHeapLayouter;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.JfrGCNames;
 import com.oracle.svm.core.jvmstat.PerfDataFeature;
-import com.oracle.svm.core.option.RuntimeOptionKey;
-import com.oracle.svm.core.option.SubstrateOptionKey;
+import com.oracle.svm.core.metaspace.AbstractMetaspace;
+import com.oracle.svm.core.metaspace.Metaspace;
+import com.oracle.svm.guest.staging.SubstrateGCOptions;
+import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
+import com.oracle.svm.shared.option.SubstrateOptionKey;
 import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.core.threadlocal.VMThreadLocalOffsetProvider;
+import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocal;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
+import com.oracle.svm.hosted.FeatureImpl.AfterAbstractImageCreationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeCompilationAccessImpl;
 import com.oracle.svm.hosted.gc.shared.NativeGCAccessedFields;
+import com.oracle.svm.hosted.image.NativeImageHeap;
+import com.oracle.svm.util.GuestAccess;
+import com.oracle.svm.util.JVMCIReflectionUtil;
 import com.oracle.svm.hosted.thread.VMThreadFeature;
 
+import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.ResolvedJavaType;
 
 /** Shenandoah GC support. */
 @AutomaticallyRegisteredFeature
@@ -99,13 +117,23 @@ public class ShenandoahFeature implements InternalFeature {
     public void afterRegistration(AfterRegistrationAccess access) {
         verifyOptionsAndPlatform();
 
-        boolean useCompressedReferences = false;
+        boolean useCompressedReferences = SubstrateOptions.useCompressedReferences();
         ImageSingletons.add(BarrierSetProvider.class, new ShenandoahBarrierSetProvider());
         ImageSingletons.add(ObjectLayout.class, createObjectLayout(useCompressedReferences));
 
         ShenandoahCommittedMemoryProvider memoryProvider = new ShenandoahCommittedMemoryProvider();
         ImageSingletons.add(CommittedMemoryProvider.class, memoryProvider);
         ImageSingletons.add(ShenandoahCommittedMemoryProvider.class, memoryProvider);
+
+        if (RuntimeClassLoading.isSupported() && ImageLayerBuildingSupport.firstImageBuild()) {
+            /* The aligned metaspace reservation must leave room for image-heap hubs. */
+            int metaspaceSize = NumUtil.roundUp(SubstrateGCOptions.ConcealedOptions.getMaxMetaspaceSize(), ShenandoahOptions.ShenandoahRegionSize.getValue());
+            if (!new ShenandoahObjectHeader().isInHubAddressSpace(ShenandoahHeap.getNullRegionSize() + metaspaceSize)) {
+                throw UserError.invalidOptionValue(SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize, SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize.getValue(),
+                                "The metaspace reservation leaves no address space for image-heap hubs with the selected Shenandoah object layout");
+            }
+            ImageSingletons.add(Metaspace.class, new ShenandoahMetaspace());
+        }
 
         ImageSingletons.add(GCRelatedMXBeans.class, new ShenandoahRelatedMXBeans());
     }
@@ -117,14 +145,35 @@ public class ShenandoahFeature implements InternalFeature {
         ImageSingletons.add(ShenandoahHeap.class, heap);
         ImageSingletons.add(PinnedObjectSupport.class, new ShenandoahPinnedObjectSupport());
 
+        if (ImageLayerBuildingSupport.firstImageBuild()) {
+            registerDiagnosticThunks();
+        }
+
         ShenandoahAllocationSupport allocationSupport = new ShenandoahAllocationSupport();
         ImageSingletons.add(GCAllocationSupport.class, allocationSupport);
         ImageSingletons.add(NativeGCAllocationSupport.class, allocationSupport);
     }
 
+    private static void registerDiagnosticThunks() {
+        SubstrateDiagnostics.DiagnosticThunkRegistry.singleton().add(new ShenandoahHeap.DumpHeapSettingsAndGCInternalState());
+        if (RuntimeClassLoading.isSupported()) {
+            SubstrateDiagnostics.DiagnosticThunkRegistry.singleton().add(new AbstractMetaspace.DumpMetaspaceInfo());
+        }
+        SubstrateDiagnostics.DiagnosticThunkRegistry.singleton().add(new ShenandoahHeap.DumpRegionInformation());
+        SubstrateDiagnostics.DiagnosticThunkRegistry.singleton().add(new ShenandoahHeap.DumpCurrentGCThreadName());
+    }
+
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         BeforeAnalysisAccessImpl accessImpl = (BeforeAnalysisAccessImpl) access;
+
+        /* Ensure that thread locals whose offsets are only used by native code are discovered. */
+        ResolvedJavaType shenandoahHeapType = accessImpl.getMetaAccess().lookupJavaType(ShenandoahHeap.class);
+        accessImpl.registerAsRead((AnalysisField) JVMCIReflectionUtil.getUniqueDeclaredField(shenandoahHeapType, "barrierAndAllocationDataTL"),
+                                  "its offset is used by Shenandoah native code");
+        accessImpl.registerAsRead((AnalysisField) JVMCIReflectionUtil.getUniqueDeclaredField(shenandoahHeapType, "javaThreadTL"),
+                                  "its offset is used by Shenandoah native code");
+
         NativeGCAccessedFields.markAsAccessed(accessImpl, ShenandoahAccessedFields.ACCESSED_CLASSES);
 
         /* Shenandoah needs a custom filler array class that does not match int[].class. */
@@ -174,6 +223,8 @@ public class ShenandoahFeature implements InternalFeature {
 
     @Override
     public void beforeCompilation(BeforeCompilationAccess a) {
+        assert hotThreadLocalDataHasSmallOffsets();
+
         BeforeCompilationAccessImpl access = (BeforeCompilationAccessImpl) a;
         ShenandoahHeap heap = ShenandoahHeap.get();
 
@@ -184,10 +235,26 @@ public class ShenandoahFeature implements InternalFeature {
         access.registerAsImmutable(imageHeapInfo.getRegionFreeSpaces());
 
         /* Collect data and offsets that are needed when initializing Shenandoah. */
-        byte[] fieldOffsets = NativeGCAccessedFields.writeOffsets(access, ShenandoahObjectHeader.getMarkWordOffset(), ShenandoahHeap.javaThreadTL, ShenandoahAllocationSupport.podReferenceMapTL,
-                        ShenandoahAccessedFields.ACCESSED_CLASSES);
+        byte[] fieldOffsets = NativeGCAccessedFields.writeOffsets(access, ShenandoahObjectHeader.getMarkWordOffset(), ShenandoahHeap.barrierAndAllocationDataTL,
+                        ShenandoahHeap.javaThreadTL, ShenandoahAllocationSupport.podReferenceMapTL, ShenandoahAccessedFields.ACCESSED_CLASSES);
         heap.setAccessedFieldOffsets(fieldOffsets);
         access.registerAsImmutable(fieldOffsets);
+    }
+
+    @Override
+    public void afterAbstractImageCreation(AfterAbstractImageCreationAccess a) {
+        AfterAbstractImageCreationAccessImpl access = (AfterAbstractImageCreationAccessImpl) a;
+        finalizeImageHeapInfo(access.getImage().getHeap());
+    }
+
+    /** Updates the arrays in the image heap info, now that the layouting is done. */
+    private static void finalizeImageHeapInfo(NativeImageHeap nativeImageHeap) {
+        ShenandoahImageHeapInfo imageHeapInfo = ShenandoahHeap.getImageHeapInfo();
+        ImageHeapScanner heapScanner = nativeImageHeap.aUniverse.getHeapScanner();
+        ResolvedJavaType imageHeapInfoType = GuestAccess.get().lookupType(ShenandoahImageHeapInfo.class);
+        ObjectScanner.ScanReason reason = new ObjectScanner.OtherReason("Manual rescan triggered from " + ShenandoahImageHeapLayouter.class);
+        heapScanner.rescanField(imageHeapInfo, JVMCIReflectionUtil.getUniqueDeclaredField(imageHeapInfoType, "regionTypes"), reason);
+        heapScanner.rescanField(imageHeapInfo, JVMCIReflectionUtil.getUniqueDeclaredField(imageHeapInfoType, "regionFreeSpaces"), reason);
     }
 
     @Override
@@ -199,8 +266,7 @@ public class ShenandoahFeature implements InternalFeature {
     @Override
     public void registerLowerings(RuntimeConfiguration runtimeConfig, OptionValues options, Providers providers,
                     Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings, boolean hosted) {
-        SubstrateAllocationSnippets allocationSnippets = ImageSingletons.lookup(SubstrateAllocationSnippets.class);
-        SubstrateAllocationSnippets.Templates templates = new SubstrateAllocationSnippets.Templates(options, providers, allocationSnippets);
+        SubstrateAllocationSnippets.Templates templates = new SubstrateAllocationSnippets.Templates(options, providers);
         templates.registerLowering(lowerings);
     }
 
@@ -213,8 +279,13 @@ public class ShenandoahFeature implements InternalFeature {
         verifyOptionEnabled(SubstrateOptions.ConcealedOptions.UseDedicatedVMOperationThread);
         verifyOptionEnabled(SubstrateOptions.ConcealedOptions.AutomaticReferenceHandling);
         verifyOptionEnabled(SubstrateOptions.UseNullRegion);
+        if (SubstrateOptions.useCompressedReferences()) {
+            verifyOptionEnabled(SubstrateOptions.ConcealedOptions.UseCompressedReferenceShift);
+        }
 
-        UserError.guarantee(!SubstrateOptions.supportCompileInIsolates(), "The Shenandoah garbage collector ('--gc=shenandoah') does not support isolated compilation.");
+        UserError.guarantee(!SubstrateOptions.SupportCompileInIsolates.getValue(), "The Shenandoah garbage collector ('--gc=shenandoah') does not support isolated compilation.");
+
+        SubstrateGCOptions.validateMaxMetaspaceSize(ShenandoahOptions.ShenandoahRegionSize.getValue(), ShenandoahHeap.getNullRegionSize());
     }
 
     private static void verifyOptionEnabled(SubstrateOptionKey<Boolean> option) {
@@ -240,7 +311,7 @@ public class ShenandoahFeature implements InternalFeature {
      * </ul>
      */
     private static ObjectLayout createObjectLayout(boolean useCompressedReferences) {
-        SubstrateTargetDescription target = ConfigurationValues.getTarget();
+        SubstrateTarget target = SubstrateTarget.singleton();
         int referenceSize = computeReferenceSize(target, useCompressedReferences);
         int intSize = target.arch.getPlatformKind(JavaKind.Int).getSizeInBytes();
         int objectAlignment = 8;
@@ -264,11 +335,28 @@ public class ShenandoahFeature implements InternalFeature {
                         headerIdentityHashOffset, IdentityHashMode.OBJECT_HEADER, identityHashNumBits, identityHashShift);
     }
 
-    private static int computeReferenceSize(SubstrateTargetDescription target, boolean useCompressedReferences) {
+    private static int computeReferenceSize(SubstrateTarget target, boolean useCompressedReferences) {
         JavaKind referenceKind = JavaKind.Object;
         if (useCompressedReferences) {
             referenceKind = JavaKind.Int;
         }
         return target.arch.getPlatformKind(referenceKind).getSizeInBytes();
+    }
+
+    private static boolean hotThreadLocalDataHasSmallOffsets() {
+        VMThreadLocalOffsetProvider offsetProvider = ImageSingletons.lookup(VMThreadLocalOffsetProvider.class);
+        int structOffset = offsetProvider.offsetOf(ShenandoahHeap.barrierAndAllocationDataTL);
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.gcStateOffsetRel());
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.satbIndexOffsetRel());
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.satbBufferOffsetRel());
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.tlabTopOffset());
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.tlabEndOffset());
+        assert hasSmallThreadLocalOffset(structOffset, ShenandoahConstants.cardTableOffsetRel());
+        return true;
+    }
+
+    private static boolean hasSmallThreadLocalOffset(int structOffset, int fieldOffset) {
+        int offset = structOffset + fieldOffset;
+        return offset <= FastThreadLocal.BYTE_OFFSET;
     }
 }

@@ -31,7 +31,7 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * Defines all data structures that are imported from Shenandoah-specific header files.
@@ -73,6 +73,9 @@ public class ShenandoahStructs {
         @CField("log_of_heap_region_grain_bytes")
         int logOfHeapRegionGrainBytes();
 
+        @CField("barrier_and_allocation_data_size")
+        int barrierAndAllocationDataSize();
+
         @CField("java_thread_size")
         int javaThreadSize();
 
@@ -96,6 +99,9 @@ public class ShenandoahStructs {
 
         @CField("gc_state_offset")
         int gcStateOffset();
+
+        @CField("cset_map_offset")
+        int csetMapOffset();
     }
 
     @CStruct(addStructKeyword = true)

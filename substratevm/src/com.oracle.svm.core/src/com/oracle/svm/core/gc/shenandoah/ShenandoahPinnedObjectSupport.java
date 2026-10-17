@@ -27,12 +27,18 @@ package com.oracle.svm.core.gc.shenandoah;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
 import com.oracle.svm.core.heap.AbstractPinnedObjectSupport;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
+import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
+@SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class, other = DisallowLayered.class)
 public final class ShenandoahPinnedObjectSupport extends AbstractPinnedObjectSupport {
     @Platforms(Platform.HOSTED_ONLY.class)
     public ShenandoahPinnedObjectSupport() {
@@ -41,12 +47,12 @@ public final class ShenandoahPinnedObjectSupport extends AbstractPinnedObjectSup
     @Override
     @Uninterruptible(reason = "Use untracked pointers. Ensure that pinned object counts and PinnedObjects are consistent.", callerMustBe = true)
     protected void pinObject(Object object) {
-        ShenandoahLibrary.pinObject(Word.objectToUntrackedPointer(object));
+        ShenandoahLibrary.pinObject(Word.objectToUntrackedWord(object));
     }
 
     @Override
     @Uninterruptible(reason = "Use untracked pointers. Ensure that pinned object counts and PinnedObjects are consistent.", callerMustBe = true)
     protected void unpinObject(Object object) {
-        ShenandoahLibrary.unpinObject(Word.objectToUntrackedPointer(object));
+        ShenandoahLibrary.unpinObject(Word.objectToUntrackedWord(object));
     }
 }

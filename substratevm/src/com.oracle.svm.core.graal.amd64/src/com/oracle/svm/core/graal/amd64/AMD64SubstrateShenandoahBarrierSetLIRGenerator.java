@@ -26,7 +26,7 @@ package com.oracle.svm.core.graal.amd64;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
-import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 
@@ -121,7 +121,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         // or 4 with size-reducing compressed references. Loading only 32 bits of an 8-byte narrow
         // reference would truncate the offset and corrupt the SATB pre-value for heaps > 4 GB.
         // A value-passed pre-value is always a full word.
-        boolean loadWordSized = !useNarrow || ConfigurationValues.getObjectLayout().getReferenceSize() == 8;
+        boolean loadWordSized = !useNarrow || ObjectLayout.singleton().getReferenceSize() == 8;
         // Compression shift, so the barrier can decode a narrow reference (oop = heapBase + value <<
         // shift) inline when enqueuing it into the SATB buffer. It is 0 on Graal CE.
         int narrowShift = ImageSingletons.lookup(CompressEncoding.class).getShift();
@@ -188,7 +188,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         // The inline path needs a heap-base-relative encoding (always true for SubstrateVM Shenandoah)
         // to decode the field value to an object address.
         boolean canInlineCsetCheck = oopEncoding.hasBase();
-        boolean loadWordSized = ConfigurationValues.getObjectLayout().getReferenceSize() == 8;
+        boolean loadWordSized = ObjectLayout.singleton().getReferenceSize() == 8;
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));

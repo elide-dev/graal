@@ -26,21 +26,21 @@ package com.oracle.svm.core.posix.linux.shenandoah;
 
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
+import com.oracle.svm.shared.singletons.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahCommittedMemoryProvider;
 import com.oracle.svm.core.gc.shenandoah.UseShenandoahGC;
-import com.oracle.svm.core.heap.PhysicalMemory.PhysicalMemorySupport;
+import com.oracle.svm.core.heap.PlatformPhysicalMemorySupport;
 import com.oracle.svm.core.posix.linux.LinuxPhysicalMemorySupportImpl;
-import com.oracle.svm.core.traits.BuiltinTraits.NoLayeredCallbacks;
-import com.oracle.svm.core.traits.BuiltinTraits.RuntimeAccessOnly;
-import com.oracle.svm.core.traits.SingletonLayeredInstallationKind.Disallowed;
-import com.oracle.svm.core.traits.SingletonTraits;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.RuntimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 
-@AutomaticallyRegisteredImageSingleton(value = PhysicalMemorySupport.class, onlyWith = UseShenandoahGC.class)
-@SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = Disallowed.class)
+@AutomaticallyRegisteredImageSingleton(value = PlatformPhysicalMemorySupport.class, onlyWith = UseShenandoahGC.class)
+@SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public class ShenandoahPhysicalMemorySupport extends LinuxPhysicalMemorySupportImpl {
     @Override
     public UnsignedWord size() {
-        return ShenandoahCommittedMemoryProvider.getInstance().getPhysicalMemorySize();
+        return ShenandoahCommittedMemoryProvider.singleton().getPhysicalMemorySize();
     }
 }

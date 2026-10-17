@@ -29,11 +29,8 @@ import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegi
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
-import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
-import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
-import com.oracle.graal.pointsto.heap.ImageHeapScanner;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahHeap;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahImageHeapInfo;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahRegionType;
@@ -41,20 +38,24 @@ import com.oracle.svm.core.image.ImageHeap;
 import com.oracle.svm.core.image.ImageHeapLayoutInfo;
 import com.oracle.svm.core.image.ImageHeapLayouter;
 import com.oracle.svm.core.image.ImageHeapObject;
+import com.oracle.svm.core.image.ImageHeapObjectSorter;
 import com.oracle.svm.core.image.ImageHeapPartition;
-import com.oracle.svm.core.util.UnsignedUtils;
-import com.oracle.svm.core.util.VMError;
-import com.oracle.svm.hosted.image.NativeImageHeap;
-import com.oracle.svm.util.ReflectionUtil;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.UnsignedUtils;
+import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.NumUtil;
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * Layouts the heap in a way that it matches the expectations of the C++ code. Multiple image heap
  * partitions can live in the same heap region. Partition alignment requirements are ensured via
  * filler objects.
  */
+@SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public class ShenandoahImageHeapLayouter implements ImageHeapLayouter {
     private final ShenandoahImageHeapPartition closedImageHeapReadOnly;
     private final ShenandoahImageHeapPartition closedImageHeapRelocatable;
@@ -95,9 +96,9 @@ public class ShenandoahImageHeapLayouter implements ImageHeapLayouter {
     }
 
     @Override
-    public ImageHeapLayoutInfo layout(ImageHeap imageHeap, int pageSize, ImageHeapLayouterCallback callback) {
+    public ImageHeapLayoutInfo layout(ImageHeap imageHeap, int pageSize, ImageHeapObjectSorter objectSorter, ImageHeapLayouterCallback callback) {
         int regionSize = ShenandoahRegionSize.getValue();
-        int objectAlignment = ConfigurationValues.getObjectLayout().getAlignment();
+        int objectAlignment = ObjectLayout.singleton().getAlignment();
         ShenandoahImageHeapObjectComparator humongousObjectsFirst = new ShenandoahImageHeapObjectComparator(regionSize, true);
         ShenandoahImageHeapObjectComparator humongousObjectsLast = new ShenandoahImageHeapObjectComparator(regionSize, false);
         ShenandoahImageHeapRegions regions = new ShenandoahImageHeapRegions(imageHeap);
@@ -155,20 +156,9 @@ public class ShenandoahImageHeapLayouter implements ImageHeapLayouter {
         assert openImageHeapBegin % regionSize == 0;
 
         return new ImageHeapLayoutInfo(startOffset, endOffset, writableBegin, writableSize, closedImageHeapRelocatableBegin, closedImageHeapRelocatable.getSize(), writablePatchedBegin,
-                        writablePatchedSize);
+                        writablePatchedSize, pageSize);
     }
 
-    @Override
-    public void afterLayout(ImageHeap imageHeap) {
-        if (imageHeap instanceof NativeImageHeap nativeImageHeap) {
-            /* Update the arrays in the image heap info, now that the layouting is done. */
-            ShenandoahImageHeapInfo imageHeapInfo = ShenandoahHeap.getImageHeapInfo();
-            ImageHeapScanner heapScanner = nativeImageHeap.aUniverse.getHeapScanner();
-            ScanReason reason = new OtherReason("Manual rescan triggered from " + ShenandoahImageHeapLayouter.class);
-            heapScanner.rescanField(imageHeapInfo, ReflectionUtil.lookupField(ShenandoahImageHeapInfo.class, "regionTypes"), reason);
-            heapScanner.rescanField(imageHeapInfo, ReflectionUtil.lookupField(ShenandoahImageHeapInfo.class, "regionFreeSpaces"), reason);
-        }
-    }
 
     private ShenandoahImageHeapInfo initializeImageHeapInfo(ImageHeap imageHeap, ShenandoahImageHeapRegions regions) {
         // Below, we are adding objects to the image heap. Those objects could be placed in a new

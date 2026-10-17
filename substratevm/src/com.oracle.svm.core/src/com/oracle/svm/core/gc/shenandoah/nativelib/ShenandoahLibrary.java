@@ -34,8 +34,9 @@ import org.graalvm.nativeimage.c.type.CCharPointerPointer;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.c.function.CFunctionOptions;
+import com.oracle.svm.guest.staging.c.function.CFunctionOptions;
 import com.oracle.svm.core.code.CodeInfo;
+import com.oracle.svm.core.gc.shared.NativeGCStructs.MetaspaceStatistics;
 import com.oracle.svm.core.gc.shared.NativeGCVMOperationSupport.NativeGCVMOperationData;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahHeapOptions;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahInitState;
@@ -43,7 +44,7 @@ import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahI
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahRegionBoundaries;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahRegionInfo;
 
-import jdk.graal.compiler.word.Word;
+import org.graalvm.word.impl.Word;
 
 /**
  * This class contains all methods that native-image uses for calling Shenandoah C++ code. It is
@@ -59,11 +60,11 @@ import jdk.graal.compiler.word.Word;
 @CContext(value = ShenandoahLibraryDependencies.class)
 public class ShenandoahLibrary {
     // GraalVM major, GraalVM minor, interface revision
-    public static final int VERSION = 250101;
+    public static final int VERSION = 250501;
 
     @CFunction(value = "svm_gc_parse_options", transition = Transition.NO_TRANSITION)
     public static native void parseOptions(int nativeImageVersion, int argc, CCharPointerPointer argv, CCharPointer imageBuildHostedArguments, CCharPointer imageBuildRuntimeArguments,
-                    UnsignedWord maxHeapAddressSpaceSize, UnsignedWord heapBaseAlignment, UnsignedWord nullRegionSize, UnsignedWord imageHeapSize,
+                    UnsignedWord maxHeapAddressSpaceSize, UnsignedWord heapBaseAlignment, UnsignedWord nullRegionSize, UnsignedWord metaspaceSize, UnsignedWord imageHeapSize,
                     int compressedReferenceShift, boolean isContainerized, long containerMemoryLimitInBytes, int containerActiveProcessorCount, ShenandoahHeapOptions result);
 
     @CFunction(value = "svm_gc_create", transition = Transition.NO_TRANSITION)
@@ -72,7 +73,7 @@ public class ShenandoahLibrary {
                     Word dynamicHubClass, Word fillerObjectClass, Word fillerArrayClass, Word stringClass, Word systemClass,
                     Word staticObjectFields, Word staticPrimitiveFields, Word vmOperationThread, Word safepoint, Word runtimeCodeInfoMemory,
                     int referenceMapCompressedOffsetShift, Word threadLocalsReferenceMap,
-                    Word classesAssumedReachableForCodeUnloading, boolean perfDataSupport, boolean useStringInlining, boolean closedTypeWorld,
+                    Word classesAssumedReachableForCodeUnloading, boolean perfDataSupport, boolean closedTypeWorld,
                     boolean useInterfaceHashing, int interfaceHashingMaxId, int dynamicHubHashingInterfaceMask, int dynamicHubHashingShiftOffset,
                     Word offsets, int offsetsLength,
                     CFunctionPointer collectForAllocationOp, CFunctionPointer collectFullOp, CFunctionPointer collectDegeneratedOp, CFunctionPointer initMarkOp, CFunctionPointer finalMarkOp, CFunctionPointer initUpdateRefsOp, CFunctionPointer finalUpdateRefsOp, CFunctionPointer finalRootsOp, CFunctionPointer handshakeFallbackOp,
@@ -125,6 +126,17 @@ public class ShenandoahLibrary {
     @CFunctionOptions(transition = CFunctionOptions.Transition.TO_VM)
     @CFunction(value = "svm_gc_allocate_array")
     public static native Word allocateArray(Word hub, int length);
+
+    @CFunctionOptions(transition = CFunctionOptions.Transition.TO_VM)
+    @CFunction(value = "svm_gc_allocate_metaspace_instance")
+    public static native Word allocateMetaspaceInstance(Word hub);
+
+    @CFunctionOptions(transition = CFunctionOptions.Transition.TO_VM)
+    @CFunction(value = "svm_gc_allocate_metaspace_array")
+    public static native Word allocateMetaspaceArray(Word hub, int length, int allocationKind);
+
+    @CFunction(value = "svm_gc_is_in_allocated_metaspace", transition = Transition.NO_TRANSITION)
+    public static native boolean isInAllocatedMetaspace(Pointer address);
 
     @CFunctionOptions(transition = CFunctionOptions.Transition.TO_VM)
     @CFunction(value = "svm_gc_allocate_stack_chunk")
@@ -200,6 +212,9 @@ public class ShenandoahLibrary {
 
     @CFunction(value = "svm_gc_get_internal_state", transition = Transition.NO_TRANSITION)
     public static native void getGCInternalState(ShenandoahInternalState result);
+
+    @CFunction(value = "svm_gc_get_metaspace_statistics", transition = Transition.NO_TRANSITION)
+    public static native void getMetaspaceStatistics(MetaspaceStatistics result);
 
     @CFunction(value = "svm_gc_get_current_thread_name", transition = Transition.NO_TRANSITION)
     public static native CCharPointer getCurrentThreadName();
