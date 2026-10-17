@@ -43,6 +43,7 @@ import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.espresso.classfile.Constants;
 import com.oracle.svm.espresso.classfile.ParserConstantPool;
 import com.oracle.svm.hosted.FeatureImpl;
+import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.interpreter.BuildTimeInterpreterUniverse;
 import com.oracle.svm.interpreter.metadata.BytecodeStream;
 import com.oracle.svm.interpreter.metadata.Bytecodes;
@@ -56,6 +57,7 @@ import com.oracle.svm.util.OriginalMethodProvider;
 import jdk.graal.compiler.api.directives.GraalDirectives;
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.debug.DebugContext;
+import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import jdk.vm.ci.code.BytecodePosition;
 import jdk.vm.ci.meta.ExceptionHandler;
 import jdk.vm.ci.meta.JavaConstant;
@@ -216,18 +218,70 @@ final class PreservedBytecodeDependencies {
                  * eligibility check excludes guaranteed-folded methods and graph-only intrinsics
                  * that cannot be artificial roots; final executable-callee pruning handles them.
                  */
+                boolean direct = opcode == Bytecodes.INVOKESTATIC || opcode == Bytecodes.INVOKESPECIAL;
+                /*
+                 * A callee that an invocation plugin intrinsifies (an Unsafe accessor or
+                 * Preconditions.checkIndex, say) is not a supported analysis method, but needs a
+                 * compiled entry of its own all the same: it becomes a direct root and is compiled
+                 * from its bytecodes or plugin once linked (elide-dev/graal#111).
+                 */
+                boolean ownCompilation = (direct || analysisTarget.canBeStaticallyBound()) && needsOwnCompilation(access, analysisTarget);
                 if (!declaringClass.isPrimitive() && !declaringClass.isWordType() &&
-                                (access.getHostVM().isSupportedAnalysisMethod(access.getBigBang(), analysisTarget) || isDefaultIntrinsicCallee(method, analysisTarget)) &&
+                                (access.getHostVM().isSupportedAnalysisMethod(access.getBigBang(), analysisTarget) || isDefaultIntrinsicCallee(method, analysisTarget) || ownCompilation) &&
                                 !GuestAnnotationAccess.isAnnotationPresent(analysisTarget, Fold.class) &&
                                 !access.getHostVM().isCoreType(analysisTarget.getWrapped().getDeclaringClass())) {
-                    boolean direct = opcode == Bytecodes.INVOKESTATIC || opcode == Bytecodes.INVOKESPECIAL;
-                    if ((direct ? directTargets : virtualTargets).add(analysisTarget)) {
-                        if (direct ? !analysisTarget.isReachable() : !analysisTarget.isInvoked()) {
+                    boolean directRoot = direct || ownCompilation;
+                    if ((directRoot ? directTargets : virtualTargets).add(analysisTarget)) {
+                        if (directRoot ? !analysisTarget.isReachable() : !analysisTarget.isInvoked()) {
                             additionalReachability(access, method, bci, "callee " + analysisTarget.format("%H.%n(%p)"));
                         }
-                        access.registerAsRoot(analysisTarget, direct, "invocation from preserved AOT bytecodes");
+                        access.registerAsRoot(analysisTarget, directRoot, "invocation from preserved AOT bytecodes");
+                    }
+                    if (ownCompilation) {
+                        pendingForcedCompilations.add(analysisTarget);
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Statically bound callees of preserved bodies that the image would not compile on their own.
+     *
+     * <p>
+     * Small methods such as {@code ConcurrentHashMap.spread} are inlined wherever the image calls
+     * them, and {@code Unsafe} accessors are intrinsified by invocation plugins (the {@code VarHandle}
+     * access methods call them), so they normally have no compiled code. A preserved body that calls
+     * one would be pruned as non-executable, even though Ristretto code may still call the callee
+     * when it does not inline it, and the interpreter must call it when Ristretto code that inlined
+     * the body deoptimizes. So such callees are compiled on their own, once the analysis links them
+     * (elide-dev/graal#103, #111).
+     */
+    private final Set<AnalysisMethod> pendingForcedCompilations = new HashSet<>();
+
+    /** Whether {@code callee} has a body (bytecodes or a non-inline-only invocation plugin) that only a forced compilation would compile. */
+    private static boolean needsOwnCompilation(FeatureImpl.DuringAnalysisAccessImpl access, AnalysisMethod callee) {
+        if (callee.isAbstract()) {
+            return false;
+        }
+        if (callee.isNative()) {
+            InvocationPlugin plugin = access.getBigBang().getProviders(callee).getGraphBuilderPlugins().getInvocationPlugins().lookupInvocation(callee, access.getBigBang().getOptions());
+            return plugin != null && !plugin.inlineOnly();
+        }
+        return callee.getCode() != null;
+    }
+
+    /**
+     * Forces the compilation of the pending callees that the analysis has linked by now. Instance
+     * methods are linked only once their class is instantiated, so callees stay pending across
+     * analysis iterations; the compile queue reads the directive after analysis.
+     */
+    void registerPendingForcedCompilations() {
+        for (var iterator = pendingForcedCompilations.iterator(); iterator.hasNext();) {
+            AnalysisMethod callee = iterator.next();
+            if (callee.isImplementationInvoked()) {
+                SubstrateCompilationDirectives.singleton().registerForcedCompilation(callee);
+                iterator.remove();
             }
         }
     }

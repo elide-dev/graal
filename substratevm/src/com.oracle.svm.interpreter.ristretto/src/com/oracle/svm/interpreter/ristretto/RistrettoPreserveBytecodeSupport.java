@@ -164,6 +164,7 @@ public final class RistrettoPreserveBytecodeSupport {
         }
         boolean preservedNewMethod = preserveNewlyReachableRuntimeCompilationBytecodes(access);
         boolean registeredNewAppendix = dependencies.registerNewInvokeDynamicAppendices(access);
+        dependencies.registerPendingForcedCompilations();
         if (registeredExactRoots || preservedNewMethod || registeredNewAppendix) {
             access.requireAnalysisIteration();
         }
