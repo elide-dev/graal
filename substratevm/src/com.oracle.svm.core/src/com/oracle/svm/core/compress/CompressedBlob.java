@@ -42,7 +42,6 @@ import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.VMError;
 
-
 /**
  * A large byte array of the image heap stored in zstd-compressed chunks, inflated lazily at run
  * time. Chunks are independent frames (optionally sharing one dictionary) so that consumers that

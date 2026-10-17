@@ -112,6 +112,7 @@ public class FrameInfoDecoder {
     public static boolean includeCompressedFrameBci() {
         return CodeInfoEncoder.Options.IncludeFrameByteCodeIndex.getValue();
     }
+
     /**
      * Value added to source line to guarantee the value is greater than zero.
      */
