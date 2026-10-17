@@ -39,9 +39,10 @@ public final class G1MemoryMXBean extends AbstractMemoryMXBean {
 
     @Override
     public MemoryUsage getHeapMemoryUsage() {
-        long used = G1Library.getUsedMemory();
-        long committed = G1Library.getTotalMemory();
-        long max = G1Library.getMaxMemory();
+        long max = G1Heap.getMaxMemory();
+        long committed = G1Heap.getTotalMemory();
+        /* MemoryUsage requires used <= committed <= max. */
+        long used = Math.min(G1Library.getUsedMemory(), committed);
         return new MemoryUsage(UNDEFINED_MEMORY_USAGE, used, committed, max);
     }
 }
