@@ -69,12 +69,13 @@ public class InterpreterOptions {
     @Option(help = "Enables backdoors in interpreter for testing", type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> InterpreterBackdoor = new HostedOptionKey<>(false);
 
-    @Option(help = "Lets Ristretto inline AOT-compiled methods of the classes in RistrettoInlinableAOTClasses: they keep their bytecode, " +
-                    "with a constant pool resolved at image build time.", type = OptionType.Expert)//
+    @Option(help = "Lets Ristretto inline AOT-compiled methods of the classes in RistrettoInlinableAOTClasses: their bytecodes are preserved " +
+                    "as with JITPreserveBytecodesForRuntime, which selects further methods.", type = OptionType.Expert)//
     public static final HostedOptionKey<Boolean> RistrettoInlineAOTMethods = new HostedOptionKey<>(true);
 
-    @Option(help = "Class name prefixes of the AOT-compiled classes whose methods Ristretto may inline (see RistrettoInlineAOTMethods). " +
-                    "Methods that are substituted or intrinsified, or that use code not in the image, are left out.", type = OptionType.Expert)//
+    @Option(help = "Class name prefixes of the AOT-compiled classes whose methods Ristretto may inline (see RistrettoInlineAOTMethods): " +
+                    "a prefix selects the reachable methods of the matching classes like the JITPreserveBytecodesForRuntime pattern <prefix>*.* does. " +
+                    "Methods whose bytecodes cannot execute at run time are left out.", type = OptionType.Expert)//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> RistrettoInlinableAOTClasses = new HostedOptionKey<>(
                     AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter(
                                     "java.util.concurrent.atomic.",

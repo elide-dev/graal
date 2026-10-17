@@ -43,6 +43,7 @@ import com.oracle.svm.hosted.SVMHost;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.interpreter.BuildTimeInterpreterUniverse;
+import com.oracle.svm.interpreter.InterpreterOptions;
 import com.oracle.svm.hosted.code.RestrictHeapAccessCalleesImpl;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 
@@ -104,8 +105,8 @@ public final class RistrettoPreserveBytecodeSupport {
      * can be applied only after analysis has discovered candidate methods.
      */
     void beforeAnalysis(FeatureImpl.BeforeAnalysisAccessImpl access) {
-        String preserveMethodFilter = RistrettoOptions.JITPreserveBytecodesForRuntime.getValue();
-        if (preserveMethodFilter != null && !preserveMethodFilter.isBlank()) {
+        String preserveMethodFilter = applicationSelection();
+        if (preserveMethodFilter != null) {
             selection = PreservedBytecodeSelection.parse(preserveMethodFilter);
         }
         PreservedBytecodeDependencies.registerRuntimeMetadata(access);
@@ -116,6 +117,31 @@ public final class RistrettoPreserveBytecodeSupport {
         if (selection != null) {
             selection.forEachExactMethod(access, method -> selectExactMethod(access, method));
         }
+    }
+
+    /**
+     * Returns the application selection as a method filter, or null if there is none: the value of
+     * {@link RistrettoOptions#JITPreserveBytecodesForRuntime}, plus the reachable methods of the
+     * classes named by {@link InterpreterOptions#RistrettoInlinableAOTClasses} (hot JDK collections,
+     * atomics and var handle access methods by default) unless
+     * {@link InterpreterOptions#RistrettoInlineAOTMethods} is off. A class name prefix selects the
+     * classes it matches like the wildcard pattern {@code <prefix>*.*}, so those selections are
+     * never analysis roots and skip unsupported bodies.
+     */
+    private static String applicationSelection() {
+        List<String> patterns = new ArrayList<>();
+        String preserveMethodFilter = RistrettoOptions.JITPreserveBytecodesForRuntime.getValue();
+        if (preserveMethodFilter != null && !preserveMethodFilter.isBlank()) {
+            patterns.add(preserveMethodFilter);
+        }
+        if (InterpreterOptions.RistrettoInlineAOTMethods.getValue()) {
+            for (String prefix : InterpreterOptions.RistrettoInlinableAOTClasses.getValue().values()) {
+                if (!prefix.isBlank()) {
+                    patterns.add(prefix.trim() + "*.*");
+                }
+            }
+        }
+        return patterns.isEmpty() ? null : String.join(",", patterns);
     }
 
     /**

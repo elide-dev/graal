@@ -133,7 +133,7 @@ public class RistrettoDeoptimizationTest {
                  * The updater methods that Updater calls, and the Unsafe accessors they call:
                  * compiled on their own, and with the Unsafe field keeping a location, those make
                  * AtomicReferenceFieldUpdaterImpl.get and set inlinable (see
-                 * RistrettoInlinableAOTMethods).
+                 * RistrettoPreserveBytecodeSupport).
                  */
                 Class<?> unsafe = Class.forName("jdk.internal.misc.Unsafe");
                 RuntimeReflection.register(AtomicReferenceFieldUpdater.class.getMethod("newUpdater", Class.class, Class.class, String.class),

@@ -290,15 +290,7 @@ public class CremaSupportImpl implements CremaSupport {
          * Keep bytecodes for java.lang.Object::<init> as a temporary exception. Its body is
          * effectively just a ret instruction, and Ristretto currently relies on that behavior.
          */
-        if (analysisMethod.isConstructor() && analysisMethod.getDeclaringClass().toJavaName().equals(Object.class.getName())) {
-            return true;
-        }
-        /*
-         * Methods of the classes in RistrettoInlinableAOTClasses keep their bytecodes so that
-         * Ristretto can inline them. RistrettoInlinableAOTMethods drops them again after compilation
-         * unless they can be resolved against a build-time constant pool.
-         */
-        return RistrettoInlinableAOTMethods.isCandidate(analysisMethod);
+        return analysisMethod.isConstructor() && analysisMethod.getDeclaringClass().toJavaName().equals(Object.class.getName());
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

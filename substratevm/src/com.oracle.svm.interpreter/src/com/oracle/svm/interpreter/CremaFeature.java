@@ -122,9 +122,6 @@ public class CremaFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         FeatureImpl.BeforeAnalysisAccessImpl accessImpl = (FeatureImpl.BeforeAnalysisAccessImpl) access;
-        if (RistrettoInlinableAOTMethods.isEnabled()) {
-            RistrettoInlinableAOTMethods.registerHeapTypes(accessImpl);
-        }
         try {
             var metaAccess = accessImpl.getMetaAccess();
             AnalysisType declaringClass = metaAccess.lookupJavaType(InterpreterStubSection.class);
@@ -252,9 +249,6 @@ public class CremaFeature implements InternalFeature {
     @Override
     public void duringAnalysis(DuringAnalysisAccess access) {
         FeatureImpl.DuringAnalysisAccessImpl accessImpl = (FeatureImpl.DuringAnalysisAccessImpl) access;
-        if (RistrettoInlinableAOTMethods.isEnabled()) {
-            RistrettoInlinableAOTMethods.registerCallees(accessImpl);
-        }
         if (keepInlinedSuperConstructorsCompiled(accessImpl)) {
             accessImpl.requireAnalysisIteration();
         }
@@ -313,9 +307,6 @@ public class CremaFeature implements InternalFeature {
     @Override
     public void afterCompilation(AfterCompilationAccess access) {
         FeatureImpl.AfterCompilationAccessImpl accessImpl = (FeatureImpl.AfterCompilationAccessImpl) access;
-        if (RistrettoInlinableAOTMethods.isEnabled()) {
-            RistrettoInlinableAOTMethods.prepare(accessImpl.getUniverse());
-        }
         BuildTimeInterpreterUniverse iUniverse = BuildTimeInterpreterUniverse.singleton();
 
         for (HostedType type : accessImpl.getUniverse().getTypes()) {
