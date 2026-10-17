@@ -35,10 +35,10 @@ import com.oracle.svm.interpreter.CremaLinkResolver;
 import com.oracle.svm.interpreter.CremaRuntimeAccess;
 import com.oracle.svm.interpreter.FailedCallSiteLink;
 import com.oracle.svm.interpreter.ResolvedInvokeDynamicConstant;
-import com.oracle.svm.interpreter.RuntimeInterpreterConstantPool;
 import com.oracle.svm.interpreter.SuccessfulCallSiteLink;
 import com.oracle.svm.interpreter.metadata.Bytecodes;
 import com.oracle.svm.interpreter.metadata.CremaMethodAccess;
+import com.oracle.svm.interpreter.metadata.CremaResolvedJavaMethodImpl;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool;
 import com.oracle.svm.interpreter.metadata.InterpreterConstantPool.LinkedInvoke;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedInvokeGenericJavaMethod;
@@ -159,14 +159,21 @@ public final class RistrettoConstantPool implements ConstantPool {
         }
         Object cachedEntry = interpreterConstantPool.peekCachedEntry(cpi);
         if (cachedEntry instanceof InterpreterResolvedJavaMethod resolvedJavaMethod) {
-            if (interpreterConstantPool instanceof RuntimeInterpreterConstantPool) {
-                // Symbolic resolution alone does not authorize any opcode-specific runtime call.
+            if (compilerMethod.getInterpreterMethod() instanceof CremaResolvedJavaMethodImpl) {
+                /*
+                 * A runtime-loaded caller: symbolic resolution alone does not authorize any
+                 * opcode-specific runtime call, so wait for the interpreter's linked invoke.
+                 */
                 return createUnresolvedMethod(cpi);
             }
             /*
-             * Hydrated preserved AOT bytecodes cache image-built targets directly. Keep their
-             * existing interpreter metadata instead of decoding the cached entry's intentionally
-             * empty symbolic payload or triggering runtime resolution.
+             * Hydrated preserved AOT bytecodes cache image-built targets directly, and the image
+             * builder checked their invoke kinds. Keep their existing interpreter metadata instead
+             * of decoding the cached entry's intentionally empty symbolic payload or triggering
+             * runtime resolution. The caller decides, not the pool class: with Crema, the pools of
+             * image types are runtime pools too, and a preserved body that the interpreter never
+             * runs natively would otherwise stay unresolved and its inlined callers would
+             * deoptimize and recompile forever (elide-dev/graal#144).
              */
             return RistrettoMethod.getOrCreate(resolvedJavaMethod);
         }
