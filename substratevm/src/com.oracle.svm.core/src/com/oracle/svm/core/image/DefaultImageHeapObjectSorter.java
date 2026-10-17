@@ -26,6 +26,7 @@ package com.oracle.svm.core.image;
 
 import com.oracle.svm.core.classinitialization.ClassInitializationInfo;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
+import com.oracle.svm.core.hub.DynamicHubExtension;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
@@ -41,11 +42,13 @@ import java.util.concurrent.locks.AbstractOwnableSynchronizer;
 public class DefaultImageHeapObjectSorter extends BasicImageHeapObjectSorter {
 
     private final ResolvedJavaType hubCompanionType;
+    private final ResolvedJavaType hubExtensionType;
     private final ResolvedJavaType classInitInfoType;
     private final ResolvedJavaType synchronizerType;
 
     public DefaultImageHeapObjectSorter(MetaAccessProvider metaAccess) {
         this.hubCompanionType = metaAccess.lookupJavaType(DynamicHubCompanion.class);
+        this.hubExtensionType = metaAccess.lookupJavaType(DynamicHubExtension.class);
         this.classInitInfoType = metaAccess.lookupJavaType(ClassInitializationInfo.class);
         this.synchronizerType = metaAccess.lookupJavaType(AbstractOwnableSynchronizer.class);
     }
@@ -65,8 +68,8 @@ public class DefaultImageHeapObjectSorter extends BasicImageHeapObjectSorter {
          * lazily decoded or computed at runtime. Grouping them can significantly reduce dirtied
          * (copy on write) image heap pages, which improves sharing between isolates and processes.
          */
-        boolean aIsHubCompanion = hubCompanionType.equals(aType);
-        if (aIsHubCompanion != hubCompanionType.equals(bType)) {
+        boolean aIsHubCompanion = hubCompanionType.equals(aType) || hubExtensionType.equals(aType);
+        if (aIsHubCompanion != (hubCompanionType.equals(bType) || hubExtensionType.equals(bType))) {
             return aIsHubCompanion ? -1 : 1;
         }
 

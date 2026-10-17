@@ -126,10 +126,15 @@ public class DynamicHubOffsets {
         @UnknownPrimitiveField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
         private int additionalFlagsOffset = UNINITIALIZED;
 
+        @UnknownPrimitiveField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
+        private int extensionOffset = UNINITIALIZED;
+
         @Platforms(Platform.HOSTED_ONLY.class)
         public void initializeOffsets(MetaAccessProvider metaAccess) {
             ResolvedJavaField additionalFlagsField = JVMCIReflectionUtil.getUniqueDeclaredField(metaAccess.lookupJavaType(DynamicHubCompanion.class), "additionalFlags");
             additionalFlagsOffset = additionalFlagsField.getOffset();
+            ResolvedJavaField extensionField = JVMCIReflectionUtil.getUniqueDeclaredField(metaAccess.lookupJavaType(DynamicHubCompanion.class), "extension");
+            extensionOffset = extensionField.getOffset();
         }
     }
 
@@ -258,6 +263,10 @@ public class DynamicHubOffsets {
 
     public int getCompanionAdditionalFlagsOffset() {
         return companionOffsets.additionalFlagsOffset;
+    }
+
+    public int getCompanionExtensionOffset() {
+        return companionOffsets.extensionOffset;
     }
 
     public static void writeObject(DynamicHub hub, int offset, Object value) {
