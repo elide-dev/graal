@@ -49,6 +49,8 @@ import jdk.graal.compiler.nodes.java.AbstractNewObjectNode;
 import jdk.graal.compiler.nodes.java.LoadFieldNode;
 import jdk.graal.compiler.nodes.java.StoreFieldNode;
 import jdk.graal.compiler.nodes.virtual.CommitAllocationNode;
+import jdk.graal.compiler.nodes.virtual.VirtualArrayNode;
+import jdk.graal.compiler.nodes.virtual.VirtualBoxingNode;
 import jdk.graal.compiler.nodes.virtual.VirtualObjectNode;
 
 /**
@@ -106,7 +108,16 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
         StructuredGraph graph = partialEval(root, args);
         assertNone(graph, AbstractNewObjectNode.class);
         assertNone(graph, CommitAllocationNode.class);
-        assertNone(graph, VirtualObjectNode.class);
+        /*
+         * With typed (unboxed) arguments on SVM, the compiled entry receives the arguments
+         * unboxed and rebuilds the boxes and the arguments array, which remain virtual in frame
+         * states.
+         */
+        for (Node node : graph.getNodes()) {
+            if (node instanceof VirtualObjectNode && !(node instanceof VirtualBoxingNode) && !isArgumentsArray(node, args.length)) {
+                Assert.fail("Static object not scalar-replaced: found " + node + " in " + graph);
+            }
+        }
         assertNone(graph, RawLoadNode.class);
         assertNone(graph, RawStoreNode.class);
         assertNone(graph, LoadFieldNode.class);
@@ -183,6 +194,10 @@ public class StaticObjectAllocationTest extends PartialEvaluationTest {
                 Assert.fail("Atomic access on a static object not virtualized: " + node + " in " + graph);
             }
         }
+    }
+
+    private static boolean isArgumentsArray(Node node, int argumentCount) {
+        return node instanceof VirtualArrayNode array && array.componentType().isJavaLangObject() && array.entryCount() == argumentCount;
     }
 
     private static void assertNone(StructuredGraph graph, Class<? extends Node> nodeClass) {
