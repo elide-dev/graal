@@ -60,13 +60,22 @@ public final class Zstd {
     @CFunction(transition = Transition.NO_TRANSITION)
     public static native UnsignedWord ZSTD_decompressDCtx(PointerBase dctx, PointerBase dst, UnsignedWord dstCapacity, PointerBase src, UnsignedWord srcSize);
 
-    /** {@code ZSTD_DDict* ZSTD_createDDict(const void* dictBuffer, size_t dictSize)}. */
-    @CFunction(transition = Transition.NO_TRANSITION)
-    public static native PointerBase ZSTD_createDDict(PointerBase dictBuffer, UnsignedWord dictSize);
+    /** {@code ZSTD_dlm_byRef}: a digested dictionary references the dictionary content. */
+    public static final int ZSTD_dlm_byRef = 1;
+    /** {@code ZSTD_dct_auto}: the dictionary content type is detected. */
+    public static final int ZSTD_dct_auto = 0;
 
-    /** {@code size_t ZSTD_freeDDict(ZSTD_DDict* ddict)}. */
+    /** {@code size_t ZSTD_estimateDDictSize(size_t dictSize, ZSTD_dictLoadMethod_e dictLoadMethod)}. */
     @CFunction(transition = Transition.NO_TRANSITION)
-    public static native UnsignedWord ZSTD_freeDDict(PointerBase ddict);
+    public static native UnsignedWord ZSTD_estimateDDictSize(UnsignedWord dictSize, int dictLoadMethod);
+
+    /**
+     * {@code const ZSTD_DDict* ZSTD_initStaticDDict(void* sBuffer, size_t sBufferSize, const void* dict, size_t dictSize, ZSTD_dictLoadMethod_e dictLoadMethod, ZSTD_dictContentType_e dictContentType)}.
+     * Digests a dictionary into a caller-provided, 8-byte aligned buffer; nothing is allocated, and
+     * the result must not be passed to {@code ZSTD_freeDDict}.
+     */
+    @CFunction(transition = Transition.NO_TRANSITION)
+    public static native PointerBase ZSTD_initStaticDDict(PointerBase sBuffer, UnsignedWord sBufferSize, PointerBase dict, UnsignedWord dictSize, int dictLoadMethod, int dictContentType);
 
     /**
      * {@code size_t ZSTD_decompress_usingDDict(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize, const ZSTD_DDict* ddict)}.

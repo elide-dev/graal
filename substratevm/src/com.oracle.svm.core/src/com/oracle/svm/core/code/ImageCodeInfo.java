@@ -111,6 +111,22 @@ public class ImageCodeInfo {
     }
 
     /**
+     * Releases the memory that {@link #prepareCodeInfo} allocated for the image code infos of the
+     * current isolate.
+     */
+    @Uninterruptible(reason = "Executes during isolate teardown.")
+    static void tearDown() {
+        ImageCodeInfo[] imageCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfo.class);
+        ImageCodeInfoStorage[] runtimeCodeInfos = MultiLayeredImageSingleton.getAllLayers(ImageCodeInfoStorage.class);
+        for (int i = 0; i < imageCodeInfos.length; i++) {
+            CompressedBlob frameInfoBlob = imageCodeInfos[i].frameInfoBlob;
+            if (frameInfoBlob != null) {
+                CodeInfoAccess.releaseCompressedFrameInfo(runtimeCodeInfos[i].getCodeInfo(), frameInfoBlob);
+            }
+        }
+    }
+
+    /**
      * The compressed frame information of the given image code info, or null if its frame
      * information is stored uncompressed or {@code info} is not image code.
      */

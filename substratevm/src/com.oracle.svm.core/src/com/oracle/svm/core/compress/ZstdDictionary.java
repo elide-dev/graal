@@ -28,7 +28,9 @@ import java.util.function.Consumer;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
+import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
+import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.c.NonmovableArrays;
@@ -41,7 +43,7 @@ import com.oracle.svm.shared.util.VMError;
 /**
  * A zstd dictionary trained at build time, shared by any number of {@link CompressedBlob}s (for
  * example all embedded resources). The decoder's digested form ({@code ZSTD_DDict}) is created on
- * first use and kept for the lifetime of the isolate.
+ * first use in {@link HeapBlobMemory} and kept until isolate teardown, see {@link #tearDown}.
  */
 public final class ZstdDictionary {
     /*
@@ -50,6 +52,17 @@ public final class ZstdDictionary {
      */
     @UnknownObjectField(availability = AfterCompilation.class) private byte[] bytes;
     @UnknownObjectField(availability = AfterCompilation.class) private UninterruptibleUtils.AtomicPointer<PointerBase> ddict = new UninterruptibleUtils.AtomicPointer<>();
+
+    /*
+     * Each digested dictionary of the isolate lives in its own mapping, which starts with a header
+     * that links it into a list for teardown: the next mapping and the size of this one.
+     */
+    private static final int MAPPING_NEXT_OFFSET = 0;
+    private static final int MAPPING_SIZE_OFFSET = MAPPING_NEXT_OFFSET + Long.BYTES;
+    private static final int MAPPING_HEADER_SIZE = MAPPING_SIZE_OFFSET + Long.BYTES;
+
+    /** The most recently created mapping of a digested dictionary of this isolate. */
+    private static final UninterruptibleUtils.AtomicPointer<Pointer> mappings = new UninterruptibleUtils.AtomicPointer<>();
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public ZstdDictionary(byte[] bytes) {
@@ -82,14 +95,46 @@ public final class ZstdDictionary {
         if (existing.isNonNull()) {
             return existing;
         }
-        PointerBase created = Zstd.ZSTD_createDDict(NonmovableArrays.getArrayBase(NonmovableArrays.fromImageHeap(bytes)), Word.unsigned(bytes.length));
-        if (created.isNull()) {
+        /* The digested form references the dictionary bytes, which live in the image heap. */
+        UnsignedWord dictSize = Word.unsigned(bytes.length);
+        UnsignedWord ddictSize = Zstd.ZSTD_estimateDDictSize(dictSize, Zstd.ZSTD_dlm_byRef);
+        UnsignedWord mappingSize = ddictSize.add(MAPPING_HEADER_SIZE);
+        Pointer mapping = HeapBlobMemory.allocate(mappingSize);
+        if (mapping.isNull()) {
             throw VMError.shouldNotReachHere("zstd: cannot allocate dictionary");
         }
+        Pointer dictStart = NonmovableArrays.getArrayBase(NonmovableArrays.fromImageHeap(bytes));
+        PointerBase created = Zstd.ZSTD_initStaticDDict(mapping.add(MAPPING_HEADER_SIZE), ddictSize, dictStart, dictSize, Zstd.ZSTD_dlm_byRef, Zstd.ZSTD_dct_auto);
+        if (created.isNull()) {
+            HeapBlobMemory.free(mapping, mappingSize);
+            throw VMError.shouldNotReachHere("zstd: cannot digest dictionary");
+        }
         if (ddict.compareAndSet(Word.nullPointer(), created)) {
+            mapping.writeWord(MAPPING_SIZE_OFFSET, mappingSize);
+            Pointer head;
+            do {
+                head = mappings.get();
+                mapping.writeWord(MAPPING_NEXT_OFFSET, head);
+            } while (!mappings.compareAndSet(head, mapping));
             return created;
         }
-        Zstd.ZSTD_freeDDict(created);
+        HeapBlobMemory.free(mapping, mappingSize);
         return ddict.get();
+    }
+
+    /**
+     * Releases the digested dictionaries of the current isolate. Called during isolate teardown,
+     * after which no blob is inflated anymore.
+     */
+    @Uninterruptible(reason = "Executes during isolate teardown.")
+    public static void tearDown() {
+        Pointer mapping = mappings.get();
+        mappings.set(Word.nullPointer());
+        while (mapping.isNonNull()) {
+            Pointer next = mapping.readWord(MAPPING_NEXT_OFFSET);
+            UnsignedWord size = mapping.readWord(MAPPING_SIZE_OFFSET);
+            HeapBlobMemory.free(mapping, size);
+            mapping = next;
+        }
     }
 }

@@ -287,6 +287,7 @@ public class CodeInfoTable {
     @Uninterruptible(reason = "Tear-down in progress.")
     public static void tearDown() {
         getRuntimeCodeCache().tearDown();
+        ImageCodeInfo.tearDown();
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
