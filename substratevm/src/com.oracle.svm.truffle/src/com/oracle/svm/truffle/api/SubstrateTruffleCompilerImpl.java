@@ -38,6 +38,7 @@ import com.oracle.svm.graal.RuntimeCompilationSupport;
 import com.oracle.svm.graal.SubstrateGraalUtils;
 import com.oracle.svm.shared.option.CommonOptionParser;
 import com.oracle.svm.truffle.SubstrateTruffleCompilationIdentifier;
+import com.oracle.svm.truffle.TruffleSupport;
 import com.oracle.truffle.compiler.TruffleCompilable;
 import com.oracle.truffle.compiler.TruffleCompilationTask;
 
@@ -74,7 +75,7 @@ public class SubstrateTruffleCompilerImpl extends TruffleCompilerImpl implements
     @Platforms(Platform.HOSTED_ONLY.class)
     @Override
     protected PartialEvaluator createPartialEvaluator(TruffleCompilerConfiguration configuration) {
-        return new SubstratePartialEvaluator(configuration, builderConfig);
+        return TruffleSupport.singleton().createPartialEvaluator(configuration, builderConfig);
     }
 
     @Override

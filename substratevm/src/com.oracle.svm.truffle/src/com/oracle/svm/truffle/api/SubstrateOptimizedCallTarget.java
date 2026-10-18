@@ -63,7 +63,13 @@ import jdk.vm.ci.meta.SpeculationLog;
  *
  * @see TypedEntrySupport
  */
-public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget implements SubstrateCompilableTruffleAST, AuxiliaryImageCodeObserver {
+public class SubstrateOptimizedCallTarget extends OptimizedCallTarget implements SubstrateCompilableTruffleAST, AuxiliaryImageCodeObserver {
+    /*
+     * Enterprise compatibility (TypedEntrySupport.ENTERPRISE_COPY): this class is not final, the
+     * installedCode field, invokeCallBoundary, onCodeInstalled and onCodeCleared are protected, and
+     * the initial installedCode comes from createInitializationInstalledCode, because Oracle's
+     * prebuilt SubstrateEnterpriseOptimizedCallTarget subclasses this class and uses them.
+     */
 
     /**
      * Stores the most recently installed code, which is the only entry point for this call target
@@ -72,7 +78,7 @@ public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget impl
      * Does not need to be volatile because it is modified only in safepoint operations. Reads of
      * this field must be done carefully so they cannot float across safepoint checks.
      */
-    private SubstrateOptimizedCallTargetInstalledCode installedCode;
+    protected SubstrateOptimizedCallTargetInstalledCode installedCode;
 
     /**
      * The entry point used by a caller that is compiled when the caller is performing a
@@ -105,13 +111,20 @@ public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget impl
     @SuppressWarnings("this-escape")
     public SubstrateOptimizedCallTarget(OptimizedCallTarget sourceCallTarget, RootNode rootNode) {
         super(sourceCallTarget, rootNode);
-        this.installedCode = new SubstrateOptimizedCallTargetInstalledCode(this);
+        this.installedCode = createInitializationInstalledCode();
+        assert this.installedCode != null : "Must never be null";
     }
 
     @SuppressWarnings("this-escape")
     public SubstrateOptimizedCallTarget(EngineData engine) {
         super(engine);
-        this.installedCode = new SubstrateOptimizedCallTargetInstalledCode(this);
+        this.installedCode = createInitializationInstalledCode();
+        assert this.installedCode != null : "Must never be null";
+    }
+
+    /** Creates the instance for initializing {@link #installedCode} so it is never {@code null}. */
+    protected SubstrateOptimizedCallTargetInstalledCode createInitializationInstalledCode() {
+        return new SubstrateOptimizedCallTargetInstalledCode(this);
     }
 
     @SuppressWarnings("sync-override")
@@ -184,12 +197,16 @@ public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget impl
         }
     }
 
-    void onCodeInstalled(SubstrateOptimizedCallTargetInstalledCode code) {
+    protected void onCodeInstalled(SubstrateOptimizedCallTargetInstalledCode code) {
         VMOperation.guaranteeInProgressAtSafepoint("Must be at a safepoint");
         assert code != null : "Must never become null";
         if (code != installedCode) {
             installedCode.makeNonEntrant();
             installedCode = code;
+        }
+        if (TypedEntrySupport.ENTERPRISE_COPY) {
+            /* The enterprise subclass maintains the entry points. */
+            return;
         }
 
         TypedEntryMethod method = code.getMethod();
@@ -213,8 +230,12 @@ public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget impl
         setFromCompiledSpecializedEntryPoint();
     }
 
-    void onCodeCleared(SubstrateOptimizedCallTargetInstalledCode code) {
+    protected void onCodeCleared(SubstrateOptimizedCallTargetInstalledCode code) {
         VMOperation.guaranteeInProgressAtSafepoint("Must be at a safepoint");
+        if (TypedEntrySupport.ENTERPRISE_COPY) {
+            /* The enterprise subclass maintains the entry points. */
+            return;
+        }
 
         if (code == installedCode) { // could be older code and not the current entry point
             this.fromCompiledSpecializedEntryPoint = 0;
@@ -331,7 +352,7 @@ public final class SubstrateOptimizedCallTarget extends OptimizedCallTarget impl
     }
 
     @Uninterruptible(reason = "Transitioning back to interruptible code", calleeMustBe = false)
-    private Object invokeCallBoundary(Object[] args) {
+    protected Object invokeCallBoundary(Object[] args) {
         return callBoundary(args);
     }
 

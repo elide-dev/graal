@@ -104,6 +104,7 @@ import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.VMError;
+import com.oracle.svm.truffle.TruffleSupport;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.compiler.TruffleCompilable;
@@ -114,6 +115,7 @@ import com.oracle.truffle.runtime.OptimizedCallTarget.ReturnProfile;
 
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.code.CompilationResult;
+import jdk.graal.compiler.core.common.EnterpriseCompatibility;
 import jdk.graal.compiler.core.common.PermanentBailoutException;
 import jdk.graal.compiler.core.common.RetryableBailoutException;
 import jdk.graal.compiler.core.common.type.StampFactory;
@@ -236,8 +238,26 @@ import jdk.vm.ci.meta.annotation.AnnotationsInfo;
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public final class TypedEntrySupport {
 
+    /**
+     * Compatibility with Oracle GraalVM EA builds whose enterprise Truffle runtime
+     * ({@code com.oracle.truffle.enterprise.svm}) was built before this support moved from it into
+     * the open-source runtime and still carries its own copy: the fork's EE distribution runs this
+     * runtime with that prebuilt module on top. Its {@code EnterpriseTruffleCompilerFeature}
+     * replaces {@link TruffleSupport} and subclasses {@link SubstrateOptimizedCallTarget} and
+     * {@link SubstrateOptimizedCallTargetInstalledCode}, so its copy is the one that runs and this
+     * class stays dormant: the hosted hooks below do nothing, the call target leaves the entry
+     * points to the subclass, and the duplicate {@link Options} resolve to the enterprise ones (see
+     * {@link EnterpriseCompatibility#resolveDuplicateOption}). The extension points those
+     * subclasses use are marked "enterprise compatibility" and can go, together with this flag, once
+     * the EE base ships without {@code com.oracle.svm.enterprise.truffle.compiler.TypedEntrySupport}.
+     */
+    public static final boolean ENTERPRISE_COPY = EnterpriseCompatibility.hasEnterpriseTruffleTypedEntries(TypedEntrySupport.class.getModule().getLayer());
+
     @Platforms(Platform.HOSTED_ONLY.class)
     public static void beforeAnalysis(BeforeAnalysisAccessImpl access) {
+        if (ENTERPRISE_COPY) {
+            return;
+        }
         TypedEntrySupport support = new TypedEntrySupport(access.getMetaAccess());
         ImageSingletons.add(TypedEntrySupport.class, support);
         support.initializeBeforeAnalysis(access);
@@ -250,6 +270,9 @@ public final class TypedEntrySupport {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public static void beforeCompilation(Feature.BeforeCompilationAccess access) {
+        if (ENTERPRISE_COPY) {
+            return;
+        }
         TypedEntrySupport support = singleton();
         support.initializeBeforeCompilation(access);
         access.registerAsImmutable(support);
@@ -381,6 +404,9 @@ public final class TypedEntrySupport {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public static void registerRuntimePlugins(InvocationPlugins plugins, boolean canDelayIntrinsification) {
+        if (ENTERPRISE_COPY) {
+            return;
+        }
         Registration r = new Registration(plugins, SubstrateOptimizedCallTarget.class);
         for (JavaKind returnKind : TYPED_RETURN_KINDS) {
             r.register(new RequiredInvocationPlugin("invokeFromCompiledReturn" + returnKind.name(), SubstrateOptimizedCallTarget.class, Object[].class) {
