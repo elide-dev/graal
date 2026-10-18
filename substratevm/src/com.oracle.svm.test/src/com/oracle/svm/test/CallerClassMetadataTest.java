@@ -51,8 +51,6 @@ import com.oracle.svm.shared.AlwaysInline;
 import com.oracle.svm.shared.NeverInline;
 
 /** Caller identity, access decisions and allocation for ordinary native stack frames. */
-@NativeImageBuildArgs({"--add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.core.graal=ALL-UNNAMED",
-                "--features=com.oracle.svm.test.CallerClassMetadataTest$TestFeature"})
 public class CallerClassMetadataTest {
     public static class TestFeature implements Feature {
         @Override

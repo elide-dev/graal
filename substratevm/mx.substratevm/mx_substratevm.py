@@ -510,8 +510,11 @@ def truffle_unittest_task(extra_build_args=None):
         '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
     ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.svm.test.ristretto.RistrettoVarHandleTest',
                     'com.oracle.svm.test.ristretto.RistrettoMethodHandleTest', 'com.oracle.svm.test.ristretto.RistrettoDispatchTest',
-                    'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
-                    extra_run_args=['-Dcom.oracle.svm.test.ristretto=true'])
+                    'com.oracle.svm.test.ristretto.RistrettoCallerClassTest', 'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
+                    # RistrettoCallerClassTest checks that its caller lookups walk generated
+                    # bytecode-handler stubs and handlers inlined into them (tail-call threading).
+                    extra_run_args=['-Dcom.oracle.svm.test.ristretto=true', '-Dcom.oracle.svm.test.caller.expectStubs=true',
+                                    '-Dcom.oracle.svm.test.caller.expectHandlerPairs=true'])
     # JDWP support enables the PLT/GOT and requires frame information for all methods, which must
     # not force deoptimization targets for runtime compilation. Its startup hook must also allow
     # the isolates used for runtime compilation.

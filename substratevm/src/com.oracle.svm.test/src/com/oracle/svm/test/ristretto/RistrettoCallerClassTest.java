@@ -25,7 +25,6 @@
 package com.oracle.svm.test.ristretto;
 
 import static com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.awaitCompiled;
-import static com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.classFileName;
 import static com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.invoke;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
@@ -33,6 +32,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -41,7 +42,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
-import org.graalvm.nativeimage.hosted.RuntimeResourceAccess;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.impl.Word;
 import org.junit.Assume;
@@ -63,6 +63,7 @@ import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
 import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
+import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.Holder;
 import com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.One;
@@ -75,13 +76,27 @@ import com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest.Two;
 public class RistrettoCallerClassTest {
     static final List<Class<?>> RUNTIME_CLASSES = List.of(Inner.class, Outer.class, Owner.class, RistrettoCallerForeign.class, Shape.class, One.class, Two.class, Holder.class);
 
-    public static final class TestFeature implements Feature {
-        @Override
-        public void beforeAnalysis(BeforeAnalysisAccess access) {
-            for (Class<?> type : RUNTIME_CLASSES) {
-                RuntimeResourceAccess.addResource(RistrettoCallerClassTest.class.getModule(), classFileName(type));
+    /**
+     * Called by {@code RistrettoDeoptimizationTest.TestFeature} before analysis, which also registers
+     * the class files of {@link #RUNTIME_CLASSES}.
+     */
+    static void beforeAnalysis(Feature.BeforeAnalysisAccess access) {
+        RuntimeReflection.register(FrameProbe.class.getDeclaredMethods());
+        try {
+            /*
+             * The run-time classes call these image methods, which the interpreter and Ristretto
+             * code can only call while they have compiled code. The caller-sensitive ones are
+             * @ForceInline, so reflection metadata alone does not compile them on their own.
+             */
+            RuntimeReflection.register(Class.class.getMethod("getDeclaredMethod", String.class, Class[].class), Class.class.getMethod("getDeclaredField", String.class),
+                            Class.class.getMethod("getDeclaredConstructor", Class[].class));
+            var accessImpl = (FeatureImpl.BeforeAnalysisAccessImpl) access;
+            for (Executable callerSensitive : new Executable[]{Method.class.getMethod("invoke", Object.class, Object[].class), Field.class.getMethod("getInt", Object.class),
+                            Constructor.class.getMethod("newInstance", Object[].class)}) {
+                accessImpl.registerAsRoot(callerSensitive, true, "called by run-time loaded code in RistrettoCallerClassTest");
             }
-            RuntimeReflection.register(FrameProbe.class.getDeclaredMethods());
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError(e);
         }
     }
 
