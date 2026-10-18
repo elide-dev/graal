@@ -71,7 +71,7 @@ env:
   # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
   # Update it when the fork moves to a new upstream base.
   ORACLE_EE_REPOSITORY: graalvm/oracle-graalvm-ea-builds
-  ORACLE_EE_TAG: jdk-25i5-25.0.4.1.1-ea.03
+  ORACLE_EE_TAG: jdk-25i5-25.0.4.1.1-ea.04
 
 jobs:
   meta:
