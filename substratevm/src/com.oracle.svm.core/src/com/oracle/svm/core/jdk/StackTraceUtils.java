@@ -32,11 +32,16 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 
 import org.graalvm.nativeimage.IsolateThread;
+import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.code.CodeInfo;
+import com.oracle.svm.core.code.CodeInfoDecoder;
+import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameSourceInfo;
+import com.oracle.svm.core.interpreter.InterpreterSupport;
 import com.oracle.svm.core.heap.VMOperationInfos;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
@@ -373,10 +378,39 @@ class BuildStackTraceVisitor extends JavaStackFrameVisitor {
 
 class GetCallerClassVisitor extends JavaStackFrameVisitor {
     private boolean ignoreFirst;
+    private CodeInfoDecoder.FrameInfoCursor cursor;
     Class<?> result;
 
     GetCallerClassVisitor(boolean ignoreFirst) {
         this.ignoreFirst = ignoreFirst;
+    }
+
+    @Override
+    public boolean visitRegularFrame(Pointer sp, CodePointer ip, CodeInfo codeInfo) {
+        if (cursor == null) {
+            cursor = new CodeInfoDecoder.FrameInfoCursor();
+        }
+        /*
+         * Preflight the entire physical frame before consuming ignoreFirst or interpreter state.
+         * A Java bytecode handler may be inlined above its generated stub. Interpreter roots need
+         * values, and synthetic runtime frames need the original caller chain for translation.
+         */
+        cursor.initialize(codeInfo, ip, true);
+        while (cursor.advance()) {
+            FrameInfoQueryResult frame = cursor.get();
+            if (frame.getSourceClass() == null || (InterpreterSupport.isEnabled() &&
+                            (InterpreterSupport.singleton().isInterpreterRoot(frame) || InterpreterSupport.singleton().isInterpreterBytecodeHandlerStub(frame)))) {
+                return super.visitRegularFrame(sp, ip, codeInfo);
+            }
+        }
+        /* Ordinary source metadata is sufficient. The cursor is overwritten on each advance. */
+        cursor.initialize(codeInfo, ip, true);
+        while (cursor.advance()) {
+            if (!visitFrame(cursor.get(), sp)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
