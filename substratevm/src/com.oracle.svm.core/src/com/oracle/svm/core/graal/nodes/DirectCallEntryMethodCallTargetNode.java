@@ -34,8 +34,9 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * A call to a signature-polymorphic method-handle intrinsic ({@code MethodHandle.invokeBasic},
- * {@code linkToStatic} or {@code linkToSpecial}) in runtime-compiled code that calls the method the
- * intrinsic links to directly when that method has compiled code (elide-dev/graal#112).
+ * {@code linkToStatic}, {@code linkToSpecial}, {@code linkToVirtual} or {@code linkToInterface}) in
+ * runtime-compiled code that calls the method the intrinsic links to directly when that method has
+ * compiled code (elide-dev/graal#112).
  * <p>
  * {@link #getEntryHolder()} is the interpreter method the call links to, or the intrinsic's own
  * interpreter method when that is not known. Lowering reads its direct call entry right before the

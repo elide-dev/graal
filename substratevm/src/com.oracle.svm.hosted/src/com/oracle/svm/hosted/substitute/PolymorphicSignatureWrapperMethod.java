@@ -224,9 +224,10 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
     }
 
     /**
-     * With runtime class loading, {@code invokeBasic}, {@code linkToStatic} and
-     * {@code linkToSpecial} go to {@code CremaSupport}, which boxes the arguments, resolves the
-     * target from the member name and dispatches through the interpreter, even when the target has
+     * With runtime class loading, {@code invokeBasic} and the {@code linkTo*} intrinsics (except
+     * {@code linkToNative}) go to {@code CremaSupport}, which boxes the arguments, resolves the
+     * target from the member name (and the receiver, for {@code linkToVirtual} and
+     * {@code linkToInterface}) and dispatches through the interpreter, even when the target has
      * compiled code. When the target has a direct call entry (see {@code MethodHandleLinkage}), call
      * it with the arguments instead (elide-dev/graal#112): the callee ignores the trailing member
      * name of a {@code linkTo*} call, and the arguments have the basic types of the target's
@@ -239,7 +240,7 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
         }
         ValueNode[] readerArgs = switch (substitutionBaseMethod.getName()) {
             case "linkToStatic" -> new ValueNode[]{args.getLast()};
-            case "linkToSpecial" -> new ValueNode[]{args.getFirst(), args.getLast()};
+            case "linkToSpecial", "linkToVirtual", "linkToInterface" -> new ValueNode[]{args.getFirst(), args.getLast()};
             default -> new ValueNode[]{receiver};
         };
         InvokeWithExceptionNode entry = kit.createInvokeWithExceptionAndUnwind(kit.getMetaAccess().lookupJavaMethod(reader), CallTargetNode.InvokeKind.Static, kit.getFrameState(), kit.bci(),

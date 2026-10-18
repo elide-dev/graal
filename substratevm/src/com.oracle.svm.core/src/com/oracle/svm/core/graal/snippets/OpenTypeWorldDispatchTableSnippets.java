@@ -26,7 +26,9 @@ package com.oracle.svm.core.graal.snippets;
 
 import static com.oracle.svm.core.hub.DynamicHubUtils.HASHING_INTERFACE_MASK;
 import static com.oracle.svm.core.hub.DynamicHubUtils.HASHING_ITABLE_SHIFT;
+import static com.oracle.svm.core.hub.DynamicHubUtils.HASHING_PARAM_MASK;
 import static com.oracle.svm.core.hub.DynamicHubUtils.HASHING_SHIFT_OFFSET;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 import static jdk.graal.compiler.nodes.extended.BranchProbabilityNode.probability;
 import static jdk.graal.compiler.nodes.extended.BranchProbabilityNode.unknownProbability;
 
@@ -43,6 +45,7 @@ import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubUtils;
 import com.oracle.svm.jvmci.shared.meta.SharedMethod;
 import com.oracle.svm.jvmci.shared.meta.SharedType;
+import com.oracle.svm.shared.Uninterruptible;
 
 import jdk.graal.compiler.api.replacements.Snippet;
 import jdk.graal.compiler.core.common.NumUtil;
@@ -154,6 +157,40 @@ public final class OpenTypeWorldDispatchTableSnippets extends SubstrateTemplates
         } else {
             return determineITableStartingOffsetIterative(checkedHub, interfaceID);
         }
+    }
+
+    /**
+     * Like {@link #determineITableStartingOffset}, but returns -1 when {@code checkedHub} does not
+     * implement the interface with {@code interfaceID}, instead of assuming that it does. For
+     * callers that select a method for a receiver whose type was not checked (elide-dev/graal#112).
+     */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static long findITableStartingOffset(DynamicHub checkedHub, int interfaceID) {
+        if (SubstrateOptions.useInterfaceHashing() && interfaceID <= SubstrateOptions.interfaceHashingMaxId()) {
+            int[] hashTable = checkedHub.getOpenTypeWorldInterfaceHashTable();
+            if (interfaceID < 0 || hashTable == null || hashTable.length == 0) {
+                return -1;
+            }
+            int hashParam = checkedHub.getOpenTypeWorldInterfaceHashParam();
+            int hash = (interfaceID >>> (hashParam >>> HASHING_SHIFT_OFFSET)) & (hashParam & HASHING_PARAM_MASK);
+            if (hash >= hashTable.length) {
+                return -1;
+            }
+            int hashTableEntry = hashTable[hash];
+            if ((hashTableEntry & HASHING_INTERFACE_MASK) != interfaceID) {
+                return -1;
+            }
+            return hashTableEntry >>> HASHING_ITABLE_SHIFT;
+        }
+        int numClassTypes = checkedHub.getNumClassTypes();
+        int numInterfaceTypes = checkedHub.getNumIterableInterfaceTypes();
+        int[] checkedTypeIds = checkedHub.getOpenTypeWorldTypeCheckSlots();
+        for (int i = 0; i < numInterfaceTypes * 2; i += 2) {
+            if (checkedTypeIds[numClassTypes + i] == interfaceID) {
+                return checkedTypeIds[numClassTypes + i + 1];
+            }
+        }
+        return -1;
     }
 
     /**
