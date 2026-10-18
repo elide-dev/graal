@@ -98,6 +98,11 @@ public class RistrettoMethodHandleTest {
             return a + b;
         }
 
+        public static int noArguments() {
+            compiledCalls += Probe.compiled();
+            return 7;
+        }
+
         public static boolean not(boolean b) {
             return !b;
         }
@@ -619,6 +624,35 @@ public class RistrettoMethodHandleTest {
         long allocated = allocatedBytes() - before;
         assertEquals(expectedSum(many), acc);
         assertTrue("image code calling compiled run-time methods through handles must not allocate, but " + many + " iterations allocated " + allocated + " bytes", allocated < many);
+    }
+
+    /** Calls from image code through a nonconstant zero-argument handle must avoid argument arrays. */
+    @Test
+    public void imageCodeCallsZeroArgumentHandleWithoutAllocating() throws Throwable {
+        RuntimeClassLoader loader = new RuntimeClassLoader(RUNTIME_CLASSES);
+        Class<?> target = loader.loadClass(Target.class.getName());
+        MethodHandle handle = MethodHandles.lookup().findStatic(target, "noArguments", MethodType.methodType(int.class));
+        java.lang.reflect.Field compiledCalls = target.getField("compiledCalls");
+        awaitCompiled("Target.noArguments", () -> {
+            try {
+                compiledCalls.setInt(null, 0);
+                for (int i = 0; i < 100; i++) {
+                    assertEquals(7, (int) handle.invokeExact());
+                }
+                return compiledCalls.getInt(null) == 100;
+            } catch (Throwable t) {
+                throw new AssertionError(t);
+            }
+        });
+        int many = 100_000;
+        int sum = 0;
+        long before = allocatedBytes();
+        for (int i = 0; i < many; i++) {
+            sum += (int) handle.invokeExact();
+        }
+        long allocated = allocatedBytes() - before;
+        assertEquals(7 * many, sum);
+        assertTrue("zero-argument image calls must not allocate, but allocated " + allocated + " bytes", allocated < many);
     }
 
     /**

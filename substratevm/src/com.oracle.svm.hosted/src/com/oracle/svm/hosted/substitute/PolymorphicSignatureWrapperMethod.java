@@ -235,7 +235,7 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
      */
     private void emitDirectCallFastPath(HostedGraphKit kit, AnalysisMethod method, ValueNode receiver, List<ValueNode> args) {
         Method reader = CremaSupport.singleton().getDirectCallEntryReader(substitutionBaseMethod.getName());
-        if (reader == null || args.isEmpty()) {
+        if (reader == null || (receiver == null && args.isEmpty())) {
             return;
         }
         ValueNode[] readerArgs = switch (substitutionBaseMethod.getName()) {
