@@ -65,6 +65,7 @@ import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.function.CEntryPointNativeFunctions;
 import com.oracle.svm.core.c.locale.LocaleSupport;
 import com.oracle.svm.core.code.CodeInfoTable;
+import com.oracle.svm.core.compress.ZstdDictionary;
 import com.oracle.svm.core.code.ImageCodeInfo;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.graal.nodes.CEntryPointEnterNode;
@@ -821,6 +822,7 @@ public final class CEntryPointSnippets extends SubstrateTemplates implements Sni
 
             /* Free VM-internal native memory and tear down the Java heap. */
             CodeInfoTable.tearDown();
+            ZstdDictionary.tearDown();
             NonmovableArrays.tearDown();
             Heap.getHeap().tearDown();
             VMThreads.singleton().destroy();

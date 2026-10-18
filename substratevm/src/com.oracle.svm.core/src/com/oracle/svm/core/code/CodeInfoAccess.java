@@ -34,8 +34,8 @@ import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.compress.CompressedBlob;
-import com.oracle.svm.core.nmt.NmtCategory;
-import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
+import com.oracle.svm.core.compress.HeapBlobMemory;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.core.AssertionsSupport;
 import com.oracle.svm.core.c.NonmovableArray;
@@ -49,6 +49,7 @@ import com.oracle.svm.guest.staging.log.Log;
 import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.SubstrateUtil;
+import com.oracle.svm.shared.util.UnsignedUtils;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.api.replacements.Fold;
@@ -397,24 +398,49 @@ public final class CodeInfoAccess {
     private static final int FRAME_INFO_CHUNK_INFLATING = 1;
     private static final int FRAME_INFO_CHUNK_READY = 2;
 
+    private static final OutOfMemoryError FRAME_INFO_OUT_OF_MEMORY_ERROR = new OutOfMemoryError("Could not allocate memory for the frame information");
+
     /**
-     * Installs compressed frame information of image code: the uncompressed array is allocated in
-     * unmanaged memory (its pages are only touched when chunks are inflated) and chunks are inflated
-     * on demand by {@link #ensureFrameInfoAvailable}.
+     * Installs compressed frame information of image code: chunks are inflated on demand by
+     * {@link #ensureFrameInfoAvailable} into an uncompressed array. That array and the chunk states
+     * share one mapping of {@link HeapBlobMemory}, states first so that both array headers are on
+     * the first page: the memory is zero-filled lazily by the operating system, so isolate creation
+     * touches a single page however large the frame information is. Chunks are always inflated
+     * before they are read, and zero is {@link #FRAME_INFO_CHUNK_ABSENT}. The mapping is unmapped
+     * by {@link #releaseCompressedFrameInfo} at isolate teardown.
      */
     @Uninterruptible(reason = "Executes during isolate creation.")
     static void setCompressedFrameInfo(CodeInfo info, CompressedBlob blob) {
         CodeInfoImpl impl = cast(info);
-        /*
-         * Accounted as image heap: it is image-heap content, and the Code category must start at 0.
-         * Chunks are always inflated before they are read, so the array is not zeroed: zeroing it
-         * would fault in all of its pages at isolate creation even if no chunk is ever inflated.
-         */
-        NonmovableArray<Byte> encodings = NonmovableArrays.createUninitializedByteArray(blob.getUncompressedLength(), NmtCategory.ImageHeap);
-        NonmovableArray<Integer> states = NonmovableArrays.createIntArray(blob.getChunkCount(), NmtCategory.ImageHeap);
-        UnmanagedMemoryUtil.fill(NonmovableArrays.getArrayBase(states), Word.unsigned(blob.getChunkCount()).multiply(Integer.BYTES), (byte) 0);
-        impl.setFrameInfoEncodings(encodings);
-        impl.setFrameInfoChunkStates(states);
+        Pointer memory = HeapBlobMemory.allocate(compressedFrameInfoMappingSize(blob));
+        if (memory.isNull()) {
+            throw FRAME_INFO_OUT_OF_MEMORY_ERROR;
+        }
+        impl.setFrameInfoChunkStates(NonmovableArrays.initializeIntArrayAt(memory, blob.getChunkCount()));
+        impl.setFrameInfoEncodings(NonmovableArrays.initializeByteArrayAt(memory.add(compressedFrameInfoEncodingsOffset(blob)), blob.getUncompressedLength()));
+    }
+
+    /** Releases the memory that {@link #setCompressedFrameInfo} allocated for {@code info}. */
+    @Uninterruptible(reason = "Executes during isolate teardown.")
+    static void releaseCompressedFrameInfo(CodeInfo info, CompressedBlob blob) {
+        CodeInfoImpl impl = cast(info);
+        NonmovableArray<Integer> states = impl.getFrameInfoChunkStates();
+        if (states.isNull()) {
+            return;
+        }
+        impl.setFrameInfoChunkStates(NonmovableArrays.nullArray());
+        impl.setFrameInfoEncodings(NonmovableArrays.nullArray());
+        HeapBlobMemory.free((Pointer) states, compressedFrameInfoMappingSize(blob));
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static UnsignedWord compressedFrameInfoEncodingsOffset(CompressedBlob blob) {
+        return UnsignedUtils.roundUp(NonmovableArrays.intArrayAllocationSize(blob.getChunkCount()), Word.unsigned(ObjectLayout.singleton().getAlignment()));
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static UnsignedWord compressedFrameInfoMappingSize(CompressedBlob blob) {
+        return compressedFrameInfoEncodingsOffset(blob).add(NonmovableArrays.byteArrayAllocationSize(blob.getUncompressedLength()));
     }
 
     /**

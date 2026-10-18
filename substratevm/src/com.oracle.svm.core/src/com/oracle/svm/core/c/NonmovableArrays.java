@@ -84,14 +84,9 @@ public final class NonmovableArrays {
     private static final OutOfMemoryError OUT_OF_MEMORY_ERROR = new OutOfMemoryError("Could not allocate nonmovable array");
     private static final NegativeArraySizeException NEGATIVE_ARRAY_SIZE_EXCEPTION = new NegativeArraySizeException();
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    private static <T extends NonmovableArray<?>> T createArray(int length, Class<?> arrayType, NmtCategory nmtCategory) {
-        return createArray(length, arrayType, nmtCategory, true);
-    }
-
     @SuppressWarnings("unchecked")
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    private static <T extends NonmovableArray<?>> T createArray(int length, Class<?> arrayType, NmtCategory nmtCategory, boolean zeroed) {
+    private static <T extends NonmovableArray<?>> T createArray(int length, Class<?> arrayType, NmtCategory nmtCategory) {
         if (SubstrateUtil.HOSTED) {
             Class<?> componentType = arrayType.getComponentType();
             Object array = Array.newInstance(componentType, length);
@@ -100,21 +95,74 @@ public final class NonmovableArrays {
         if (length < 0) {
             throw NEGATIVE_ARRAY_SIZE_EXCEPTION;
         }
-        DynamicHub hub = SubstrateUtil.cast(arrayType, DynamicHub.class);
-        assert LayoutEncoding.isArray(hub.getLayoutEncoding());
-        UnsignedWord size = LayoutEncoding.getArrayAllocationSize(hub.getLayoutEncoding(), length);
-        Pointer array = zeroed ? NullableNativeMemory.calloc(size, nmtCategory) : NullableNativeMemory.malloc(size, nmtCategory);
+        UnsignedWord size = allocationSize(arrayType, length);
+        Pointer array = NullableNativeMemory.calloc(size, nmtCategory);
         if (array.isNull()) {
             throw OUT_OF_MEMORY_ERROR;
         }
 
+        initializeHeader(array, arrayType, length);
+        // already zero-initialized thanks to calloc()
+        trackUnmanagedArray((NonmovableArray<?>) array);
+        return (T) array;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static UnsignedWord allocationSize(Class<?> arrayType, int length) {
+        DynamicHub hub = SubstrateUtil.cast(arrayType, DynamicHub.class);
+        assert LayoutEncoding.isArray(hub.getLayoutEncoding());
+        return LayoutEncoding.getArrayAllocationSize(hub.getLayoutEncoding(), length);
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static void initializeHeader(Pointer array, Class<?> arrayType, int length) {
+        DynamicHub hub = SubstrateUtil.cast(arrayType, DynamicHub.class);
         ObjectHeader header = Heap.getHeap().getObjectHeader();
         Word encodedHeader = header.encodeAsUnmanagedObjectHeader(hub);
         header.initializeHeaderOfNewObjectOffHeap(array, encodedHeader, true);
         array.writeInt(ObjectLayout.singleton().getArrayLengthOffset(), length, NamedLocationIdentity.OFF_HEAP_LOCATION);
-        // already zero-initialized thanks to calloc(), unless the caller asked for uninitialized memory
-        trackUnmanagedArray((NonmovableArray<?>) array);
-        return (T) array;
+    }
+
+    /**
+     * The number of bytes, including the header, that {@link #initializeByteArrayAt} needs for a
+     * byte array of the given length.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static UnsignedWord byteArrayAllocationSize(int length) {
+        return allocationSize(byte[].class, length);
+    }
+
+    /**
+     * The number of bytes, including the header, that {@link #initializeIntArrayAt} needs for an
+     * integer array of the given length.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static UnsignedWord intArrayAllocationSize(int length) {
+        return allocationSize(int[].class, length);
+    }
+
+    /**
+     * Initializes a byte array in memory that the caller allocated (with at least
+     * {@link #byteArrayAllocationSize} bytes, suitably aligned) and frees itself, e.g. memory from
+     * the {@code VirtualMemoryProvider}. Only the header is written; the elements keep whatever
+     * the memory holds. The array is not tracked and must not be passed to
+     * {@link #releaseUnmanagedArray}.
+     */
+    @SuppressWarnings("unchecked")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static NonmovableArray<Byte> initializeByteArrayAt(Pointer memory, int length) {
+        assert !SubstrateUtil.HOSTED && length >= 0;
+        initializeHeader(memory, byte[].class, length);
+        return (NonmovableArray<Byte>) memory;
+    }
+
+    /** Like {@link #initializeByteArrayAt}, for an integer array. */
+    @SuppressWarnings("unchecked")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static NonmovableArray<Integer> initializeIntArrayAt(Pointer memory, int length) {
+        assert !SubstrateUtil.HOSTED && length >= 0;
+        initializeHeader(memory, int[].class, length);
+        return (NonmovableArray<Integer>) memory;
     }
 
     /** Begins tracking an array, e.g. when it is handed over from a different isolate. */
@@ -192,16 +240,6 @@ public final class NonmovableArrays {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static NonmovableArray<Byte> createByteArray(int nbytes, NmtCategory nmtCategory) {
         return createArray(nbytes, byte[].class, nmtCategory);
-    }
-
-    /**
-     * Allocates a byte array whose elements are not initialized, for callers that write every
-     * element before reading it. Unlike {@link #createByteArray}, the allocation does not touch the
-     * memory, so pages that are never written are never faulted in.
-     */
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    public static NonmovableArray<Byte> createUninitializedByteArray(int nbytes, NmtCategory nmtCategory) {
-        return createArray(nbytes, byte[].class, nmtCategory, false);
     }
 
     /**
