@@ -30,11 +30,13 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.MetadataAccessorImpl;
 import com.oracle.svm.guest.staging.core.heap.UnknownObjectField;
 import com.oracle.svm.shared.singletons.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.shared.singletons.LayeredImageSingletonSupport;
+import com.oracle.svm.shared.singletons.MultiLayeredImageSingleton;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.MultiLayer;
@@ -74,6 +76,8 @@ public class RuntimeMetadataEncoding {
      */
     @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private volatile byte[] encoding;
     @UnknownObjectField(availability = AfterCompilation.class, canBeNull = true) private CompressedBlob compressedEncoding;
+    /** Whether {@link #getEncoding} was called at run time, for heap-blob profiles. */
+    private boolean encodingRead;
 
     /**
      * Compact side-table encoding for non-layered image reflection metadata. During image building,
@@ -90,6 +94,9 @@ public class RuntimeMetadataEncoding {
     }
 
     public byte[] getEncoding() {
+        if (HeapBlobProfile.isSupported() && !encodingRead) {
+            encodingRead = true;
+        }
         byte[] result = encoding;
         if (result == null && compressedEncoding != null) {
             /* Threads may race here; they produce identical arrays and either one is fine. */
@@ -97,6 +104,19 @@ public class RuntimeMetadataEncoding {
             encoding = result;
         }
         return result;
+    }
+
+    /** Reports whether the current run read the encoding, for heap-blob profiles. */
+    public static final class HeapBlobProfileSource implements HeapBlobProfile.Source {
+        @Override
+        public void record(HeapBlobProfile.Recorder recorder) {
+            for (RuntimeMetadataEncoding layer : MultiLayeredImageSingleton.getAllLayers(RuntimeMetadataEncoding.class)) {
+                if (layer.encodingRead) {
+                    recorder.whole(HeapBlobProfile.REFLECTION_METADATA);
+                    return;
+                }
+            }
+        }
     }
 
     /** The number of bytes the encoding occupies in the image heap, compressed or not. */
