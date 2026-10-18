@@ -60,7 +60,6 @@ import com.oracle.svm.interpreter.ristretto.compile.RistrettoDeoptimizationSuppo
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoDeoptimizedInterpreterFrame;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoGraphBuilderPlugins;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoMethodHandleLinkagePhase;
-import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.interpreter.ristretto.profile.RistrettoCompilationManager;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
@@ -72,7 +71,6 @@ import com.oracle.svm.util.JVMCIReflectionUtil;
 
 import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import jdk.graal.compiler.phases.util.Providers;
-import jdk.vm.ci.code.InstalledCode;
 
 /**
  * Ristretto provides runtime Just-In-Time (JIT) compilation support for the Crema interpreter in
@@ -97,9 +95,9 @@ public final class RistrettoFeature implements InternalFeature {
     private static final String DYNAMIC_HUB_COMPANION_INTERPRETER_TYPE_FIELD = "interpreterType";
     private static final String INTERPRETER_RESOLVED_OBJECT_TYPE_VTABLE_HOLDER_FIELD = "vtableHolder";
     private static final String VTABLE_HOLDER_VTABLE_FIELD = "vtable";
-    private static final String INTERPRETER_RESOLVED_JAVA_METHOD_RISTRETTO_METHOD_FIELD = "ristrettoMethod";
-    private static final String RISTRETTO_METHOD_INSTALLED_CODE_FIELD = "installedCode";
-    private static final String INSTALLED_CODE_ENTRY_POINT_FIELD = "entryPoint";
+    private static final String DIRECT_CALL_ENTRY_FIELD = "directCallEntry";
+    private static final String PATCHED_SLOT_ADDRESSES_FIELD = "patchedSlotAddresses";
+    private static final String PATCHED_SLOT_COUNT_FIELD = "patchedSlotCount";
 
     private static final Method interpEntryVoid = ReflectionUtil.lookupMethod(InterpreterDeoptEntryPoints.class, "entryVoid", RistrettoDeoptimizedInterpreterFrame.class);
     private static final Method interpEntryInt = ReflectionUtil.lookupMethod(InterpreterDeoptEntryPoints.class, "entryInt", RistrettoDeoptimizedInterpreterFrame.class);
@@ -162,13 +160,14 @@ public final class RistrettoFeature implements InternalFeature {
          * InterpreterExecutionOffsets. Analysis does not necessarily observe those reads as normal
          * Java field loads, so preserve the hosted field metadata explicitly.
          */
+        access.registerAsInHeap(InterpreterExecutionOffsets.class, "Offsets used by compiled interpreter dispatch prefixes");
         var metaAccess = access.getMetaAccess();
         registerFastPathField(access, metaAccess.lookupJavaType(DynamicHubCompanion.class), DYNAMIC_HUB_COMPANION_INTERPRETER_TYPE_FIELD);
         registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedObjectType.class), INTERPRETER_RESOLVED_OBJECT_TYPE_VTABLE_HOLDER_FIELD);
         registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedObjectType.VTableHolder.class), VTABLE_HOLDER_VTABLE_FIELD);
-        registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedJavaMethod.class), INTERPRETER_RESOLVED_JAVA_METHOD_RISTRETTO_METHOD_FIELD);
-        registerFastPathField(access, metaAccess.lookupJavaType(RistrettoMethod.class), RISTRETTO_METHOD_INSTALLED_CODE_FIELD);
-        registerFastPathField(access, metaAccess.lookupJavaType(InstalledCode.class), INSTALLED_CODE_ENTRY_POINT_FIELD);
+        registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedJavaMethod.class), DIRECT_CALL_ENTRY_FIELD);
+        registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedJavaMethod.class), PATCHED_SLOT_ADDRESSES_FIELD);
+        registerFastPathField(access, metaAccess.lookupJavaType(InterpreterResolvedJavaMethod.class), PATCHED_SLOT_COUNT_FIELD);
 
         if (RistrettoOptions.useDeoptimization()) {
             DeoptimizationFeature.registerDeoptimizeRuntimeAsRoot(access, RistrettoFeature.class);
@@ -255,16 +254,15 @@ public final class RistrettoFeature implements InternalFeature {
         var interpreterResolvedObjectType = metaAccess.lookupJavaType(InterpreterResolvedObjectType.class);
         var vtableHolderType = metaAccess.lookupJavaType(InterpreterResolvedObjectType.VTableHolder.class);
         var interpreterResolvedJavaMethodType = metaAccess.lookupJavaType(InterpreterResolvedJavaMethod.class);
-        var ristrettoMethodType = metaAccess.lookupJavaType(RistrettoMethod.class);
-        var installedCodeType = metaAccess.lookupJavaType(InstalledCode.class);
 
         InterpreterExecutionOffsets offsets = new InterpreterExecutionOffsets(
                         JVMCIReflectionUtil.getUniqueDeclaredField(dynamicHubCompanionType, DYNAMIC_HUB_COMPANION_INTERPRETER_TYPE_FIELD).getOffset(),
                         JVMCIReflectionUtil.getUniqueDeclaredField(interpreterResolvedObjectType, INTERPRETER_RESOLVED_OBJECT_TYPE_VTABLE_HOLDER_FIELD).getOffset(),
                         JVMCIReflectionUtil.getUniqueDeclaredField(vtableHolderType, VTABLE_HOLDER_VTABLE_FIELD).getOffset(),
-                        JVMCIReflectionUtil.getUniqueDeclaredField(interpreterResolvedJavaMethodType, INTERPRETER_RESOLVED_JAVA_METHOD_RISTRETTO_METHOD_FIELD).getOffset(),
-                        JVMCIReflectionUtil.getUniqueDeclaredField(ristrettoMethodType, RISTRETTO_METHOD_INSTALLED_CODE_FIELD).getOffset(),
-                        JVMCIReflectionUtil.getUniqueDeclaredField(installedCodeType, INSTALLED_CODE_ENTRY_POINT_FIELD).getOffset());
+                        JVMCIReflectionUtil.getUniqueDeclaredField(interpreterResolvedJavaMethodType, DIRECT_CALL_ENTRY_FIELD).getOffset(),
+                        JVMCIReflectionUtil.getUniqueDeclaredField(interpreterResolvedJavaMethodType, PATCHED_SLOT_ADDRESSES_FIELD).getOffset(),
+                        JVMCIReflectionUtil.getUniqueDeclaredField(interpreterResolvedJavaMethodType, PATCHED_SLOT_COUNT_FIELD).getOffset(),
+                        InterpreterResolvedJavaMethod.maxPatchedSlots());
 
         ImageSingletons.add(InterpreterExecutionOffsets.class, offsets);
         access.registerAsImmutable(offsets);
