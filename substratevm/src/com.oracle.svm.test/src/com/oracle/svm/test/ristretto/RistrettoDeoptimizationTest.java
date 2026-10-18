@@ -99,13 +99,14 @@ public class RistrettoDeoptimizationTest {
     public static final class TestFeature implements Feature {
         @Override
         public void beforeAnalysis(BeforeAnalysisAccess access) {
-            for (List<Class<?>> classes : List.of(RUNTIME_CLASSES, RistrettoVarHandleTest.RUNTIME_CLASSES, RistrettoMethodHandleTest.RUNTIME_CLASSES)) {
+            for (List<Class<?>> classes : List.of(RUNTIME_CLASSES, RistrettoVarHandleTest.RUNTIME_CLASSES, RistrettoMethodHandleTest.RUNTIME_CLASSES, RistrettoDispatchTest.RUNTIME_CLASSES)) {
                 for (Class<?> c : classes) {
                     RuntimeResourceAccess.addResource(RistrettoDeoptimizationTest.class.getModule(), classFileName(c));
                 }
             }
             RistrettoVarHandleTest.beforeAnalysis();
             RistrettoMethodHandleTest.beforeAnalysis();
+            RistrettoDispatchTest.beforeAnalysis();
             /*
              * Links the VarHandle call sites of the AOT methods that AtomicUser calls in the
              * builder JVM, where JVMCI then resolves them to their invokehandle adapters

@@ -224,6 +224,12 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
     @UnknownObjectField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
     private PreparedSignature preparedSignature;
 
+    /** Capacity used by the generated dispatch prefixes, without duplicating the tracking limit. */
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public static int maxPatchedSlots() {
+        return MAX_PATCHED_SLOTS;
+    }
+
     /** The compiled entry calls may jump to directly, or 0 while there is none. */
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public long getDirectCallEntry() {

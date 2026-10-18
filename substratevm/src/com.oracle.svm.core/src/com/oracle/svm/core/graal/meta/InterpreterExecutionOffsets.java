@@ -36,18 +36,20 @@ public final class InterpreterExecutionOffsets {
     private final int dynamicHubCompanionInterpreterTypeOffset;
     private final int interpreterResolvedObjectTypeVtableHolderOffset;
     private final int vtableHolderVtableOffset;
-    private final int interpreterResolvedJavaMethodRistrettoMethodOffset;
-    private final int ristrettoMethodInstalledCodeOffset;
-    private final int installedCodeEntryPointOffset;
+    private final int directCallEntryOffset;
+    private final int patchedSlotAddressesOffset;
+    private final int patchedSlotCountOffset;
+    private final int maxPatchedSlots;
 
     public InterpreterExecutionOffsets(int dynamicHubCompanionInterpreterTypeOffset, int interpreterResolvedObjectTypeVtableHolderOffset, int vtableHolderVtableOffset,
-                    int interpreterResolvedJavaMethodRistrettoMethodOffset, int ristrettoMethodInstalledCodeOffset, int installedCodeEntryPointOffset) {
+                    int directCallEntryOffset, int patchedSlotAddressesOffset, int patchedSlotCountOffset, int maxPatchedSlots) {
         this.dynamicHubCompanionInterpreterTypeOffset = dynamicHubCompanionInterpreterTypeOffset;
         this.interpreterResolvedObjectTypeVtableHolderOffset = interpreterResolvedObjectTypeVtableHolderOffset;
         this.vtableHolderVtableOffset = vtableHolderVtableOffset;
-        this.interpreterResolvedJavaMethodRistrettoMethodOffset = interpreterResolvedJavaMethodRistrettoMethodOffset;
-        this.ristrettoMethodInstalledCodeOffset = ristrettoMethodInstalledCodeOffset;
-        this.installedCodeEntryPointOffset = installedCodeEntryPointOffset;
+        this.directCallEntryOffset = directCallEntryOffset;
+        this.patchedSlotAddressesOffset = patchedSlotAddressesOffset;
+        this.patchedSlotCountOffset = patchedSlotCountOffset;
+        this.maxPatchedSlots = maxPatchedSlots;
     }
 
     public static InterpreterExecutionOffsets singleton() {
@@ -66,15 +68,19 @@ public final class InterpreterExecutionOffsets {
         return vtableHolderVtableOffset;
     }
 
-    public int getInterpreterResolvedJavaMethodRistrettoMethodOffset() {
-        return interpreterResolvedJavaMethodRistrettoMethodOffset;
+    public int getDirectCallEntryOffset() {
+        return directCallEntryOffset;
     }
 
-    public int getRistrettoMethodInstalledCodeOffset() {
-        return ristrettoMethodInstalledCodeOffset;
+    public int getPatchedSlotAddressesOffset() {
+        return patchedSlotAddressesOffset;
     }
 
-    public int getInstalledCodeEntryPointOffset() {
-        return installedCodeEntryPointOffset;
+    public int getPatchedSlotCountOffset() {
+        return patchedSlotCountOffset;
+    }
+
+    public int getMaxPatchedSlots() {
+        return maxPatchedSlots;
     }
 }
