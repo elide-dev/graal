@@ -52,8 +52,10 @@ import com.oracle.svm.interpreter.metadata.InterpreterResolvedObjectType;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.test.NativeImageBuildArgs;
 
 /** Actual hub-slot checks: an assembly tail jump can bypass Java fast-path test hooks. */
+@NativeImageBuildArgs("--add-exports=org.graalvm.nativeimage.guest.staging/com.oracle.svm.guest.staging.core.graal=ALL-UNNAMED")
 public class RistrettoDispatchTest {
     static final List<Class<?>> RUNTIME_CLASSES = List.of(Target.class);
 
