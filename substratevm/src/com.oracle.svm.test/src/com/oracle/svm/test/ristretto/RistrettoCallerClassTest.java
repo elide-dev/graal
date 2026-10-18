@@ -32,6 +32,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -119,6 +120,18 @@ public class RistrettoCallerClassTest {
             return sum;
         }
 
+        public static long allocationProbe(int count, boolean full, int[] compiled) {
+            long before = FrameProbe.allocatedBytes();
+            for (int i = 0; i < count; i++) {
+                if (FrameProbe.allocationCaller(full) != Outer.class) {
+                    throw new AssertionError("allocation probe caller identity changed");
+                }
+            }
+            long bytes = FrameProbe.allocatedBytes() - before;
+            compiled[0] += Probe.compiled();
+            return bytes;
+        }
+
         public static Class<?> caught(int[] compiled) {
             try {
                 FrameProbe.fail();
@@ -165,6 +178,30 @@ public class RistrettoCallerClassTest {
         static volatile int lastStubs;
         static volatile int lastHandlerPairs;
         static volatile int lastDeoptimizedFrames;
+        static volatile int lastSyntheticFrames;
+
+        public static long allocatedBytes() {
+            var bean = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+            if (!bean.isThreadAllocatedMemorySupported() || !bean.isThreadAllocatedMemoryEnabled()) {
+                throw new AssertionError("thread allocation accounting unavailable");
+            }
+            long bytes = bean.getCurrentThreadAllocatedBytes();
+            if (bytes < 0) {
+                throw new AssertionError("thread allocation reading unavailable");
+            }
+            return bytes;
+        }
+
+        @NeverInline("Measure caller lookup separately from the differential semantic oracle.")
+        public static Class<?> allocationCaller(boolean full) {
+            Pointer sp = KnownIntrinsics.readCallerStackPointer();
+            if (!full) {
+                return StackTraceUtils.getCallerClass(sp, false);
+            }
+            AllocationCallerVisitor visitor = new AllocationCallerVisitor();
+            JavaStackWalker.walkCurrentThread(sp, visitor);
+            return visitor.result;
+        }
 
         @NeverInline("Exercise unwinding from image code into a guest exception handler.")
         public static void fail() {
@@ -193,10 +230,25 @@ public class RistrettoCallerClassTest {
             lastStubs = reference.stubs;
             lastHandlerPairs = reference.handlerPairs;
             lastDeoptimizedFrames = reference.deoptimizedFrames;
+            lastSyntheticFrames = reference.syntheticFrames;
             if (actual != reference.result) {
                 throw new AssertionError("cursor and full caller lookup disagree");
             }
             return actual;
+        }
+    }
+
+    /** Full metadata decoding of the same live runtime caller used by allocationCaller. */
+    static final class AllocationCallerVisitor extends JavaStackFrameVisitor {
+        Class<?> result;
+
+        @Override
+        public boolean visitFrame(FrameSourceInfo info, Pointer sp) {
+            if (info.getSourceClass() == null) {
+                return true;
+            }
+            result = info.getSourceClass();
+            return false;
         }
     }
 
@@ -229,6 +281,7 @@ public class RistrettoCallerClassTest {
         int stubs;
         int handlerPairs;
         int deoptimizedFrames;
+        int syntheticFrames;
 
         FullCallerVisitor(boolean ignoreFirst) {
             this.ignoreFirst = ignoreFirst;
@@ -239,6 +292,9 @@ public class RistrettoCallerClassTest {
             if (InterpreterSupport.isEnabled()) {
                 var interpreter = InterpreterSupport.singleton();
                 for (FrameInfoQueryResult frame = CodeInfoTable.lookupCodeInfoQueryResult(codeInfo, ip).getFrameInfo(); frame != null; frame = frame.getCaller()) {
+                    if (frame.getSourceClass() == null && interpreter.getSyntheticMethodFrameInfo(frame) != null) {
+                        syntheticFrames++;
+                    }
                     if (interpreter.isInterpreterRoot(frame)) {
                         roots++;
                     }
@@ -382,6 +438,28 @@ public class RistrettoCallerClassTest {
     }
 
     @Test
+    public void compiledCallerLookupAvoidsFullValueDecoding() throws Throwable {
+        RuntimeClassLoader loader = new RuntimeClassLoader(RUNTIME_CLASSES);
+        Class<?> outer = loader.loadClass(Outer.class.getName());
+        Method probe = outer.getMethod("allocationProbe", int.class, boolean.class, int[].class);
+        for (boolean full : new boolean[]{false, true}) {
+            awaitCompiled("allocation probe with a live compiled caller", () -> {
+                int[] compiled = new int[1];
+                invoke(probe, 256, full, compiled);
+                return compiled[0] == 1;
+            });
+        }
+        int[] fastCompiled = new int[1];
+        int[] fullCompiled = new int[1];
+        long fast = (long) invoke(probe, 4_000, false, fastCompiled);
+        long full = (long) invoke(probe, 4_000, true, fullCompiled);
+        assertEquals("optimized caller must remain compiled", 1, fastCompiled[0]);
+        assertEquals("full-decoder caller must remain compiled", 1, fullCompiled[0]);
+        assertTrue("allocation readings must be valid", fast >= 0 && full > 0);
+        assertTrue("compiled caller lookup must avoid full value decoding: fast=" + fast + ", full=" + full, fast * 10 <= full * 9);
+    }
+
+    @Test
     public void interpretedAndCompiledIdentityAndAccess() throws Throwable {
         RuntimeClassLoader loader = new RuntimeClassLoader(RUNTIME_CLASSES);
         Class<?> inner = loader.loadClass(Inner.class.getName());
@@ -422,6 +500,7 @@ public class RistrettoCallerClassTest {
                 if (compiled[0] != 1 || compiled[1] != 1) {
                     return false;
                 }
+                assertTrue("null-source compiled frames were translated for ignoreFirst=" + ignoreFirst, FrameProbe.lastSyntheticFrames > 0);
             }
             return true;
         });

@@ -393,20 +393,45 @@ class GetCallerClassVisitor extends JavaStackFrameVisitor {
         /*
          * Preflight the entire physical frame before consuming ignoreFirst or interpreter state.
          * A Java bytecode handler may be inlined above its generated stub. Interpreter roots need
-         * values, and synthetic runtime frames need the original caller chain for translation.
+         * values. Known synthetic runtime frames translate from method metadata alone; unknown
+         * null-source frames retain the original caller chain and full translation.
          */
+        FrameSourceInfo firstSyntheticFrame = null;
+        ArrayList<FrameSourceInfo> otherSyntheticFrames = null;
         cursor.initialize(codeInfo, ip, true);
         while (cursor.advance()) {
             FrameInfoQueryResult frame = cursor.get();
-            if (frame.getSourceClass() == null || (InterpreterSupport.isEnabled() &&
-                            (InterpreterSupport.singleton().isInterpreterRoot(frame) || InterpreterSupport.singleton().isInterpreterBytecodeHandlerStub(frame)))) {
+            if (InterpreterSupport.isEnabled() &&
+                            (InterpreterSupport.singleton().isInterpreterRoot(frame) || InterpreterSupport.singleton().isInterpreterBytecodeHandlerStub(frame))) {
                 return super.visitRegularFrame(sp, ip, codeInfo);
             }
+            if (frame.getSourceClass() == null) {
+                FrameSourceInfo synthetic = InterpreterSupport.isEnabled() ? InterpreterSupport.singleton().getSyntheticMethodFrameInfo(frame) : null;
+                if (synthetic == null) {
+                    return super.visitRegularFrame(sp, ip, codeInfo);
+                }
+                if (firstSyntheticFrame == null) {
+                    firstSyntheticFrame = synthetic;
+                } else {
+                    if (otherSyntheticFrames == null) {
+                        otherSyntheticFrames = new ArrayList<>(2);
+                    }
+                    otherSyntheticFrames.add(synthetic);
+                }
+            }
         }
-        /* Ordinary source metadata is sufficient. The cursor is overwritten on each advance. */
+        /* Synthetic source objects are independent of the reusable cursor and need no values. */
+        int syntheticIndex = 0;
         cursor.initialize(codeInfo, ip, true);
         while (cursor.advance()) {
-            if (!visitFrame(cursor.get(), sp)) {
+            FrameInfoQueryResult frame = cursor.get();
+            FrameSourceInfo sourceInfo = frame;
+            if (frame.getSourceClass() == null) {
+                sourceInfo = syntheticIndex == 0 ? firstSyntheticFrame : otherSyntheticFrames.get(syntheticIndex - 1);
+                syntheticIndex++;
+                assert sourceInfo != null : "Synthetic caller metadata changed after preflight";
+            }
+            if (!visitFrame(sourceInfo, sp)) {
                 return false;
             }
         }
