@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.interpreter.metadata;
 
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+
 import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -41,6 +43,7 @@ import com.oracle.svm.espresso.classfile.descriptors.Name;
 import com.oracle.svm.espresso.classfile.descriptors.Symbol;
 import com.oracle.svm.espresso.classfile.descriptors.Type;
 import com.oracle.svm.espresso.classfile.descriptors.TypeSymbols;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.vm.ci.meta.Assumptions;
@@ -136,6 +139,12 @@ public abstract class InterpreterResolvedJavaType extends InterpreterAnnotated i
 
     public final DynamicHub getHub() {
         return DynamicHub.fromClass(getJavaClass());
+    }
+
+    /** The {@link #getHub() hub}, for uninterruptible callers. */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public final DynamicHub peekHub() {
+        return DynamicHub.fromClass(clazz);
     }
 
     public final boolean isWordType() {

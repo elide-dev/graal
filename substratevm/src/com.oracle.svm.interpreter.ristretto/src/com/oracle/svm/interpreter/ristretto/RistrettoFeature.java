@@ -37,6 +37,7 @@ import com.oracle.svm.core.ParsingReason;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.meta.InterpreterExecutionOffsets;
+import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.core.meta.MethodPointer;
@@ -50,6 +51,7 @@ import com.oracle.svm.interpreter.CremaFeature;
 import com.oracle.svm.interpreter.InterpreterFeature;
 import com.oracle.svm.interpreter.InterpreterFrame;
 import com.oracle.svm.interpreter.InterpreterOptions;
+import com.oracle.svm.interpreter.MethodHandleLinkage;
 import com.oracle.svm.interpreter.RistrettoInterpreterSupport;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedObjectType;
@@ -57,6 +59,7 @@ import com.oracle.svm.interpreter.ristretto.compile.InterpreterDeoptEntryPoints;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoDeoptimizationSupport;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoDeoptimizedInterpreterFrame;
 import com.oracle.svm.interpreter.ristretto.compile.RistrettoGraphBuilderPlugins;
+import com.oracle.svm.interpreter.ristretto.compile.RistrettoMethodHandleLinkagePhase;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.interpreter.ristretto.profile.RistrettoCompilationManager;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
@@ -146,6 +149,12 @@ public final class RistrettoFeature implements InternalFeature {
         FeatureImpl.BeforeAnalysisAccessImpl access = (FeatureImpl.BeforeAnalysisAccessImpl) a;
         preserveBytecodeSupport.beforeAnalysis(access);
         RistrettoUtils.forcePreserveType(access.getBigBang(), RistrettoDirectives.class);
+        /*
+         * Ristretto code calls this foreign call target (see RistrettoMethodHandleLinkagePhase),
+         * which no image code calls, so it is compiled only as a root.
+         */
+        access.registerAsRoot(ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToVirtualEntryHolder", Object.class, Object.class, Object.class), true,
+                        "Foreign call target of Ristretto code, registered in " + RistrettoFeature.class);
         /* OSR code reads the entering interpreter frame from this thread local. */
         RistrettoOSRFrameLayout.singleton().setCurrentFrame(ImageSingletons.lookup(VMThreadLocalCollector.class).forFastThreadLocal(RistrettoOSRSupport.currentFrameThreadLocal()));
         /*
@@ -266,6 +275,11 @@ public final class RistrettoFeature implements InternalFeature {
      * Registers Ristretto graph builder plugins that lower Crema interpreter operations and
      * runtime-compilation hooks.
      */
+    @Override
+    public void registerForeignCalls(SubstrateForeignCallsProvider foreignCalls) {
+        RistrettoMethodHandleLinkagePhase.registerForeignCalls(foreignCalls);
+    }
+
     @Override
     public void registerGraphBuilderPlugins(Providers providers, GraphBuilderConfiguration.Plugins plugins, ParsingReason reason) {
         registerRistrettoGraphBuilderPlugins(plugins);

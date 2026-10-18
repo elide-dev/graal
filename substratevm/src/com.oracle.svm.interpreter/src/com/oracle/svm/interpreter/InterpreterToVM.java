@@ -1051,7 +1051,7 @@ public final class InterpreterToVM {
 
     /**
      * Lets compiled method-handle linkers call {@code target} directly (elide-dev/graal#112). A
-     * {@code linkToStatic}, {@code linkToSpecial} or {@code invokeBasic} in compiled code (see
+     * {@code linkTo*} (except {@code linkToNative}) or {@code invokeBasic} in compiled code (see
      * {@code PolymorphicSignatureWrapperMethod} and {@code NonSnippetLowerings}) calls the direct
      * call entry of the method its member name resolves to, if there is one, instead of going
      * through {@link #dispatchInvocation}. Ristretto publishes that entry for the run-time loaded

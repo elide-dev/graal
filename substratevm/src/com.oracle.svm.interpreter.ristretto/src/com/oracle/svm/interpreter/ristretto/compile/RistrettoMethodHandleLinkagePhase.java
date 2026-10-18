@@ -29,16 +29,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.graal.nodes.DirectCallEntryMethodCallTargetNode;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.methodhandles.MethodHandleInterpreterUtils;
+import com.oracle.svm.core.snippets.SnippetRuntime;
+import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 import com.oracle.svm.espresso.shared.meta.SignaturePolymorphicIntrinsic;
+import com.oracle.svm.interpreter.MethodHandleLinkage;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaType;
 import com.oracle.svm.interpreter.ristretto.RistrettoOptions;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoType;
 import com.oracle.svm.shared.util.VMError;
 
+import jdk.graal.compiler.core.common.spi.ForeignCallDescriptor.CallSideEffect;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.FixedNode;
@@ -49,6 +54,7 @@ import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.calc.ConditionalNode;
 import jdk.graal.compiler.nodes.calc.IsNullNode;
+import jdk.graal.compiler.nodes.extended.ForeignCallNode;
 import jdk.graal.compiler.nodes.java.LoadFieldNode;
 import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
@@ -58,8 +64,9 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
- * Lets calls to {@code MethodHandle.invokeBasic}, {@code linkToStatic} and {@code linkToSpecial}
- * that Ristretto could not resolve at compile time call their target directly (elide-dev/graal#112).
+ * Lets calls to {@code MethodHandle.invokeBasic}, {@code linkToStatic}, {@code linkToSpecial},
+ * {@code linkToVirtual} and {@code linkToInterface} that Ristretto could not resolve at compile
+ * time call their target directly (elide-dev/graal#112).
  * <p>
  * Such a call goes to the interpreter's enter stub for the intrinsic, which resolves the target
  * from the member name ({@code linkTo*}) or from the handle's lambda form ({@code invokeBasic}),
@@ -71,12 +78,23 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * it compiles and the interpreter for image methods it resolves, and the stub otherwise. The
  * member name is the last argument of a {@code linkTo*} call; the callee does not read it.
  * <p>
- * {@code linkToVirtual} and {@code linkToInterface} select their target from the receiver, and
- * stay with the stub. A {@code linkToStatic} target is called without a class initialization
+ * {@code linkToVirtual} and {@code linkToInterface} select their target from the receiver: a
+ * foreign call to {@link MethodHandleLinkage#linkToVirtualEntryHolder} selects it from the
+ * receiver's interpreter vtable, as the interpreter does, and returns the intrinsic when the call
+ * must take the stub (a null receiver, which the stub reports, or a target it cannot select). The
+ * selection does not reach a safepoint and needs no frame state. A {@code linkToStatic} target is called without a class initialization
  * check, as on HotSpot: the lambda forms of direct handles to methods of classes that are not
  * initialized initialize them first.
  */
 public final class RistrettoMethodHandleLinkagePhase extends BasePhase<CoreProviders> {
+
+    /** Selects the target of a {@code linkToVirtual} or {@code linkToInterface} call. */
+    private static final SubstrateForeignCallDescriptor LINK_TO_VIRTUAL_ENTRY_HOLDER = SnippetRuntime.findForeignCall(MethodHandleLinkage.class, "linkToVirtualEntryHolder",
+                    CallSideEffect.NO_SIDE_EFFECT);
+
+    public static void registerForeignCalls(SubstrateForeignCallsProvider foreignCalls) {
+        foreignCalls.register(LINK_TO_VIRTUAL_ENTRY_HOLDER);
+    }
 
     /** A member name that is not resolved, which stands in for a missing lambda form entry. */
     private static final Object UNRESOLVED_MEMBER_NAME = MethodHandleInterpreterUtils.newUnresolvedMemberName();
@@ -120,6 +138,14 @@ public final class RistrettoMethodHandleLinkagePhase extends BasePhase<CoreProvi
             return;
         }
         FixedNode before = invoke.asFixedNode();
+        /* The intrinsic itself never has a direct call entry, so the call takes the stub. */
+        ConstantNode stub = ConstantNode.forConstant(context.getSnippetReflection().forObject(intrinsicMethod.getInterpreterMethod()), context.getMetaAccess(), graph);
+        if (intrinsic == SignaturePolymorphicIntrinsic.LinkToVirtual || intrinsic == SignaturePolymorphicIntrinsic.LinkToInterface) {
+            ForeignCallNode select = graph.add(new ForeignCallNode(LINK_TO_VIRTUAL_ENTRY_HOLDER, arguments[0], arguments[arguments.length - 1], stub));
+            graph.addBeforeFixed(before, select);
+            replaceCallTarget(graph, callTarget, arguments, select);
+            return;
+        }
         ValueNode memberName;
         if (intrinsic == SignaturePolymorphicIntrinsic.InvokeBasic) {
             ValueNode form = addLoad(graph, before, arguments[0], fields.form);
@@ -131,13 +157,15 @@ public final class RistrettoMethodHandleLinkagePhase extends BasePhase<CoreProvi
             memberName = arguments[arguments.length - 1];
         }
         ValueNode resolved = addLoad(graph, before, memberName, fields.resolved);
-        /* The intrinsic itself never has a direct call entry, so the call takes the stub. */
-        ConstantNode stub = ConstantNode.forConstant(context.getSnippetReflection().forObject(intrinsicMethod.getInterpreterMethod()), context.getMetaAccess(), graph);
         ValueNode entryHolder = conditional(graph, isNull(graph, resolved), stub, resolved);
         if (intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial) {
             /* A null receiver is left to the stub, which throws the NullPointerException. */
             entryHolder = conditional(graph, isNull(graph, arguments[0]), stub, entryHolder);
         }
+        replaceCallTarget(graph, callTarget, arguments, entryHolder);
+    }
+
+    private static void replaceCallTarget(StructuredGraph graph, MethodCallTargetNode callTarget, ValueNode[] arguments, ValueNode entryHolder) {
         DirectCallEntryMethodCallTargetNode linked = graph.add(new DirectCallEntryMethodCallTargetNode(callTarget.invokeKind(), callTarget.targetMethod(), arguments, callTarget.returnStamp(),
                         callTarget.getTypeProfile(), entryHolder));
         callTarget.replaceAndDelete(linked);
@@ -147,7 +175,8 @@ public final class RistrettoMethodHandleLinkagePhase extends BasePhase<CoreProvi
     private static SignaturePolymorphicIntrinsic linkageIntrinsic(Object method) {
         if (method instanceof RistrettoMethod ristrettoMethod) {
             SignaturePolymorphicIntrinsic intrinsic = ristrettoMethod.getInterpreterMethod().getSignaturePolymorphicIntrinsic();
-            if (intrinsic == SignaturePolymorphicIntrinsic.InvokeBasic || intrinsic == SignaturePolymorphicIntrinsic.LinkToStatic || intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial) {
+            if (intrinsic == SignaturePolymorphicIntrinsic.InvokeBasic || intrinsic == SignaturePolymorphicIntrinsic.LinkToStatic || intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial ||
+                            intrinsic == SignaturePolymorphicIntrinsic.LinkToVirtual || intrinsic == SignaturePolymorphicIntrinsic.LinkToInterface) {
                 return intrinsic;
             }
         }

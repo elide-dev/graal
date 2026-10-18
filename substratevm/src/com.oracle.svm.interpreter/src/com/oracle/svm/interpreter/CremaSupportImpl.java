@@ -2061,6 +2061,7 @@ public class CremaSupportImpl implements CremaSupport {
         Target_java_lang_invoke_MemberName mnTarget = (Target_java_lang_invoke_MemberName) args[args.length - 1];
         InterpreterResolvedJavaMethod target = InterpreterResolvedJavaMethod.fromMemberName(mnTarget);
         InterpreterUnresolvedSignature signature = target.getSignature();
+        publishVirtualTargetDirectCallEntry(args);
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToVirtual ", target, basicArgs);
         try {
@@ -2118,6 +2119,7 @@ public class CremaSupportImpl implements CremaSupport {
         Target_java_lang_invoke_MemberName mnTarget = (Target_java_lang_invoke_MemberName) args[args.length - 1];
         InterpreterResolvedJavaMethod target = InterpreterResolvedJavaMethod.fromMemberName(mnTarget);
         InterpreterUnresolvedSignature signature = target.getSignature();
+        publishVirtualTargetDirectCallEntry(args);
         Object[] basicArgs = unbasic(args, signature, true);
         logIntrinsic("[from compiled] linkToInterface ", target, basicArgs);
         try {
@@ -2125,6 +2127,22 @@ public class CremaSupportImpl implements CremaSupport {
             return Interpreter.rebasic(result, signature.getReturnKind());
         } catch (SemanticJavaException e) {
             throw uncheckedThrow(e.getCause());
+        }
+    }
+
+    /**
+     * Publishes the direct call entry of the image method that {@code linkToVirtual} or
+     * {@code linkToInterface} with {@code args} selects, so that later calls go to it directly (see
+     * {@link MethodHandleLinkage}). A null receiver throws the {@link NullPointerException}, as on
+     * HotSpot.
+     */
+    private static void publishVirtualTargetDirectCallEntry(Object[] args) {
+        if (args[0] == null) {
+            throw new NullPointerException();
+        }
+        InterpreterResolvedJavaMethod selected = MethodHandleLinkage.selectVirtualTarget(args[0], args[args.length - 1]);
+        if (selected != null) {
+            InterpreterToVM.publishImageMethodDirectCallEntry(selected);
         }
     }
 
@@ -2225,6 +2243,7 @@ public class CremaSupportImpl implements CremaSupport {
         return switch (intrinsicName) {
             case "linkToStatic" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToStaticEntry", Object.class);
             case "linkToSpecial" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToSpecialEntry", Object.class, Object.class);
+            case "linkToVirtual", "linkToInterface" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "linkToVirtualEntry", Object.class, Object.class);
             case "invokeBasic" -> ReflectionUtil.lookupMethod(MethodHandleLinkage.class, "invokeBasicEntry", Object.class);
             default -> null;
         };

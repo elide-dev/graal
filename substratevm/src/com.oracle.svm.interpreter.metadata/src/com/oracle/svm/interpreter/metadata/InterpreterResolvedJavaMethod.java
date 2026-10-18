@@ -829,11 +829,13 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
         return interpretedCode.length;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     @Override
     public final Symbol<Name> getSymbolicName() {
         return name;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     @Override
     public final Symbol<Signature> getSymbolicSignature() {
         return signatureSymbol;
@@ -844,6 +846,7 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
         return name.toString();
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     @Override
     public final InterpreterResolvedObjectType getDeclaringClass() {
         return declaringClass;
@@ -1040,6 +1043,7 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
         this.nativeEntryPoint = ReferenceConstant.createFromNonNullReference(nativeEntryPoint);
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public final int getVTableIndex() {
         return vtableIndex;
     }
@@ -1079,6 +1083,12 @@ public class InterpreterResolvedJavaMethod extends InterpreterAnnotated implemen
 
     public final void setOneImplementation(InterpreterResolvedJavaMethod oneImplementation) {
         this.oneImplementation = oneImplementation;
+    }
+
+    /** The {@link #getOneImplementation() one implementation}, without checking that there is one. */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public final InterpreterResolvedJavaMethod peekOneImplementation() {
+        return oneImplementation;
     }
 
     public final InterpreterResolvedJavaMethod getOneImplementation() {

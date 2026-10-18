@@ -208,8 +208,9 @@ public interface CremaSupport {
 
     /**
      * Returns the method that image code calls to read the direct call entry of the target of a
-     * {@code MethodHandle.invokeBasic}, {@code linkToStatic} or {@code linkToSpecial} call, with
-     * the arguments of that call, or null for other intrinsics (elide-dev/graal#112). It returns 0
+     * {@code MethodHandle.invokeBasic}, {@code linkToStatic}, {@code linkToSpecial},
+     * {@code linkToVirtual} or {@code linkToInterface} call, with the arguments of that call, or
+     * null for other intrinsics (elide-dev/graal#112). It returns 0
      * when the call must take the slow path, and reads the entry without a safepoint, so that the
      * caller can call the entry before invalidated code withdraws it.
      */

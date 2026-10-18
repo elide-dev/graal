@@ -1031,6 +1031,7 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
         return typeIDDepth;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getNumClassTypes() {
         return numClassTypes;
     }
@@ -1042,10 +1043,12 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
      * {@link #openTypeWorldInterfaceHashTable}. Their number is excluded from the number of
      * iterable interfaces.
      */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getNumIterableInterfaceTypes() {
         return numIterableInterfaceTypes;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int[] getOpenTypeWorldTypeCheckSlots() {
         return openTypeWorldTypeCheckSlots;
     }
@@ -1055,10 +1058,12 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
         return interfaceID;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int[] getOpenTypeWorldInterfaceHashTable() {
         return openTypeWorldInterfaceHashTable;
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getOpenTypeWorldInterfaceHashParam() {
         return openTypeWorldInterfaceHashParam;
     }
@@ -1286,6 +1291,7 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
         throw VMError.shouldNotReachHere("Intrinsified in StandardGraphBuilderPlugins.");
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public boolean hubIsArray() {
         return HubType.isArray(hubType);
     }

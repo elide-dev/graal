@@ -659,9 +659,15 @@ public final class Interpreter {
                     }
                     InterpreterUnresolvedSignature signature = resolutionSeed.getSignature();
                     boolean hasReceiver = intrinsic != SignaturePolymorphicIntrinsic.LinkToStatic;
-                    if (intrinsic == SignaturePolymorphicIntrinsic.LinkToSpecial && arguments[0] == null) {
+                    if (hasReceiver && arguments[0] == null) {
                         /* As on HotSpot: the callee would get a null receiver. */
                         throw new NullPointerException();
+                    }
+                    if (intrinsic == SignaturePolymorphicIntrinsic.LinkToVirtual || intrinsic == SignaturePolymorphicIntrinsic.LinkToInterface) {
+                        InterpreterResolvedJavaMethod selected = MethodHandleLinkage.selectVirtualTarget(arguments[0], memberName);
+                        if (selected != null) {
+                            InterpreterToVM.publishImageMethodDirectCallEntry(selected);
+                        }
                     }
                     Object[] basicArgs = unbasic(arguments, signature, hasReceiver);
                     // This should integrate with the debugger GR-70801
