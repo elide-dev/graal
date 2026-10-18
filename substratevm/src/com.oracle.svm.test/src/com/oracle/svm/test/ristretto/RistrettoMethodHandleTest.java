@@ -626,13 +626,17 @@ public class RistrettoMethodHandleTest {
         assertTrue("image code calling compiled run-time methods through handles must not allocate, but " + many + " iterations allocated " + allocated + " bytes", allocated < many);
     }
 
-    /** Calls from image code through a nonconstant zero-argument handle must avoid argument arrays. */
+    /**
+     * Image code calls a handle of a static run-time method without arguments, which is not a
+     * constant: {@code invokeBasic} gets only the handle. Once the target is compiled, the calls do
+     * not allocate.
+     */
     @Test
     public void imageCodeCallsZeroArgumentHandleWithoutAllocating() throws Throwable {
         RuntimeClassLoader loader = new RuntimeClassLoader(RUNTIME_CLASSES);
         Class<?> target = loader.loadClass(Target.class.getName());
         MethodHandle handle = MethodHandles.lookup().findStatic(target, "noArguments", MethodType.methodType(int.class));
-        java.lang.reflect.Field compiledCalls = target.getField("compiledCalls");
+        Field compiledCalls = target.getField("compiledCalls");
         awaitCompiled("Target.noArguments", () -> {
             try {
                 compiledCalls.setInt(null, 0);
@@ -645,14 +649,73 @@ public class RistrettoMethodHandleTest {
             }
         });
         int many = 100_000;
-        int sum = 0;
-        long before = allocatedBytes();
-        for (int i = 0; i < many; i++) {
-            sum += (int) handle.invokeExact();
+        /* The first round can still compile the lambda forms of the handle. */
+        for (int round = 0; round < 2; round++) {
+            int sum = 0;
+            long before = allocatedBytes();
+            for (int i = 0; i < many; i++) {
+                sum += (int) handle.invokeExact();
+            }
+            long allocated = allocatedBytes() - before;
+            assertEquals(7 * many, sum);
+            if (round == 1) {
+                assertTrue("image code calling a compiled run-time method through a zero-argument handle must not allocate, but " + many + " iterations allocated " + allocated +
+                                " bytes", allocated < many);
+            }
         }
-        long allocated = allocatedBytes() - before;
-        assertEquals(7 * many, sum);
-        assertTrue("zero-argument image calls must not allocate, but allocated " + allocated + " bytes", allocated < many);
+    }
+
+    /**
+     * Image code calls bound handles of virtual and interface methods of run-time classes that take
+     * no arguments: {@code invokeBasic} gets only the handle, and the lambda form of the bound
+     * handle links to the target with {@code linkToVirtual} or {@code linkToInterface}. Once the
+     * targets are compiled, the calls do not allocate.
+     */
+    @Test
+    public void imageCodeCallsBoundZeroArgumentVirtualAndInterfaceHandles() throws Throwable {
+        Virtuals v = Virtuals.bind();
+        MethodHandle[] values = new MethodHandle[3];
+        for (int k = 0; k < values.length; k++) {
+            values[k] = v.value().bindTo(v.bases()[k]);
+        }
+        MethodHandle[] speaks = new MethodHandle[4];
+        for (int k = 0; k < speaks.length; k++) {
+            speaks[k] = MethodHandles.insertArguments(v.speak(), 0, v.speakers()[k], k);
+        }
+        /* value() of Cat, Dog and Cow; speak(k) of Cat, Dog, Cow and Parrot (see expectedSpeakSum). */
+        int[] expectedValues = {1, 2, 3};
+        int[] expectedSpeaks = {1, 4, 5, 2};
+        awaitCompiled("the bound zero-argument targets", () -> {
+            try {
+                v.resetCompiledCalls();
+                for (int i = 0; i < 84; i++) {
+                    assertEquals(expectedValues[i % 3], (int) values[i % 3].invokeExact());
+                    assertEquals(expectedSpeaks[i % 4], (int) speaks[i % 4].invokeExact());
+                }
+                return v.compiledCalls() == 2 * 84;
+            } catch (Throwable t) {
+                throw new AssertionError(t);
+            }
+        });
+        int many = 100_000;
+        int expected = 0;
+        for (int i = 0; i < many; i++) {
+            expected += expectedValues[i % 3] + expectedSpeaks[i % 4];
+        }
+        for (int round = 0; round < 2; round++) {
+            int acc = 0;
+            long before = allocatedBytes();
+            for (int i = 0; i < many; i++) {
+                acc += (int) values[i % 3].invokeExact();
+                acc += (int) speaks[i % 4].invokeExact();
+            }
+            long allocated = allocatedBytes() - before;
+            assertEquals(expected, acc);
+            if (round == 1) {
+                assertTrue("image code calling compiled targets through bound zero-argument virtual and interface handles must not allocate, but " + many + " iterations allocated " +
+                                allocated + " bytes", allocated < many);
+            }
+        }
     }
 
     /**
