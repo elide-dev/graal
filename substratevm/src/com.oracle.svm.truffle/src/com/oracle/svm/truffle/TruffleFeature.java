@@ -163,7 +163,6 @@ import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.StringUtil;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.truffle.api.SubstrateKnownTruffleTypes;
-import com.oracle.svm.truffle.api.SubstrateOptimizedCallTarget;
 import com.oracle.svm.truffle.api.SubstrateThreadLocalHandshake;
 import com.oracle.svm.truffle.api.SubstrateThreadLocalHandshakeSnippets;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompiler;
@@ -543,9 +542,11 @@ public class TruffleFeature implements InternalFeature {
         /*
          * GR-57561: The concrete OptimizedCallTarget must be seen as instantiated, and its
          * constructor analyzed so writes to rootNode and engine keep Truffle compilation reachable.
+         * (Enterprise compatibility: the concrete class comes from TruffleSupport.)
          */
-        config.registerAsInHeap(SubstrateOptimizedCallTarget.class, "Concrete OptimizedCallTarget needs to be seen as instantiated, registered by " + TruffleFeature.class);
-        config.registerAsRoot(ReflectionUtil.lookupConstructor(SubstrateOptimizedCallTarget.class, OptimizedCallTarget.class, RootNode.class), true,
+        Class<?> callTargetClass = TruffleSupport.singleton().getOptimizedCallTargetClass();
+        config.registerAsInHeap(callTargetClass, "Concrete OptimizedCallTarget needs to be seen as instantiated, registered by " + TruffleFeature.class);
+        config.registerAsRoot(ReflectionUtil.lookupConstructor(callTargetClass, OptimizedCallTarget.class, RootNode.class), true,
                         "The constructor of OptimizedCallTarget needs to be seen by the analysis, registered by " + TruffleFeature.class);
 
         /*
