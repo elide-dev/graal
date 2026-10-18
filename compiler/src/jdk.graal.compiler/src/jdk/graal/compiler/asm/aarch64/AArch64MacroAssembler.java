@@ -1770,9 +1770,17 @@ public abstract class AArch64MacroAssembler extends AArch64Assembler {
 
     }
 
+    private static void checkAdrOffset(int offset) {
+        if (!NumUtil.isSignedNbit(21, offset)) {
+            throw new BranchTargetOutOfBoundsException(true, "ADR target %d out of bounds", offset);
+        }
+    }
+
     public void adr(Register dst, Label label) {
         if (label.isBound()) {
-            super.adr(dst, getPCRelativeOffset(label));
+            int offset = getPCRelativeOffset(label);
+            checkAdrOffset(offset);
+            super.adr(dst, offset);
         } else {
             label.addPatchAt(position(), this);
             int extraInformation = dst.encoding;
@@ -2061,6 +2069,9 @@ public abstract class AArch64MacroAssembler extends AArch64Assembler {
 
         int embeddedOffset = value >> low;
         int newOffset = embeddedOffset + additionalOffset;
+        if (!NumUtil.isSignedNbit(high - low, newOffset)) {
+            throw new BranchTargetOutOfBoundsException(true, "Replayed label target %d out of bounds", newOffset);
+        }
         int newOffsetInPlace = (newOffset << low) & mask;
         return (instruction & ~mask) | newOffsetInPlace;
     }
@@ -2162,6 +2173,7 @@ public abstract class AArch64MacroAssembler extends AArch64Assembler {
                 break;
             }
             case ADR: {
+                checkAdrOffset(pcRelativeOffset);
                 Register reg = AArch64.cpuRegisters.get(extraInformation);
                 super.adr(reg, pcRelativeOffset, patchPos);
                 break;
