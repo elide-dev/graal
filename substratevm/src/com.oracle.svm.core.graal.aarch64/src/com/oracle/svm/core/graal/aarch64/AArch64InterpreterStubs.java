@@ -143,9 +143,9 @@ public class AArch64InterpreterStubs {
             masm.ldar(ObjectLayout.singleton().getReferenceSize() * Byte.SIZE, dst, addressScratch);
         }
 
-        private static void loadObjectWordField(AArch64MacroAssembler masm, Register dst, Register obj, int offset, boolean compressedBase, int compressionShift, Register addressScratch) {
+        private static void loadObjectWordFieldAcquire(AArch64MacroAssembler masm, Register dst, Register obj, int offset, boolean compressedBase, int compressionShift, Register addressScratch) {
             materializeFieldAddress(masm, obj, offset, compressedBase, compressionShift, addressScratch);
-            masm.ldr(64, dst, createBaseRegisterOnlyAddress(64, addressScratch));
+            masm.ldar(64, dst, addressScratch);
         }
 
         /**
@@ -217,16 +217,8 @@ public class AArch64InterpreterStubs {
              */
             goSlowPathIfNull(masm, interpreterMethod, slowPath);
 
-            // Load volatile field with acquire semantics.
-            loadObjectObjectFieldAcquire(masm, scratch, interpreterMethod, executionOffsets.getInterpreterResolvedJavaMethodRistrettoMethodOffset(), compressedInterpreterMethod, compressionShift,
-                            scratch);
-            goSlowPathIfNull(masm, scratch, slowPath);
-
-            // Load volatile field with acquire semantics.
-            loadObjectObjectFieldAcquire(masm, scratch, scratch, executionOffsets.getRistrettoMethodInstalledCodeOffset(), true, compressionShift, scratch);
-            goSlowPathIfNull(masm, scratch, slowPath);
-
-            loadObjectWordField(masm, scratch, scratch, executionOffsets.getInstalledCodeEntryPointOffset(), true, compressionShift, scratch);
+            // The published direct entry is withdrawn at the code-invalidation safepoint.
+            loadObjectWordFieldAcquire(masm, scratch, interpreterMethod, executionOffsets.getDirectCallEntryOffset(), compressedInterpreterMethod, compressionShift, scratch);
             goSlowPathIfNull(masm, scratch, slowPath);
             // Jump to the entry point of the method.
             masm.jmp(scratch);
@@ -274,6 +266,20 @@ public class AArch64InterpreterStubs {
             masm.ldr(referenceSize * Byte.SIZE, method,
                             AArch64Address.createExtendedRegisterOffsetAddress(referenceSize * Byte.SIZE, scratch1, vtableIndex, true, AArch64Assembler.ExtendType.UXTW));
 
+            /*
+             * Give a trackable runtime hub slot one visit to the Java patcher. Otherwise the
+             * installed-code jump bypasses patching forever. Full or unavailable tracking keeps
+             * the compiled fallback without repeatedly entering the Java argument bridge.
+             */
+            Label fallback = new Label();
+            goSlowPathIfNull(masm, method, slowPath);
+            loadObjectObjectFieldAcquire(masm, scratch1, method, executionOffsets.getPatchedSlotAddressesOffset(), true, compressionShift, scratch1);
+            goSlowPathIfNull(masm, scratch1, fallback);
+            materializeFieldAddress(masm, method, executionOffsets.getPatchedSlotCountOffset(), true, compressionShift, scratch1);
+            masm.ldar(32, scratch1, scratch1);
+            masm.compare(32, scratch1, executionOffsets.getMaxPatchedSlots());
+            masm.branchConditionally(AArch64Assembler.ConditionFlag.LO, slowPath);
+            masm.bind(fallback);
             emitInstalledCodeFastPath(masm, method, true, scratch1);
             masm.bind(slowPath);
         }

@@ -221,13 +221,7 @@ public class AMD64InterpreterStubs {
              */
             goSlowPathIfNull(masm, interpreterMethod, slowPath);
 
-            loadObjectObjectField(masm, scratch, interpreterMethod, executionOffsets.getInterpreterResolvedJavaMethodRistrettoMethodOffset(), compressedInterpreterMethod, compressionShift);
-            goSlowPathIfNull(masm, scratch, slowPath);
-
-            loadObjectObjectField(masm, scratch, scratch, executionOffsets.getRistrettoMethodInstalledCodeOffset(), true, compressionShift);
-            goSlowPathIfNull(masm, scratch, slowPath);
-
-            loadObjectWordField(masm, scratch, scratch, executionOffsets.getInstalledCodeEntryPointOffset(), true, compressionShift);
+            loadObjectWordField(masm, scratch, interpreterMethod, executionOffsets.getDirectCallEntryOffset(), compressedInterpreterMethod, compressionShift);
             goSlowPathIfNull(masm, scratch, slowPath);
             // Jump to the entry point of the method.
             masm.jmp(scratch);
@@ -273,6 +267,21 @@ public class AMD64InterpreterStubs {
             AMD64Assembler.AMD64RMOp.MOV.emit(masm, referenceOperandSize(), method,
                             new AMD64Address(scratch1, vtableIndex, Stride.fromLog2(CodeUtil.log2(ol.getReferenceSize())), ol.getArrayBaseOffset(JavaKind.Object)));
 
+            /*
+             * Crema vtable stubs belong to runtime-loaded hubs. When tracking has room, visit the
+             * Java helper once so it can register and patch this slot before calling the target.
+             * A tail jump here would bypass that patch forever. Exhausted/unavailable tracking
+             * keeps the published-entry fallback instead of repeatedly boxing arguments.
+             */
+            Label fallback = new Label();
+            goSlowPathIfNull(masm, method, slowPath);
+            loadObjectObjectField(masm, scratch1, method, executionOffsets.getPatchedSlotAddressesOffset(), true, compressionShift);
+            goSlowPathIfNull(masm, scratch1, fallback);
+            AMD64Assembler.AMD64RMOp.MOV.emit(masm, AMD64BaseAssembler.OperandSize.DWORD, scratch1,
+                            heapObjectAddress(method, executionOffsets.getPatchedSlotCountOffset(), true, compressionShift));
+            masm.cmpl(scratch1, executionOffsets.getMaxPatchedSlots());
+            masm.jcc(AMD64Assembler.ConditionFlag.Below, slowPath);
+            masm.bind(fallback);
             emitInstalledCodeFastPath(masm, method, true, scratch1);
             masm.bind(slowPath);
         }
