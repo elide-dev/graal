@@ -33,34 +33,35 @@ import jdk.graal.compiler.api.directives.GraalDirectives;
 import jdk.graal.compiler.asm.BranchTargetOutOfBoundsException;
 import jdk.graal.compiler.asm.aarch64.AArch64MacroAssembler;
 import jdk.graal.compiler.code.CompilationResult;
-import jdk.graal.compiler.core.common.LIRKind;
-import jdk.graal.compiler.lir.LabelRef;
-import jdk.graal.compiler.lir.SwitchStrategy;
 import jdk.graal.compiler.core.aarch64.AArch64LIRGenerator;
-import jdk.vm.ci.aarch64.AArch64Kind;
-import jdk.vm.ci.meta.JavaConstant;
+import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.gen.LIRGenerationProvider;
 import jdk.graal.compiler.core.test.backend.BackendTest;
 import jdk.graal.compiler.lir.LIRInstruction;
 import jdk.graal.compiler.lir.LIRInstructionClass;
+import jdk.graal.compiler.lir.LabelRef;
+import jdk.graal.compiler.lir.StandardOp;
+import jdk.graal.compiler.lir.SwitchStrategy;
+import jdk.graal.compiler.lir.aarch64.AArch64ControlFlow;
 import jdk.graal.compiler.lir.aarch64.AArch64LIRInstruction;
+import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
+import jdk.graal.compiler.lir.asm.CompilationResultBuilderFactory;
 import jdk.graal.compiler.lir.gen.LIRGenerationResult;
 import jdk.graal.compiler.lir.phases.LIRPhase;
 import jdk.graal.compiler.lir.phases.LIRSuites;
 import jdk.graal.compiler.lir.phases.PostAllocationOptimizationPhase.PostAllocationOptimizationContext;
-import jdk.graal.compiler.options.OptionValues;
-import jdk.vm.ci.code.TargetDescription;
-import jdk.graal.compiler.lir.StandardOp;
-import jdk.graal.compiler.lir.aarch64.AArch64ControlFlow;
-import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
-import jdk.graal.compiler.lir.asm.CompilationResultBuilderFactory;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.options.OptionValues;
 import jdk.vm.ci.aarch64.AArch64;
+import jdk.vm.ci.aarch64.AArch64Kind;
 import jdk.vm.ci.code.InstalledCode;
+import jdk.vm.ci.code.TargetDescription;
+import jdk.vm.ci.meta.JavaConstant;
 
 public class AArch64LargeTableSwitchTest extends BackendTest {
     private boolean forceConservative;
     private Class<? extends LIRInstruction> expectedSwitch;
+
     @Before
     public void requireAArch64() {
         Assume.assumeTrue("AArch64-specific test", getTarget().arch instanceof AArch64);
@@ -249,6 +250,7 @@ public class AArch64LargeTableSwitchTest extends BackendTest {
             Assert.assertEquals(hashSnippet(key), code.executeVarargs(key));
         }
     }
+
     @Test
     public void conservativeRangeResults() throws Exception {
         forceConservative = true;

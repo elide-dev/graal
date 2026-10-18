@@ -24,30 +24,32 @@
  */
 package jdk.graal.compiler.core.aarch64.test;
 
+import java.util.EnumSet;
+
 import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Before;
 import org.junit.Test;
 
 import jdk.graal.compiler.asm.aarch64.AArch64MacroAssembler;
+import jdk.graal.compiler.lir.LIRInstruction;
 import jdk.graal.compiler.lir.LIRInstructionClass;
-import jdk.graal.compiler.lir.aarch64.AArch64LIRInstruction;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 import jdk.graal.compiler.lir.gen.LIRGeneratorTool;
 import jdk.graal.compiler.lir.jtt.LIRTest;
 import jdk.graal.compiler.lir.jtt.LIRTestSpecification;
 import jdk.vm.ci.aarch64.AArch64;
+import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.Value;
 
+/**
+ * Checks the code snippet records kept by the shared {@code Assembler} across a reset and under
+ * conservative label ranges. The snippets are recorded in a separate AArch64 assembler with a
+ * synthetic target, so this runs on every host architecture.
+ */
 public class AArch64SnippetStateTest extends LIRTest {
     private static final SnippetSpec FINISHED = new SnippetSpec(0);
     private static final SnippetSpec UNFINISHED = new SnippetSpec(1);
     private static final SnippetSpec CONSERVATIVE = new SnippetSpec(2);
-
-    @Before
-    public void requireAArch64() {
-        Assume.assumeTrue("AArch64-specific test", getTarget().arch instanceof AArch64);
-    }
+    private static final TargetDescription AARCH64_TARGET = new TargetDescription(new AArch64(EnumSet.of(AArch64.CPUFeature.FP)), true, 16, 4096, true);
 
     private static final class SnippetSpec extends LIRTestSpecification {
         final int operation;
@@ -63,7 +65,7 @@ public class AArch64SnippetStateTest extends LIRTest {
         }
     }
 
-    private static final class SnippetStateOp extends AArch64LIRInstruction {
+    private static final class SnippetStateOp extends LIRInstruction {
         static final LIRInstructionClass<SnippetStateOp> TYPE = LIRInstructionClass.create(SnippetStateOp.class);
         private final int operation;
 
@@ -73,10 +75,10 @@ public class AArch64SnippetStateTest extends LIRTest {
         }
 
         @Override
-        public void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
+        public void emitCode(CompilationResultBuilder crb) {
             // Use the live builder for its site bookkeeping, but keep this assembler isolated.
-            AArch64MacroAssembler recorded = new AArch64TestMacroAssembler(crb.target);
-            int start = masm.position() + 4;
+            AArch64MacroAssembler recorded = new AArch64TestMacroAssembler(AARCH64_TARGET);
+            int start = crb.asm.position() + 4;
             while (recorded.position() < start) {
                 recorded.nop();
             }

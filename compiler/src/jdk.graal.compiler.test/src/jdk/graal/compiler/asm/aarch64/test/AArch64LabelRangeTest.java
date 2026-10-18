@@ -24,10 +24,10 @@
  */
 package jdk.graal.compiler.asm.aarch64.test;
 
+import java.util.EnumSet;
+
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
-import org.junit.Assume;
 
 import jdk.graal.compiler.asm.BranchTargetOutOfBoundsException;
 import jdk.graal.compiler.asm.Label;
@@ -36,19 +36,21 @@ import jdk.graal.compiler.core.aarch64.test.AArch64TestMacroAssembler;
 import jdk.graal.compiler.test.GraalTest;
 import jdk.vm.ci.aarch64.AArch64;
 import jdk.vm.ci.code.TargetDescription;
-import jdk.vm.ci.runtime.JVMCI;
 
+/**
+ * Assembler-level checks for AArch64 label range handling. Only machine code is emitted and
+ * inspected, so this uses a synthetic AArch64 target and runs on every host architecture.
+ */
 public class AArch64LabelRangeTest extends GraalTest {
-    private TargetDescription target;
-
-    @Before
-    public void requireAArch64() {
-        target = JVMCI.getRuntime().getHostJVMCIBackend().getTarget();
-        Assume.assumeTrue("AArch64-specific test", target.arch instanceof AArch64);
-    }
+    private final TargetDescription target = new TargetDescription(new AArch64(EnumSet.of(AArch64.CPUFeature.FP)), true, 16, 4096, true);
 
     private enum Kind {
-        ADR(21), CONDITIONAL(21), COMPARE_ZERO(21), TEST_BIT(16), UNCONDITIONAL(28);
+        ADR(21),
+        CONDITIONAL(21),
+        COMPARE_ZERO(21),
+        TEST_BIT(16),
+        UNCONDITIONAL(28);
+
         final int bits;
 
         Kind(int bits) {
