@@ -323,6 +323,8 @@ public abstract class Assembler<T extends Enum<T>> {
 
     public void reset() {
         labelsWithPatches = null;
+        currentCodeSnippet = null;
+        recordedCodeSnippets = null;
         codeBuffer.reset();
     }
 
@@ -392,7 +394,7 @@ public abstract class Assembler<T extends Enum<T>> {
      * may cause errors if unresolved.
      */
     public boolean replayCodeSnippetAt(CompilationResultBuilder crb, int pos) {
-        if (recordedCodeSnippets != null) {
+        if (!crb.usesConservativeLabelRanges() && recordedCodeSnippets != null) {
             CodeSnippetRecord codeSnippet = recordedCodeSnippets.get(pos);
             if (codeSnippet != null) {
                 codeSnippet.replayRecording(crb, this);
