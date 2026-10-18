@@ -65,6 +65,8 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.oracle.svm.shared.util.ModuleSupport;
+
 /**
  * Deoptimizes code that Ristretto compiled from bytecode loaded at run time, and checks that
  * execution resumes in the interpreter with the right state.
@@ -97,9 +99,16 @@ public class RistrettoDeoptimizationTest {
 
     /** Registers the class files of the run-time classes as resources. */
     public static final class TestFeature implements Feature {
+        public TestFeature() {
+            /* RistrettoCallerClassTest registers analysis roots through the hosted feature access. */
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted");
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.base", "com.oracle.svm.common.meta");
+        }
+
         @Override
         public void beforeAnalysis(BeforeAnalysisAccess access) {
-            for (List<Class<?>> classes : List.of(RUNTIME_CLASSES, RistrettoVarHandleTest.RUNTIME_CLASSES, RistrettoMethodHandleTest.RUNTIME_CLASSES, RistrettoDispatchTest.RUNTIME_CLASSES)) {
+            for (List<Class<?>> classes : List.of(RUNTIME_CLASSES, RistrettoVarHandleTest.RUNTIME_CLASSES, RistrettoMethodHandleTest.RUNTIME_CLASSES, RistrettoDispatchTest.RUNTIME_CLASSES,
+                            RistrettoCallerClassTest.RUNTIME_CLASSES)) {
                 for (Class<?> c : classes) {
                     RuntimeResourceAccess.addResource(RistrettoDeoptimizationTest.class.getModule(), classFileName(c));
                 }
@@ -107,6 +116,7 @@ public class RistrettoDeoptimizationTest {
             RistrettoVarHandleTest.beforeAnalysis();
             RistrettoMethodHandleTest.beforeAnalysis();
             RistrettoDispatchTest.beforeAnalysis();
+            RistrettoCallerClassTest.beforeAnalysis(access);
             /*
              * Links the VarHandle call sites of the AOT methods that AtomicUser calls in the
              * builder JVM, where JVMCI then resolves them to their invokehandle adapters
