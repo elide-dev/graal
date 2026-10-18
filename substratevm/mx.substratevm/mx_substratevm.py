@@ -509,7 +509,8 @@ def truffle_unittest_task(extra_build_args=None):
         '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED',
         '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
     ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.svm.test.ristretto.RistrettoVarHandleTest',
-                    'com.oracle.svm.test.ristretto.RistrettoMethodHandleTest', 'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
+                    'com.oracle.svm.test.ristretto.RistrettoMethodHandleTest', 'com.oracle.svm.test.ristretto.RistrettoDispatchTest',
+                    'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
                     extra_run_args=['-Dcom.oracle.svm.test.ristretto=true'])
     # JDWP support enables the PLT/GOT and requires frame information for all methods, which must
     # not force deoptimization targets for runtime compilation. Its startup hook must also allow
