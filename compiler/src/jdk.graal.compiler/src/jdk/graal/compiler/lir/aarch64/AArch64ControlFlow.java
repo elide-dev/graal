@@ -313,6 +313,15 @@ public class AArch64ControlFlow {
         }
     }
 
+    private static void emitSwitchBranch(CompilationResultBuilder crb, AArch64MacroAssembler masm, LIRInstruction instruction, ConditionFlag condition, Label target) {
+        if (crb.usesConservativeLabelRanges()) {
+            emitBranchOrFarBranch(crb, masm, instruction, 21, target, label -> masm.branchConditionally(condition, label),
+                            label -> masm.branchConditionally(condition.negate(), label));
+        } else {
+            masm.branchConditionally(condition, target);
+        }
+    }
+
     public static class StrategySwitchOp extends AArch64BlockEndOp {
         public static final LIRInstructionClass<StrategySwitchOp> TYPE = LIRInstructionClass.create(StrategySwitchOp.class);
 
@@ -382,7 +391,7 @@ public class AArch64ControlFlow {
             @Override
             protected void conditionalJump(int index, Condition condition, Label target) {
                 emitComparison(keyConstants[index]);
-                masm.branchConditionally(converter.apply(condition), target);
+                emitSwitchBranch(crb, masm, StrategySwitchOp.this, converter.apply(condition), target);
             }
         }
 
@@ -495,7 +504,7 @@ public class AArch64ControlFlow {
                         });
                     }
                     // Jump to outOfRangeLabel if index is not within the jump table
-                    masm.branchConditionally(ConditionFlag.HI, outOfRangeLabel);
+                    emitSwitchBranch(crb, masm, this, ConditionFlag.HI, outOfRangeLabel);
                 }
 
                 emitJumpTable(crb, masm, keyOffsetReg, scratch1, scratch2, lowKey, highKey, Arrays.stream(targets).map(LabelRef::label));
@@ -527,7 +536,7 @@ public class AArch64ControlFlow {
             // jump to target
             masm.jmp(scratch);
 
-            crb.getLIR().addSlowPath(null, () -> {
+            Runnable emitTable = () -> {
                 // Insert halt so that static analyzers do not continue decoding past this point
                 masm.halt();
                 masm.bind(jumpTable);
@@ -535,7 +544,14 @@ public class AArch64ControlFlow {
                 targets.forEach(label -> masm.emitJumpTableOffset(jumpTable, label));
                 JumpTable jt = new JumpTable(jumpTable.position(), lowKey, highKey, EntryFormat.OFFSET_ONLY);
                 crb.compilationResult.addAnnotation(jt);
-            });
+            };
+            if (crb.usesConservativeLabelRanges()) {
+                // Keep the table within ADR range, and exclude its data from threaded snippets.
+                masm.stopRecordingCodeSnippet(crb);
+                emitTable.run();
+            } else {
+                crb.getLIR().addSlowPath(null, emitTable);
+            }
         }
     }
 
@@ -605,7 +621,7 @@ public class AArch64ControlFlow {
 
                     // check if values match; if not, jump to default target
                     masm.cmp(32, jumpTableEntry, asRegister(originalValue));
-                    masm.branchConditionally(ConditionFlag.NE, defaultTarget.label());
+                    emitSwitchBranch(crb, masm, this, ConditionFlag.NE, defaultTarget.label());
 
                     /*
                      * Compute target address (jumpTableStart + target offset). The shift needed to
@@ -616,7 +632,7 @@ public class AArch64ControlFlow {
                     masm.jmp(jumpTableBase);
                 }
 
-                crb.getLIR().addSlowPath(this, () -> {
+                Runnable emitTable = () -> {
                     // Insert halt so that static analyzers do not continue decoding past this point
                     masm.halt();
                     // ensure jump table is aligned with the entry size
@@ -631,7 +647,13 @@ public class AArch64ControlFlow {
                     }
                     JumpTable jt = new JumpTable(jumpTable.position(), 0, keys.length - 1, format);
                     crb.compilationResult.addAnnotation(jt);
-                });
+                };
+                if (crb.usesConservativeLabelRanges()) {
+                    masm.stopRecordingCodeSnippet(crb);
+                    emitTable.run();
+                } else {
+                    crb.getLIR().addSlowPath(this, emitTable);
+                }
             }
         }
     }
