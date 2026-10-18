@@ -53,6 +53,7 @@ import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.code.FrameInfoQueryResult;
 import com.oracle.svm.core.code.FrameSourceInfo;
+import com.oracle.svm.core.deopt.DeoptimizationSupport;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.hub.DynamicHub;
@@ -231,6 +232,13 @@ public class RistrettoCallerClassTest {
                 throw new AssertionError("no active runtime caller frame");
             }
             if (!finder.alreadyDeoptimized) {
+                /*
+                 * Folded at build time: the default native-unittest image, which also contains
+                 * this class, has no deoptimization support, so the call must not be parsed there.
+                 */
+                if (!DeoptimizationSupport.enabled()) {
+                    throw new AssertionError("eager deoptimization needs an image with deoptimization support");
+                }
                 Deoptimizer.deoptimizeFrameEagerly(finder.sp, false, null);
             }
         }
