@@ -27,8 +27,10 @@ package com.oracle.svm.hosted.meta;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.meta.DynamicHubOffsets;
+import com.oracle.svm.core.hub.DynamicHubCompanion;
 import com.oracle.svm.hosted.FeatureImpl;
 
 @AutomaticallyRegisteredFeature
@@ -37,6 +39,20 @@ public final class DynamicHubOffsetsFeature implements InternalFeature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
         ImageSingletons.add(DynamicHubOffsets.class, new DynamicHubOffsets());
+    }
+
+    @Override
+    public void beforeAnalysis(BeforeAnalysisAccess access) {
+        /*
+         * DynamicHubCompanion.extension is published at run time with Unsafe, at the offset that
+         * initializeOffsets computes below. The analysis cannot attribute that write to the field,
+         * so it must be registered as unsafe accessed: otherwise the analysis considers the field
+         * never written, HostedConstantFieldProvider treats it as final, and reads through a
+         * constant class (e.g. SomeClass.class.getSimpleName() or getAnnotation() inlined into a
+         * caller) fold to the build-time value null. Class.newReflectionData() and
+         * Class.annotationData() then retry their CAS forever once the extension exists.
+         */
+        access.registerAsUnsafeAccessed(ReflectionUtil.lookupField(DynamicHubCompanion.class, "extension"));
     }
 
     @Override

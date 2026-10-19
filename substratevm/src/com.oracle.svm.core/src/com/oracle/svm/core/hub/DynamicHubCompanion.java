@@ -266,6 +266,10 @@ public final class DynamicHubCompanion {
          * Use the witness value of the exchange instead of re-reading the field: the compiler may
          * still hold the read that found the field null, e.g. right after the companion was
          * allocated at run time, and would not see the value another thread installed.
+         *
+         * This is the only run-time write of the field, and the analysis cannot see it, so
+         * DynamicHubOffsetsFeature registers the field as unsafe accessed. Without that, reads of
+         * the field through a constant hub are folded to null (see there).
          */
         long offset = DynamicHubOffsets.singleton().getCompanionExtensionOffset();
         Object witness = Unsafe.getUnsafe().compareAndExchangeReference(this, offset, null, created);

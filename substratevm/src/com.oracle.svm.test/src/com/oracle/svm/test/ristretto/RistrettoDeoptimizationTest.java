@@ -103,6 +103,13 @@ public class RistrettoDeoptimizationTest {
             /* RistrettoCallerClassTest registers analysis roots through the hosted feature access. */
             ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted");
             ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.base", "com.oracle.svm.common.meta");
+            /* RistrettoHubExtensionTest checks the hosted field of the hub extension. */
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted.meta");
+        }
+
+        @Override
+        public void beforeCompilation(BeforeCompilationAccess access) {
+            RistrettoHubExtensionTest.beforeCompilation(access);
         }
 
         @Override

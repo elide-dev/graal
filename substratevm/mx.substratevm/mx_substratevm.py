@@ -510,7 +510,8 @@ def truffle_unittest_task(extra_build_args=None):
         '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
     ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.svm.test.ristretto.RistrettoVarHandleTest',
                     'com.oracle.svm.test.ristretto.RistrettoMethodHandleTest', 'com.oracle.svm.test.ristretto.RistrettoDispatchTest',
-                    'com.oracle.svm.test.ristretto.RistrettoCallerClassTest', 'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
+                    'com.oracle.svm.test.ristretto.RistrettoCallerClassTest', 'com.oracle.svm.test.ristretto.RistrettoHubExtensionTest',
+                    'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
                     # RistrettoCallerClassTest checks that its caller lookups walk generated
                     # bytecode-handler stubs and handlers inlined into them (tail-call threading).
                     extra_run_args=['-Dcom.oracle.svm.test.ristretto=true', '-Dcom.oracle.svm.test.caller.expectStubs=true',
