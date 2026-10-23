@@ -58,6 +58,7 @@ import com.oracle.svm.hosted.c.codegen.CCompilerInvoker;
 import com.oracle.svm.hosted.c.libc.HostedLibCBase;
 import com.oracle.svm.hosted.imagelayer.HostedDynamicLayerInfo;
 import com.oracle.svm.hosted.jdk.JNIRegistrationSupport;
+import com.oracle.svm.hosted.jni.JNILibraryLinkagePlan;
 import com.oracle.svm.shared.option.AccumulatingLocatableMultiOptionValue;
 import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.shared.util.VMError;
@@ -352,7 +353,7 @@ public abstract class CCLinkerInvocation implements LinkerInvocation {
                 }
                 exportedSymbols.append("{\n");
                 /* Only exported symbols are global ... */
-                Set<String> globalSymbols = Stream.concat(getImageSymbols(true).stream(), JNIRegistrationSupport.getShimLibrarySymbols()).collect(Collectors.toSet());
+                Set<String> globalSymbols = Stream.concat(getImageSymbols(true).stream(), JNILibraryLinkagePlan.getShimLibrarySymbols()).collect(Collectors.toSet());
                 if (!globalSymbols.isEmpty()) {
                     exportedSymbols.append("global:\n");
                     globalSymbols.forEach(symbol -> exportedSymbols.append('\"').append(symbol).append("\";\n"));
@@ -485,7 +486,7 @@ public abstract class CCLinkerInvocation implements LinkerInvocation {
              */
             try {
                 Path exportedSymbolsPath = nativeLibs.tempDirectory.resolve("exported_symbols.list");
-                Set<String> globalSymbols = Stream.concat(getImageSymbols(true).stream(), JNIRegistrationSupport.getShimLibrarySymbols().map("_"::concat)).collect(Collectors.toSet());
+                Set<String> globalSymbols = Stream.concat(getImageSymbols(true).stream(), JNILibraryLinkagePlan.getShimLibrarySymbols().map("_"::concat)).collect(Collectors.toSet());
                 Files.write(exportedSymbolsPath, globalSymbols);
                 additionalPreOptions.add("-Wl,-exported_symbols_list");
                 additionalPreOptions.add("-Wl," + exportedSymbolsPath.toAbsolutePath());
