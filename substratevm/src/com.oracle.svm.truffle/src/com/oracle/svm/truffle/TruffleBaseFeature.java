@@ -78,6 +78,7 @@ import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.hosted.RuntimeResourceAccess;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Value.Optimized;
 
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisType;
@@ -568,6 +569,8 @@ public final class TruffleBaseFeature implements InternalFeature {
         if (!ImageSingletons.contains(TruffleFeature.class) && isSubstrateRuntime(Truffle.getRuntime())) {
             VMError.shouldNotReachHere("TruffleFeature is required for SubstrateTruffleRuntime.");
         }
+        Class<?>[] proxyInterfaces = access.getImageClassLoader().findAnnotatedClasses(Optimized.class, false).toArray(Class<?>[]::new);
+        invokeStaticMethod("com.oracle.truffle.polyglot.PolyglotProxyFeature", "initializeNativeImageState", List.of(Class[].class), (Object) proxyInterfaces);
         access.registerObjectReachabilityHandler(this::processInlinedField, InlinableField.class);
 
         StaticObjectSupport.duringSetup(a);
