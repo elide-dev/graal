@@ -18,7 +18,8 @@ cannot be upgraded. Changes to comments or formatting, which only move line numb
 
 LinkCheck.java then checks that the enterprise code (the jars only Oracle's build has, and the
 enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
-modules. Last, the native-image launcher is rebuilt so that it accepts the fork's hosted options.
+modules. The default trust store is hardened per Oracle's October 2026 CSPU advisory before the
+native-image launcher is rebuilt so that it accepts the fork's hosted options.
 
   build-ee.py <version> <platform> <ce-home> <out-dir>
 
@@ -205,6 +206,13 @@ def link_check(graal, ee_home, fork_jars, enterprise_jars):
     print(result.stdout, end="")
     if result.returncode != 0:
         fail("the enterprise code does not link against the fork's code (see the problems above)")
+
+
+def harden_trust_store(graal, ee_home):
+    """Apply Oracle's CVE-2026-91403 workaround before baking trust into native images."""
+    java = os.path.join(ee_home, "bin", "java.exe" if os.name == "nt" else "java")
+    script = os.path.join(graal, "ci", "elide", "HardenTrustStore.java")
+    print(run(java, script, os.path.join(ee_home, "lib", "security", "cacerts")), end="")
 
 
 def rebuild_launcher(ee_home):
@@ -425,6 +433,7 @@ def main():
     merge_driver_flags(ee_home, oracle_driver_flags)
     upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
+    harden_trust_store(graal, ee_home)
     rebuild_launcher(ee_home)
 
     revision = run("git", "rev-parse", "HEAD", cwd=graal).strip()
