@@ -30,6 +30,7 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.CompressedBlobOptions;
 import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.shared.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.code.RuntimeMetadataDecoderImpl.MetadataAccessorImpl;
@@ -98,7 +99,8 @@ public class RuntimeMetadataEncoding {
             encodingRead = true;
         }
         byte[] result = encoding;
-        if (result == null && compressedEncoding != null) {
+        // Unknown fields alone cannot make the native zstd decoder unreachable on WebImage.
+        if (CompressedBlobOptions.CompressHeapBlobs.getValue() && result == null && compressedEncoding != null) {
             /* Threads may race here; they produce identical arrays and either one is fine. */
             result = compressedEncoding.inflateAll();
             encoding = result;
