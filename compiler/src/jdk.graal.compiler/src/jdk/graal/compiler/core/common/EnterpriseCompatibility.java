@@ -26,9 +26,8 @@ package jdk.graal.compiler.core.common;
 
 import jdk.graal.compiler.options.OptionDescriptor;
 
-/// Compatibility with Oracle's enterprise modules, for an EE distribution that runs this compiler
-/// and the open-source Truffle runtime with Oracle's prebuilt enterprise modules
-/// (`com.oracle.graal.graal_enterprise`, `com.oracle.truffle.enterprise.svm`) on top.
+/// Compatibility with Oracle's enterprise compiler, for an EE distribution that runs this compiler
+/// with Oracle's prebuilt enterprise compiler module (`com.oracle.graal.graal_enterprise`) on top.
 ///
 /// Upstream moved a series of optimizations from the enterprise compiler into this one (strip
 /// mining, loop inversion and rotation, aggressive partial unrolling, simulation-based peeling,
@@ -37,11 +36,6 @@ import jdk.graal.compiler.options.OptionDescriptor;
 /// compiler present, the copies here are off by default ({@link #MOVED_OPTIMIZATIONS}), so the tiers
 /// build the phase plan the enterprise compiler expects and each optimization runs once, in the
 /// enterprise compiler's version.
-///
-/// Likewise, upstream moved the typed (unboxed) calling convention for compiled Truffle calls from
-/// the enterprise Truffle runtime into `com.oracle.svm.truffle.api.TypedEntrySupport`. An enterprise
-/// Truffle runtime built before that still has its own copy, and with one present the open-source
-/// copy stays dormant ({@link #hasEnterpriseTruffleTypedEntries}).
 public final class EnterpriseCompatibility {
 
     private EnterpriseCompatibility() {
@@ -58,26 +52,17 @@ public final class EnterpriseCompatibility {
     /// unless the enterprise compiler is present.
     public static final boolean MOVED_OPTIMIZATIONS = !ENTERPRISE_COMPILER;
 
-    /// Whether an enterprise Truffle runtime that still has its own copy of the typed calling
-    /// convention for compiled Truffle calls is visible from the given module layer (Oracle GraalVM
-    /// 25.5 EA builds up to at least 25i5 ea.04, built before upstream moved it into
-    /// `org.graalvm.truffle.runtime.svm`). This checks for its `TypedEntrySupport`. The layer is
-    /// that of the open-source copy: the image builder loads the Truffle builder modules into the
-    /// image class loader's layer, not the boot layer. Null (an unnamed module) means the boot layer.
-    public static boolean hasEnterpriseTruffleTypedEntries(ModuleLayer layer) {
-        return (layer == null ? ModuleLayer.boot() : layer).findModule("com.oracle.truffle.enterprise.svm").map(
-                        m -> Class.forName(m, "com.oracle.svm.enterprise.truffle.compiler.TypedEntrySupport") != null).orElse(false);
-    }
-
     /// For two option descriptors with the same name, the one to keep, or null if they conflict. The
-    /// moved optimizations' options have the same names here and in the enterprise compiler, and the
-    /// typed-entry options the same names in the open-source and the enterprise Truffle runtime; the
-    /// enterprise one is kept, as its code is what runs.
+    /// moved optimizations' options have the same names here and in the enterprise compiler; the
+    /// enterprise compiler's are kept, as its phases are the ones that run.
     public static OptionDescriptor resolveDuplicateOption(OptionDescriptor a, OptionDescriptor b) {
-        if (isEnterprise(a) && isSupersededCopy(b)) {
+        if (!ENTERPRISE_COMPILER) {
+            return null;
+        }
+        if (isEnterprise(a) && isCompiler(b)) {
             return a;
         }
-        if (isEnterprise(b) && isSupersededCopy(a)) {
+        if (isEnterprise(b) && isCompiler(a)) {
             return b;
         }
         return null;
@@ -88,16 +73,7 @@ public final class EnterpriseCompatibility {
         return module != null && module.startsWith("com.oracle.") && module.contains("enterprise");
     }
 
-    /// Whether the option belongs to an open-source copy that an enterprise module present at build
-    /// time supersedes.
-    private static boolean isSupersededCopy(OptionDescriptor descriptor) {
-        Module module = descriptor.getDeclaringClass().getModule();
-        if (module == EnterpriseCompatibility.class.getModule()) {
-            return ENTERPRISE_COMPILER;
-        }
-        if ("org.graalvm.truffle.runtime.svm".equals(module.getName())) {
-            return hasEnterpriseTruffleTypedEntries(module.getLayer());
-        }
-        return false;
+    private static boolean isCompiler(OptionDescriptor descriptor) {
+        return EnterpriseCompatibility.class.getModule() == descriptor.getDeclaringClass().getModule();
     }
 }
