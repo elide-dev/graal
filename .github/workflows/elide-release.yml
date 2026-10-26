@@ -288,6 +288,9 @@ jobs:
           "${home}/bin/javac" Hello.java
           "${home}/bin/native-image" -cp . Hello hello
           ./hello
+          # CVE-2026-91403: build-dist.sh installs ci/elide/blocked.certs.
+          "${MX_PYTHON}" "${WS}/graal/ci/elide/test-blocked-certs.py"
+          "${WS}/graal/ci/elide/check-blocked-certs.sh" "${home}" blocked-certs
           ls -la "${WS}/out/dist"
       - name: Check glibc floor (Linux)
         if: runner.os == 'Linux'
@@ -333,6 +336,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "native-image failed ($LASTEXITCODE)" }
           & .\hello.exe
           if ($LASTEXITCODE -ne 0) { throw "hello.exe failed ($LASTEXITCODE)" }
+          # CVE-2026-91403: build-dist.sh installs ci/elide/blocked.certs (see check-blocked-certs.sh).
+          $check = "$env:WS\graal\ci\elide\CheckBlockedCerts.java"
+          & "$gvmHome\bin\java.exe" $check
+          if ($LASTEXITCODE -ne 0) { throw "the JVM does not block the CVE-2026-91403 certificates" }
+          & "$gvmHome\bin\javac.exe" -d . $check
+          cmd /c "call `"$vcvars`" x64 && `"$gvmHome\bin\native-image.cmd`" -cp . -o check-blocked-certs CheckBlockedCerts && check-blocked-certs.exe"
+          if ($LASTEXITCODE -ne 0) { throw "native images do not block the CVE-2026-91403 certificates ($LASTEXITCODE)" }
           Get-ChildItem "$env:WS\out\dist"
       - name: Build EE distribution (Windows)
         if: runner.os == 'Windows'
@@ -356,6 +366,13 @@ jobs:
           # PGO: an instrumented image writes default.iprof, the optimized build uses it.
           cmd /c "call `"$vcvars`" x64 && $ni --version && $ni -cp . --pgo-instrument Hello hello-instrumented && hello-instrumented.exe && $ni -cp . --pgo=default.iprof Hello hello-pgo && hello-pgo.exe"
           if ($LASTEXITCODE -ne 0) { throw "EE smoke test failed ($LASTEXITCODE)" }
+          # CVE-2026-91403: build-ee.py installs ci/elide/blocked.certs (see check-blocked-certs.sh).
+          $check = "$env:WS\graal\ci\elide\CheckBlockedCerts.java"
+          & "$eeHome\bin\java.exe" $check
+          if ($LASTEXITCODE -ne 0) { throw "the EE JVM does not block the CVE-2026-91403 certificates" }
+          & "$eeHome\bin\javac.exe" -d . $check
+          cmd /c "call `"$vcvars`" x64 && $ni -cp . -o check-blocked-certs CheckBlockedCerts && check-blocked-certs.exe"
+          if ($LASTEXITCODE -ne 0) { throw "EE native images do not block the CVE-2026-91403 certificates ($LASTEXITCODE)" }
 
       # The Maven platform builds everything, for maven-deploy; the others, only what the natives
       # come from.
