@@ -221,8 +221,12 @@ def rebuild_launcher(ee_home):
     launcher = os.path.join(bin_dir, "native-image" + suffix)
     oracle_launcher = os.path.join(bin_dir, "native-image-oracle" + suffix)
     os.replace(launcher, oracle_launcher)
+    # Oracle's launcher carries the module flags of Oracle's build. The fork's builder modules may
+    # need more (ea.05's launcher does not export sun.reflect.annotation to guest staging, where
+    # upstream since moved the reflection substitutions), so pass the merged driver flags along.
+    module_flags = ["-J" + flag for flag in driver_module_flags(ee_home)]
     with tempfile.TemporaryDirectory(prefix="native-image-launcher-") as work:
-        result = subprocess.run([oracle_launcher, "--macro:native-image-launcher"], cwd=work, text=True,
+        result = subprocess.run([oracle_launcher, *module_flags, "--macro:native-image-launcher"], cwd=work, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not os.path.exists(launcher):
         print(result.stdout)
@@ -239,6 +243,15 @@ def rebuild_launcher(ee_home):
 
 DRIVER_JAR = "lib/graalvm/svm-driver.jar"
 MODULE_FLAGS = ("--add-exports=", "--add-opens=", "--add-reads=")
+
+
+def driver_module_flags(ee_home):
+    """The module flags (--add-exports, ...) of the driver jar's flag file for the home's Java
+    version, after merge_driver_flags: the fork's and Oracle's."""
+    major = read_release(ee_home).get("JAVA_VERSION", "").split(".")[0]
+    with zipfile.ZipFile(os.path.join(ee_home, DRIVER_JAR)) as jar:
+        lines = jar.read(f"graal-compiler-flags-{major}.config").decode("utf-8").splitlines()
+    return [line for line in lines if line.startswith(MODULE_FLAGS)]
 
 
 def read_driver_flags(ee_home):
