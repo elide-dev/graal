@@ -2,6 +2,10 @@
 
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
+## Version 25.6
+
+* GR-80881: Bytecode DSL: `Float` and `Double` constants are now compared by their raw bits, so distinct NaN payloads no longer share a constant-pool slot.
+
 ## Version 25.5
 
 * GR-79669: Instrument lookup is now supported during context preinitialization. Added `TruffleInstrument.onPreinitialize(Env)` for instruments to support retention during engine preinitialization.
