@@ -32,6 +32,7 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.compress.CompressedBlob;
+import com.oracle.svm.core.compress.CompressedBlobOptions;
 import com.oracle.svm.core.compress.HeapBlobCompression;
 import com.oracle.svm.core.compress.HeapBlobProfile;
 import com.oracle.svm.core.compress.ZstdDictionary;
@@ -87,7 +88,8 @@ public final class ResourceStorageEntry extends ResourceStorageEntryBase {
             read = true;
         }
         byte[][] result = data;
-        if (result == null) {
+        // Unknown fields alone cannot make the native zstd decoder unreachable on WebImage.
+        if (CompressedBlobOptions.CompressHeapBlobs.getValue() && result == null) {
             /* Threads may race here; they produce identical arrays and either one is fine. */
             result = new byte[compressedData.length][];
             for (int i = 0; i < result.length; i++) {
