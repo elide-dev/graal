@@ -27,6 +27,9 @@ fi
 HOME_DIR=${GVM_HOME:-$("${MX}" "${MX_ARGS[@]}" graalvm-home | tail -1)}
 HOME_DIR=$(echo "${HOME_DIR}" | tr '\\' '/')
 [ -d "${HOME_DIR}" ] || { echo "no GraalVM home at ${HOME_DIR}" >&2; exit 1; }
+# CVE-2026-91403: LabsJDK 25.0.4 does not block the compromised eMudhra intermediate CAs. Patches the
+# home itself, not just the archive: the smoke tests use it (ci/elide/check-blocked-certs.sh).
+"${MX_PYTHON:-python3}" "${WORKSPACE}/graal/ci/elide/install-blocked-certs.py" "${HOME_DIR}"
 
 # On macOS, the home is <bundle>/Contents/Home; the archive holds the bundle, as Oracle's do.
 ROOT=${HOME_DIR%/Contents/Home}
