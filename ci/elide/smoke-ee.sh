@@ -4,9 +4,10 @@
 #   ci/elide/smoke-ee.sh <ee-home> <platform> <work-dir> [<maven-repo> <version>]
 #
 # Builds and runs images with PGO (instrumented, then optimized), and on Linux with G1 and with code
-# compression. With a Maven repository (the release's), instead builds an image that embeds GraalJS
-# with Truffle runtime compilation, which runs a function until Truffle compiles it: the Maven
-# artifacts only exist once the release's Maven build has run.
+# compression, and checks that the distribution blocks the certificates of CVE-2026-91403 (see
+# check-blocked-certs.sh). With a Maven repository (the release's), instead builds an image that
+# embeds GraalJS with Truffle runtime compilation, which runs a function until Truffle compiles it:
+# the Maven artifacts only exist once the release's Maven build has run.
 set -euo pipefail
 
 HOME_DIR=${1:?ee-home}
@@ -15,6 +16,7 @@ WORK=${3:?work-dir}
 MAVEN_REPO=${4:-}
 VERSION=${5:-}
 NI="${HOME_DIR}/bin/native-image"
+SCRIPTS=$(cd "$(dirname "$0")" && pwd)
 
 mkdir -p "${WORK}"
 cd "${WORK}"
@@ -89,6 +91,7 @@ case "${PLATFORM}" in
     build_and_run smoke-compressed -H:+UnlockExperimentalVMOptions -H:+EnableCodeCompression
     ;;
 esac
+"${SCRIPTS}/check-blocked-certs.sh" "${HOME_DIR}" blocked-certs
 else
   cp=""
   for ga in org/graalvm/polyglot/polyglot org/graalvm/sdk/collections org/graalvm/sdk/word org/graalvm/sdk/nativeimage \
