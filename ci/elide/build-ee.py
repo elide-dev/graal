@@ -20,6 +20,9 @@ LinkCheck.java then checks that the enterprise code (the jars only Oracle's buil
 enterprise modules) still links against the fork's classes, the overlaid jars and the upgraded
 modules. Last, the native-image launcher is rebuilt so that it accepts the fork's hosted options.
 
+Oracle's build also gets the blocked-certificate list with the fix for CVE-2026-91403
+(install-blocked-certs.py), which its JDK 25.0.4 does not have.
+
   build-ee.py <version> <platform> <ce-home> <out-dir>
 
 Run from the workspace that holds the graal checkout. Needs ORACLE_EE_REPOSITORY and ORACLE_EE_TAG
@@ -205,6 +208,12 @@ def link_check(graal, ee_home, fork_jars, enterprise_jars):
     print(result.stdout, end="")
     if result.returncode != 0:
         fail("the enterprise code does not link against the fork's code (see the problems above)")
+
+
+def install_blocked_certs(graal, ee_home):
+    """Blocks the compromised eMudhra intermediate CAs of CVE-2026-91403 (see ci/elide/blocked.certs)."""
+    script = os.path.join(graal, "ci", "elide", "install-blocked-certs.py")
+    print(run(sys.executable, script, ee_home), end="")
 
 
 def rebuild_launcher(ee_home):
@@ -418,6 +427,7 @@ def main():
     if not ee_commit:
         fail(f"{tag} names no compiler source revision")
     print(f"base: Oracle GraalVM {ee_release['GRAALVM_VERSION']} ({tag}), open source {ee_commit.group(1)}")
+    install_blocked_certs(graal, ee_home)
 
     oracle_driver_flags = read_driver_flags(ee_home)
     replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
