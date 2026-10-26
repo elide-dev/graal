@@ -353,11 +353,18 @@ def overlay_jars(ce_home, ee_home):
 # decoder that every image links and the zstd-jni jar the image builder compresses heap blobs with.
 ADDITION_DIRS = ("lib/svm/builder/lib", "lib/svm/clibraries")
 
+# Native Image's own static libraries (libjvm, libchelper, svm_container and their symbol
+# manifests), built from substratevm's C sources. The fork's Java code is built against the fork's
+# sources, so Oracle's copies are replaced: ea.05's libjvm.a, for example, still has the
+# JVM_GetManagement stub that aborts, while the fork's runtime calls the implemented one.
+STATIC_LIBRARY_DIR = "lib/svm/clibraries"
+STATIC_LIBRARY_SUFFIXES = (".a", ".lib", ".symbols")
+
 
 def add_fork_files(ce_home, ee_home):
-    """Copies the files the fork adds in ADDITION_DIRS, leaving Oracle's files alone. Returns the
-    added files."""
-    added = []
+    """Copies the files the fork adds in ADDITION_DIRS, leaving Oracle's files alone, and replaces
+    Oracle's static libraries in STATIC_LIBRARY_DIR with the fork's. Returns the added files."""
+    added, replaced = [], []
     for directory in ADDITION_DIRS:
         for dirpath, _, files in os.walk(os.path.join(ce_home, directory)):
             for name in files:
@@ -367,8 +374,12 @@ def add_fork_files(ce_home, ee_home):
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     shutil.copy2(os.path.join(ce_home, relative), target)
                     added.append(relative)
+                elif directory == STATIC_LIBRARY_DIR and name.endswith(STATIC_LIBRARY_SUFFIXES):
+                    shutil.copy2(os.path.join(ce_home, relative), target)
+                    replaced.append(relative)
     for relative in added:
         print(f"added the fork's {relative}")
+    print(f"replaced {len(replaced)} static libraries with the fork's: {', '.join(sorted(set(os.path.basename(r) for r in replaced)))}")
     return added
 
 
