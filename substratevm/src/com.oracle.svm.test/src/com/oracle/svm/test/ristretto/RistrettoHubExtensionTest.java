@@ -76,6 +76,7 @@ public class RistrettoHubExtensionTest {
 
     @Test
     public void testReflectionCachesOfConstantClass() {
+        // Checkstyle: allow direct annotation access
         for (int i = 0; i < 3; i++) {
             assertEquals("Probe", Probe.class.getSimpleName());
             assertNotNull(Probe.class.getAnnotation(Marker.class));
@@ -83,5 +84,6 @@ public class RistrettoHubExtensionTest {
         assertSame(Probe.class.getAnnotation(Marker.class), Probe.class.getAnnotation(Marker.class));
         assertSame(Probe.class.getProtectionDomain(), Probe.class.getProtectionDomain());
         assertFalse(Probe.class.isAnnotationPresent(Test.class));
+        // Checkstyle: disallow direct annotation access
     }
 }
