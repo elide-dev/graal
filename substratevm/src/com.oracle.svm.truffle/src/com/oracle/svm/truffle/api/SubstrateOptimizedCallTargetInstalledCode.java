@@ -55,13 +55,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * Assume that methods return stale values because internal state can change at any safepoint (see
  * {@link SubstrateInstalledCode}).
  */
-public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode implements SubstrateInstalledCode, OptimizedAssumptionDependency {
-    /*
-     * Enterprise compatibility (TypedEntrySupport.ENTERPRISE_COPY): this class is not final and its
-     * constructor is protected because Oracle's prebuilt
-     * SubstrateEnterpriseOptimizedCallTargetInstalledCode subclasses it; that subclass installs its
-     * own typed entry method, which setAddress does not keep.
-     */
+public final class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode implements SubstrateInstalledCode, OptimizedAssumptionDependency {
     private final WeakCallTargetRef<SubstrateOptimizedCallTarget> callTargetRef;
     private String nameSuffix = "";
     private TypedEntryMethod method;
@@ -78,7 +72,7 @@ public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode imp
         }
     }
 
-    protected SubstrateOptimizedCallTargetInstalledCode(SubstrateOptimizedCallTarget callTarget) {
+    SubstrateOptimizedCallTargetInstalledCode(SubstrateOptimizedCallTarget callTarget) {
         super(null);
         this.callTargetRef = new WeakCallTargetRef<>(callTarget);
     }
@@ -187,7 +181,7 @@ public class SubstrateOptimizedCallTargetInstalledCode extends InstalledCode imp
     @Override
     public void setAddress(long address, long entryPoint, ResolvedJavaMethod method) {
         VMOperation.guaranteeInProgressAtSafepoint("Must be at a safepoint");
-        this.method = TypedEntrySupport.ENTERPRISE_COPY ? null : (TypedEntryMethod) method;
+        this.method = (TypedEntryMethod) method;
         this.address = address;
         this.entryPoint = entryPoint;
 

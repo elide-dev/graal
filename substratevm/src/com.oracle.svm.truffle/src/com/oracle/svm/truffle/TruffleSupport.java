@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.truffle;
 
-import java.lang.reflect.Method;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -42,18 +41,15 @@ import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.truffle.api.SubstrateOptimizedCallTarget;
-import com.oracle.svm.truffle.api.SubstratePartialEvaluator;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompiler;
 import com.oracle.svm.truffle.api.SubstrateTruffleCompilerImpl;
 import com.oracle.svm.truffle.api.SubstrateTruffleRuntime;
 import com.oracle.svm.truffle.isolated.IsolateAwareTruffleCompiler;
 import com.oracle.svm.truffle.isolated.IsolatedTruffleRuntimeSupport;
-import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.utilities.TriState;
 import com.oracle.truffle.compiler.OptimizedAssumptionDependency;
 import com.oracle.truffle.compiler.TruffleCompilable;
 import com.oracle.truffle.runtime.BackgroundCompileQueue;
-import com.oracle.truffle.runtime.EngineData;
 import com.oracle.truffle.runtime.OptimizedAssumption;
 import com.oracle.truffle.runtime.OptimizedCallTarget;
 import com.oracle.truffle.runtime.OptimizedDirectCallNode;
@@ -75,32 +71,6 @@ public class TruffleSupport {
         return ImageSingletons.lookup(TruffleSupport.class);
     }
 
-    /*
-     * Enterprise compatibility (TypedEntrySupport.ENTERPRISE_COPY): the factory methods below and
-     * the three-argument createSubstrateTruffleCompilerConfig exist for Oracle's prebuilt
-     * EnterpriseSupport, which overrides them to install its own call target, partial evaluator and
-     * compiler; the runtime, the compiler and TruffleFeature go through them.
-     */
-
-    /**
-     * @return the concrete subclass of {@link OptimizedCallTarget}.
-     */
-    public Class<?> getOptimizedCallTargetClass() {
-        return SubstrateOptimizedCallTarget.class;
-    }
-
-    public SubstrateOptimizedCallTarget createOptimizedCallTarget(OptimizedCallTarget sourceCallTarget, RootNode rootNode) {
-        return new SubstrateOptimizedCallTarget(sourceCallTarget, rootNode);
-    }
-
-    public SubstrateOptimizedCallTarget createOptimizedCallTarget(EngineData engine) {
-        return new SubstrateOptimizedCallTarget(engine);
-    }
-
-    public SubstratePartialEvaluator createPartialEvaluator(TruffleCompilerConfiguration config, GraphBuilderConfiguration graphBuilderConfigForRoot) {
-        return new SubstratePartialEvaluator(config, graphBuilderConfigForRoot);
-    }
-
     public SubstrateTruffleCompiler createTruffleCompiler(SubstrateTruffleRuntime runtime) {
         SubstrateTruffleCompilerImpl compiler = new SubstrateTruffleCompilerImpl(createSubstrateTruffleCompilerConfig(runtime, "community"));
         if (SubstrateOptions.SupportCompileInIsolates.getValue()) {
@@ -110,19 +80,10 @@ public class TruffleSupport {
     }
 
     protected static TruffleCompilerConfiguration createSubstrateTruffleCompilerConfig(SubstrateTruffleRuntime runtime, String compilerConfigurationName) {
-        return createSubstrateTruffleCompilerConfig(runtime, compilerConfigurationName, ReflectionUtil.lookupMethod(SubstrateOptimizedCallTarget.class, "doInvoke", Object[].class));
-    }
-
-    /**
-     * @param optimizedCallTargetMethod the method whose compiled code calls other compiled code
-     *            through the call target's entry point (enterprise compatibility: the enterprise
-     *            subclass passes its own {@code doInvoke})
-     */
-    protected static TruffleCompilerConfiguration createSubstrateTruffleCompilerConfig(SubstrateTruffleRuntime runtime, String compilerConfigurationName, Method optimizedCallTargetMethod) {
         RuntimeCompilationFeature runtimeCompilationFeature = RuntimeCompilationFeature.singleton();
         final GraphBuilderConfiguration.Plugins graphBuilderPlugins = runtimeCompilationFeature.getHostedProviders().getGraphBuilderPlugins();
         SubstrateBackend substrateBackend = RuntimeCompilationSupport.getRuntimeConfig().getBackendForNormalMethod();
-        substrateBackend.setRuntimeToRuntimeInvokeMethod(optimizedCallTargetMethod);
+        substrateBackend.setRuntimeToRuntimeInvokeMethod(ReflectionUtil.lookupMethod(SubstrateOptimizedCallTarget.class, "doInvoke", Object[].class));
         KnownTruffleTypes types = ImageSingletons.lookup(KnownTruffleTypes.class);
         Suites firstTierSuites = truffleSuites(RuntimeCompilationSupport.getFirstTierSuites());
         Suites fullOptSuites = truffleSuites(RuntimeCompilationSupport.getFullOptSuites());
