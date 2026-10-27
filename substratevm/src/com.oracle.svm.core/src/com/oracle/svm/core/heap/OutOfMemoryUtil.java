@@ -51,6 +51,7 @@ public class OutOfMemoryUtil {
     private static final OutOfMemoryError OUT_OF_MEMORY_ERROR = PreallocatedExceptions.createOutOfMemoryError(
                     "Garbage-collected heap size exceeded. Consider increasing the maximum Java heap size, for example with '-Xmx'.");
 
+    @NeverInline("Keep error reporting out of allocation slow paths.")
     @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Can't allocate when out of memory.")
     public static OutOfMemoryError heapSizeExceeded() {
         return reportOutOfMemoryError(OUT_OF_MEMORY_ERROR);
