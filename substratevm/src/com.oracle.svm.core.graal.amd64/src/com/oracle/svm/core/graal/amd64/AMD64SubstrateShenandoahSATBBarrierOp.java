@@ -24,14 +24,14 @@
  */
 package com.oracle.svm.core.graal.amd64;
 
-import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
+import static com.oracle.svm.core.graal.amd64.AMD64SubstrateShenandoahBarrierUtil.callStub;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahConstants;
-import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
 
 import jdk.graal.compiler.asm.Label;
 import jdk.graal.compiler.asm.amd64.AMD64Address;
@@ -42,7 +42,6 @@ import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
 import jdk.graal.compiler.lir.LIRInstructionClass;
 import jdk.graal.compiler.lir.Opcode;
 import jdk.graal.compiler.lir.amd64.AMD64AddressValue;
-import jdk.graal.compiler.lir.amd64.AMD64Call;
 import jdk.graal.compiler.lir.amd64.AMD64LIRInstruction;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 
@@ -97,6 +96,8 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
     @Temp({REG}) private AllocatableValue callArg;
 
     /** The runtime stub that enqueues the previous value (narrow or wide variant). */
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
 
     /**
@@ -117,7 +118,7 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
     private final boolean nonNull;
 
     public AMD64SubstrateShenandoahSATBBarrierOp(AMD64AddressValue address, AllocatableValue tmp, AllocatableValue preval, AllocatableValue buf,
-                    AllocatableValue preValue, ForeignCallLinkage callTarget, boolean loadWordSized, boolean narrow, int narrowShift, boolean nonNull) {
+                    AllocatableValue preValue, ForeignCallLinkage callTarget, AllocatableValue callAddress, boolean loadWordSized, boolean narrow, int narrowShift, boolean nonNull) {
         super(TYPE);
         this.address = address;
         this.tmp = tmp;
@@ -126,6 +127,7 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
         this.preValue = preValue;
         this.callArg = callTarget.getOutgoingCallingConvention().getArgument(0);
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.loadWordSized = loadWordSized;
         this.narrow = narrow;
         this.narrowShift = narrowShift;
@@ -200,7 +202,7 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
             // rtmp := rtmp - wordSize; *index := rtmp
             masm.subq(rtmp, 8);
             masm.movq(indexAddr, rtmp);
-            // rtmp := *buffer + rtmp  (address of the slot to write)
+            // rtmp := *buffer + rtmp (address of the slot to write)
             masm.movq(rbuf, new AMD64Address(thread, ShenandoahConstants.satbBufferOffset()));
             masm.addq(rtmp, rbuf);
             // The SATB buffer holds uncompressed oops. For a narrow (compressed, shift==0) reference
@@ -226,7 +228,7 @@ public class AMD64SubstrateShenandoahSATBBarrierOp extends AMD64LIRInstruction {
             } else {
                 masm.movl(arg0, rpre);
             }
-            AMD64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, false, null);
+            callStub(crb, masm, callTarget, callAddress);
             masm.jmp(done);
         });
     }

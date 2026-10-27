@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.graal.aarch64;
 
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.callStub;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.heapBaseRegister;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.linkRegisterValue;
@@ -92,12 +93,14 @@ public class AArch64SubstrateShenandoahLoadRefBarrierOp extends AArch64LIRInstru
     /** The {@code bl} of the slow path overwrites the link register. */
     @Temp({REG}) private AllocatableValue linkReg;
 
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
     private final ReferenceStrength strength;
     private final boolean notNull;
 
     public AArch64SubstrateShenandoahLoadRefBarrierOp(AllocatableValue result, AllocatableValue object, AArch64AddressValue loadAddress, AllocatableValue tmp, AllocatableValue tmp2,
-                    ForeignCallLinkage callTarget, ReferenceStrength strength, boolean notNull) {
+                    ForeignCallLinkage callTarget, AllocatableValue callAddress, ReferenceStrength strength, boolean notNull) {
         super(TYPE);
         this.result = result;
         this.object = object;
@@ -109,6 +112,7 @@ public class AArch64SubstrateShenandoahLoadRefBarrierOp extends AArch64LIRInstru
         this.callRet = callTarget.getOutgoingCallingConvention().getReturn();
         this.linkReg = linkRegisterValue();
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.strength = strength;
         this.notNull = notNull;
     }
@@ -177,7 +181,7 @@ public class AArch64SubstrateShenandoahLoadRefBarrierOp extends AArch64LIRInstru
             // object and the address components are Alive, so they cannot live in arg0/arg1.
             masm.loadAddress(arg1, loadAddr);
             masm.mov(64, arg0, objReg);
-            callStub(crb, masm, callTarget);
+            callStub(crb, masm, callTarget, callAddress);
             masm.mov(64, resReg, asRegister(callRet));
             masm.jmp(done);
         });

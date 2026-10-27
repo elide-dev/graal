@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.graal.amd64;
 
+import static com.oracle.svm.core.graal.amd64.AMD64SubstrateShenandoahBarrierUtil.callTargetAddress;
+
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.config.ObjectLayout;
@@ -88,7 +90,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, strength, notNull));
+        tool.append(new AMD64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, callTargetAddress(tool, linkage), strength, notNull));
         return result;
     }
 
@@ -125,7 +127,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         // shift) inline when enqueuing it into the SATB buffer. It is 0 on Graal CE.
         int narrowShift = ImageSingletons.lookup(CompressEncoding.class).getShift();
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, loadWordSized, useNarrow, narrowShift, nonNull));
+        tool.append(new AMD64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, callTargetAddress(tool, linkage), loadWordSized, useNarrow, narrowShift, nonNull));
     }
 
     @Override
@@ -193,7 +195,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp4 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(healLinkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, loadWordSized, narrowShift, canInlineCsetCheck));
+        tool.append(new AMD64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, callTargetAddress(tool, healLinkage), loadWordSized, narrowShift, canInlineCsetCheck));
     }
 
     @Override

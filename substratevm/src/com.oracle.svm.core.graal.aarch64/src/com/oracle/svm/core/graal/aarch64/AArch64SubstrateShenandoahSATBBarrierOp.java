@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.graal.aarch64;
 
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.callStub;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.heapBaseRegister;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.linkRegisterValue;
@@ -31,7 +32,6 @@ import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrie
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.storeThreadLocal;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.threadRegister;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
-import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
@@ -91,6 +91,8 @@ public class AArch64SubstrateShenandoahSATBBarrierOp extends AArch64LIRInstructi
     /** The {@code bl} of the slow path overwrites the link register. */
     @Temp({REG}) private AllocatableValue linkReg;
 
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
 
     /** Whether the field value is a full 64-bit word (vs. a 32-bit compressed reference). */
@@ -106,7 +108,7 @@ public class AArch64SubstrateShenandoahSATBBarrierOp extends AArch64LIRInstructi
     private final boolean nonNull;
 
     public AArch64SubstrateShenandoahSATBBarrierOp(AArch64AddressValue address, AllocatableValue tmp, AllocatableValue preval, AllocatableValue buf,
-                    AllocatableValue preValue, ForeignCallLinkage callTarget, boolean loadWordSized, boolean narrow, int narrowShift, boolean nonNull) {
+                    AllocatableValue preValue, ForeignCallLinkage callTarget, AllocatableValue callAddress, boolean loadWordSized, boolean narrow, int narrowShift, boolean nonNull) {
         super(TYPE);
         this.address = address;
         this.tmp = tmp;
@@ -116,6 +118,7 @@ public class AArch64SubstrateShenandoahSATBBarrierOp extends AArch64LIRInstructi
         this.callArg = callTarget.getOutgoingCallingConvention().getArgument(0);
         this.linkReg = linkRegisterValue();
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.loadWordSized = loadWordSized;
         this.narrow = narrow;
         this.narrowShift = narrowShift;
@@ -187,7 +190,7 @@ public class AArch64SubstrateShenandoahSATBBarrierOp extends AArch64LIRInstructi
         crb.getLIR().addSlowPath(this, () -> {
             masm.bind(runtime);
             masm.mov(valueBits, asRegister(callArg), rpre);
-            callStub(crb, masm, callTarget);
+            callStub(crb, masm, callTarget, callAddress);
             masm.jmp(done);
         });
     }

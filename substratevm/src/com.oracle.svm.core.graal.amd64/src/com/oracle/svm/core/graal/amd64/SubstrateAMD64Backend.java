@@ -761,6 +761,12 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
             return true;
         }
 
+        /** Returns an indirect target when the current compilation cannot use a direct relocation. */
+        Value emitBarrierCallTargetAddress(ForeignCallLinkage linkage) {
+            SharedMethod callee = (SharedMethod) ((SubstrateForeignCallLinkage) linkage).getMethod();
+            return shouldEmitIndirectForeignCall(callee) ? emitIndirectForeignCallAddress(linkage) : Value.ILLEGAL;
+        }
+
         protected Value emitIndirectForeignCallAddress(ForeignCallLinkage linkage) {
             SubstrateForeignCallLinkage callTarget = (SubstrateForeignCallLinkage) linkage;
             SharedMethod targetMethod = (SharedMethod) callTarget.getMethod();

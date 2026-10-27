@@ -70,7 +70,7 @@ import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahInitState;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahInternalState;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahStructs.ShenandoahRegionInfo;
-import com.oracle.svm.core.graal.RuntimeCompilation;
+import com.oracle.svm.core.code.RuntimeCodeInstallation;
 import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
 import com.oracle.svm.core.heap.FillerArray;
 import com.oracle.svm.core.heap.FillerObject;
@@ -121,7 +121,7 @@ import jdk.vm.ci.meta.JavaKind;
 public final class ShenandoahHeap extends Heap {
     /* Keep frequently accessed allocation and barrier fields within compact displacement range. */
     public static final FastThreadLocalBytes<Word> barrierAndAllocationDataTL = FastThreadLocalFactory.createBytes(ShenandoahConstants::barrierAndAllocationDataSize,
-                                                                                                                   "ShenandoahHeap.barrierAndAllocationData")
+                    "ShenandoahHeap.barrierAndAllocationData")
                     .setMaxOffset(FastThreadLocal.BYTE_OFFSET - ShenandoahConstants.cardTableOffsetRel());
     public static final FastThreadLocalBytes<Word> javaThreadTL = FastThreadLocalFactory.createBytes(ShenandoahConstants::javaThreadSize, "ShenandoahHeap.javaThread");
 
@@ -238,7 +238,7 @@ public final class ShenandoahHeap extends Heap {
 
     @Uninterruptible(reason = "Called during startup.")
     private static Word getClassesAssumedReachableForCodeUnloading() {
-        if (RuntimeCompilation.isEnabled()) {
+        if (RuntimeCodeInstallation.isEnabled()) {
             return Word.objectToUntrackedWord(CLASSES_ASSUMED_REACHABLE);
         }
         return Word.nullPointer();
