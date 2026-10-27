@@ -37,6 +37,7 @@ import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 
 import com.oracle.svm.guest.staging.SubstrateGCOptions;
+import com.oracle.svm.guest.staging.SubstrateGuestOptions;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.guest.staging.c.CGlobalData;
@@ -49,6 +50,7 @@ import com.oracle.svm.core.gc.shared.NativeGCOptions.NativeGCRuntimeOptionKey;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.RuntimeArgumentsSupplier;
 import com.oracle.svm.shared.option.HostedOptionKey;
 import com.oracle.svm.shared.option.SubstrateOptionKey;
+import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.core.util.UserError;
 
 import jdk.graal.compiler.api.replacements.Fold;
@@ -73,9 +75,6 @@ public class ShenandoahOptions {
 
     @Option(help = "Size of the Shenandoah heap regions in bytes. " + SUPPORTED_REGION_SIZES + ".", type = OptionType.User)//
     public static final HostedOptionKey<Integer> ShenandoahRegionSize = new ShenandoahHostedOptionKey<>(1 * M, ShenandoahOptions::validateRegionSize);
-
-    @Option(help = "Enable normal processing of flags relating to field diagnostics.", type = OptionType.Debug)//
-    public static final RuntimeOptionKey<Boolean> UnlockDiagnosticVMOptions = new ShenandoahRuntimeOptionKey<>(false, IsolateCreationOnly);
 
     private static final String SUPPORTED_GC_MODES = "satb, passive, generational";
 
@@ -120,7 +119,14 @@ public class ShenandoahOptions {
 
     public static ArrayList<Field> getOptionFields() {
         Class<?>[] optionClasses = {SubstrateGCOptions.class, SubstrateGCOptions.ConcealedOptions.class, NativeGCOptions.class, ShenandoahOptions.class};
-        return NativeGCOptions.getOptionFields(optionClasses);
+        ArrayList<Field> result = NativeGCOptions.getOptionFields(optionClasses);
+        /*
+         * Shenandoah checks UnlockDiagnosticVMOptions before it accepts diagnostic GC modes and
+         * heuristics (e.g., the passive mode). The option itself is defined once for all of Native
+         * Image in SubstrateGuestOptions, so only pass that field on to the C++ code.
+         */
+        result.add(ReflectionUtil.lookupField(SubstrateGuestOptions.class, SubstrateGuestOptions.UnlockDiagnosticVMOptions.getName()));
+        return result;
     }
 
     private static void validateShenandoahOption(SubstrateOptionKey<?> optionKey) {
