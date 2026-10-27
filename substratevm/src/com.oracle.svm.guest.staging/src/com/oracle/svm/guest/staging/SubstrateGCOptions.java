@@ -30,6 +30,7 @@ import static com.oracle.svm.guest.staging.option.RuntimeOptionKey.RuntimeOption
 import static com.oracle.svm.guest.staging.option.RuntimeOptionValidators.NON_NEGATIVE;
 import static com.oracle.svm.shared.option.HostedOptionKey.HostedOptionKeyFlag.DoNotPassToNativeGC;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 import org.graalvm.collections.EconomicMap;
@@ -47,9 +48,6 @@ import com.oracle.svm.shared.util.SubstrateUtil;
 import jdk.graal.compiler.options.Option;
 import jdk.graal.compiler.options.OptionKey;
 import jdk.graal.compiler.options.OptionType;
-
-import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Garbage collection-specific options that are supported by all garbage collectors. Some of these

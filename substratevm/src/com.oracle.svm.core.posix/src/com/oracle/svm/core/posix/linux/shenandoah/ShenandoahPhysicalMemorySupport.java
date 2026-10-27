@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.posix.linux.shenandoah;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.UnsignedWord;
 
 import com.oracle.svm.shared.singletons.AutomaticallyRegisteredImageSingleton;
@@ -38,6 +40,7 @@ import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 
 @AutomaticallyRegisteredImageSingleton(value = PlatformPhysicalMemorySupport.class, onlyWith = UseShenandoahGC.class)
 @SingletonTraits(access = RuntimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
+@Platforms(Platform.LINUX.class)
 public class ShenandoahPhysicalMemorySupport extends LinuxPhysicalMemorySupportImpl {
     @Override
     public UnsignedWord size() {
