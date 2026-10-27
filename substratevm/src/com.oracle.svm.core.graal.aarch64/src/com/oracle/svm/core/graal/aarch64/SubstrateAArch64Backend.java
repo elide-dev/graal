@@ -587,6 +587,13 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
              * snippets and therefore do not need one. Note that SubstrateAArch64VectorLIRGenerator
              * extends this class and therefore gets the same barrier-set LIR generator.
              */
+            if (!SubstrateOptions.useShenandoahGC()) {
+                /*
+                 * Folded at image build time, so that runtime-compiled code in images with other
+                 * GCs does not reach the Shenandoah LIR operations and their thread locals.
+                 */
+                return null;
+            }
             BarrierSet barrierSet = providers.getPlatformConfigurationProvider().getBarrierSet();
             if (barrierSet instanceof ShenandoahBarrierSet) {
                 return new AArch64SubstrateShenandoahBarrierSetLIRGenerator();

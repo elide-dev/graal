@@ -681,6 +681,13 @@ public class SubstrateAMD64Backend extends SubstrateBackendWithAssembler<AMD64Ma
              * a barrier-set LIR generator. All other SubstrateVM GCs implement their barriers as
              * snippets and therefore do not need one.
              */
+            if (!SubstrateOptions.useShenandoahGC()) {
+                /*
+                 * Folded at image build time, so that runtime-compiled code in images with other
+                 * GCs does not reach the Shenandoah LIR operations and their thread locals.
+                 */
+                return null;
+            }
             BarrierSet barrierSet = providers.getPlatformConfigurationProvider().getBarrierSet();
             if (barrierSet instanceof ShenandoahBarrierSet) {
                 return new AMD64SubstrateShenandoahBarrierSetLIRGenerator();
