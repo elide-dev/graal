@@ -1137,6 +1137,20 @@ def crema_class_loading_benchmark(args):
     native_image_context_run(build_and_run)
 
 
+@mx.command(suite.name, 'shenandoah-gc-stress', '[native-image options]')
+def shenandoah_gc_stress(args):
+    """Build and run the Shenandoah object-graph, atomic-reference, and concurrent mutation test."""
+    output_dir = join(svmbuild_dir(), platform_name(), 'shenandoah-gc-stress')
+    mx_util.ensure_dir_exists(output_dir)
+    source = join(suite.dir, 'src', 'native-image-tests', 'shenandoah', 'GCStress.java')
+    mx.run([mx.get_jdk().javac, '-d', output_dir, source])
+    with native_image_context(IMAGE_ASSERTION_FLAGS) as native_image:
+        build_args = ['--gc=shenandoah'] + svm_experimental_options(['-H:ShenandoahGCMode=generational'])
+        image = native_image(build_args + args + ['-cp', output_dir, '-o', join(output_dir, 'gcstress'), 'GCStress'])
+        # Passive mode requires diagnostic options; the unlock is harmless for the other modes.
+        mx.run([image, '-Xms32m', '-Xmx64m', '-XX:+UnlockDiagnosticVMOptions', '-XX:+PrintGC'], timeout=120)
+
+
 def runtime_classpath_resource_test_task(extra_build_args=None):
     svm_tests_jar = mx.distribution('substratevm:SVM_TESTS').path
     build_args = svm_experimental_options(['-H:+ClassForNameRespectsClassLoader']) + [

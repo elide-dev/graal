@@ -271,8 +271,8 @@ public class ShenandoahFeature implements InternalFeature {
     }
 
     private static void verifyOptionsAndPlatform() {
-        UserError.guarantee(Platform.includedIn(Platform.LINUX_AMD64.class) || Platform.includedIn(Platform.LINUX_AARCH64.class),
-                        "The Shenandoah garbage collector ('--gc=shenandoah') is currently only supported on linux/amd64 and linux/aarch64.");
+        UserError.guarantee(Platform.includedIn(Platform.LINUX_AMD64.class) || Platform.includedIn(Platform.LINUX_AARCH64.class) || Platform.includedIn(Platform.DARWIN_AARCH64.class),
+                        "The Shenandoah garbage collector ('--gc=shenandoah') is currently only supported on linux/amd64, linux/aarch64, and darwin/aarch64.");
 
         verifyOptionEnabled(SubstrateOptions.SpawnIsolates);
         verifyOptionEnabled(SubstrateOptions.AllowVMInternalThreads);
@@ -294,7 +294,7 @@ public class ShenandoahFeature implements InternalFeature {
     }
 
     /**
-     * Layout of instance objects:
+     * Layout of instance objects.
      * <ul>
      * <li>32/64 bit mark word/identity hashcode</li>
      * <li>32 bit hub reference</li>

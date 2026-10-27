@@ -47,3 +47,8 @@ Consulting the CI configurations in ci/ci.jsonnet may help understand how `mx ga
 ## Project Terminus
 
 - [Project Terminus](project-terminus.md): overview and design direction for self-hosting Native Image.
+
+## Shenandoah GC
+
+- [Building Shenandoah on Linux](shenandoah-linux.md): build the companion GC libraries and a native executable with generational Shenandoah.
+- [Building Shenandoah on macOS](shenandoah-macos.md): build and test Shenandoah on Apple Silicon.
