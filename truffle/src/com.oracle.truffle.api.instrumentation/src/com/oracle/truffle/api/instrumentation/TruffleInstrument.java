@@ -358,7 +358,7 @@ public abstract class TruffleInstrument {
      * @param env environment information for the instrument
      * @return {@code true} if the instrument state can be retained in the preinitialized engine,
      *         or {@code false} to fail engine preinitialization
-     * @since 25.6
+     * @since 25.5
      */
     protected boolean onPreinitialize(Env env) {
         return false;

@@ -501,7 +501,7 @@ public final class Engine implements AutoCloseable {
      * @param state the prepared state to consume
      * @return a builder that can create an engine
      * @throws NullPointerException if {@code state} is {@code null}
-     * @since 25.6
+     * @since 25.5
      */
     public static Builder newBuilder(Preinitialized state) {
         return EMPTY.new Builder(Objects.requireNonNull(state, "Preinitialized state must not be null."));
@@ -678,7 +678,7 @@ public final class Engine implements AutoCloseable {
      * {@code --initialize-at-build-time=<holder-class>}. Preparing state at native-image run time is
      * not supported.
      *
-     * @since 25.6
+     * @since 25.5
      */
     public static final class Preinitialized implements AutoCloseable {
 
@@ -697,7 +697,7 @@ public final class Engine implements AutoCloseable {
          *
          * @return an immutable set of cached sources
          * @throws IllegalStateException if this state has been consumed or closed
-         * @since 25.6
+         * @since 25.5
          */
         public synchronized Set<Source> getCachedSources() {
             checkAvailable();
@@ -708,7 +708,7 @@ public final class Engine implements AutoCloseable {
          * Releases this prepared state if it has not been consumed. This method is idempotent and
          * has no effect if the state is already closed or consumed.
          *
-         * @since 25.6
+         * @since 25.5
          */
         @Override
         public void close() {
@@ -1133,7 +1133,7 @@ public final class Engine implements AutoCloseable {
          * @throws IllegalStateException if callback contexts remain open, do not form exactly one
          *             compatible sharing layer, or retain unsupported instrument state
          * @throws NullPointerException if {@code initializer} is {@code null}
-         * @since 25.6
+         * @since 25.5
          */
         public Preinitialized preinitialize(int contextCount, Consumer<Engine> initializer) {
             if (preinitialized != null) {

@@ -2,12 +2,9 @@
 
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
-## Version 25.6
-
-* GR-79669: Instrument lookup is now supported during context preinitialization. Added `TruffleInstrument.onPreinitialize(Env)` for instruments to support retention during engine preinitialization.
-
 ## Version 25.5
 
+* GR-79669: Instrument lookup is now supported during context preinitialization. Added `TruffleInstrument.onPreinitialize(Env)` for instruments to support retention during engine preinitialization.
 * GR-79534: Added `HostCompilerDirectives.BytecodeInterpreterHandlerConfig.enableTailDuplication()` to opt threaded bytecode handlers into dispatch-tail duplication; disabled by default.
 * GR-71613: Added `CompilerDirectives.mergeExplodeKey` method for explicitly marking a local variable as a key for `@ExplodeLoop(MERGE_EXPLODE)` methods. It is recommended to migrate all merge exploded loops to use this method to catch unintended graph size explosions.
 * GR-79855: Extended `HostCompilerDirectives.BytecodeInterpreterHandlerConfig.Argument.Field.templateVariable()` to support per-field template variant counts for bytecode handler threading and added template-aware main dispatch from the switch loop.
