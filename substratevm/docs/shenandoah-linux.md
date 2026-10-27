@@ -70,3 +70,7 @@ The packaged product libraries are static archives, so this configuration does n
 - The native GC supports one isolate per process.
 - Runtime class loading is not supported by the companion Shenandoah implementation.
   Its metaspace allocation and statistics entry points are not implemented.
+
+## Runtime Metadata and Code
+
+See [Shenandoah Runtime Metadata and Code](shenandoah-runtime.md) for the metaspace contract and isolated Crema, Ristretto, and Truffle regression commands.

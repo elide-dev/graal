@@ -28,6 +28,9 @@
 
 #include <sys/types.h>
 
+// Note: this files has to be kept in sync with the GraalVM file with the same name under:
+// substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/gc/shenandoah/include/shenandoahGCStructs.h
+
 #ifdef __cplusplus
 namespace svm_gc {
 #endif
@@ -67,7 +70,7 @@ struct ShenandoahRegionInfo {
   u_char *bottom;
   u_char *top;
   u_char *end;
-  char region_type;
+  int region_type;
 };
 
 struct ShenandoahInternalState {

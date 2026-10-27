@@ -100,3 +100,7 @@ The stress test passed in all three modes with both reference encodings, and in 
 The collector supports one isolate per process.
 Runtime class loading and Intel macOS are not supported by this integration.
 The static GC archives link against the macOS C++ runtime; this configuration does not require a separate Shenandoah dynamic library or `DYLD_LIBRARY_PATH`.
+
+## Runtime Metadata and Code
+
+See [Shenandoah Runtime Metadata and Code](shenandoah-runtime.md) for the metaspace contract and isolated Crema, Ristretto, and Truffle regression commands.

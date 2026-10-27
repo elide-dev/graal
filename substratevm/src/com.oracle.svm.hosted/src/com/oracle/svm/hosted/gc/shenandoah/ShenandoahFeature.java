@@ -126,12 +126,6 @@ public class ShenandoahFeature implements InternalFeature {
         ImageSingletons.add(ShenandoahCommittedMemoryProvider.class, memoryProvider);
 
         if (RuntimeClassLoading.isSupported() && ImageLayerBuildingSupport.firstImageBuild()) {
-            /* The aligned metaspace reservation must leave room for image-heap hubs. */
-            int metaspaceSize = NumUtil.roundUp(SubstrateGCOptions.ConcealedOptions.getMaxMetaspaceSize(), ShenandoahOptions.ShenandoahRegionSize.getValue());
-            if (!new ShenandoahObjectHeader().isInHubAddressSpace(ShenandoahHeap.getNullRegionSize() + metaspaceSize)) {
-                throw UserError.invalidOptionValue(SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize, SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize.getValue(),
-                                "The metaspace reservation leaves no address space for image-heap hubs with the selected Shenandoah object layout");
-            }
             ImageSingletons.add(Metaspace.class, new ShenandoahMetaspace());
         }
 
@@ -167,12 +161,21 @@ public class ShenandoahFeature implements InternalFeature {
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         BeforeAnalysisAccessImpl accessImpl = (BeforeAnalysisAccessImpl) access;
 
+        if (RuntimeClassLoading.isSupported() && ImageLayerBuildingSupport.firstImageBuild()) {
+            /* Compression encoding is available after setup, so the header can be queried here. */
+            int metaspaceSize = NumUtil.roundUp(SubstrateGCOptions.ConcealedOptions.getMaxMetaspaceSize(), ShenandoahOptions.ShenandoahRegionSize.getValue());
+            if (!ShenandoahObjectHeader.get().isInHubAddressSpace(ShenandoahHeap.getNullRegionSize() + metaspaceSize)) {
+                throw UserError.invalidOptionValue(SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize, SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize.getValue(),
+                                "The metaspace reservation leaves no address space for image-heap hubs with the selected Shenandoah object layout");
+            }
+        }
+
         /* Ensure that thread locals whose offsets are only used by native code are discovered. */
         ResolvedJavaType shenandoahHeapType = accessImpl.getMetaAccess().lookupJavaType(ShenandoahHeap.class);
         accessImpl.registerAsRead((AnalysisField) JVMCIReflectionUtil.getUniqueDeclaredField(shenandoahHeapType, "barrierAndAllocationDataTL"),
-                                  "its offset is used by Shenandoah native code");
+                        "its offset is used by Shenandoah native code");
         accessImpl.registerAsRead((AnalysisField) JVMCIReflectionUtil.getUniqueDeclaredField(shenandoahHeapType, "javaThreadTL"),
-                                  "its offset is used by Shenandoah native code");
+                        "its offset is used by Shenandoah native code");
 
         NativeGCAccessedFields.markAsAccessed(accessImpl, ShenandoahAccessedFields.ACCESSED_CLASSES);
 

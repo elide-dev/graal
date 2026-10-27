@@ -24,13 +24,14 @@
  */
 package com.oracle.svm.core.graal.amd64;
 
+import static com.oracle.svm.core.graal.amd64.AMD64SubstrateShenandoahBarrierUtil.callStub;
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahConstants;
-import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
 
 import jdk.graal.compiler.asm.Label;
 import jdk.graal.compiler.asm.amd64.AMD64Address;
@@ -41,7 +42,6 @@ import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
 import jdk.graal.compiler.lir.LIRInstructionClass;
 import jdk.graal.compiler.lir.Opcode;
 import jdk.graal.compiler.lir.amd64.AMD64AddressValue;
-import jdk.graal.compiler.lir.amd64.AMD64Call;
 import jdk.graal.compiler.lir.amd64.AMD64LIRInstruction;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 import jdk.graal.compiler.nodes.gc.shenandoah.ShenandoahLoadRefBarrierNode.ReferenceStrength;
@@ -95,6 +95,8 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
     @Temp({REG}) private AllocatableValue callRet;
 
     /** The runtime stub implementing the slow-path load-reference barrier. */
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
 
     private final ReferenceStrength strength;
@@ -102,7 +104,7 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
     private final boolean notNull;
 
     public AMD64SubstrateShenandoahLoadRefBarrierOp(AllocatableValue result, AllocatableValue object, AMD64AddressValue loadAddress, AllocatableValue tmp, AllocatableValue tmp2,
-                    ForeignCallLinkage callTarget, ReferenceStrength strength, boolean notNull) {
+                    ForeignCallLinkage callTarget, AllocatableValue callAddress, ReferenceStrength strength, boolean notNull) {
         super(TYPE);
         this.result = result;
         this.object = object;
@@ -113,6 +115,7 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
         this.callArg1 = callTarget.getOutgoingCallingConvention().getArgument(1);
         this.callRet = callTarget.getOutgoingCallingConvention().getReturn();
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.strength = strength;
         this.notNull = notNull;
     }
@@ -188,7 +191,7 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
             masm.bind(slowPath);
             masm.leaq(asRegister(callArg1), loadAddr);
             masm.movq(asRegister(callArg0), objReg);
-            AMD64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, false, null);
+            callStub(crb, masm, callTarget, callAddress);
             masm.movq(resReg, asRegister(callRet));
             masm.jmp(done);
         });

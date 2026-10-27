@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.graal.aarch64;
 
+import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.callTargetAddress;
+
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.config.ObjectLayout;
@@ -95,7 +97,7 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, strength, notNull));
+        tool.append(new AArch64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, callTargetAddress(tool, linkage), strength, notNull));
         return result;
     }
 
@@ -122,7 +124,7 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         boolean loadWordSized = !useNarrow || ObjectLayout.singleton().getReferenceSize() == 8;
         int narrowShift = ImageSingletons.lookup(CompressEncoding.class).getShift();
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, loadWordSized, useNarrow, narrowShift, nonNull));
+        tool.append(new AArch64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, callTargetAddress(tool, linkage), loadWordSized, useNarrow, narrowShift, nonNull));
     }
 
     @Override
@@ -177,7 +179,8 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         AllocatableValue tmp4 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(healLinkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, wordSized, oopEncoding.getShift(), oopEncoding.hasBase()));
+        tool.append(new AArch64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, callTargetAddress(tool, healLinkage), wordSized, oopEncoding.getShift(), oopEncoding
+                        .hasBase()));
     }
 
     @Override

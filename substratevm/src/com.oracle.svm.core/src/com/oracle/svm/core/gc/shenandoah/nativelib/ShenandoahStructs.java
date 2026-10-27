@@ -127,7 +127,7 @@ public class ShenandoahStructs {
         Word end();
 
         @CField("region_type")
-        byte regionType();
+        int regionType();
     }
 
     @CStruct(addStructKeyword = true)

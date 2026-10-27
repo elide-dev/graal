@@ -25,6 +25,7 @@
 package com.oracle.svm.core.graal.aarch64;
 
 import static jdk.vm.ci.aarch64.AArch64.lr;
+import static jdk.vm.ci.code.ValueUtil.asRegister;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
@@ -35,9 +36,11 @@ import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
 import jdk.graal.compiler.lir.aarch64.AArch64Call;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
+import jdk.graal.compiler.lir.gen.LIRGeneratorTool;
 import jdk.vm.ci.aarch64.AArch64Kind;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Value;
 
 /**
  * Helpers shared by the AArch64 SubstrateVM Shenandoah barrier LIR ops.
@@ -77,10 +80,20 @@ final class AArch64SubstrateShenandoahBarrierUtil {
     }
 
     /**
-     * Calls the (uninterruptible, register-preserving) runtime stub. All SubstrateVM direct calls
+     * Calls the (uninterruptible, register-preserving) runtime stub. AOT direct calls
      * are within +-128 MB, so a plain {@code bl} suffices (see SubstrateAArch64DirectCallOp).
      */
-    static void callStub(CompilationResultBuilder crb, AArch64MacroAssembler masm, ForeignCallLinkage callTarget) {
-        AArch64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, null);
+    static AllocatableValue callTargetAddress(LIRGeneratorTool tool, ForeignCallLinkage linkage) {
+        Value address = ((SubstrateAArch64Backend.SubstrateAArch64LIRGenerator) tool).emitBarrierCallTargetAddress(linkage);
+        return Value.ILLEGAL.equals(address) ? Value.ILLEGAL : tool.asAllocatable(address);
+    }
+
+    static void callStub(CompilationResultBuilder crb, AArch64MacroAssembler masm, ForeignCallLinkage callTarget, AllocatableValue address) {
+        var method = ((SubstrateForeignCallLinkage) callTarget).getMethod();
+        if (Value.ILLEGAL.equals(address)) {
+            AArch64Call.directCall(crb, masm, method, null, null);
+        } else {
+            AArch64Call.indirectCall(crb, masm, asRegister(address), method, null);
+        }
     }
 }
