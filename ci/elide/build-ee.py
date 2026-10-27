@@ -4,7 +4,8 @@
 The base is the Oracle GraalVM early-access build made from the same upstream sources as the
 fork's base (same GraalVM version and JVMCI). Its open-source jars are replaced with the fork's,
 taken from the CE distribution built in the same job. The enterprise parts stay: svm-enterprise
-(PGO, code compression, ...), the G1 libraries, the enterprise compiler and Truffle modules.
+(PGO, code compression, ...), the G1 libraries, the enterprise compiler and Truffle modules. The
+fork's Shenandoah libraries (the CE build's svmgc component) are added next to Oracle's G1 ones.
 
 Oracle's build has the Graal compiler inside lib/modules. Its jdk.graal.compiler module is the
 open-source build of the same sources (byte for byte); the enterprise compiler is a separate module
@@ -369,6 +370,11 @@ ADDITION_DIRS = ("lib/svm/builder/lib", "lib/svm/clibraries")
 STATIC_LIBRARY_DIR = "lib/svm/clibraries"
 STATIC_LIBRARY_SUFFIXES = (".a", ".lib", ".symbols")
 
+# The native GC libraries of the CE build's svmgc component (built from labs-openjdk's
+# substratevm-gcs). Oracle's build ships its own G1 libraries, which stay: the enterprise G1 is
+# smoke-tested with them. The fork's Shenandoah libraries are new files and are added.
+ORACLE_NATIVE_GC_LIBRARIES = re.compile(r"^(lib)?g1gc(-[\w-]+)?\.(a|lib)$")
+
 
 def add_fork_files(ce_home, ee_home):
     """Copies the files the fork adds in ADDITION_DIRS, leaving Oracle's files alone, and replaces
@@ -383,7 +389,7 @@ def add_fork_files(ce_home, ee_home):
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     shutil.copy2(os.path.join(ce_home, relative), target)
                     added.append(relative)
-                elif directory == STATIC_LIBRARY_DIR and name.endswith(STATIC_LIBRARY_SUFFIXES):
+                elif directory == STATIC_LIBRARY_DIR and name.endswith(STATIC_LIBRARY_SUFFIXES) and not ORACLE_NATIVE_GC_LIBRARIES.match(name):
                     shutil.copy2(os.path.join(ce_home, relative), target)
                     replaced.append(relative)
     for relative in added:
