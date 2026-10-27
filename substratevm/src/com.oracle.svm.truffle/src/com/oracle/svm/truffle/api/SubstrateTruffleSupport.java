@@ -38,6 +38,7 @@ import com.oracle.svm.graal.RuntimeCompilationSupport;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.shared.util.ReflectionUtil;
 import com.oracle.svm.shared.util.SubstrateUtil;
+import com.oracle.svm.truffle.TruffleSupport;
 import com.oracle.svm.truffle.isolated.IsolateAwareTruffleCompiler;
 import com.oracle.svm.truffle.isolated.IsolatedTruffleRuntimeSupport;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -82,14 +83,34 @@ public class SubstrateTruffleSupport extends AbstractTruffleCompilationSupport {
         throw CompilerDirectives.shouldNotReachHere("Should not be called. Not necessary to be called on SVM.");
     }
 
+    /**
+     * The {@link TruffleSupport} image singleton that Oracle's prebuilt enterprise Truffle jar
+     * registers, to which this support delegates the methods that jar overrides; {@code null} if
+     * there is none or if this support is a subclass.
+     */
+    private SubstrateTruffleSupport registeredTruffleSupport() {
+        if (getClass() == SubstrateTruffleSupport.class && ImageSingletons.contains(TruffleSupport.class)) {
+            return TruffleSupport.singleton();
+        }
+        return null;
+    }
+
     @Override
     public String getCompilerConfigurationName(TruffleCompilerRuntime runtime) {
+        SubstrateTruffleSupport registered = registeredTruffleSupport();
+        if (registered != null) {
+            return registered.getCompilerConfigurationName(runtime);
+        }
         return "community";
     }
 
     @Override
     @Platforms(Platform.HOSTED_ONLY.class)
     public SubstrateTruffleCompiler createCompiler(TruffleCompilerRuntime compilerRuntime) {
+        SubstrateTruffleSupport registered = registeredTruffleSupport();
+        if (registered != null) {
+            return registered.createCompiler(compilerRuntime);
+        }
         SubstrateTruffleRuntime runtime = (SubstrateTruffleRuntime) compilerRuntime;
         SubstrateTruffleCompilerImpl compiler = new SubstrateTruffleCompilerImpl(createSubstrateTruffleCompilerConfig(runtime, getCompilerConfigurationName(runtime)));
         if (SubstrateOptions.SupportCompileInIsolates.getValue()) {
@@ -153,7 +174,11 @@ public class SubstrateTruffleSupport extends AbstractTruffleCompilationSupport {
         return SubstrateObjectConstant.forObject(callTarget);
     }
 
-    public BackgroundCompileQueue createBackgroundCompileQueue(@SuppressWarnings("unused") SubstrateTruffleRuntime runtime) {
+    public BackgroundCompileQueue createBackgroundCompileQueue(SubstrateTruffleRuntime runtime) {
+        SubstrateTruffleSupport registered = registeredTruffleSupport();
+        if (registered != null) {
+            return registered.createBackgroundCompileQueue(runtime);
+        }
         return new BackgroundCompileQueue(runtime);
     }
 
