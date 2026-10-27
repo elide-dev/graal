@@ -3,11 +3,12 @@
 #
 #   ci/elide/smoke-ee.sh <ee-home> <platform> <work-dir> [<maven-repo> <version>]
 #
-# Builds and runs images with PGO (instrumented, then optimized), and on Linux with G1 and with code
-# compression, and checks that the distribution blocks the certificates of CVE-2026-91403 (see
-# check-blocked-certs.sh). With a Maven repository (the release's), instead builds an image that
-# embeds GraalJS with Truffle runtime compilation, which runs a function until Truffle compiles it:
-# the Maven artifacts only exist once the release's Maven build has run.
+# Builds and runs images with PGO (instrumented, then optimized), on Linux with G1 and with code
+# compression, on Linux and macOS with Shenandoah, and checks that the distribution blocks the
+# certificates of CVE-2026-91403 (see check-blocked-certs.sh). With a Maven repository (the
+# release's), instead builds an image that embeds GraalJS with Truffle runtime compilation, which
+# runs a function until Truffle compiles it: the Maven artifacts only exist once the release's Maven
+# build has run.
 set -euo pipefail
 
 HOME_DIR=${1:?ee-home}
@@ -89,6 +90,13 @@ case "${PLATFORM}" in
     build_and_run smoke-g1 --gc=G1
     grep -q 'Garbage collector: G1 GC' smoke-g1.log || { echo "the image does not use G1" >&2; exit 1; }
     build_and_run smoke-compressed -H:+UnlockExperimentalVMOptions -H:+EnableCodeCompression
+    ;;
+esac
+case "${PLATFORM}" in
+  linux-* | macos-aarch64)
+    # The fork's Shenandoah libraries (svmgc), added by build-ee.py.
+    build_and_run smoke-shenandoah --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:ShenandoahGCMode=generational -H:-UnlockExperimentalVMOptions
+    grep -q 'Garbage collector: Shenandoah GC' smoke-shenandoah.log || { echo "the image does not use Shenandoah" >&2; exit 1; }
     ;;
 esac
 "${SCRIPTS}/check-blocked-certs.sh" "${HOME_DIR}" blocked-certs

@@ -4,6 +4,7 @@
 # platform under dist/. graalvm-ce-* is the fork built from source. graalvm-ee-* is Oracle GraalVM
 # (the early-access build from the fork's upstream base, ORACLE_EE_TAG) with the fork's code in place
 # of Oracle's open-source code, for the enterprise features: G1, PGO, code compression, ...
+# On Linux and macOS, both carry the Shenandoah GC (svmgc, built from labs-openjdk's substratevm-gcs).
 #
 # Triggers:
 #   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.5.5-elide.1`, to build and publish.
@@ -72,6 +73,15 @@ env:
   # Update it when the fork moves to a new upstream base.
   ORACLE_EE_REPOSITORY: graalvm/oracle-graalvm-ea-builds
   ORACLE_EE_TAG: jdk-25i5-25.0.4.1.1-ea.05
+  # The native GC libraries (svmgc: Shenandoah, and G1) come from the substratevm-gcs suite, a
+  # reduced HotSpot source tree in labs-openjdk. Its sources must match the fork's GC integration
+  # (shenandoahGCStructs.h, ShenandoahConstants) and the LabsJDK it builds with, so it is pinned to
+  # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
+  # finds it. Windows has no Shenandoah support and builds without it.
+  LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
+  LABS_OPENJDK_REF: f9e39e7add09413b62aa914f57897bbf114b0df7  # feat/shenandoah-25.5
+  SVMGC_IMPORTS: substratevm-gcs
+  SVMGC_COMPONENTS: svmgc
 
 jobs:
   meta:
@@ -175,6 +185,13 @@ jobs:
           repository: ${{ env.GRAALPYTHON_REPOSITORY }}
           ref: ${{ env.GRAALPYTHON_REF }}
           path: graalpython
+      - name: Checkout labs-openjdk (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ env.LABS_OPENJDK_REPOSITORY }}
+          ref: ${{ env.LABS_OPENJDK_REF }}
+          path: labs-openjdk
       # The runners are persistent, and a previous run's clean up may not have run: its archives and
       # natives would otherwise ship with this release.
       - name: Remove previous output
@@ -209,7 +226,8 @@ jobs:
           python-version: "3.12"
       - name: Record source revisions
         run: |
-          for r in graal graaljs graalpython; do
+          for r in graal graaljs graalpython labs-openjdk; do
+            [ -d "${r}" ] || continue
             echo "${r}: $(git -C "${r}" rev-parse HEAD)" | tee -a "${GITHUB_STEP_SUMMARY}"
           done
           py=python3; command -v python3 >/dev/null 2>&1 || py=python
@@ -258,6 +276,9 @@ jobs:
 
       - name: Build GraalVM (Unix)
         if: runner.os != 'Windows'
+        env:
+          DIST_IMPORTS: ${{ env.DIST_IMPORTS }},${{ env.SVMGC_IMPORTS }}
+          DIST_COMPONENTS: ${{ env.DIST_COMPONENTS }},${{ env.SVMGC_COMPONENTS }}
         run: ./graal/ci/elide/build-dist.sh "${VERSION}" "${PLATFORM}" "${WS}/out/dist" | tee build-dist.out
       - name: Build GraalVM (Windows)
         if: runner.os == 'Windows'
@@ -288,6 +309,10 @@ jobs:
           "${home}/bin/javac" Hello.java
           "${home}/bin/native-image" -cp . Hello hello
           ./hello
+          # The svmgc component: an image with the Shenandoah GC (generational mode).
+          "${home}/bin/native-image" --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:ShenandoahGCMode=generational -H:-UnlockExperimentalVMOptions -cp . Hello hello-shenandoah | tee hello-shenandoah.log
+          grep -q 'Garbage collector: Shenandoah GC' hello-shenandoah.log
+          ./hello-shenandoah
           # CVE-2026-91403: build-dist.sh installs ci/elide/blocked.certs.
           "${MX_PYTHON}" "${WS}/graal/ci/elide/test-blocked-certs.py"
           "${WS}/graal/ci/elide/check-blocked-certs.sh" "${home}" blocked-certs
@@ -296,7 +321,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
-          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello smoke/hello-shenandoah
       - name: Check ThinLTO bitcode of the static C libraries (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -316,7 +341,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
-          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -475,7 +500,7 @@ jobs:
       - name: Clean up
         if: always()
         run: |
-          rm -rf graal graaljs graalpython mx out smoke smoke-ee smoke-ee-js labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
+          rm -rf graal graaljs graalpython labs-openjdk mx out smoke smoke-ee smoke-ee-js labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
           df -Pk . | awk 'NR==2 {printf "free after cleanup: %d GB\n", $4 / 1024 / 1024}'
 
   publish:
