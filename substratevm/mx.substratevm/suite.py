@@ -1729,7 +1729,8 @@ suite = {
                     "jdk.vm.ci.meta",
                     "jdk.vm.ci.meta.annotation",
                     "jdk.vm.ci.code",
-                    "jdk.vm.ci.code.stack"
+                    "jdk.vm.ci.code.stack",
+                    "jdk.vm.ci.runtime",
                 ]
             },
             "checkstyle": "com.oracle.svm.hosted",

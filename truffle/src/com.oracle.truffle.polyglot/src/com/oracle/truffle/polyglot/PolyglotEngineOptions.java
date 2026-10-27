@@ -140,10 +140,6 @@ final class PolyglotEngineOptions {
     static final OptionKey<Boolean> WarnMethodScoping = new OptionKey<>(true);
 
     @Option(category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = "" +
-                    "Use pre-initialized context when it's available (default: true).", usageSyntax = "true|false")//
-    static final OptionKey<Boolean> UsePreInitializedContext = new OptionKey<>(true);
-
-    @Option(category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = "" +
                     "Adopt the pre-initialized context even when it initialized languages the new context does not permit. " +
                     "Such languages stay dormant: never entered, patched, finalized or consulted on thread access. " +
                     "The embedder guarantees no value of theirs escapes pre-initialization (default: false).", usageSyntax = "true|false")//
