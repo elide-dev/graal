@@ -25,7 +25,10 @@
 package com.oracle.svm.hosted.gc.shenandoah;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +58,7 @@ import com.oracle.svm.core.gc.shenandoah.ShenandoahPinnedObjectSupport;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahRelatedMXBeans;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahAllocationSupport;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
+import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibraryDependencies;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.ObjectScanner;
 import com.oracle.graal.pointsto.heap.ImageHeapScanner;
@@ -166,6 +170,7 @@ public class ShenandoahFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         BeforeAnalysisAccessImpl accessImpl = (BeforeAnalysisAccessImpl) access;
+        verifyNativeLibraryAvailable(accessImpl.getNativeLibraries().getLibraryPaths());
 
         /* Ensure that thread locals whose offsets are only used by native code are discovered. */
         ResolvedJavaType shenandoahHeapType = accessImpl.getMetaAccess().lookupJavaType(ShenandoahHeap.class);
@@ -286,6 +291,24 @@ public class ShenandoahFeature implements InternalFeature {
         UserError.guarantee(!SubstrateOptions.SupportCompileInIsolates.getValue(), "The Shenandoah garbage collector ('--gc=shenandoah') does not support isolated compilation.");
 
         SubstrateGCOptions.validateMaxMetaspaceSize(ShenandoahOptions.ShenandoahRegionSize.getValue(), ShenandoahHeap.getNullRegionSize());
+    }
+
+    /**
+     * The Shenandoah library is not part of the default Native Image distribution. Without this
+     * check, a missing library is only reported by the linker after the whole image was built.
+     */
+    private static void verifyNativeLibraryAvailable(Collection<String> libraryPaths) {
+        String library = new ShenandoahLibraryDependencies().getLibraries().getFirst();
+        for (String libraryPath : libraryPaths) {
+            for (String suffix : new String[]{".a", ".so", ".dylib"}) {
+                if (Files.isRegularFile(Path.of(libraryPath, "lib" + library + suffix))) {
+                    return;
+                }
+            }
+        }
+        throw UserError.abort("The Shenandoah garbage collector ('--gc=shenandoah') requires the native library 'lib%s', which was not found in the native library search path %s. " +
+                        "Use a GraalVM distribution that includes the SubstrateVM GC component (svmgc), or add the directory that contains the library with '-H:CLibraryPath=<dir>'.",
+                        library, libraryPaths);
     }
 
     private static void verifyOptionEnabled(SubstrateOptionKey<Boolean> option) {
