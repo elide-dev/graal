@@ -475,7 +475,7 @@ public final class JavaStackWalker {
         VMError.guarantee(anchor.isNonNull(), "walkCurrentThreadFromFrameAnchor requires a frame anchor");
         JavaStackWalk walk = StackValue.get(sizeOfJavaStackWalk());
         initWalk0(walk, anchor.getLastJavaSP(), Word.nullPointer(), anchor.getLastJavaIP(), anchor.getPreviousAnchor());
-        return doWalk(walk, thread, visitor, data);
+        return doWalkThread(walk, thread, visitor, data);
     }
 
     @Uninterruptible(reason = "Prevent deoptimization of stack frames while in this method.")

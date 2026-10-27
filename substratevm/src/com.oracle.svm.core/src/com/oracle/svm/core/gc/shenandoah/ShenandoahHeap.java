@@ -36,11 +36,11 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.RuntimeStateTrimConfig.Mode;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
+import org.graalvm.nativeimage.impl.RuntimeStateTrimConfig.Mode;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
@@ -60,6 +60,7 @@ import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.gc.shared.NativeGCStackWalker;
 import com.oracle.svm.core.gc.shared.NativeGCThreadTransitions;
 import com.oracle.svm.core.gc.shared.NativeGCThreadsLock;
@@ -451,7 +452,7 @@ public final class ShenandoahHeap extends Heap {
 
     @Fold
     static int getByteArrayBaseOffset() {
-        return ObjectLayout.singleton().getArrayBaseOffset(JavaKind.Byte);
+        return ObjectLayoutCompilerSupport.getArrayBaseOffset(ObjectLayout.singleton(), JavaKind.Byte);
     }
 
     @Override
