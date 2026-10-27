@@ -47,8 +47,6 @@ import org.graalvm.nativeimage.Platforms;
 import com.oracle.svm.core.OS;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.HostedArgumentsSupplier;
-import com.oracle.svm.core.gc.shared.NativeGCOptions.NativeGCHostedOptionKey;
-import com.oracle.svm.core.gc.shared.NativeGCOptions.NativeGCRuntimeOptionKey;
 import com.oracle.svm.core.gc.shared.NativeGCOptions.RuntimeArgumentsSupplier;
 import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
 import com.oracle.svm.guest.staging.option.RuntimeOptionValidation;

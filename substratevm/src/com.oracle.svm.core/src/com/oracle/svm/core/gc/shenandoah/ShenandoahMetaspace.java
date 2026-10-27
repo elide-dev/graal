@@ -32,7 +32,6 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.gc.shenandoah.ShenandoahOptions;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
 import com.oracle.svm.core.gc.shared.NativeGCStructs.MetaspaceStatistics;
 import com.oracle.svm.core.gc.shared.graal.NativeGCAllocationSupport;

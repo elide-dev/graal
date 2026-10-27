@@ -27,6 +27,7 @@ package com.oracle.svm.core.gc.shenandoah.nativelib;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.CContext;
 
 import com.oracle.svm.core.SubstrateOptions;
@@ -59,6 +60,6 @@ public class ShenandoahLibraryDependencies implements CContext.Directives {
     }
 
     private static List<String> getCppLibs() {
-        return List.of("stdc++");
+        return List.of(Platform.includedIn(Platform.DARWIN.class) ? "c++" : "stdc++");
     }
 }

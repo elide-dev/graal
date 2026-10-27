@@ -26,7 +26,6 @@ package com.oracle.svm.core.gc.shenandoah;
 
 import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegionSize;
 import static com.oracle.svm.core.heap.RuntimeCodeCacheCleaner.CLASSES_ASSUMED_REACHABLE;
-import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import java.lang.ref.Reference;
 import java.util.ArrayList;
@@ -100,7 +99,6 @@ import com.oracle.svm.core.thread.Safepoint;
 import com.oracle.svm.guest.staging.core.thread.ThreadStatus;
 import com.oracle.svm.core.thread.ThreadsLock;
 import com.oracle.svm.core.thread.VMOperationControl;
-import com.oracle.svm.core.thread.VMThreads;
 import com.oracle.svm.core.thread.VMThreads.SafepointBehavior;
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocal;
 import com.oracle.svm.guest.staging.core.threadlocal.FastThreadLocalBytes;
