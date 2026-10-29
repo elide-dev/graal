@@ -9,6 +9,7 @@ This changelog summarizes major changes to GraalVM Native Image.
   Shared arena support is no longer disabled by default when Vector API support is enabled, and enabling both `-H:+SharedArenaSupport` and `-H:+VectorAPISupport` no longer fails the build.
 * (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
   Requesting an unlinkable provider still fails at run time.
+* (GR-80925) Fixed conditional foreign metadata collection in the Tracing Agent, including partial runs, and preservation of foreign conditions when generating or merging reachability metadata.
 
 * (GR-81016) Preserved `sun.misc` entry points for Maven running with runtime class loading.
 * Initialized runtime services before executing restored Truffle code.
