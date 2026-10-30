@@ -76,6 +76,7 @@ jobs:
         run: |
           for gc_mode in satb generational; do
             ../../mx/mx --java-home="${JAVA_HOME}" --dynamicimports=substratevm-gcs shenandoah-truffle-test \
+              -H:CLibraryPath="${GITHUB_WORKSPACE}/labs-openjdk/mxbuild/linux-amd64/hotspot/linux-amd64/glibc" \
               -H:+UnlockExperimentalVMOptions -H:ShenandoahDebugLevel=fastdebug \
               -H:ShenandoahGCMode="${gc_mode}" -H:-UnlockExperimentalVMOptions \
               -R:+UnlockDiagnosticVMOptions -R:+ShenandoahVerify
