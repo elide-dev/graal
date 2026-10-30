@@ -4,6 +4,9 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
+  Requesting an unlinkable provider still fails at run time.
+
 * Fixed Shenandoah images with Truffle runtime compilation failing during compiler setup and emitting unsupported direct barrier calls.
   The unsupported `MemoryMaskingAndFencing` mitigation is rejected when using Shenandoah.
   Runtime compilation requires companion collector libraries with runtime code-root support.
