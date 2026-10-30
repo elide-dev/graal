@@ -4,6 +4,9 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
+  Requesting an unlinkable provider still fails at run time.
+
 * Fixed Shenandoah image builds with runtime class loading by validating the metaspace reservation after compression encoding initialization.
 * Fixed embedded Native Image drivers retaining the hosted `Optimize` option update callback.
 
