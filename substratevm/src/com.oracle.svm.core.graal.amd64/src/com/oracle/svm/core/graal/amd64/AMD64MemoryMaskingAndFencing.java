@@ -37,11 +37,13 @@ import com.oracle.svm.core.genscavenge.AddressRangeCommittedMemoryProvider;
 import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.guest.staging.option.RuntimeOptionKey;
+import com.oracle.svm.guest.staging.option.RuntimeOptionValidation;
 import com.oracle.svm.guest.staging.option.RuntimeOptionValidators;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.CompressEncoding;
@@ -101,11 +103,26 @@ public class AMD64MemoryMaskingAndFencing {
 
     public static class Options {
         @Option(help = "AMD64 only spectre mitigation for runtime compiled code (masking or fencing before accesses).", type = OptionType.Expert, stability = OptionStability.EXPERIMENTAL) //
-        public static final RuntimeOptionKey<Boolean> MemoryMaskingAndFencing = new RuntimeOptionKey<>(false, null, Options::validateMemoryMaskingAndFencing, RelevantForCompilationIsolates);
+        public static final RuntimeOptionKey<Boolean> MemoryMaskingAndFencing = new RuntimeOptionKey<>(false, Options::validateMemoryMaskingAndFencingUpdate,
+                        Options::validateMemoryMaskingAndFencing, RelevantForCompilationIsolates);
+
+        private static void validateMemoryMaskingAndFencingUpdate(RuntimeOptionKey<Boolean> optionKey, boolean value) {
+            /* Hosted collector options are only available after argument parsing. */
+            if (!SubstrateUtil.HOSTED) {
+                validateShenandoahMemoryMaskingAndFencing(optionKey, value);
+            }
+        }
+
+        private static void validateShenandoahMemoryMaskingAndFencing(RuntimeOptionKey<Boolean> optionKey, boolean value) {
+            if (value && SubstrateOptions.useShenandoahGC()) {
+                throw RuntimeOptionValidation.invalidOptionValue(optionKey, true, "The option is not supported when using Shenandoah");
+            }
+        }
 
         private static void validateMemoryMaskingAndFencing(RuntimeOptionKey<Boolean> optionKey) {
             RuntimeOptionValidators.onlyEnabledOnAMD64(optionKey);
             RuntimeOptionValidators.notEnabledWithG1(optionKey);
+            validateShenandoahMemoryMaskingAndFencing(optionKey, optionKey.getValue());
         }
     }
 }
@@ -122,10 +139,11 @@ class AMD64MemoryMaskingAndFencingFeature implements InternalFeature {
              * for host compilation.
              */
             return;
-        } else if (SubstrateOptions.useG1GC()) {
+        } else if (SubstrateOptions.useG1GC() || SubstrateOptions.useShenandoahGC()) {
             /*
-             * The mitigation is not compatible with G1. Also, when only 1 isolate is used (G1 case)
-             * the mitigation is not needed.
+             * The mitigation requires AddressRangeCommittedMemoryProvider. G1 and Shenandoah use
+             * different memory providers and only support one isolate. Option validation rejects
+             * enabling the mitigation with these collectors.
              */
             return;
         }

@@ -1,0 +1,82 @@
+name: Shenandoah Truffle
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/shenandoah-truffle.yml'
+      - 'substratevm/**'
+      - 'compiler/**'
+      - 'truffle/**'
+  push:
+    branches: ['elide-25.5.x']
+    paths:
+      - '.github/workflows/shenandoah-truffle.yml'
+      - 'substratevm/**'
+      - 'compiler/**'
+      - 'truffle/**'
+  workflow_dispatch:
+
+concurrency:
+  group: shenandoah-truffle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-compilation:
+    runs-on: linux-amd64-cipool
+    container: docker.io/library/ubuntu:22.04
+    timeout-minutes: 120
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      MX_PYTHON: python3
+      MULTITARGET: linux-amd64-glibc
+      SVM_GC_TARGETS: build_genshen_product_cr_a build_genshen_fastdebug_cr_a
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates python3 unzip zip xz-utils cmake ninja-build pkg-config
+      - name: Checkout graal
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: graal
+      - name: Checkout native collectors
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: elide-dev/labs-openjdk
+          ref: 3d41073dcd567d43c867c04baaf1ff89a14dbcb3
+          path: labs-openjdk
+      - name: Determine mx version
+        run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
+      - name: Checkout mx
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: graalvm/mx
+          ref: ${{ env.MX_VERSION }}
+          path: mx
+      - name: Fetch LabsJDK
+        working-directory: graal
+        run: |
+          echo "JAVA_HOME=${GITHUB_WORKSPACE}/labsjdk" >> "${GITHUB_ENV}"
+          echo "${GITHUB_WORKSPACE}/labsjdk/bin" >> "${GITHUB_PATH}"
+          mkdir -p "${RUNNER_TEMP}/jdks"
+          ../mx/mx --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${GITHUB_WORKSPACE}/labsjdk"
+      - name: Build compiler and native collectors
+        working-directory: graal/substratevm
+        run: ../../mx/mx --java-home="${JAVA_HOME}" --dynamicimports=substratevm-gcs build --build-logs=silent --warning-as-error --force-javac
+      - name: Verify Truffle compilation and moving collections
+        working-directory: graal/substratevm
+        run: |
+          for gc_mode in satb generational; do
+            ../../mx/mx --java-home="${JAVA_HOME}" --dynamicimports=substratevm-gcs shenandoah-truffle-test \
+              -H:+UnlockExperimentalVMOptions -H:ShenandoahDebugLevel=fastdebug \
+              -H:ShenandoahGCMode="${gc_mode}" -H:-UnlockExperimentalVMOptions \
+              -R:+UnlockDiagnosticVMOptions -R:+ShenandoahVerify
+          done

@@ -657,6 +657,14 @@ public class SubstrateAArch64Backend extends SubstrateBackendWithAssembler<Subst
             return true;
         }
 
+        protected AllocatableValue emitShenandoahBarrierCallAddress(ForeignCallLinkage linkage) {
+            SharedMethod target = (SharedMethod) ((SubstrateForeignCallLinkage) linkage).getMethod();
+            if (shouldEmitIndirectCall(target)) {
+                return asAllocatable(emitIndirectForeignCallAddress(linkage));
+            }
+            return Value.ILLEGAL;
+        }
+
         protected Value emitIndirectForeignCallAddress(ForeignCallLinkage linkage) {
             SubstrateForeignCallLinkage callTarget = (SubstrateForeignCallLinkage) linkage;
             SharedMethod targetMethod = (SharedMethod) callTarget.getMethod();

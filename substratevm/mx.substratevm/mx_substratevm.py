@@ -1137,6 +1137,14 @@ def crema_class_loading_benchmark(args):
     native_image_context_run(build_and_run)
 
 
+@mx.command(suite.name, 'shenandoah-truffle-test', '[native-image options]')
+def shenandoah_truffle_test(args):
+    """Build and run Truffle runtime compilation and option validation with Shenandoah."""
+    _truffle_runtime_compilation_test(['--gc=shenandoah'] + svm_experimental_options(['-H:-SupportCompileInIsolates']) + args,
+                                    extra_tests=['com.oracle.svm.test.ShenandoahRuntimeCompilationTest', 'com.oracle.truffle.sl.test.SLShenandoahCompilationTest'],
+                                    extra_run_args=['-XX:-UsePerfData', '-Xms32m', '-Xmx128m', '-Dcom.oracle.truffle.sl.test.shenandoah=true'])
+
+
 @mx.command(suite.name, 'shenandoah-gc-stress', '[native-image options]')
 def shenandoah_gc_stress(args):
     """Build and run the Shenandoah object-graph, atomic-reference, and concurrent mutation test."""

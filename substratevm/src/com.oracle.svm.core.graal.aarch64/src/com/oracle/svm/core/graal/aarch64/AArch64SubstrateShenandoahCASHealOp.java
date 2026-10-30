@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,7 @@ import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrie
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.linkRegisterValue;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.loadThreadLocal;
 import static com.oracle.svm.core.graal.aarch64.AArch64SubstrateShenandoahBarrierUtil.threadRegister;
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
@@ -91,6 +92,8 @@ public class AArch64SubstrateShenandoahCASHealOp extends AArch64LIRInstruction {
     /** The {@code bl} of the slow path overwrites the link register. */
     @Temp({REG}) private AllocatableValue linkReg;
 
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
 
     /** Whether the reference field is a full machine word (8 bytes) vs. 32 bits. */
@@ -103,7 +106,7 @@ public class AArch64SubstrateShenandoahCASHealOp extends AArch64LIRInstruction {
     private final boolean canInlineCsetCheck;
 
     public AArch64SubstrateShenandoahCASHealOp(AllocatableValue address, AllocatableValue tmp, AllocatableValue tmp2, AllocatableValue tmp3, AllocatableValue tmp4,
-                    ForeignCallLinkage callTarget, boolean loadWordSized, int narrowShift, boolean canInlineCsetCheck) {
+                    ForeignCallLinkage callTarget, AllocatableValue callAddress, boolean loadWordSized, int narrowShift, boolean canInlineCsetCheck) {
         super(TYPE);
         this.address = address;
         this.tmp = tmp;
@@ -113,6 +116,7 @@ public class AArch64SubstrateShenandoahCASHealOp extends AArch64LIRInstruction {
         this.callArg = callTarget.getOutgoingCallingConvention().getArgument(0);
         this.linkReg = linkRegisterValue();
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.loadWordSized = loadWordSized;
         this.narrowShift = narrowShift;
         this.canInlineCsetCheck = canInlineCsetCheck;
@@ -186,7 +190,7 @@ public class AArch64SubstrateShenandoahCASHealOp extends AArch64LIRInstruction {
         crb.getLIR().addSlowPath(this, () -> {
             masm.bind(slowPath);
             masm.mov(64, asRegister(callArg), addr);
-            callStub(crb, masm, callTarget);
+            callStub(crb, masm, callTarget, callAddress);
             masm.jmp(done);
         });
     }
