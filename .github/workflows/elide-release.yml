@@ -79,7 +79,7 @@ env:
   # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
   # finds it. Windows has no Shenandoah support and builds without it.
   LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
-  LABS_OPENJDK_REF: f9e39e7add09413b62aa914f57897bbf114b0df7  # feat/shenandoah-25.5
+  LABS_OPENJDK_REF: 3d41073dcd567d43c867c04baaf1ff89a14dbcb3  # Shenandoah Truffle runtime code support
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
 
