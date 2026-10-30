@@ -4,6 +4,9 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* Fixed Shenandoah images with Truffle runtime compilation failing during compiler setup and emitting unsupported direct barrier calls.
+  The unsupported `MemoryMaskingAndFencing` mitigation is rejected when using Shenandoah.
+  Runtime compilation requires companion collector libraries with runtime code-root support.
 * (GR-77774) Added the experimental `-H:JNILibraryLinkage=<library>:{static|dynamic}[?][,...]` option to select static or dynamic linkage for individual Java Native Interface (JNI) libraries.
   When runtime class loading is disabled, the build fails if a configured library is not reachable unless its linkage has a trailing `?`; when runtime class loading is enabled, configured libraries are made reachable and `?` has no effect.
   Built-in JNI method resolution now links the exact short or signature-suffixed long JNI symbol exported by a static library, enabling overloaded native methods that export only long names.
