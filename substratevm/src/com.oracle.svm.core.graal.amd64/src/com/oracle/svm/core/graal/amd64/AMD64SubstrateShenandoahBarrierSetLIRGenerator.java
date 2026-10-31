@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,9 @@ package com.oracle.svm.core.graal.amd64;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.graal.amd64.SubstrateAMD64Backend.SubstrateAMD64LIRGenerator;
+import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
+import com.oracle.svm.jvmci.shared.meta.SharedMethod;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 
@@ -68,6 +71,15 @@ import jdk.vm.ci.meta.Value;
  */
 public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements ShenandoahBarrierSetLIRGeneratorTool, AMD64ReadBarrierSetLIRGenerator {
 
+    private static AllocatableValue barrierCallAddress(LIRGeneratorTool tool, ForeignCallLinkage linkage) {
+        SubstrateAMD64LIRGenerator generator = (SubstrateAMD64LIRGenerator) tool;
+        SharedMethod target = (SharedMethod) ((SubstrateForeignCallLinkage) linkage).getMethod();
+        if (generator.shouldEmitIndirectForeignCall(target)) {
+            return generator.asAllocatable(generator.emitIndirectForeignCallAddress(linkage));
+        }
+        return Value.ILLEGAL;
+    }
+
     @Override
     public Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadRefBarrierNode.ReferenceStrength strength, boolean narrow, boolean notNull) {
         /*
@@ -88,7 +100,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, strength, notNull));
+        tool.append(new AMD64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, barrierCallAddress(tool, linkage), strength, notNull));
         return result;
     }
 
@@ -125,7 +137,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         // shift) inline when enqueuing it into the SATB buffer. It is 0 on Graal CE.
         int narrowShift = ImageSingletons.lookup(CompressEncoding.class).getShift();
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, loadWordSized, useNarrow, narrowShift, nonNull));
+        tool.append(new AMD64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, barrierCallAddress(tool, linkage), loadWordSized, useNarrow, narrowShift, nonNull));
     }
 
     @Override
@@ -193,7 +205,7 @@ public class AMD64SubstrateShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp4 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(healLinkage.getOutgoingCallingConvention());
-        tool.append(new AMD64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, loadWordSized, narrowShift, canInlineCsetCheck));
+        tool.append(new AMD64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, barrierCallAddress(tool, healLinkage), loadWordSized, narrowShift, canInlineCsetCheck));
     }
 
     @Override

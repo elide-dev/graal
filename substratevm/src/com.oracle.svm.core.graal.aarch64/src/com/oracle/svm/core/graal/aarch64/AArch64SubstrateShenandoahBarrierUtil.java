@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,8 @@
 package com.oracle.svm.core.graal.aarch64;
 
 import static jdk.vm.ci.aarch64.AArch64.lr;
+import static jdk.vm.ci.code.ValueUtil.asRegister;
+import static jdk.vm.ci.code.ValueUtil.isIllegal;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
@@ -77,10 +79,15 @@ final class AArch64SubstrateShenandoahBarrierUtil {
     }
 
     /**
-     * Calls the (uninterruptible, register-preserving) runtime stub. All SubstrateVM direct calls
-     * are within +-128 MB, so a plain {@code bl} suffices (see SubstrateAArch64DirectCallOp).
+     * Calls the uninterruptible, register-preserving runtime stub using the backend's call policy.
+     * Runtime compilations must use indirect calls; image builds can also require them for layers
+     * or PLT/GOT routing.
      */
-    static void callStub(CompilationResultBuilder crb, AArch64MacroAssembler masm, ForeignCallLinkage callTarget) {
-        AArch64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, null);
+    static void callStub(CompilationResultBuilder crb, AArch64MacroAssembler masm, ForeignCallLinkage callTarget, AllocatableValue callAddress) {
+        if (isIllegal(callAddress)) {
+            AArch64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, null);
+        } else {
+            AArch64Call.indirectCall(crb, masm, asRegister(callAddress), ((SubstrateForeignCallLinkage) callTarget).getMethod(), null);
+        }
     }
 }

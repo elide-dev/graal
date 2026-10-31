@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@ package com.oracle.svm.core.graal.aarch64;
 import org.graalvm.nativeimage.ImageSingletons;
 
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.graal.aarch64.SubstrateAArch64Backend.SubstrateAArch64LIRGenerator;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
 
@@ -78,6 +79,10 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         return ((AArch64LIRGenerator) tool).asAddressValue(address, AArch64Address.ANY_SIZE);
     }
 
+    private static AllocatableValue barrierCallAddress(LIRGeneratorTool tool, ForeignCallLinkage linkage) {
+        return ((SubstrateAArch64LIRGenerator) tool).emitShenandoahBarrierCallAddress(linkage);
+    }
+
     @Override
     public Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadRefBarrierNode.ReferenceStrength strength, boolean narrow, boolean notNull) {
         /*
@@ -95,7 +100,7 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, strength, notNull));
+        tool.append(new AArch64SubstrateShenandoahLoadRefBarrierOp(result, tool.asAllocatable(obj), loadAddress, tmp, tmp2, linkage, barrierCallAddress(tool, linkage), strength, notNull));
         return result;
     }
 
@@ -122,7 +127,7 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         boolean loadWordSized = !useNarrow || ObjectLayout.singleton().getReferenceSize() == 8;
         int narrowShift = ImageSingletons.lookup(CompressEncoding.class).getShift();
         tool.getResult().getFrameMapBuilder().callsMethod(linkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, loadWordSized, useNarrow, narrowShift, nonNull));
+        tool.append(new AArch64SubstrateShenandoahSATBBarrierOp(addr, tmp, preval, buf, preValue, linkage, barrierCallAddress(tool, linkage), loadWordSized, useNarrow, narrowShift, nonNull));
     }
 
     @Override
@@ -177,7 +182,8 @@ public class AArch64SubstrateShenandoahBarrierSetLIRGenerator implements Shenand
         AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         AllocatableValue tmp4 = tool.newVariable(LIRKind.value(AArch64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(healLinkage.getOutgoingCallingConvention());
-        tool.append(new AArch64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, wordSized, oopEncoding.getShift(), oopEncoding.hasBase()));
+        tool.append(new AArch64SubstrateShenandoahCASHealOp(address, tmp, tmp2, tmp3, tmp4, healLinkage, barrierCallAddress(tool, healLinkage), wordSized, oopEncoding.getShift(), oopEncoding
+                        .hasBase()));
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,8 +25,10 @@
 package com.oracle.svm.core.graal.amd64;
 
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
+import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.ILLEGAL;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
+import static jdk.vm.ci.code.ValueUtil.isIllegal;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahConstants;
@@ -95,6 +97,8 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
     @Temp({REG}) private AllocatableValue callRet;
 
     /** The runtime stub implementing the slow-path load-reference barrier. */
+    @Alive({REG, ILLEGAL}) private AllocatableValue callAddress;
+
     private final ForeignCallLinkage callTarget;
 
     private final ReferenceStrength strength;
@@ -102,7 +106,7 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
     private final boolean notNull;
 
     public AMD64SubstrateShenandoahLoadRefBarrierOp(AllocatableValue result, AllocatableValue object, AMD64AddressValue loadAddress, AllocatableValue tmp, AllocatableValue tmp2,
-                    ForeignCallLinkage callTarget, ReferenceStrength strength, boolean notNull) {
+                    ForeignCallLinkage callTarget, AllocatableValue callAddress, ReferenceStrength strength, boolean notNull) {
         super(TYPE);
         this.result = result;
         this.object = object;
@@ -113,6 +117,7 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
         this.callArg1 = callTarget.getOutgoingCallingConvention().getArgument(1);
         this.callRet = callTarget.getOutgoingCallingConvention().getReturn();
         this.callTarget = callTarget;
+        this.callAddress = callAddress;
         this.strength = strength;
         this.notNull = notNull;
     }
@@ -188,7 +193,11 @@ public class AMD64SubstrateShenandoahLoadRefBarrierOp extends AMD64LIRInstructio
             masm.bind(slowPath);
             masm.leaq(asRegister(callArg1), loadAddr);
             masm.movq(asRegister(callArg0), objReg);
-            AMD64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, false, null);
+            if (isIllegal(callAddress)) {
+                AMD64Call.directCall(crb, masm, ((SubstrateForeignCallLinkage) callTarget).getMethod(), null, false, null);
+            } else {
+                AMD64Call.indirectCall(crb, masm, asRegister(callAddress), ((SubstrateForeignCallLinkage) callTarget).getMethod(), null);
+            }
             masm.movq(resReg, asRegister(callRet));
             masm.jmp(done);
         });

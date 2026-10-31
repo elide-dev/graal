@@ -65,8 +65,26 @@ Replace the class path, output path, and main class with your application's valu
 Use the same dynamic imports and components for build and execution commands so `mx` selects the same distribution.
 The packaged product libraries are static archives, so this configuration does not require `LD_LIBRARY_PATH`.
 
+## Test Truffle Runtime Compilation
+
+After building the Truffle test projects, run the following command from _graal/substratevm_ with the same dynamic imports and components used for your distribution:
+
+```shell
+mx shenandoah-truffle-test -H:CLibraryPath=/absolute/path/to/native-gc-libraries
+```
+
+The test builds a Shenandoah executable, runs a SimpleLanguage guest with synchronous compilation, and verifies that guest code was compiled.
+It also executes compiled functions across forced collections to check runtime code roots.
+Use companion collector libraries that include runtime code registration, relocation, and unloading support; older libraries contain unimplemented entry points for these operations.
+On AMD64, it also verifies that enabling `MemoryMaskingAndFencing` is rejected without changing the option value.
+Shenandoah does not support this mitigation or isolated compilation.
+The test command disables isolated compilation and the unimplemented Shenandoah performance counters explicitly.
+
 ## Current Limitations
 
 - The native GC supports one isolate per process.
 - Runtime class loading is not supported by the companion Shenandoah implementation.
   Its metaspace allocation and statistics entry points are not implemented.
+
+- Shenandoah performance counters are not implemented.
+  If you include JVMStat monitoring, disable those counters with `-XX:-UsePerfData` at run time.
