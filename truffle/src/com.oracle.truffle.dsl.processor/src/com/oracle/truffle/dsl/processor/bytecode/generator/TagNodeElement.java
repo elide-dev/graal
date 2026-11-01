@@ -94,6 +94,7 @@ final class TagNodeElement extends AbstractElement {
         this.add(createFindProbe());
         this.add(createIsInstrumentable());
         this.add(createHasTag());
+        this.add(createGetNodeObject());
         this.add(createCopy());
         this.add(createGetSourceSection());
         this.add(createGetSourceSections());
@@ -143,6 +144,16 @@ final class TagNodeElement extends AbstractElement {
         ex.getModifiers().add(Modifier.FINAL);
         CodeTreeBuilder b = ex.createBuilder();
         b.statement("return this.returnBci");
+        return ex;
+    }
+
+    private CodeExecutableElement createGetNodeObject() {
+        CodeExecutableElement ex = GeneratorUtils.override(types.InstrumentableNode, "getNodeObject");
+        ex.getModifiers().remove(Modifier.ABSTRACT);
+        ex.getModifiers().add(Modifier.FINAL);
+        CodeTreeBuilder b = ex.createBuilder();
+        b.declaration(types.RootNode, "root", "getRootNode()");
+        b.startReturn().string("root == null ? null : ((").type(types.BytecodeRootNode).string(") root).getInstrumentationNodeObject(this)").end();
         return ex;
     }
 

@@ -4,6 +4,8 @@ This changelog summarizes major changes between Truffle versions relevant to lan
 
 ## Version 25.5
 
+* Bytecode DSL: Added `BytecodeRootNode.getInstrumentationNodeObject(TagTreeNode)` to supply tag-specific metadata, including variable names for read/write instrumentation.
+
 * GR-80881: Bytecode DSL: `Float` and `Double` constants are now compared by their raw bits, so distinct NaN payloads no longer share a constant-pool slot.
 * Bytecode DSL: Fixed null results in boxing-eliminated slow paths and code generation for roots with instruction tracing disabled.
 * GR-79669: Instrument lookup is now supported during context preinitialization. Added `TruffleInstrument.onPreinitialize(Env)` for instruments to support retention during engine preinitialization.

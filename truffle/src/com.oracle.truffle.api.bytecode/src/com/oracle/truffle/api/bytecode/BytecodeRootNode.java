@@ -48,6 +48,8 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.EventContext;
 import com.oracle.truffle.api.instrumentation.ExecutionEventListener;
 import com.oracle.truffle.api.instrumentation.ExecutionEventNode;
+import com.oracle.truffle.api.instrumentation.InstrumentableNode;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
@@ -82,6 +84,33 @@ public interface BytecodeRootNode {
      * @since 24.2
      */
     Object execute(VirtualFrame frame);
+
+    /**
+     * Supplies the node object for a tagged bytecode region. The generated instrumentation node
+     * delegates {@link InstrumentableNode#getNodeObject()} to this hook. The default returns
+     * {@code null}, which instrumentation treats as an empty node object.
+     * <p>
+     * Use the supplied node's tags and source sections to identify the region and expose language
+     * metadata. Source sections can be absent if source information has not been materialized
+     * or the parser did not supply a source section. For example, {@link StandardTags.ReadVariableTag} and
+     * {@link StandardTags.WriteVariableTag} require a node object with the variable name. The
+     * result must satisfy the interop and tag-specific contracts of
+     * {@link InstrumentableNode#getNodeObject()}.
+     * <p>
+     * This hook may be called before guest execution, without an entered language context, and
+     * from multiple threads. It must not execute guest code or depend on frame values. Metadata
+     * must remain valid when read without the AST lock. Do not cache the node object in the AST;
+     * instrumentation manages caching. Bytecode indices can change when instrumentation is
+     * enabled, so do not use indices from a previous bytecode version to identify the region.
+     *
+     * @param node the tagged region belonging to this root
+     * @return an interop node object, or {@code null} if no properties are available
+     * @since 25.5
+     */
+    @SuppressWarnings("unused")
+    default Object getInstrumentationNodeObject(TagTreeNode node) {
+        return null;
+    }
 
     /**
      * Optional hook invoked to convert a value received from tag instrumentation before it resumes
