@@ -40,9 +40,9 @@ concurrency:
 
 env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
-  GRAALJS_REF: elide-25.5.x
+  GRAALJS_REF: 5a538406fc647e9e44c43c9c6d9b90653f9eda1d  # elide-25.5.x; unchanged for elide.23
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: elide-25.5.x
+  GRAALPYTHON_REF: 8020c130f1b718382c7386e83b5c48b9b83e0f7f  # elide-dev/graalpython#9: static lexical scopes
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
