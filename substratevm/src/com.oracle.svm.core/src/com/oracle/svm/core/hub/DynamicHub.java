@@ -1197,7 +1197,7 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
 
     public boolean canUnsafeInstantiateAsInstanceFastPath() {
         RuntimeDynamicAccessMetadata canUnsafeAllocate = cachedCanUnsafeAllocate();
-        return canUnsafeAllocate != null && canUnsafeAllocate.fastPathSatisfied();
+        return LayoutEncoding.isPureInstance(layoutEncoding) && canUnsafeAllocate != null && canUnsafeAllocate.isKnownSatisfied();
     }
 
     /** The unsafe allocation metadata if already known, without decoding it. */
@@ -1210,6 +1210,8 @@ public final class DynamicHub implements AnnotatedElement, java.lang.reflect.Typ
     }
 
     public boolean canUnsafeInstantiateAsInstanceSlowPath() {
+        assert LayoutEncoding.isPureInstance(layoutEncoding) : "expected to be checked by caller";
+
         RuntimeDynamicAccessMetadata canUnsafeAllocate = canUnsafeAllocate();
         return canUnsafeAllocate != null && canUnsafeAllocate.satisfied();
     }
