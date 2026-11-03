@@ -21,7 +21,7 @@ NAME="graalvm-ce-${VERSION}-${PLATFORM}"
 
 cd "${WORKSPACE}/graal/vm"
 if [ "${PACKAGE_ONLY}" != "--package-only" ]; then
-  "${MX}" "${MX_ARGS[@]}" build
+  "${MX}" "${MX_ARGS[@]}" build --build-logs=silent
 fi
 # GVM_HOME, if set, names the built home instead of asking mx (the Windows step records it).
 HOME_DIR=${GVM_HOME:-$("${MX}" "${MX_ARGS[@]}" graalvm-home | tail -1)}
