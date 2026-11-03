@@ -36,14 +36,17 @@ import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.objectfile.ObjectFile;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.libc.TemporaryBuildDirectoryProvider;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.code.SubstrateBackendFactory;
 import com.oracle.svm.core.graal.code.SubstrateLoweringProviderFactory;
 import com.oracle.svm.core.graal.code.SubstrateSuitesCreatorProvider;
+import com.oracle.svm.core.graal.code.SubstrateVectorArchitectureFactory;
 import com.oracle.svm.core.graal.llvm.image.LLVMCCompilerInvoker;
 import com.oracle.svm.core.graal.llvm.lowering.LLVMLoadExceptionObjectLowering;
+import com.oracle.svm.core.graal.llvm.lowering.ScalarVectorArchitecture;
 import com.oracle.svm.core.graal.llvm.lowering.SubstrateLLVMLoweringProvider;
 import com.oracle.svm.core.graal.llvm.objectfile.LLVMObjectFile;
 import com.oracle.svm.core.graal.llvm.replacements.LLVMGraphBuilderPlugins;
@@ -79,6 +82,7 @@ import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.replacements.DefaultJavaLoweringProvider;
 import jdk.graal.compiler.replacements.TargetGraphBuilderPlugins;
+import jdk.graal.compiler.vector.architecture.VectorArchitecture;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.MetaAccessProvider;
 
@@ -172,11 +176,14 @@ public class LLVMFeature implements InternalFeature {
     }
 
     @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
-    private static final class LLVMSubstrateLoweringProviderFactory implements SubstrateLoweringProviderFactory {
+    private static final class LLVMSubstrateLoweringProviderFactory extends SubstrateVectorArchitectureFactory implements SubstrateLoweringProviderFactory {
         @Override
         public DefaultJavaLoweringProvider newLoweringProvider(MetaAccessProvider metaAccess, ForeignCallsProvider foreignCalls, PlatformConfigurationProvider platformConfig,
                         MetaAccessExtensionProvider metaAccessExtensionProvider, TargetDescription target) {
-            return new SubstrateLLVMLoweringProvider(metaAccess, foreignCalls, platformConfig, metaAccessExtensionProvider, target);
+            VectorArchitecture vectorArchitecture = getSingletonVectorArchitecture(
+                            (arch, enabled, referenceSize, compressedReferences, alignment, objectVectorization) -> new ScalarVectorArchitecture(referenceSize, compressedReferences, alignment),
+                            target.arch, false, ObjectLayout.singleton().getReferenceSize(), ObjectLayout.singleton().getAlignment(), platformConfig.getBarrierSet());
+            return new SubstrateLLVMLoweringProvider(metaAccess, foreignCalls, platformConfig, metaAccessExtensionProvider, target, vectorArchitecture);
         }
     }
 
