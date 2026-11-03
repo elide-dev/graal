@@ -99,6 +99,9 @@ The existing `shenandoah-truffle-test` command also checks Truffle compilation a
 
 ## Current Limitations
 
+- On Linux/AMD64, disabling compressed references with `-H:-UseCompressedReferences` can trigger an existing JNI trampoline startup failure, also reproducible with serial GC.
+  Use the default compressed-reference configuration.
+
 - The native GC supports one isolate per process.
 - Runtime class loading requires matching Java and native collector interface version `250502`.
   Metaspace is bounded and permanent; class unloading is not supported.
