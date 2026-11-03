@@ -80,11 +80,28 @@ On AMD64, it also verifies that enabling `MemoryMaskingAndFencing` is rejected w
 Shenandoah does not support this mitigation or isolated compilation.
 The test command disables isolated compilation and the unimplemented Shenandoah performance counters explicitly.
 
+## Test Runtime Class Loading
+
+Build with matching native collector interface version `250502` and enable `-H:+RuntimeClassLoading`.
+Use `-H:MaxMetaspaceSize=<size>m` to bound the permanent metadata reservation.
+Garbage collection scans outgoing metadata references, but does not unload classes.
+
+Run these targeted tests from _graal/substratevm_ using the same dynamic imports and components as your build:
+
+```shell
+mx shenandoah-metaspace-test
+mx shenandoah-ristretto-test
+mx shenandoah-code-roots-test
+```
+
+The tests cover concurrent class definition, metadata allocation and exhaustion, runtime compilation, and compiled code roots under collection.
+The existing `shenandoah-truffle-test` command also checks Truffle compilation and option validation.
+
 ## Current Limitations
 
 - The native GC supports one isolate per process.
-- Runtime class loading is not supported by the companion Shenandoah implementation.
-  Its metaspace allocation and statistics entry points are not implemented.
+- Runtime class loading requires matching Java and native collector interface version `250502`.
+  Metaspace is bounded and permanent; class unloading is not supported.
 
 - Shenandoah performance counters are not implemented.
   If you include JVMStat monitoring, disable those counters with `-XX:-UsePerfData` at run time.

@@ -37,7 +37,7 @@ import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.core.code.CodeInfo;
 import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.core.gc.shenandoah.nativelib.ShenandoahLibrary;
-import com.oracle.svm.core.graal.RuntimeCompilation;
+import com.oracle.svm.core.code.RuntimeCodeInstallation;
 import com.oracle.svm.core.heap.RuntimeCodeCacheCleaner;
 import com.oracle.svm.core.heap.RuntimeCodeInfoGCSupport;
 
@@ -48,7 +48,7 @@ public class ShenandoahRuntimeCodeInfoGCSupport extends RuntimeCodeInfoGCSupport
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public ShenandoahRuntimeCodeInfoGCSupport() {
-        funcCleanCodeCache = RuntimeCompilation.isEnabled() ? CEntryPointLiteral.create(ShenandoahRuntimeCodeInfoGCSupport.class, "cleanCodeCache", PointerBase.class, IsolateThread.class) : null;
+        funcCleanCodeCache = RuntimeCodeInstallation.isEnabled() ? CEntryPointLiteral.create(ShenandoahRuntimeCodeInfoGCSupport.class, "cleanCodeCache", PointerBase.class, IsolateThread.class) : null;
     }
 
     @Override

@@ -80,7 +80,7 @@ env:
   # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
   # finds it. Windows has no Shenandoah support and builds without it.
   LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
-  LABS_OPENJDK_REF: 3d41073dcd567d43c867c04baaf1ff89a14dbcb3  # Shenandoah Truffle runtime code support
+  LABS_OPENJDK_REF: 5e2d9e2e0822db4c993376145848d875891f7f68  # Shenandoah metaspace and runtime-code parity (interface 250502)
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
 
@@ -312,6 +312,7 @@ jobs:
           ./hello-shenandoah
           "${home}/bin/native-image" --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading -cp . Hello hello-shenandoah-rcl
           ./hello-shenandoah-rcl
+          "${WS}/graal/ci/elide/check-shenandoah-metaspace.sh" "${home}" "${WS}/smoke/metaspace"
           # CVE-2026-91403: build-dist.sh installs ci/elide/blocked.certs.
           "${MX_PYTHON}" "${WS}/graal/ci/elide/test-blocked-certs.py"
           "${WS}/graal/ci/elide/check-blocked-certs.sh" "${home}" blocked-certs

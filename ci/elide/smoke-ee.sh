@@ -99,6 +99,7 @@ case "${PLATFORM}" in
     grep -q 'Garbage collector: Shenandoah GC' smoke-shenandoah.log || { echo "the image does not use Shenandoah" >&2; exit 1; }
     # Regression #178: compressed-reference layout must exist before metaspace validation.
     build_and_run smoke-shenandoah-rcl --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading
+    "${SCRIPTS}/check-shenandoah-metaspace.sh" "${HOME_DIR}" metaspace
     ;;
 esac
 "${SCRIPTS}/check-blocked-certs.sh" "${HOME_DIR}" blocked-certs
