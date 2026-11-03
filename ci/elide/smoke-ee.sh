@@ -128,6 +128,8 @@ public class JsSmoke {
             // Doubles invalidate the int-specialized code: deoptimization, then recompilation.
             check(12238.0, fib.execute(20.5).asDouble());
             check(75025, fib.execute(25).asInt());
+            System.gc();
+            check(75025, fib.execute(25).asInt());
             System.out.println("ok js");
         }
     }
@@ -149,6 +151,7 @@ EOF
   case "${PLATFORM}" in
     linux-*)
       js_build_and_run js-g1 --gc=G1
+      js_build_and_run js-shenandoah --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:-SupportCompileInIsolates -H:ShenandoahGCMode=generational
       # Truffle-compiled code must call compressed image methods through the GOT (#38).
       js_build_and_run js-compressed --gc=G1 -H:+UnlockExperimentalVMOptions -H:+EnableCodeCompression
       ;;
