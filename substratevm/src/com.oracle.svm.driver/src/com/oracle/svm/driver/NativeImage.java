@@ -1129,7 +1129,7 @@ public class NativeImage {
 
         if (getHostedOptionArgument(imageBuilderArgs, oHOptimize).isEmpty()) {
             // Ensure fallback -H:Optimize comes before any option that could implicitly modify the optimization level.
-            imageBuilderArgs.add(0, oH(SubstrateOptions.Optimize, OptionOrigin.originDriver) + SubstrateOptions.OPTIMIZE_DEFAULT_VALUE);
+            imageBuilderArgs.add(0, oH + "Optimize@" + OptionOrigin.originDriver + "=" + SubstrateOptions.OPTIMIZE_DEFAULT_VALUE);
         }
 
         if (config.getBuilderInspectServerPath() != null) {
