@@ -97,6 +97,8 @@ case "${PLATFORM}" in
     # The fork's Shenandoah libraries (svmgc), added by build-ee.py.
     build_and_run smoke-shenandoah --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:ShenandoahGCMode=generational -H:-UnlockExperimentalVMOptions
     grep -q 'Garbage collector: Shenandoah GC' smoke-shenandoah.log || { echo "the image does not use Shenandoah" >&2; exit 1; }
+    # Regression #178: compressed-reference layout must exist before metaspace validation.
+    build_and_run smoke-shenandoah-rcl --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading
     ;;
 esac
 "${SCRIPTS}/check-blocked-certs.sh" "${HOME_DIR}" blocked-certs

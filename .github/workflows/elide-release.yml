@@ -65,9 +65,10 @@ env:
   GLIBC_FLOOR: "2.35"
   # The LLVM major that SVM's static C libraries carry ThinLTO bitcode for on Linux (fat LTO objects,
   # see SVM_LTO_CC in mx_substratevm.py). Embedders link them with this LLVM's lld, and LLVM cannot
-  # read bitcode from a newer major, so this must not be newer than theirs. The Linux legs install it
-  # from apt.llvm.org's per-major repository for the container's Ubuntu release.
+  # read bitcode from a newer major, so this must not be newer than theirs. The Linux legs use
+  # the pinned Elide toolchain for reproducible compiler and linker versions.
   LTO_LLVM_MAJOR: "23"
+  ELIDE_TOOLCHAIN_VERSION: "2026.11.1"
   # The Oracle GraalVM build the EE distribution is made from (ci/elide/build-ee.py). It must be
   # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
   # Update it when the fork moves to a new upstream base.
@@ -154,18 +155,14 @@ jobs:
           apt-get update -q
           apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
             python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config gnupg lsb-release
-          # Clang, llvm-ar and lld of LTO_LLVM_MAJOR for the static C libraries' ThinLTO bitcode.
-          codename=$(lsb_release -cs)
-          install -d /etc/apt/keyrings
-          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /etc/apt/keyrings/apt.llvm.org.asc
-          echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] https://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-${LTO_LLVM_MAJOR} main" \
-            > /etc/apt/sources.list.d/llvm.list
-          apt-get update -q
-          apt-get install -y -q --no-install-recommends "clang-${LTO_LLVM_MAJOR}" "llvm-${LTO_LLVM_MAJOR}" "lld-${LTO_LLVM_MAJOR}"
-          "/usr/lib/llvm-${LTO_LLVM_MAJOR}/bin/clang" --version
           # The workspace belongs to the runner's user, not root.
           git config --global --add safe.directory '*'
           getconf GNU_LIBC_VERSION
+      - name: Install Elide toolchain (Linux)
+        if: runner.os == 'Linux'
+        uses: elide-dev/toolchain/action@4677dd77b520b609bb0e548e6e7a4dadadbb2d14  # v2026.11.1
+        with:
+          version: ${{ env.ELIDE_TOOLCHAIN_VERSION }}
       - name: Allow long paths (Windows)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
@@ -258,7 +255,7 @@ jobs:
             echo "LANG=C.UTF-8" >> "${GITHUB_ENV}"
             echo "LC_ALL=C.UTF-8" >> "${GITHUB_ENV}"
             # Build SVM's static C libraries as fat LTO objects (see LTO_LLVM_MAJOR).
-            echo "SVM_LTO_CC=/usr/lib/llvm-${LTO_LLVM_MAJOR}/bin/clang" >> "${GITHUB_ENV}"
+            echo "SVM_LTO_CC=${ELIDE_TOOLCHAIN_HOME}/bin/clang" >> "${GITHUB_ENV}"
           else
             echo "LANG=en_US.UTF-8" >> "${GITHUB_ENV}"
           fi
@@ -313,6 +310,8 @@ jobs:
           "${home}/bin/native-image" --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:ShenandoahGCMode=generational -H:-UnlockExperimentalVMOptions -cp . Hello hello-shenandoah | tee hello-shenandoah.log
           grep -q 'Garbage collector: Shenandoah GC' hello-shenandoah.log
           ./hello-shenandoah
+          "${home}/bin/native-image" --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading -cp . Hello hello-shenandoah-rcl
+          ./hello-shenandoah-rcl
           # CVE-2026-91403: build-dist.sh installs ci/elide/blocked.certs.
           "${MX_PYTHON}" "${WS}/graal/ci/elide/test-blocked-certs.py"
           "${WS}/graal/ci/elide/check-blocked-certs.sh" "${home}" blocked-certs
@@ -326,7 +325,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
-          ./graal/ci/elide/check-lto.sh "/usr/lib/llvm-${LTO_LLVM_MAJOR}/bin" "${LTO_LLVM_MAJOR}" "${home}" lto-check
+          ./graal/ci/elide/check-lto.sh "${ELIDE_TOOLCHAIN_HOME}/bin" "${LTO_LLVM_MAJOR}" "${home}" lto-check
       - name: Build EE distribution (Unix)
         if: runner.os != 'Windows'
         run: |

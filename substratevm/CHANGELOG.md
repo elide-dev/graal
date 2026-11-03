@@ -4,6 +4,9 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* Fixed Shenandoah image builds with runtime class loading by validating the metaspace reservation after compression encoding initialization.
+* Fixed embedded Native Image drivers retaining the hosted `Optimize` option update callback.
+
 * Fixed Shenandoah images with Truffle runtime compilation failing during compiler setup and emitting unsupported direct barrier calls.
   The unsupported `MemoryMaskingAndFencing` mitigation is rejected when using Shenandoah.
   Runtime compilation requires companion collector libraries with runtime code-root support.
