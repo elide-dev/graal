@@ -42,7 +42,7 @@ env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
   GRAALJS_REF: 5a538406fc647e9e44c43c9c6d9b90653f9eda1d  # elide-25.5.x; unchanged for elide.23
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: 0289c6d2921e98620362ce42521555c5dfb434be  # elide-dev/graalpython#11: variable-access metadata
+  GRAALPYTHON_REF: 57c2c23756f7f71a0b2b853dc7645d82033f2eb4  # elide-dev/graalpython#11: variable-access metadata
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
