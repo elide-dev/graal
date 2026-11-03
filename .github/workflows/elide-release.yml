@@ -427,7 +427,7 @@ jobs:
         if: matrix.maven
         working-directory: graalpython
         run: |
-          "${MX}" --java-home "${JAVA_HOME}" build --build-logs=silent --dependencies com.oracle.graal.python.test
+          "${MX}" --java-home "${JAVA_HOME}" build --build-logs=silent --dependencies GRAALPYTHON_UNIT_TESTS
           "${MX}" --java-home "${JAVA_HOME}" unittest VariableAccessTests LexicalScopeTests PythonDebugTest
 
       - name: Collect natives (Unix)
