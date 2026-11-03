@@ -42,7 +42,7 @@ env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
   GRAALJS_REF: 5a538406fc647e9e44c43c9c6d9b90653f9eda1d  # elide-25.5.x; unchanged for elide.23
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: 8020c130f1b718382c7386e83b5c48b9b83e0f7f  # elide-dev/graalpython#9: static lexical scopes
+  GRAALPYTHON_REF: 0289c6d2921e98620362ce42521555c5dfb434be  # elide-dev/graalpython#11: variable-access metadata
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
@@ -421,6 +421,13 @@ jobs:
           $mxArgs = "--java-home `"$env:JAVA_HOME`" --env ni-ce --dynamicimports $env:LANGUAGE_IMPORTS"
           cmd /c "call `"$vcvars`" x64 && cd graal\vm && `"$env:MX`" $mxArgs build --dependencies $env:NATIVES_DISTS"
           if ($LASTEXITCODE -ne 0) { throw "mx build failed ($LASTEXITCODE)" }
+
+      - name: Test Python instrumentation metadata
+        if: matrix.maven
+        working-directory: graalpython
+        run: |
+          "${MX}" --java-home "${JAVA_HOME}" build --build-logs=silent --dependencies com.oracle.graal.python.test
+          "${MX}" --java-home "${JAVA_HOME}" unittest VariableAccessTests LexicalScopeTests PythonDebugTest
 
       - name: Collect natives (Unix)
         if: runner.os != 'Windows'
