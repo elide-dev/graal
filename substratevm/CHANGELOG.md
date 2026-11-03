@@ -7,6 +7,13 @@ This changelog summarizes major changes to GraalVM Native Image.
 * (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
   Requesting an unlinkable provider still fails at run time.
 
+* (GR-81016) Preserved `sun.misc` entry points for Maven running with runtime class loading.
+* Initialized runtime services before executing restored Truffle code.
+* Fixed Shenandoah image builds with runtime class loading by validating the metaspace reservation after compression encoding initialization.
+  Added the matching native metaspace allocator and garbage collection of outgoing metadata references.
+  Shenandoah now requires native collector interface version `250502`; rebuild Java and native libraries together.
+* Fixed embedded Native Image drivers retaining the hosted `Optimize` option update callback.
+
 * Fixed Shenandoah images with Truffle runtime compilation failing during compiler setup and emitting unsupported direct barrier calls.
   The unsupported `MemoryMaskingAndFencing` mitigation is rejected when using Shenandoah.
   Runtime compilation requires companion collector libraries with runtime code-root support.
