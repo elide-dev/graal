@@ -97,6 +97,9 @@ case "${PLATFORM}" in
     # The fork's Shenandoah libraries (svmgc), added by build-ee.py.
     build_and_run smoke-shenandoah --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:ShenandoahGCMode=generational -H:-UnlockExperimentalVMOptions
     grep -q 'Garbage collector: Shenandoah GC' smoke-shenandoah.log || { echo "the image does not use Shenandoah" >&2; exit 1; }
+    # Regression #178: compressed-reference layout must exist before metaspace validation.
+    build_and_run smoke-shenandoah-rcl --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading
+    "${SCRIPTS}/check-shenandoah-metaspace.sh" "${HOME_DIR}" metaspace
     ;;
 esac
 "${SCRIPTS}/check-blocked-certs.sh" "${HOME_DIR}" blocked-certs
@@ -125,6 +128,8 @@ public class JsSmoke {
             // Doubles invalidate the int-specialized code: deoptimization, then recompilation.
             check(12238.0, fib.execute(20.5).asDouble());
             check(75025, fib.execute(25).asInt());
+            System.gc();
+            check(75025, fib.execute(25).asInt());
             System.out.println("ok js");
         }
     }
@@ -146,6 +151,7 @@ EOF
   case "${PLATFORM}" in
     linux-*)
       js_build_and_run js-g1 --gc=G1
+      js_build_and_run js-shenandoah --gc=shenandoah -H:+UnlockExperimentalVMOptions -H:-SupportCompileInIsolates -H:ShenandoahGCMode=generational
       # Truffle-compiled code must call compressed image methods through the GOT (#38).
       js_build_and_run js-compressed --gc=G1 -H:+UnlockExperimentalVMOptions -H:+EnableCodeCompression
       ;;
