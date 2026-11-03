@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: elide-dev/labs-openjdk
-          ref: 3d41073dcd567d43c867c04baaf1ff89a14dbcb3
+          ref: 5e2d9e2e0822db4c993376145848d875891f7f68
           path: labs-openjdk
       - name: Determine mx version
         run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
@@ -75,9 +75,11 @@ jobs:
         working-directory: graal/substratevm
         run: |
           for gc_mode in satb generational; do
-            ../../mx/mx --java-home="${JAVA_HOME}" --dynamicimports=substratevm-gcs shenandoah-truffle-test \
+            for test in shenandoah-truffle-test shenandoah-metaspace-test shenandoah-ristretto-test shenandoah-code-roots-test; do
+              ../../mx/mx --java-home="${JAVA_HOME}" --dynamicimports=substratevm-gcs "${test}" \
               -H:CLibraryPath="${GITHUB_WORKSPACE}/labs-openjdk/mxbuild/linux-amd64/hotspot/linux-amd64/glibc" \
               -H:+UnlockExperimentalVMOptions -H:ShenandoahDebugLevel=fastdebug \
               -H:ShenandoahGCMode="${gc_mode}" -H:-UnlockExperimentalVMOptions \
               -R:+UnlockDiagnosticVMOptions -R:+ShenandoahVerify
+            done
           done
