@@ -7,6 +7,8 @@ This changelog summarizes major changes to GraalVM Native Image.
 * (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
   Requesting an unlinkable provider still fails at run time.
 
+* (GR-81016) Preserved `sun.misc` entry points for Maven running with runtime class loading.
+* Initialized runtime services before executing restored Truffle code.
 * Fixed Shenandoah image builds with runtime class loading by validating the metaspace reservation after compression encoding initialization.
 * Fixed embedded Native Image drivers retaining the hosted `Optimize` option update callback.
 
