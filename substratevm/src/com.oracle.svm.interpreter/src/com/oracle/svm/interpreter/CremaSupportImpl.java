@@ -472,6 +472,7 @@ public class CremaSupportImpl implements CremaSupport {
         }
         thisType.setAfterFieldsOffset(fieldLayout.afterInstanceFieldsOffset());
         thisType.setDeclaredFields(declaredFields);
+        thisType.sortDeclaredFields();
 
         Class<?> dynamicNestHost = info.dynamicNest;
         if (dynamicNestHost != null) {
