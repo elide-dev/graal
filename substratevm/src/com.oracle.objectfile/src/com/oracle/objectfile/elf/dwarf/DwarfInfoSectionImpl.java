@@ -631,6 +631,11 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         return writeAttrAccessibility(modifiers, buffer, pos);
     }
 
+    private static boolean hasClassCompilationUnit(ClassEntry classEntry) {
+        return classEntry.getMethods().stream().anyMatch(m -> m.isInRange() || m.isInlined() || m.isCompiledInPriorLayer()) ||
+                        classEntry.getFields().stream().anyMatch(DwarfInfoSectionImpl::isManifestedStaticField);
+    }
+
     private int writeInstanceClasses(DebugContext context, byte[] buffer, int p) {
         log(context, "  [0x%08x] instance classes", p);
         int pos = p;
@@ -649,8 +654,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
              * declaration in the owner type CU. Other information is already written to the
              * corresponding type units.
              */
-            if (classEntry.getMethods().stream().anyMatch(m -> m.isInRange() || m.isInlined() || m.isCompiledInPriorLayer()) ||
-                            classEntry.getFields().stream().anyMatch(DwarfInfoSectionImpl::isManifestedStaticField)) {
+            if (hasClassCompilationUnit(classEntry)) {
                 setCUIndex(classEntry, pos);
                 pos = writeInstanceClassInfo(context, classEntry, buffer, pos);
             }
@@ -848,13 +852,16 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         pos = writeTUPreamble(context, interfaceClassEntry.getLayoutTypeSignature(), loaderId, interfaceClassEntry, buffer, pos);
 
         log(context, "  [0x%08x] interface layout", pos);
-        AbbrevCode abbrevCode = AbbrevCode.INTERFACE_LAYOUT;
+        boolean hasSpecification = !dwarfSections.useTypeUnits() && hasClassCompilationUnit(interfaceClassEntry);
+        AbbrevCode abbrevCode = hasSpecification ? AbbrevCode.INTERFACE_LAYOUT_SPEC : AbbrevCode.INTERFACE_LAYOUT;
         log(context, "  [0x%08x] <1> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
         String name = uniqueDebugString(interfaceClassEntry.getTypeName());
         log(context, "  [0x%08x]     name  0x%x (%s)", pos, debugStringIndex(name), name);
         pos = writeStrSectionOffset(name, buffer, pos);
-        pos = writeTypeSpecification(interfaceClassEntry.getLayoutTypeSignature(), buffer, pos);
+        if (hasSpecification) {
+            pos = writeTypeSpecification(interfaceClassEntry.getLayoutTypeSignature(), buffer, pos);
+        }
 
         /* Now write references to all class layouts that implement this interface. */
         pos = writeInterfaceImplementors(context, interfaceClassEntry, buffer, pos);
@@ -885,7 +892,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
 
         int refTypeIdx = pos;
         log(context, "  [0x%08x] type layout", pos);
-        AbbrevCode abbrevCode = AbbrevCode.CLASS_LAYOUT_TU;
+        boolean hasSpecification = !dwarfSections.useTypeUnits() && hasClassCompilationUnit(classEntry);
+        AbbrevCode abbrevCode = hasSpecification ? AbbrevCode.CLASS_LAYOUT_TU_SPEC : AbbrevCode.CLASS_LAYOUT_TU;
         log(context, "  [0x%08x] <1> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
         String name = uniqueDebugString(classEntry.getTypeName());
@@ -896,7 +904,9 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         pos = writeAttrData2((short) size, buffer, pos);
 
         pos = writeAttrData2((short) classEntry.getFileIdx(), buffer, pos);
-        pos = writeTypeSpecification(classEntry.getLayoutTypeSignature(), buffer, pos);
+        if (hasSpecification) {
+            pos = writeTypeSpecification(classEntry.getLayoutTypeSignature(), buffer, pos);
+        }
 
         StructureTypeEntry superClassEntry = classEntry.getSuperClass();
         if (superClassEntry == null) {

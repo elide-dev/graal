@@ -30,7 +30,6 @@ int main(void) {
 C
 clang "$out/harness.c" -I "$out" -L "$out" -lprobe -Wl,-rpath,@loader_path -o "$out/harness"
 test "$("$out/harness")" = 42
-line=$(awk '/DEBUG_QUALITY_INNER/ {print NR}' "$out/DebugQualityProbe.java")
 for spec in executable shared; do
   binary="$out/probe"
   image="$out/probe"
@@ -54,8 +53,8 @@ for spec in executable shared; do
   # The dollar sign belongs to the Java nested-class name sent to LLDB.
   # shellcheck disable=SC2016
   "${debugger[@]}" --batch -o "target create $binary" "${args[@]}" \
-    -o "breakpoint set --file DebugQualityProbe.java --line $line" \
-    -o run -o 'frame info' -o 'thread backtrace' -o 'frame variable value shifted' \
+    -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint'" \
+    -o run -o 'frame info' -o 'thread backtrace' -o 'frame select 1' -o 'frame variable value' \
     -o 'image lookup -t "debugquality.DebugQualityProbe$DataOnly"' \
     -o "command script import $out/debug_quality_lldb.py" -o debug-quality-check > "$out/$spec.lldb.txt" 2>&1
   grep -q 'stop reason = breakpoint' "$out/$spec.lldb.txt"

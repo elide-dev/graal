@@ -35,6 +35,10 @@ on:
         type: choice
         default: all
         options: [all, linux-amd64, linux-aarch64, macos-aarch64, windows-amd64]
+      runner:
+        description: "Optional hosted runner for a nonpublishing single-platform qualification"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -91,7 +95,7 @@ env:
 jobs:
   meta:
     name: Release metadata
-    runs-on: linux-amd64-cipool
+    runs-on: ${{ inputs.runner != '' && 'ubuntu-24.04' || 'linux-amd64-cipool' }}
     outputs:
       version: ${{ steps.meta.outputs.version }}
       publish: ${{ steps.meta.outputs.publish }}
@@ -103,6 +107,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_PUBLISH: ${{ inputs.publish }}
           INPUT_PLATFORM: ${{ inputs.platform }}
+          INPUT_RUNNER: ${{ inputs.runner }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             version=${GITHUB_REF_NAME#gvm-elide-}
@@ -123,6 +128,16 @@ jobs:
             echo "::error::platform subsets are only available for nonpublishing qualification"
             exit 1
           fi
+          if [ -n "${INPUT_RUNNER}" ]; then
+            if [ "${publish}" = true ] || [ "${INPUT_PLATFORM}" = all ]; then
+              echo "::error::runner overrides require a nonpublishing single-platform qualification"
+              exit 1
+            fi
+            case "${INPUT_PLATFORM}:${INPUT_RUNNER}" in
+              linux-amd64:ubuntu-24.04|linux-aarch64:ubuntu-24.04-arm|macos-aarch64:macos-15|windows-amd64:windows-2025) ;;
+              *) echo "::error::runner override does not match the qualification platform"; exit 1 ;;
+            esac
+          fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
           echo "Release ${version}, publish=${publish}" >> "${GITHUB_STEP_SUMMARY}"
@@ -130,7 +145,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     needs: meta
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ inputs.runner || matrix.runner }}
     # The Linux legs build in an old-glibc container (see GLIBC_FLOOR); the others on the runner.
     container: ${{ matrix.container }}
     timeout-minutes: 360

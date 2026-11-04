@@ -17,7 +17,12 @@ public class DebugQualityProbe {
     @AlwaysInline("Exercise an inline scope with a live argument")
     static int inner(int value) {
         int shifted = value + 3;
-        return shifted * 2; // DEBUG_QUALITY_INNER
+        return checkpoint(shifted) + value + 3; // DEBUG_QUALITY_INNER
+    }
+
+    @NeverInline("Keep a call with the caller's argument live for variable inspection")
+    static int checkpoint(int shifted) {
+        return shifted;
     }
 
     @NeverInline("Keep a concrete caller for inline attribution")

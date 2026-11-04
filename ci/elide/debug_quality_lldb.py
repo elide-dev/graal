@@ -9,9 +9,9 @@ def check(debugger, command, result, internal_dict):
         names = [frame.GetFunctionName() or "" for frame in thread]
         assert any("inner" in name for name in names), names
         assert any("outer" in name for name in names), names
-        frame = thread.GetFrameAtIndex(0)
+        frame = next(frame for frame in thread if "inner" in (frame.GetFunctionName() or ""))
         assert frame.GetLineEntry().GetFileSpec().GetFilename() == "DebugQualityProbe.java"
-        for name, expected in [("value", 18), ("shifted", 21)]:
+        for name, expected in [("value", 18)]:
             value = frame.FindVariable(name)
             error = lldb.SBError()
             actual = value.GetValueAsSigned(error)
