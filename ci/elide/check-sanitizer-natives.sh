@@ -18,17 +18,22 @@ case "${sanitizer}" in
   *) exit 2 ;;
 esac
 run_probe() {
-  local output=$1 status=0 attempt
+  local output=$1 status=0 attempt startup_error
   shift
   for ((attempt = 1; attempt <= 32; attempt++)); do
     if "$@" > "${output}" 2>&1; then return 0; else status=$?; fi
-    # Container seccomp can block TSan's personality() re-exec when ASLR chooses an
+    # Container seccomp can block a sanitizer's personality() re-exec when ASLR chooses an
     # incompatible address layout. Retry that startup failure with a fresh layout.
     # Actual sanitizer findings and all other failures retain their original status.
-    if [ "${sanitizer}" != tsan ] || ! grep -q '^FATAL: ThreadSanitizer: encountered an incompatible memory layout' "${output}"; then
+    case "${sanitizer}" in
+      tsan) startup_error='^FATAL: ThreadSanitizer: encountered an incompatible memory layout' ;;
+      msan) startup_error='^FATAL: MemorySanitizer: unable to disable ASLR' ;;
+      *) return "${status}" ;;
+    esac
+    if ! grep -q "${startup_error}" "${output}"; then
       return "${status}"
     fi
-    echo "TSan startup address-layout collision (${attempt}/32)" >&2
+    echo "${sanitizer} startup address-layout collision (${attempt}/32)" >&2
   done
   return "${status}"
 }

@@ -61,6 +61,6 @@ Each sanitizer uses separate build output and CMake caches.
 The build selects only Linux amd64 glibc distributions, independent of other native toolchains installed on the builder.
 The build inspects the packaged native libraries for sanitizer references, checks the shared libraries against the release's glibc 2.35 floor, and checks every Native Image archive object for machine code and ThinLTO bitcode.
 A native probe links the packaged `liblibchelper.a` and `libzstd.a` with and without ThinLTO, runs a clean workload, and requires a known sanitizer error to be reported.
-TSan probes retry reported address-layout startup collisions up to 32 times per invocation; sanitizer findings and other errors retain their failure status.
+TSan and MSan probes retry reported address-layout startup collisions up to 32 times per invocation; sanitizer findings and other errors retain their failure status.
 The ASan job also exercises the packaged Truffle, Native Function Interface (NFI), and GraalPy resources in a JVM, using native Portable Operating System Interface (POSIX), compression, ctypes/libffi, and SQLite support.
 The release workflow requires all three sanitizer jobs to succeed before publication.
