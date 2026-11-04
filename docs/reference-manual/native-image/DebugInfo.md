@@ -42,6 +42,15 @@ If you want more parameter and local variable information to be included when em
 native-image -g -H:+SourceLevelDebug Hello
 ```
 
+To retain source and inline positions between safepoints in an optimized executable, you can enable `-H:+DebugInfoNonSafepoints`:
+
+```shell
+native-image -g -O2 -H:+TrackNodeSourcePosition -H:+DebugInfoNonSafepoints Hello
+```
+
+This option keeps the selected optimization level and does not enable `SourceLevelDebug` or disable frame-state pruning.
+Parameters and local variables removed by optimization can still be unavailable.
+
 Enabling debuginfo with flag `-g` does not make any difference to how a generated
 native image is compiled and does not affect how fast it executes nor how much memory it uses at runtime.
 However, it can significantly increase the size of the generated image on disk. Enabling full parameter
