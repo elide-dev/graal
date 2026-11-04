@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: elide-26-sanitizer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   natives:
     uses: ./.github/workflows/elide-sanitizer-natives.yml

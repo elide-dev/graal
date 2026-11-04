@@ -38,8 +38,16 @@ import jdk.graal.compiler.api.directives.BytecodeInterpreterDirectives.BytecodeI
 import jdk.graal.compiler.api.directives.BytecodeInterpreterDirectives.BytecodeInterpreterHandlerConfig.Argument;
 import jdk.graal.compiler.api.directives.BytecodeInterpreterDirectives.BytecodeInterpreterHandlerConfig.Argument.Field;
 import jdk.graal.compiler.core.common.CompilationIdentifier;
+import jdk.graal.compiler.core.common.type.StampFactory;
+import jdk.graal.compiler.core.common.type.StampPair;
 import jdk.graal.compiler.debug.GraalError;
+import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
+import jdk.graal.compiler.nodes.ConstantNode;
+import jdk.graal.compiler.nodes.IndirectCallTargetNode;
+import jdk.graal.compiler.nodes.InvokeNode;
+import jdk.graal.compiler.nodes.ReturnNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.StructuredGraph.AllowAssumptions;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.calc.ArbitraryValueNode;
 import jdk.graal.compiler.nodes.virtual.CommitAllocationNode;
@@ -49,6 +57,8 @@ import jdk.graal.compiler.phases.util.BytecodeHandlerStubHelper;
 import jdk.graal.compiler.phases.util.BytecodeInterpreterAnnotations;
 import jdk.graal.compiler.replacements.GraphKit;
 import jdk.graal.compiler.truffle.hotspot.HotSpotOutlineBytecodeHandlerPhase;
+import jdk.vm.ci.hotspot.HotSpotCallingConventionType;
+import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class BytecodeHandlerFieldValidityTest extends GraalCompilerTest {
@@ -137,6 +147,22 @@ public class BytecodeHandlerFieldValidityTest extends GraalCompilerTest {
         BytecodeInterpreterAnnotations.registerCompilerDirectives(getMetaAccess());
         ResolvedJavaMethod method = getResolvedJavaMethod(name);
         return BytecodeHandlerConfig.getHandlerConfig(method, method, enabled);
+    }
+
+    @Test
+    public void testOutliningPreservesLoweredIndirectCall() {
+        BytecodeInterpreterAnnotations.registerCompilerDirectives(getMetaAccess());
+        StructuredGraph graph = parseEager("valid", AllowAssumptions.NO);
+        IndirectCallTargetNode target = graph.add(new IndirectCallTargetNode(ConstantNode.forLong(0, graph), ValueNode.EMPTY_ARRAY,
+                        StampPair.createSingle(StampFactory.forVoid()), new JavaType[0], null, HotSpotCallingConventionType.JavaCall, InvokeKind.Static));
+        InvokeNode invoke = graph.add(new InvokeNode(target, 0));
+        invoke.setStateAfter(graph.start().stateAfter().duplicate());
+        graph.addBeforeFixed(graph.getNodes(ReturnNode.TYPE).first(), invoke);
+
+        new HotSpotOutlineBytecodeHandlerPhase().apply(graph, getDefaultHighTierContext());
+
+        Assert.assertTrue(invoke.isAlive());
+        Assert.assertSame(target, invoke.callTarget());
     }
 
     @Test

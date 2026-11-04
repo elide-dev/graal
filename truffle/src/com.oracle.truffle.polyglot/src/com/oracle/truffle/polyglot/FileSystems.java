@@ -645,11 +645,7 @@ final class FileSystems {
         public Path getTempDirectory() {
             if (converter != null && delegate instanceof NIOFileSystem nio && nio.hostTmpDirPath == null) {
                 // Preinitialization can create temporary-directory paths without host I/O access.
-                String tmpDir = System.getProperty("java.io.tmpdir");
-                if (tmpDir == null) {
-                    throw new UnsupportedOperationException("Temporary directories not supported");
-                }
-                return wrap(delegate.parsePath(tmpDir));
+                return wrap(converter.getTempDirectory(delegate));
             }
             return wrap(delegate.getTempDirectory());
         }
@@ -819,6 +815,18 @@ final class FileSystems {
 
             private volatile List<InternalResourcePath> internalResources;
             private Map<String, Path> languageHomes;
+            private Path tempDirectory;
+
+            synchronized Path getTempDirectory(FileSystem fileSystem) {
+                if (tempDirectory == null) {
+                    String tmpDir = System.getProperty("java.io.tmpdir");
+                    if (tmpDir == null) {
+                        throw new UnsupportedOperationException("Temporary directories not supported");
+                    }
+                    tempDirectory = fileSystem.parsePath(tmpDir);
+                }
+                return tempDirectory;
+            }
 
             synchronized void initialize(InternalResourceRoots resourceRoots, Map<String, Path> newLanguageHomes) {
                 if (internalResources != null) {
@@ -827,6 +835,7 @@ final class FileSystems {
                 List<InternalResourcePath> resources = new ArrayList<>();
                 resourceRoots.forEachUsedResource((cache, path) -> resources.add(new InternalResourcePath(cache, path)));
                 languageHomes = newLanguageHomes;
+                tempDirectory = null;
                 internalResources = resources;
             }
 

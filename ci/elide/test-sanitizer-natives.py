@@ -46,18 +46,21 @@ class SanitizerArtifactsTest(unittest.TestCase):
                 resources.write(self.shared, "META-INF/resources/test/linux/amd64/libfixture.so")
             self.jars.append(jar)
 
-    def assemble(self):
-        NATIVES.assemble("25.5.5-elide.25", "asan", self.toolchain, self.root / "out", self.svm, self.jars)
+    def assemble(self, version="25.5.5-elide.25"):
+        NATIVES.assemble(version, "asan", self.toolchain, self.root / "out", self.svm, self.jars)
 
     def test_preserves_jars_and_records_hashes(self):
-        self.assemble()
-        root = self.root / "out/graalvm-natives-25.5.5-elide.25-linux-amd64-sanitizer-asan"
-        manifest = json.loads((root / "manifest.json").read_text())
-        self.assertEqual(manifest["native_libraries"], dict.fromkeys(NATIVES.JARS, 1))
-        for name, jar in zip(NATIVES.JARS, self.jars):
-            relative = f"jars/{name}.jar"
-            self.assertEqual((root / relative).read_bytes(), jar.read_bytes())
-            self.assertEqual(manifest["files"][relative], NATIVES.hashlib.sha256(jar.read_bytes()).hexdigest())
+        for version in ("25.5.5-elide.25", "25.6.0-dev"):
+            with self.subTest(version=version):
+                self.assemble(version)
+                root = self.root / f"out/graalvm-natives-{version}-linux-amd64-sanitizer-asan"
+                manifest = json.loads((root / "manifest.json").read_text())
+                self.assertEqual(manifest["version"], version)
+                self.assertEqual(manifest["native_libraries"], dict.fromkeys(NATIVES.JARS, 1))
+                for name, jar in zip(NATIVES.JARS, self.jars):
+                    relative = f"jars/{name}.jar"
+                    self.assertEqual((root / relative).read_bytes(), jar.read_bytes())
+                    self.assertEqual(manifest["files"][relative], NATIVES.hashlib.sha256(jar.read_bytes()).hexdigest())
 
     def test_rejects_uninstrumented_resource(self):
         ordinary = self.root / "ordinary.so"

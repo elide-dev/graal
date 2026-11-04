@@ -49,8 +49,8 @@ def inspect_library(path, sanitizer, toolchain):
 
 
 def assemble(version, sanitizer, toolchain, out, svm_tar, jars):
-    if not re.fullmatch(r"\d+\.\d+\.\d+-elide\.\d+", version):
-        raise ValueError(f"Invalid release version: {version}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-elide\.\d+|-dev)", version):
+        raise ValueError(f"Invalid artifact version: {version}")
     if sanitizer not in PREFIXES:
         raise ValueError(f"Unsupported sanitizer: {sanitizer}")
     root = out / f"graalvm-natives-{version}-linux-amd64-sanitizer-{sanitizer}"

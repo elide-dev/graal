@@ -38,6 +38,7 @@ import jdk.graal.compiler.nodes.InvokeNode;
 import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.ValueNode;
+import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
 import jdk.graal.compiler.phases.util.BytecodeHandlerCallSite;
 import jdk.graal.compiler.phases.util.BytecodeInterpreterAnnotations;
@@ -105,7 +106,9 @@ public abstract class OutlineBytecodeHandlerPhase extends BasePhase<HighTierCont
         }
 
         for (Node node : graph.getNodes()) {
-            if (node instanceof Invoke invoke) {
+            // Lowered indirect calls have no Java annotation metadata. In particular, dispatches
+            // emitted for tail-call bytecode handlers can already occur in this graph.
+            if (node instanceof Invoke invoke && invoke.callTarget() instanceof MethodCallTargetNode) {
                 ResolvedJavaMethod targetMethod = invoke.callTarget().targetMethod();
                 GraalError.guarantee(targetMethod != null, "Missing target method for handler invoke %s in %s", invoke, graph);
                 if (BytecodeInterpreterAnnotations.getBytecodeInterpreterHandler(targetMethod) == null) {
