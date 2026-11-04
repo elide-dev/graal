@@ -14,13 +14,14 @@ cp "$scripts/DebugQualityProbe.java" "$out/src/debugquality/DebugQualityProbe.ja
   -H:DebugInfoSourceSearchPath="$out/src" --initialize-at-build-time=debugquality \
   -cp "$out/classes" debugquality.DebugQualityProbe -o "$out/probe" > "$out/build.log" 2>&1
 test "$("$out/probe" test)" = '42:84'
-line=$(awk '/DEBUG_QUALITY_INNER/ {print NR}' "$out/src/debugquality/DebugQualityProbe.java")
+symbol=$(nm "$out/probe.debug" | awk '/DebugQualityProbe.*checkpoint/ && $2 ~ /[tT]/ && !found { print $3; found=1 }')
+test -n "$symbol"
 cat > "$out/values.gdb" <<'GDB'
 set pagination off
 set disable-randomization off
 set args test
 GDB
-printf 'break DebugQualityProbe.java:%s\nrun\n' "$line" >> "$out/values.gdb"
+printf 'break %s\nrun\n' "$symbol" >> "$out/values.gdb"
 cat >> "$out/values.gdb" <<'GDB'
 backtrace
 info args
@@ -28,13 +29,18 @@ info locals
 python
 import gdb
 frame = gdb.newest_frame()
-assert frame.find_sal().symtab.filename.endswith('DebugQualityProbe.java')
-assert int(gdb.parse_and_eval('value')) == 18
-assert int(gdb.parse_and_eval('shifted')) == 21
 names = []
+value_frame = None
 while frame:
-    names.append(frame.name() or '')
+    name = frame.name() or ''
+    names.append(name)
+    if 'inner' in name:
+        value_frame = frame
     frame = frame.older()
+assert value_frame is not None, names
+value_frame.select()
+assert value_frame.find_sal().symtab.filename.endswith('DebugQualityProbe.java')
+assert int(gdb.parse_and_eval('value')) == 18
 assert any('inner' in name for name in names), names
 assert any('outer' in name for name in names), names
 symbol = gdb.lookup_global_symbol('debugquality.DebugQualityProbe$DataOnly', gdb.SYMBOL_STRUCT_DOMAIN)

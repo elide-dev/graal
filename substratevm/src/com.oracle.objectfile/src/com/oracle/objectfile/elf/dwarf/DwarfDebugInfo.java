@@ -120,6 +120,8 @@ public class DwarfDebugInfo extends DebugInfoBase {
         TYPE_UNIT_FILES,
         CLASS_UNIT_FILES,
         INTERFACE_LAYOUT_CU,
+        CLASS_LAYOUT_TU_SPEC,
+        INTERFACE_LAYOUT_SPEC,
     }
 
     /**
