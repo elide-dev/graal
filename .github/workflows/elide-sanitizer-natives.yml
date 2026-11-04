@@ -1,0 +1,119 @@
+# Called by the release CI stack; also supports building add-ons without publishing a release.
+name: Elide sanitizer native libraries
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      graalpython-ref:
+        required: true
+        type: string
+      toolchain-version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version for the add-on archives
+        required: true
+        type: string
+      graalpython-ref:
+        description: Immutable GraalPy revision matching the release
+        default: 57c2c23756f7f71a0b2b853dc7645d82033f2eb4
+        required: true
+        type: string
+      toolchain-version:
+        description: Elide toolchain version (including the sanitizer add-ons)
+        default: "2026.11.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux amd64 ${{ matrix.sanitizer }} natives
+    runs-on: linux-amd64-cipool
+    container: docker.io/library/ubuntu:22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, tsan, msan]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
+            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config
+          git config --global --add safe.directory '*'
+      - name: Install Elide toolchain and sanitizer add-on
+        uses: elide-dev/toolchain/action@4677dd77b520b609bb0e548e6e7a4dadadbb2d14  # v2026.11.1
+        with:
+          version: ${{ inputs.toolchain-version }}
+          target: x86_64-unknown-linux-gnu
+          sanitizer: ${{ matrix.sanitizer }}
+      - name: Checkout graal
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: graal
+      - name: Checkout graalpython
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: elide-dev/graalpython
+          ref: ${{ inputs.graalpython-ref }}
+          path: graalpython
+      - name: Set up environment
+        run: |
+          {
+            echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")"
+            echo "MX=${PWD}/mx/mx"
+            echo "MX_PYTHON=python3"
+            echo "JAVA_HOME=${PWD}/labsjdk"
+            echo "LANG=C.UTF-8"
+            echo "LC_ALL=C.UTF-8"
+          } >> "${GITHUB_ENV}"
+      - name: Checkout mx
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: graalvm/mx
+          ref: ${{ env.MX_VERSION }}
+          path: mx
+      - name: Fetch LabsJDK
+        run: |
+          "${MX}" -p graal/vm --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to jdks --alias "${JAVA_HOME}"
+      - name: Test artifact validation
+        if: matrix.sanitizer == 'asan'
+        run: python3 graal/ci/elide/test-sanitizer-natives.py
+      - name: Build, inspect, and smoke-test native libraries
+        env:
+          VERSION: ${{ inputs.version }}
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          rm -rf sanitizer-out
+          ./graal/ci/elide/build-sanitizer-natives.sh "${VERSION}" "${SANITIZER}" "${PWD}/sanitizer-out"
+      - name: Smoke-test packaged ASan resources in a JVM
+        if: matrix.sanitizer == 'asan'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 graal/ci/elide/check-sanitizer-resources.py "${ELIDE_TOOLCHAIN_HOME}" \
+            "${PWD}/sanitizer-out/graalvm-natives-${VERSION}-linux-amd64-sanitizer-asan" \
+            "${PWD}/sanitizer-out/work-asan/mxbuild"
+      - name: Upload native-library add-on
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dist-linux-amd64-sanitizer-${{ matrix.sanitizer }}
+          path: sanitizer-out/*.tar.xz*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean up
+        if: always()
+        run: rm -rf graal graalpython mx sanitizer-out labsjdk jdks
