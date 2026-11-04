@@ -67,8 +67,8 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                     strippedSuccessfully = true;
                     break;
                 case MACH_O:
-                    // Not supported. See warning in SubstrateOptions.validateStripDebugInfo
-                    return;
+                    strippedSuccessfully = stripMacOS(accessImpl);
+                    break;
                 default:
                     throw UserError.abort("Unsupported object file format");
             }
@@ -121,6 +121,57 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                 return true;
             } catch (IOException e) {
                 throw UserError.abort("Generation of separate debuginfo file failed", e);
+            } catch (InterruptedException e) {
+                throw new InterruptImageBuilding("Interrupted during debuginfo file splitting of image " + imageName);
+            }
+        }
+    }
+
+    @SuppressFBWarnings(value = "", justification = "FB reports null pointer dereferencing although it is not possible in this case.")
+    private static boolean stripMacOS(AfterImageWriteAccessImpl accessImpl) {
+        String dsymutilExe = "dsymutil";
+        String stripExe = "strip";
+        String dsymExtension = ".dSYM";
+        Path imagePath = accessImpl.getImagePath();
+        if (imagePath == null) {
+            assert !Platform.includedIn(InternalPlatform.NATIVE_ONLY.class);
+            return false;
+        }
+
+        Path imageName = imagePath.getFileName();
+        boolean dsymutilAvailable = false;
+        try {
+            dsymutilAvailable = FileUtils.executeCommand(dsymutilExe, "--version") == 0;
+        } catch (IOException e) {
+            /* Fall through to `if (!dsymutilAvailable)` */
+        } catch (InterruptedException e) {
+            throw new InterruptImageBuilding("Interrupted during checking for " + dsymutilExe + " availability");
+        }
+
+        if (!dsymutilAvailable) {
+            LogUtils.warning("%s not available. The debuginfo will remain embedded in the executable.", dsymutilExe);
+            return false;
+        } else {
+            try {
+                Path outputDirectory = imagePath.getParent();
+                String imageFilePath = imagePath.toString();
+                if (SubstrateOptions.useDebugInfoGeneration()) {
+                    /* Generate a dSYM bundle with debug info before stripping the executable. */
+                    String dsymName = imageName + dsymExtension;
+                    Path dsymPath = outputDirectory.resolve(dsymName);
+                    FileUtils.executeCommand(dsymutilExe, "-o", dsymPath.toString(), imageFilePath);
+                    BuildArtifacts.singleton().add(ArtifactType.DEBUG_INFO, dsymPath);
+                }
+                if (SubstrateOptions.DeleteLocalSymbols.getValue()) {
+                    /* Strip debug info and local symbols. */
+                    FileUtils.executeCommand(stripExe, imageFilePath);
+                } else {
+                    /* Strip debug info only. */
+                    FileUtils.executeCommand(stripExe, "-S", imageFilePath);
+                }
+                return true;
+            } catch (IOException e) {
+                throw UserError.abort("Generation of dSYM debug info bundle failed", e);
             } catch (InterruptedException e) {
                 throw new InterruptImageBuilding("Interrupted during debuginfo file splitting of image " + imageName);
             }
