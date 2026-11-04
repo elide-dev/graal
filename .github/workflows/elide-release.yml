@@ -40,7 +40,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: elide-release-${{ github.ref }}
+  group: elide-release-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && !inputs.publish && inputs.platform != 'all' && format('-qualify-{0}', inputs.platform) || '' }}
   cancel-in-progress: false
 
 env:
@@ -152,7 +152,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -q
           apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
-            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config gnupg lsb-release
+            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config gnupg lsb-release gdb
           # Clang, llvm-ar and lld of LTO_LLVM_MAJOR for the static C libraries' ThinLTO bitcode.
           codename=$(lsb_release -cs)
           install -d /etc/apt/keyrings
@@ -341,6 +341,19 @@ jobs:
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
+      - name: Qualify optimized Java AOT debug information (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          command -v gdb
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          bash ./graal/ci/elide/debug-quality-linux.sh "${home}" debug-quality-linux
+      - name: Retain Linux debug quality evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-${{ matrix.platform }}-${{ github.sha }}
+          path: debug-quality-linux/
+          if-no-files-found: error
       - name: Qualify Java AOT debug information (macOS)
         if: runner.os == 'macOS'
         run: |
