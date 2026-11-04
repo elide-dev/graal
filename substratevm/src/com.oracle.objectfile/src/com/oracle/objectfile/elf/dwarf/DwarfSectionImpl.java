@@ -256,8 +256,12 @@ public abstract class DwarfSectionImpl extends BasicProgbitsSectionImpl {
              * Mark address so it is relocated relative to the start of the text segment.
              * Use format-aware section name since Mach-O uses __text instead of .text.
              */
-            String textSectionName = SectionName.TEXT.getFormatDependentName(owner.getFormat());
-            markRelocationSite(pos, ObjectFile.RelocationKind.DIRECT_8, textSectionName, l);
+            // Darwin's linker debug map omits the local section symbol. Use the
+            // exported code-boundary anchor so dsymutil can resolve live PCs.
+            String codeSymbol = owner.getFormat() == ObjectFile.Format.MACH_O
+                            ? DwarfDebugInfo.CODE_BEGIN_NAME
+                            : SectionName.TEXT.getFormatDependentName(owner.getFormat());
+            markRelocationSite(pos, ObjectFile.RelocationKind.DIRECT_8, codeSymbol, l);
             pos = writeLong(0, buffer, pos);
         }
         return pos;
