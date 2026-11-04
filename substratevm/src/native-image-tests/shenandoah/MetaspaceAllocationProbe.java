@@ -41,6 +41,12 @@ public class MetaspaceAllocationProbe {
         return new WeakReference<>(value);
     }
 
+    private static void verifyLongArray(long[] longs) {
+        if (longs[0] != 0x0123456789ABCDEFL || longs[1] != 0 || longs[longs.length - 1] != 0xFEDCBA9876543210L) {
+            throw new AssertionError("Long-array metaspace allocation corrupted");
+        }
+    }
+
     public static void main(String[] args) {
         Metaspace metaspace = Metaspace.singleton();
         if (Runtime.getRuntime().maxMemory() != 64L * 1024 * 1024) {
@@ -52,13 +58,17 @@ public class MetaspaceAllocationProbe {
         WeakReference<Object> reference = installReference(box);
         byte[] bytes = metaspace.allocateByteArray(2_000_003);
         int[] ints = metaspace.allocateIntArray(500_003);
+        long[] longs = metaspace.allocateLongArray(1_027);
         bytes[bytes.length - 1] = 123;
         ints[ints.length - 1] = 456;
-        if (!metaspace.isInAllocatedMemory(box) || !metaspace.isInAllocatedMemory(bytes) || !metaspace.isInAllocatedMemory(ints)) {
+        longs[0] = 0x0123456789ABCDEFL;
+        longs[longs.length - 1] = 0xFEDCBA9876543210L;
+        if (!metaspace.isInAllocatedMemory(box) || !metaspace.isInAllocatedMemory(bytes) || !metaspace.isInAllocatedMemory(ints) || !metaspace.isInAllocatedMemory(longs)) {
             throw new AssertionError("Metaspace membership check failed");
         }
         for (int round = 0; round < 16; round++) {
             System.gc();
+            verifyLongArray(longs);
             long used = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
             long afterGC = Heap.getHeap().getUsedMemoryAfterLastGC().rawValue();
             if (used < 0 || used > Runtime.getRuntime().maxMemory() || afterGC < 0 || afterGC > Runtime.getRuntime().maxMemory()) {
@@ -89,6 +99,7 @@ public class MetaspaceAllocationProbe {
             }
         }
         System.gc();
+        verifyLongArray(longs);
         if (reference.get() != box.value || reference.get() == null || bytes[bytes.length - 1] != 123 || ints[ints.length - 1] != 456) {
             throw new AssertionError("Failed allocation corrupted existing objects");
         }
