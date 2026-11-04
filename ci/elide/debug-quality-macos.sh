@@ -9,7 +9,7 @@ cp "$scripts/DebugQualityProbe.java" "$out/DebugQualityProbe.java"
 "$sdk/bin/javac" --add-modules org.graalvm.nativeimage -g \
   -cp "$sdk/lib/svm/svm-shared.jar" -d "$out/classes" "$out/DebugQualityProbe.java"
 common=(-J-Xmx5g -J-XX:ActiveProcessorCount=4 --no-fallback -g -O2 \
-  --initialize-at-build-time=debugquality -cp "$out/classes:$sdk/lib/svm/svm-shared.jar")
+  --initialize-at-build-time=debugquality -cp "$out/classes")
 "$sdk/bin/native-image" "${common[@]}" debugquality.DebugQualityProbe -o "$out/probe" > "$out/executable-build.log" 2>&1
 "$sdk/bin/native-image" "${common[@]}" --shared debugquality.DebugQualityProbe -o "$out/libprobe" > "$out/shared-build.log" 2>&1
 test "$("$out/probe" test)" = '42:84'

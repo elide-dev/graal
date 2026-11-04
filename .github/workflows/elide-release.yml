@@ -30,6 +30,11 @@ on:
         required: false
         default: false
         type: boolean
+      platform:
+        description: "Platform subset for nonpublishing qualification"
+        type: choice
+        default: all
+        options: [all, linux-amd64, linux-aarch64, macos-aarch64, windows-amd64]
 
 permissions:
   contents: read
@@ -98,6 +103,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_PLATFORM: ${{ inputs.platform }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             version=${GITHUB_REF_NAME#gvm-elide-}
@@ -114,6 +120,10 @@ jobs:
             echo "::error::invalid release version '${version}'"
             exit 1
           fi
+          if [ "${publish}" = true ] && [ -n "${INPUT_PLATFORM}" ] && [ "${INPUT_PLATFORM}" != all ]; then
+            echo "::error::platform subsets are only available for nonpublishing qualification"
+            exit 1
+          fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
           echo "Release ${version}, publish=${publish}" >> "${GITHUB_STEP_SUMMARY}"
@@ -128,18 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: linux-amd64
-            runner: linux-amd64-cipool
-            container: docker.io/library/ubuntu:22.04
-            maven: true
-          - platform: linux-aarch64
-            runner: linux-arm64-cipool
-            container: docker.io/library/ubuntu:22.04
-          - platform: macos-aarch64
-            runner: macos-arm64-cipool
-          - platform: windows-amd64
-            runner: windows-amd64-cipool
+        include: ${{ fromJSON(inputs.platform == 'macos-aarch64' && '[{"platform":"macos-aarch64","runner":"macos-arm64-cipool"}]' || inputs.platform == 'windows-amd64' && '[{"platform":"windows-amd64","runner":"windows-amd64-cipool"}]' || inputs.platform == 'linux-aarch64' && '[{"platform":"linux-aarch64","runner":"linux-arm64-cipool","container":"docker.io/library/ubuntu:22.04"}]' || inputs.platform == 'linux-amd64' && '[{"platform":"linux-amd64","runner":"linux-amd64-cipool","container":"docker.io/library/ubuntu:22.04","maven":true}]' || '[{"platform":"linux-amd64","runner":"linux-amd64-cipool","container":"docker.io/library/ubuntu:22.04","maven":true},{"platform":"linux-aarch64","runner":"linux-arm64-cipool","container":"docker.io/library/ubuntu:22.04"},{"platform":"macos-aarch64","runner":"macos-arm64-cipool"},{"platform":"windows-amd64","runner":"windows-amd64-cipool"}]') }}
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       PLATFORM: ${{ matrix.platform }}
@@ -524,6 +523,7 @@ jobs:
 
   publish:
     name: Assemble and publish
+    if: ${{ !inputs.platform || inputs.platform == 'all' }}
     needs: [meta, build]
     runs-on: linux-amd64-cipool
     env:
