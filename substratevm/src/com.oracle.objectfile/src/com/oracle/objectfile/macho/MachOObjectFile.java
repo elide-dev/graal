@@ -2425,6 +2425,22 @@ public final class MachOObjectFile extends ObjectFile {
         DwarfRangesSectionImpl rangesSection = dwarfSections.getRangesSectionImpl();
         DwarfLineSectionImpl lineSection = dwarfSections.getLineSectionImpl();
 
+        // A valid, initially empty DWARF5 address table gives dsymutil an addr_base
+        // to update when it rewrites absolute location lists into indexed lists.
+        byte[] addrHeader = ByteBuffer.allocate(DwarfDebugInfo.MACH_O_ADDR_BASE).order(getByteOrder())
+                        .putInt(4).putShort((short) 5).put((byte) 8).put((byte) 0).array();
+        newDebugSection("__debug_addr", new BasicProgbitsSectionImpl(addrHeader) {
+            @Override
+            public boolean isLoadable() {
+                return false;
+            }
+
+            @Override
+            public boolean isReferenceable() {
+                return false;
+            }
+        });
+
         // Create section elements using Mach-O style names (e.g., "__debug_str" instead of ".debug_str")
         // The section names go to the __DWARF segment
         newDebugSection(strSection.getSectionName(), strSection);
