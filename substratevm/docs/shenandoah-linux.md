@@ -82,7 +82,7 @@ The test command disables isolated compilation and the unimplemented Shenandoah 
 
 ## Test Runtime Class Loading
 
-Build with matching native collector interface version `250502` and enable `-H:+RuntimeClassLoading`.
+Build with matching native collector interface version `250600` and enable `-H:+RuntimeClassLoading`.
 Use `-H:MaxMetaspaceSize=<size>m` to bound the permanent metadata reservation.
 Garbage collection scans outgoing metadata references, but does not unload classes.
 
@@ -103,8 +103,11 @@ The existing `shenandoah-truffle-test` command also checks Truffle compilation a
   Use the default compressed-reference configuration.
 
 - The native GC supports one isolate per process.
-- Runtime class loading requires matching Java and native collector interface version `250502`.
+- Runtime class loading requires matching Java and native collector interface version `250600`.
   Metaspace is bounded and permanent; class unloading is not supported.
 
 - Shenandoah performance counters are not implemented.
   If you include JVMStat monitoring, disable those counters with `-XX:-UsePerfData` at run time.
+
+On the 25.6 line, runtime metadata supports `long[]` interface tables and PEXT interface hashing.
+Build the Java sources and native collector libraries together with interface version `250600`.

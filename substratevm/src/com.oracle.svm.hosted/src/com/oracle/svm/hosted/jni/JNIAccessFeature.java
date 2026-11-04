@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -48,8 +48,6 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.impl.RuntimeJNIAccessSupport;
-import org.graalvm.word.WordBase;
-import org.graalvm.word.impl.Word;
 
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.ObjectScanner.OtherReason;
@@ -73,15 +71,13 @@ import com.oracle.svm.core.jni.CallVariant;
 import com.oracle.svm.core.jni.JNIJavaCallTrampolineHolder;
 import com.oracle.svm.core.jni.access.JNIAccessibleClass;
 import com.oracle.svm.core.jni.access.JNIAccessibleField;
-import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.jni.access.JNIAccessibleMethod;
 import com.oracle.svm.core.jni.access.JNIAccessibleMethodDescriptor;
 import com.oracle.svm.core.jni.access.JNINativeLinkage;
 import com.oracle.svm.core.jni.access.JNIReflectionDictionary;
 import com.oracle.svm.core.jni.functions.JNIFunctions;
-import com.oracle.svm.core.meta.MethodOffset;
-import com.oracle.svm.core.meta.MethodPointer;
-import com.oracle.svm.core.meta.MethodRef;
+import com.oracle.svm.core.meta.MethodRefUtils;
+import com.oracle.svm.guest.staging.meta.MethodRef;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.ClassLoaderFeature;
 import com.oracle.svm.hosted.ConditionalConfigurationRegistry;
@@ -320,11 +316,6 @@ public class JNIAccessFeature implements Feature {
             registerJavaCallTrampoline(access, variant, false);
             registerJavaCallTrampoline(access, variant, true);
         }
-        if (JNIAccessibleMethod.storesCodeOffsets()) {
-            /* Read only by the call trampolines. */
-            ResolvedJavaField codeInfoField = JNIAccessibleMethod.getCodeInfoField(access.getMetaAccess().getWrapped());
-            access.registerAsAccessed(access.getUniverse().lookup(codeInfoField), "it is read by the JNI call trampolines");
-        }
         pendingNativeCallWrappers.forEach((wrapper, linkage) -> registerNativeCallWrapperReachabilityHandler(access, wrapper, linkage));
         pendingNativeCallWrappers.clear();
 
@@ -535,7 +526,7 @@ public class JNIAccessFeature implements Feature {
             if (!Modifier.isStatic(method.getModifiers()) && !Modifier.isAbstract(method.getModifiers())) {
                 nonvirtualVariantWrappers = createJavaCallVariantWrappers(access, callWrapperMethod.getSignature(), true, method);
             }
-            JNIAccessibleMethod jniMethod = new JNIAccessibleMethod(jniClass, method.getModifiers(), preserved);
+            JNIAccessibleMethod jniMethod = new JNIAccessibleMethod(jniClass, method.getModifiers(), targetMethod.isConstructor(), preserved);
             calledJavaMethods.add(new JNICallableJavaMethod(descriptor, jniMethod, targetMethod, callWrapperMethod, newObjectMethod, variantWrappers, nonvirtualVariantWrappers));
             return jniMethod;
         });
@@ -641,7 +632,7 @@ public class JNIAccessFeature implements Feature {
         }
         for (JNICallableJavaMethod method : calledJavaMethods) {
             finishMethodBeforeCompilation(method, access);
-            access.registerAsImmutable(method.jniMethod);
+            access.registerAsImmutable(method.jniMethod); // May contain relocatable pointers.
         }
     }
 
@@ -676,37 +667,28 @@ public class JNIAccessFeature implements Feature {
                 interfaceTypeID = indirectCallTargetClass.isInterface() ? indirectCallTargetClass.getInterfaceID() : JNIAccessibleMethod.INTERFACE_TYPEID_CLASS_TABLE;
             }
         }
-        MethodRef nonvirtualTarget = codeRef(hTarget);
-        WordBase newObjectTarget = null;
+        MethodRef nonvirtualTarget = MethodRefUtils.create(hTarget);
+        MethodRef newObjectTarget = null;
         if (method.newObjectMethod != null) {
-            newObjectTarget = codeRef(hUniverse.lookup(aUniverse.lookup(method.newObjectMethod)));
+            newObjectTarget = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.newObjectMethod)));
         } else if (method.targetMethod.isConstructor()) {
             assert method.targetMethod.getDeclaringClass().isAbstract();
-            newObjectTarget = Word.signed(JNIAccessibleMethod.NEW_OBJECT_TARGET_INVALID_FOR_ABSTRACT_TYPE);
         }
-        MethodRef callWrapper = codeRef(hUniverse.lookup(aUniverse.lookup(method.callWrapper)));
-        MethodRef varargs = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.varargs)));
-        MethodRef array = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.array)));
-        MethodRef valist = codeRef(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.valist)));
+        MethodRef callWrapper = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.callWrapper)));
+        MethodRef varargs = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.varargs)));
+        MethodRef array = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.array)));
+        MethodRef valist = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.variantWrappers.valist)));
         MethodRef varargsNonvirtual = null;
         MethodRef arrayNonvirtual = null;
         MethodRef valistNonvirtual = null;
         if (method.nonvirtualVariantWrappers != null) {
-            varargsNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.varargs)));
-            arrayNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.array)));
-            valistNonvirtual = codeRef(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.valist)));
+            varargsNonvirtual = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.varargs)));
+            arrayNonvirtual = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.array)));
+            valistNonvirtual = MethodRefUtils.create(hUniverse.lookup(aUniverse.lookup(method.nonvirtualVariantWrappers.valist)));
         }
         EconomicSet<Class<?>> hidingSubclasses = findHidingSubclasses(hTarget.getDeclaringClass(), sub -> anyMethodMatchesIgnoreReturnType(sub, method.descriptor));
         method.jniMethod.finishBeforeCompilation(hidingSubclasses, vtableIndex, interfaceTypeID, nonvirtualTarget, newObjectTarget, callWrapper,
                         varargs, array, valist, varargsNonvirtual, arrayNonvirtual, valistNonvirtual);
-        if (JNIAccessibleMethod.storesCodeOffsets()) {
-            method.jniMethod.setCodeInfo(CodeInfoTable.getCurrentLayerImageCodeCache());
-        }
-    }
-
-    /** @see JNIAccessibleMethod#storesCodeOffsets() */
-    private static MethodRef codeRef(HostedMethod method) {
-        return JNIAccessibleMethod.storesCodeOffsets() ? new MethodOffset(method) : new MethodPointer(method);
     }
 
     private static boolean anyMethodMatchesIgnoreReturnType(ResolvedJavaType sub, JNIAccessibleMethodDescriptor descriptor) {

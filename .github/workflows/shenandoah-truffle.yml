@@ -8,7 +8,7 @@ on:
       - 'compiler/**'
       - 'truffle/**'
   push:
-    branches: ['elide-25.5.x']
+    branches: ['elide-25.5.x', 'elide-25.6.x']
     paths:
       - '.github/workflows/shenandoah-truffle.yml'
       - 'substratevm/**'
@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: elide-dev/labs-openjdk
-          ref: 861b5b674187eb1aecda79118b222b9a138bf829
+          ref: 2271d82dcd2d08bd9a64ab754a3e62d3cd4e05c8
           path: labs-openjdk
       - name: Determine mx version
         run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"

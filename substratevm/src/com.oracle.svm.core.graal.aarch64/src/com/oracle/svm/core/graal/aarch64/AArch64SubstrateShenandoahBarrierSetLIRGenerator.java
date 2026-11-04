@@ -26,7 +26,7 @@ package com.oracle.svm.core.graal.aarch64;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.graal.aarch64.SubstrateAArch64Backend.SubstrateAArch64LIRGenerator;
 import com.oracle.svm.core.gc.shenandoah.graal.ShenandoahBarrierSupport;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;

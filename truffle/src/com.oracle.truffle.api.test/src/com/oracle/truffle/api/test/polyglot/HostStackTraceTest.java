@@ -65,6 +65,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleOptions;
+
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.ArityException;
@@ -83,6 +84,8 @@ import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class HostStackTraceTest extends AbstractPolyglotTest {
+
+    private boolean rootCall;
 
     @ExportLibrary(InteropLibrary.class)
     class HostStackTraceExecutable implements TruffleObject {
@@ -105,9 +108,12 @@ public class HostStackTraceTest extends AbstractPolyglotTest {
             return true;
         }
 
-        // unached version does callTarget.call
+        // uncached version does callTarget.call
         @ExportMessage
         final Object execute(Object[] arguments, @Cached IndirectCallNode callNode) {
+            if (rootCall) {
+                return callNode.call(callTarget.getRootNode(), -1, arguments);
+            }
             return callNode.call(callTarget, arguments);
         }
 
@@ -483,6 +489,12 @@ public class HostStackTraceTest extends AbstractPolyglotTest {
             StackTraceVarArgsFunction function = (StackTraceVarArgsFunction) proxy;
             return defaultCall ? function.defaultCall(target) : function.call(target);
         }
+    }
+
+    @Test
+    public void testExecuteGuestTwoFramesWithRootCall() {
+        rootCall = true;
+        testExecuteGuestTwoFrames();
     }
 
     @Test

@@ -73,7 +73,7 @@ import com.oracle.svm.core.graal.nodes.ComputedIndirectCallTargetNode.Computatio
 import com.oracle.svm.core.graal.nodes.ComputedIndirectCallTargetNode.FieldLoad;
 import com.oracle.svm.core.graal.nodes.ComputedIndirectCallTargetNode.FieldLoadIfZero;
 import com.oracle.svm.core.graal.replacements.SubstrateGraphKit;
-import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.jvmci.shared.meta.SharedMethod;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.shared.ReflectivelyAccessed;
@@ -253,7 +253,7 @@ public final class TypedEntrySupport {
             access.registerAsInHeap(FunctionPointerHolder.class, "generated proxy entry fallback");
             for (Method entryMethod : entries) {
                 AnalysisMethod entry = access.getMetaAccess().lookupJavaMethod(entryMethod);
-                support.generatedEntryFallbacks.put(entryMethod, new FunctionPointerHolder(new MethodPointer(entry)));
+                support.generatedEntryFallbacks.put(entryMethod, new FunctionPointerHolder(MethodRefSupport.createMethodPointer(entry)));
                 access.registerAsRoot(entry, true, "generated proxy entry fallback");
             }
         }
@@ -390,7 +390,7 @@ public final class TypedEntrySupport {
     private void initializeBeforeCompilation(Feature.CompilationAccess a) {
         CompilationAccessImpl access = (CompilationAccessImpl) a;
 
-        compiledIndirectEntryAddress = new MethodPointer(access.getMetaAccess().lookupJavaMethod(compiledIndirectEntryMethod()));
+        compiledIndirectEntryAddress = MethodRefSupport.createMethodPointer(access.getMetaAccess().lookupJavaMethod(compiledIndirectEntryMethod()));
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

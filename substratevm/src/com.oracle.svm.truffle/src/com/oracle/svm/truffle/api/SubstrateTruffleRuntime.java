@@ -33,7 +33,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.guest.staging.option.RuntimeOptionValues.Origin;
+import com.oracle.svm.shared.config.ObjectLayout;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platform.HOSTED_ONLY;
@@ -118,7 +119,7 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
     private static final int DEBUG_TEAR_DOWN_TIMEOUT = 2_000;
     private static final int PRODUCTION_TEAR_DOWN_TIMEOUT = 10_000;
 
-    @Platforms(HOSTED_ONLY.class) private final KnownMethods hostedKnownMethods;
+    @Platforms(HOSTED_ONLY.class) private final KnownMethods hostedCallMethods;
     @Platforms(HOSTED_ONLY.class) private Method[] exactGeneratedProxyEntries = new Method[0];
     private volatile BackgroundCompileQueue compileQueue;
     private volatile boolean initialized;
@@ -128,7 +129,7 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
     @Platforms(Platform.HOSTED_ONLY.class)
     public SubstrateTruffleRuntime() {
         super(SubstrateTruffleSupport.create(), List.of());
-        hostedKnownMethods = new KnownMethods(JVMCI.getRuntime().getHostJVMCIBackend().getMetaAccess());
+        hostedCallMethods = new KnownMethods(JVMCI.getRuntime().getHostJVMCIBackend().getMetaAccess());
     }
 
     @Override
@@ -168,7 +169,7 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
             compileQueue = getSupport().createBackgroundCompileQueue(this);
         }
         if (callTarget.engine.traceTransferToInterpreter) {
-            Deoptimizer.Options.TraceDeoptimization.update(true);
+            Deoptimizer.Options.TraceDeoptimization.update(true, Origin.Runtime);
         }
         installDefaultListeners();
         RuntimeSupport.getRuntimeSupport().addTearDownHook(_ -> teardownCompilerIsolate());
@@ -213,7 +214,7 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
     }
 
     public ResolvedJavaMethod[] getAnyFrameMethod() {
-        return knownMethods.anyFrameMethod;
+        return knownMethods.getAnyFrameMethods();
     }
 
     /**
@@ -247,7 +248,7 @@ public final class SubstrateTruffleRuntime extends OptimizedTruffleRuntime {
     @Override
     public KnownMethods getKnownMethods() {
         if (SubstrateUtil.HOSTED) {
-            return hostedKnownMethods;
+            return hostedCallMethods;
         } else {
             return knownMethods;
         }

@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.core.code;
 
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.word.Pointer;
@@ -32,7 +32,7 @@ import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.core.c.CIsolateData;
+import com.oracle.svm.guest.staging.core.c.CIsolateData;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;

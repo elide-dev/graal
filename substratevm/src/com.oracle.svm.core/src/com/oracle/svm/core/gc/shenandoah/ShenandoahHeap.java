@@ -59,7 +59,7 @@ import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.gc.shared.NativeGCStackWalker;
 import com.oracle.svm.core.gc.shared.NativeGCThreadTransitions;
@@ -187,7 +187,7 @@ public final class ShenandoahHeap extends Heap {
         boolean closedTypeWorldHubLayout = SubstrateOptions.useClosedTypeWorldHubLayout();
         boolean useInterfaceHashing = SubstrateOptions.useInterfaceHashing();
         int interfaceHashingMaxId = SubstrateOptions.interfaceHashingMaxId();
-        int dynamicHubHashingInterfaceMask = DynamicHubUtils.HASHING_INTERFACE_MASK;
+        boolean usePextInterfaceHashing = SubstrateOptions.usePextInterfaceHashing();
         int dynamicHubHashingShiftOffset = DynamicHubUtils.HASHING_SHIFT_OFFSET;
         Word offsets = Word.objectToUntrackedWord(accessedFieldOffsets).add(getByteArrayBaseOffset());
         int offsetsLength = accessedFieldOffsets.length;
@@ -223,7 +223,7 @@ public final class ShenandoahHeap extends Heap {
                         staticObjectFields, staticPrimitiveFields, vmOperationThread, safepointMaster, runtimeCodeInfoMemory,
                         referenceMapCompressedOffsetShift, threadLocalsReferenceMap,
                         classesAssumedReachableForCodeUnloading, perfDataSupport, closedTypeWorldHubLayout,
-                        useInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingInterfaceMask, dynamicHubHashingShiftOffset,
+                        useInterfaceHashing, usePextInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingShiftOffset,
                         offsets, offsetsLength,
                         collectForAllocationOp, collectFullOp, collectDegeneratedOp, initMarkOp, finalMarkOp, initUpdateRefsOp, finalUpdateRefsOp, finalRootsOp, handshakeFallbackOp,
                         waitForVMOperationExecutionStatus, updateVMOperationExecutionStatus, isVMOperationFinished, yieldToQueuedVMOperations,

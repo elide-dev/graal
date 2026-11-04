@@ -55,7 +55,7 @@ import com.oracle.svm.core.hub.crema.CremaSupport;
 import com.oracle.svm.core.hub.registry.ClassRegistries;
 import com.oracle.svm.core.interpreter.InterpreterForeignFunctionsSupport;
 import com.oracle.svm.core.jni.CallVariant;
-import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.classloading.RuntimeClassLoadingFeature;
 import com.oracle.svm.hosted.code.CEntryPointCallStubSupport;
@@ -286,7 +286,7 @@ public class CremaFeature implements InternalFeature {
         InterpreterFeature.prepareSignatures();
 
         accessImpl.registerAsImmutable(CremaSupport.singleton());
-        CremaSupport.singleton().setEnterDirectInterpreterStubEntryPoint(new MethodPointer(hUniverse.lookup(enterDirectInterpreterStub)));
+        CremaSupport.singleton().setEnterDirectInterpreterStubEntryPoint(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterDirectInterpreterStub)));
         /*
          * Only foreign function support (com.oracle.svm.core.foreign) uses this singleton. Without
          * it, the analysis never reached the singleton's type, and it is not in the image.
@@ -294,14 +294,14 @@ public class CremaFeature implements InternalFeature {
         InterpreterForeignFunctionsSupport ffmSupport = InterpreterForeignFunctionsSupport.singleton();
         if (hUniverse.getBigBang().getMetaAccess().optionalLookupJavaType(ffmSupport.getClass()).filter(AnalysisType::isReachable).isPresent()) {
             accessImpl.registerAsImmutable(ffmSupport);
-            ffmSupport.setUpcallStubPointer(new MethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
+            ffmSupport.setUpcallStubPointer(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
         }
-        CremaSupport.singleton().setCremaJNIUpcallWrapperEntryPoints(new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsVirtualWrapper)),
-                        new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayVirtualWrapper)),
-                        new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListVirtualWrapper)),
-                        new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsNonVirtualWrapper)),
-                        new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayNonVirtualWrapper)),
-                        new MethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListNonVirtualWrapper)));
+        CremaSupport.singleton().setCremaJNIUpcallWrapperEntryPoints(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsVirtualWrapper)),
+                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayVirtualWrapper)),
+                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListVirtualWrapper)),
+                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsNonVirtualWrapper)),
+                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayNonVirtualWrapper)),
+                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListNonVirtualWrapper)));
     }
 
     @Override
@@ -322,12 +322,12 @@ public class CremaFeature implements InternalFeature {
             // Setup fields info
             InterpreterResolvedObjectType objectType = (InterpreterResolvedObjectType) iType;
             initializeInterpreterFields(iUniverse, (HostedField[]) type.getStaticFields());
-            if (type.isInterface()) {
-                continue;
+            if (!type.isInterface()) {
+                HostedInstanceClass instanceClass = (HostedInstanceClass) type;
+                objectType.setAfterFieldsOffset(instanceClass.getAfterFieldsOffset());
+                initializeInterpreterFields(iUniverse, instanceClass.getInstanceFields(false));
             }
-            HostedInstanceClass instanceClass = (HostedInstanceClass) type;
-            objectType.setAfterFieldsOffset(instanceClass.getAfterFieldsOffset());
-            initializeInterpreterFields(iUniverse, instanceClass.getInstanceFields(false));
+            objectType.sortDeclaredFields();
         }
     }
 

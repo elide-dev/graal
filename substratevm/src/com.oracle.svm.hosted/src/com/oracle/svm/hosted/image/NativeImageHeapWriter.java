@@ -45,7 +45,7 @@ import com.oracle.objectfile.ObjectFile;
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.graal.code.CGlobalDataBasePointer;
 import com.oracle.svm.core.heap.Heap;
@@ -54,9 +54,10 @@ import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.image.ImageHeapLayoutInfo;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.meta.MethodOffset;
-import com.oracle.svm.core.meta.MethodPointer;
-import com.oracle.svm.core.meta.MethodRef;
+import com.oracle.svm.guest.staging.meta.MethodOffset;
+import com.oracle.svm.guest.staging.meta.MethodPointer;
+import com.oracle.svm.guest.staging.meta.MethodRef;
+import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.guest.staging.util.HostedByteBufferPointer;
 import com.oracle.svm.hosted.DeadlockWatchdog;
 import com.oracle.svm.hosted.code.CEntryPointLiteralFeature;
@@ -214,7 +215,7 @@ public final class NativeImageHeapWriter {
         if (pltgotConfig != null) {
             GOTEntryAllocator gotAllocator = pltgotConfig.getGOTEntryAllocator();
             if (gotAllocator.queryGOTEntry(target) != GOTEntryAllocator.GOT_NO_ENTRY) {
-                return pltgotConfig.getPLTSupport().getMethodPLTStubCodeAddressOffset(target);
+                return pltgotConfig.getPLTSupport().getMethodPLTStubEntryOffset(target);
             }
         }
         return target.getCodeAddressOffset();
@@ -271,7 +272,7 @@ public final class NativeImageHeapWriter {
         HostedMetaAccess metaAccess = heap.hMetaAccess;
         if (constant instanceof PatchedWordConstant pwc) {
             if (pwc.getWord() instanceof MethodOffset methodOffset) {
-                ResolvedJavaMethod method = methodOffset.getMethod();
+                ResolvedJavaMethod method = MethodRefSupport.getMethod(methodOffset);
                 HostedMethod hMethod = (method instanceof HostedMethod hm) ? hm : metaAccess.getUniverse().lookup(method);
                 if (imageLayer && NativeImage.isInjectedNotCompiled(hMethod)) {
                     // Will be patched in a future layer (even if it ends up not compiled at all)

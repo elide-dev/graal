@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,15 +22,25 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.graal.compiler.nodes.loop;
+package com.oracle.svm.guest.staging.core.c;
 
-/**
- * Marker for a node that reconstructs the original limit-checked induction variable after a loop
- * transformation. Consumers can use this to distinguish the original induction variable from
- * unrelated induction variables that have the same arithmetic structure.
- * <p>
- * Upstream removed this interface; Oracle's prebuilt enterprise compiler still implements it (see
- * {@link jdk.graal.compiler.core.common.EnterpriseCompatibility}).
- */
-public interface OriginalLimitCheckedIV {
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
+import org.graalvm.nativeimage.c.struct.SizeOf;
+import org.graalvm.word.PointerBase;
+import org.graalvm.word.UnsignedWord;
+
+@Platforms(Platform.HOSTED_ONLY.class)
+public final class CIsolateDataFactory {
+
+    public static <T extends PointerBase> CIsolateData<T> createStruct(String name, Class<T> clazz) {
+        return create(name, SizeOf.unsigned(clazz));
+    }
+
+    public static <T extends PointerBase> CIsolateData<T> create(String name, UnsignedWord size) {
+        return new CIsolateData<>(name, size.rawValue());
+    }
+
+    private CIsolateDataFactory() {
+    }
 }

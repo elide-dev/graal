@@ -24,49 +24,11 @@
  */
 package com.oracle.svm.core.pltgot;
 
-import org.graalvm.nativeimage.c.struct.SizeOf;
-import org.graalvm.nativeimage.c.type.CIntPointer;
-
-import com.oracle.svm.core.thread.NativeSpinLockUtils;
-import com.oracle.svm.guest.staging.c.CGlobalData;
-import com.oracle.svm.guest.staging.c.CGlobalDataFactory;
 import com.oracle.svm.shared.Uninterruptible;
 
 public class MethodAddressResolutionDispatcher {
-    /*
-     * The GOT and its memory protection are shared by all isolates of the process (see
-     * GOTHeapSupport). The lock and the number of active resolvers must therefore also be
-     * process-wide, otherwise one isolate could make the GOT read-only while another isolate is
-     * still resolving a method, e.g., the isolates used for runtime compilation.
-     */
-    private static final CGlobalData<CIntPointer> LOCK = CGlobalDataFactory.createBytes(() -> SizeOf.get(CIntPointer.class));
-    private static final CGlobalData<CIntPointer> ACTIVE_RESOLVER_INSTANCES = CGlobalDataFactory.createBytes(() -> SizeOf.get(CIntPointer.class));
-
     @Uninterruptible(reason = "PLT/GOT method address resolution doesn't support interruptible code paths.")
     protected static long resolveMethodAddress(long gotEntry) {
-        CIntPointer lock = LOCK.get();
-        CIntPointer activeResolverInstances = ACTIVE_RESOLVER_INSTANCES.get();
-        NativeSpinLockUtils.lockNoTransition(lock);
-        try {
-            if (activeResolverInstances.read() == 0) {
-                GOTHeapSupport.get().makeGOTWritable();
-            }
-            activeResolverInstances.write(activeResolverInstances.read() + 1);
-        } finally {
-            NativeSpinLockUtils.unlock(lock);
-        }
-
-        long resolvedMethodAddress = PLTGOTConfiguration.singleton().getMethodAddressResolver().resolveMethodWithGOTEntry(gotEntry);
-
-        NativeSpinLockUtils.lockNoTransition(lock);
-        try {
-            if (activeResolverInstances.read() == 1) {
-                GOTHeapSupport.get().makeGOTReadOnly();
-            }
-            activeResolverInstances.write(activeResolverInstances.read() - 1);
-        } finally {
-            NativeSpinLockUtils.unlock(lock);
-        }
-        return resolvedMethodAddress;
+        return PLTGOTConfiguration.singleton().getMethodAddressResolver().resolveMethodWithGOTEntry(gotEntry);
     }
 }

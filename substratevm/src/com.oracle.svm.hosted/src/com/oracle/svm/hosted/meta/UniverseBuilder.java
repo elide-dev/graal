@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,7 @@ import com.oracle.svm.hosted.ExcludeFromReferenceMapGuestValue;
 import com.oracle.svm.hosted.ContendedGuestValue;
 import java.io.Serializable;
 import java.lang.reflect.Modifier;
+import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -72,7 +73,7 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.c.BoxedRelocatedPointer;
 import com.oracle.svm.guest.staging.c.function.CFunctionOptions;
 import com.oracle.svm.core.classinitialization.ClassInitializationInfo;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.heap.FillerArray;
 import com.oracle.svm.core.heap.FillerObject;
 import com.oracle.svm.core.heap.Heap;
@@ -87,9 +88,8 @@ import com.oracle.svm.core.hub.DynamicHubUtils;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.imagelayer.DynamicImageLayerInfo;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.meta.MethodOffset;
-import com.oracle.svm.core.meta.MethodPointer;
-import com.oracle.svm.core.meta.MethodRef;
+import com.oracle.svm.core.meta.MethodRefSupport;
+import com.oracle.svm.guest.staging.meta.MethodRef;
 import com.oracle.svm.core.reflect.SubstrateConstructorAccessor;
 import com.oracle.svm.core.reflect.SubstrateMethodAccessor;
 import com.oracle.svm.core.util.UserError;
@@ -308,7 +308,7 @@ public class UniverseBuilder {
          * time by their subtypes.
          */
         if (hType.wrapped.isReachable() &&
-                        ClassInitializationSupport.singleton().maybeInitializeAtBuildTime(hostedJavaClass) &&
+                        ClassInitializationSupport.singleton().maybeInitializeAtBuildTime(aType) &&
                         hub.getClassInitializationInfo().getTypeReached() == ClassInitializationInfo.TypeReached.NOT_REACHED) {
             hType.wrapped.forAllSuperTypes(t -> {
                 var superHub = hUniverse.hostVM().dynamicHub(t);
@@ -944,6 +944,10 @@ public class UniverseBuilder {
         boolean closedTypeWorldHubLayout = SubstrateOptions.useClosedTypeWorldHubLayout();
         boolean useOffsets = SubstrateOptions.useRelativeCodePointers();
 
+        // Hash tables are immutable once constructed. Share equal contents within this image layer;
+        // the build-local map and its content-based LongBuffer keys do not enter the image heap.
+        Map<LongBuffer, long[]> interfaceHashTables = new HashMap<>();
+
         for (HostedType type : hUniverse.getTypes()) {
             hUniverse.hostVM().recordActivity();
 
@@ -1007,7 +1011,7 @@ public class UniverseBuilder {
                 hub.setClosedTypeWorldData(vtable, type.getTypeID(), type.getTypeCheckStart(), type.getTypeCheckRange(),
                                 type.getTypeCheckSlot(), type.getClosedTypeWorldTypeCheckSlots());
             } else {
-                setOpenTypeWorldData(type, dynamicHubLayout, hub, useOffsets);
+                setOpenTypeWorldData(type, dynamicHubLayout, hub, useOffsets, interfaceHashTables);
             }
         }
     }
@@ -1016,7 +1020,7 @@ public class UniverseBuilder {
      * See {@link DynamicHubUtils#computeOpenTypeWorldTypeCheckData} for details on the
      * {@link DynamicHub} type check layout in the open type world.
      */
-    private static void setOpenTypeWorldData(HostedType type, DynamicHubLayout dynamicHubLayout, DynamicHub hub, boolean useOffsets) {
+    private static void setOpenTypeWorldData(HostedType type, DynamicHubLayout dynamicHubLayout, DynamicHub hub, boolean useOffsets, Map<LongBuffer, long[]> interfaceHashTables) {
         boolean implementsMethods = type.itableStartingOffsets.length > 0;
         int numClassTypes = type.numClassTypes;
         int[] typeHierarchy = new int[numClassTypes];
@@ -1032,10 +1036,15 @@ public class UniverseBuilder {
         DynamicHubUtils.TypeCheckData typeCheckData = DynamicHubUtils.computeOpenTypeWorldTypeCheckData(implementsMethods, typeHierarchy, interfaceIDs, iTableOffsets, vTableOffset,
                         vTableSlotSize);
 
+        long[] interfaceHashTable = typeCheckData.openTypeWorldInterfaceHashTable();
+        if (interfaceHashTable != null) {
+            interfaceHashTable = interfaceHashTables.computeIfAbsent(LongBuffer.wrap(interfaceHashTable), LongBuffer::array);
+        }
+
         MethodRef[] vtable = createVTable(type.openTypeWorldDispatchTables, useOffsets);
         hub.setOpenTypeWorldData(vtable, type.getTypeID(), type.getInterfaceID(), type.getTypeIDDepth(), type.getNumClassTypes(), typeCheckData.numIterableInterfaces(),
                         typeCheckData.openTypeWorldTypeCheckSlots(),
-                        typeCheckData.openTypeWorldInterfaceHashTable(), typeCheckData.openTypeWorldInterfaceHashParam());
+                        interfaceHashTable, typeCheckData.openTypeWorldInterfaceHashParam());
     }
 
     private static MethodRef[] createVTable(HostedMethod[] methods, boolean useOffsets) {
@@ -1046,13 +1055,13 @@ public class UniverseBuilder {
         for (int i = 0; i < methods.length; i++) {
             HostedMethod method = methods[i];
             if (useOffsets) {
-                vtable[i] = new MethodOffset(method);
+                vtable[i] = MethodRefSupport.createMethodOffset(method);
             } else {
                 /*
                  * We install a CodePointer in the vtable; when generating relocation info, we will
                  * know these point into .text
                  */
-                vtable[i] = new MethodPointer(method);
+                vtable[i] = MethodRefSupport.createMethodPointer(method);
             }
         }
         return vtable;

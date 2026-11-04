@@ -26,7 +26,7 @@ package com.oracle.svm.core.graal.amd64;
 
 import org.graalvm.nativeimage.ImageSingletons;
 
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.graal.amd64.SubstrateAMD64Backend.SubstrateAMD64LIRGenerator;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
 import com.oracle.svm.jvmci.shared.meta.SharedMethod;

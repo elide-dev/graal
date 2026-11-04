@@ -36,7 +36,7 @@ import org.graalvm.word.impl.Word;
 import com.oracle.svm.core.compress.CompressedBlob;
 import com.oracle.svm.core.compress.HeapBlobMemory;
 import com.oracle.svm.core.compress.HeapBlobProfile;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.core.AssertionsSupport;
 import com.oracle.svm.core.c.NonmovableArray;

@@ -39,10 +39,11 @@ import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.meta.InterpreterExecutionOffsets;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.hub.DynamicHubCompanion;
-import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
-import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.meta.MethodRefSupport;
+import com.oracle.svm.core.methodhandles.RuntimeCallSiteTargetSupport;
 import com.oracle.svm.graal.hosted.DeoptimizationFeature;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
+import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.meta.HostedMetaAccess;
 import com.oracle.svm.hosted.thread.VMThreadLocalCollector;
@@ -134,6 +135,7 @@ public final class RistrettoFeature implements InternalFeature {
         RuntimeSupport.getRuntimeSupport().addTearDownHook(RistrettoCompilationManager.getProfileSupportTearDownHook());
 
         if (RistrettoOptions.useDeoptimization()) {
+            RuntimeSupport.getRuntimeSupport().addStartupHook(new RistrettoCallSiteTargetAssumptionStartupHook());
             ImageSingletons.add(RistrettoDeoptimizationSupport.class, new RistrettoDeoptimizationSupport());
         }
         ImageSingletons.add(RistrettoOSRFrameLayout.class, new RistrettoOSRFrameLayout());
@@ -155,6 +157,10 @@ public final class RistrettoFeature implements InternalFeature {
                         "Foreign call target of Ristretto code, registered in " + RistrettoFeature.class);
         /* OSR code reads the entering interpreter frame from this thread local. */
         RistrettoOSRFrameLayout.singleton().setCurrentFrame(ImageSingletons.lookup(VMThreadLocalCollector.class).forFastThreadLocal(RistrettoOSRSupport.currentFrameThreadLocal()));
+
+        RistrettoUtils.forcePreserveType(access.getBigBang(), RistrettoOSRSupport.class);
+        RistrettoOptions.configureCallSiteTargetValueAssumptions();
+
         /*
          * The low-level Ristretto fast path reads these fields via offsets recorded in
          * InterpreterExecutionOffsets. Analysis does not necessarily observe those reads as normal
@@ -226,16 +232,16 @@ public final class RistrettoFeature implements InternalFeature {
             HostedMetaAccess metaAccess = config.getMetaAccess();
 
             RistrettoDeoptimizationSupport.initialize(
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryVoid)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryInt)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryLong)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryFloat)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryDouble)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryObject)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryBoolean)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryByte)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryShort)),
-                            new MethodPointer(metaAccess.lookupJavaMethod(interpEntryChar)));
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryVoid)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryInt)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryLong)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryFloat)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryDouble)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryObject)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryBoolean)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryByte)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryShort)),
+                            MethodRefSupport.createMethodPointer(metaAccess.lookupJavaMethod(interpEntryChar)));
         }
     }
 
@@ -297,5 +303,14 @@ public final class RistrettoFeature implements InternalFeature {
         public boolean getAsBoolean() {
             return SubstrateOptions.useRistretto();
         }
+    }
+}
+
+/** Configures CallSite target-assumption tracking after runtime options are parsed. */
+final class RistrettoCallSiteTargetAssumptionStartupHook implements RuntimeSupport.Hook {
+    @Override
+    public void execute(boolean isFirstIsolate) {
+        RuntimeCallSiteTargetSupport.setTargetAssumptionTrackingEnabled(
+                        RistrettoOptions.JITUseCallSiteTargetValueAssumptions.getValue());
     }
 }

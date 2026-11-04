@@ -57,6 +57,7 @@ import com.oracle.graal.pointsto.ObjectScanner.ScanReason;
 import com.oracle.graal.pointsto.api.ImageLayerLoader;
 import com.oracle.graal.pointsto.constraints.UnsupportedFeatureException;
 import com.oracle.graal.pointsto.flow.AnalysisParsedGraph;
+import com.oracle.graal.pointsto.flow.AnalysisParsedGraph.GraphMetadata;
 import com.oracle.graal.pointsto.heap.HostedValuesProvider;
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.graal.pointsto.heap.ImageHeapInstance;
@@ -75,7 +76,8 @@ import com.oracle.svm.core.classinitialization.ClassInitializationInfo;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.imagelayer.LayeredImageOptions;
-import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.meta.MethodRefSupport;
+import com.oracle.svm.guest.staging.meta.MethodPointer;
 import com.oracle.svm.core.reflect.proxy.DynamicProxySupport;
 import com.oracle.svm.core.reflect.serialize.SerializationSupport;
 import com.oracle.svm.hosted.FeatureImpl;
@@ -1040,9 +1042,13 @@ public class SVMImageLayerLoader extends ImageLayerLoader implements AutoCloseab
     @Override
     public AnalysisParsedGraph getAnalysisParsedGraph(AnalysisMethod analysisMethod) {
         PersistedAnalysisMethodData.Loader methodData = getMethodData(analysisMethod);
+        /* Reused graphs bypass the after-parsing hook, even when only inlined in the prior layer. */
+        List<AnalysisField> closedFieldWrites = StreamSupport.stream(methodData.getClosedFieldWrites().spliterator(), false)
+                        .map(this::getAnalysisFieldForBaseLayerId).toList();
+        ((SVMHost) universe.hostVM()).checkClosedFieldWrites(analysisMethod, closedFieldWrites);
         boolean intrinsic = methodData.getAnalysisGraphIsIntrinsic();
         EncodedGraph analyzedGraph = getEncodedGraph(analysisMethod, methodData.getAnalysisGraphLocation());
-        return new AnalysisParsedGraph(analyzedGraph, intrinsic);
+        return new AnalysisParsedGraph(analyzedGraph, intrinsic, new GraphMetadata(closedFieldWrites));
     }
 
     public boolean hasStrengthenedGraph(AnalysisMethod analysisMethod) {
@@ -1212,12 +1218,12 @@ public class SVMImageLayerLoader extends ImageLayerLoader implements AutoCloseab
             analysisField.getDeclaringClass().getInstanceFields(true);
         }
         postTask(isAccessed, _ -> {
-            analysisField.injectDeclaredType();
+            analysisField.injectConservativeFieldValues();
             analysisField.registerAsAccessed(PERSISTED);
         });
         postTask(isRead, _ -> analysisField.registerAsRead(PERSISTED));
         postTask(fieldData.getIsWritten(), _ -> {
-            analysisField.injectDeclaredType();
+            analysisField.injectConservativeFieldValues();
             analysisField.registerAsWritten(PERSISTED);
         });
         postTask(fieldData.getIsFolded(), _ -> analysisField.registerAsFolded(PERSISTED));
@@ -1417,7 +1423,7 @@ public class SVMImageLayerLoader extends ImageLayerLoader implements AutoCloseab
         } else {
             assert initInfo.getIsLinked() : "Invalid state";
             int classInitializerId = initInfo.getInitializerMethodId();
-            MethodPointer classInitializer = (classInitializerId == 0) ? null : new MethodPointer(getAnalysisMethodForBaseLayerId(classInitializerId));
+            MethodPointer classInitializer = (classInitializerId == 0) ? null : MethodRefSupport.createMethodPointer(getAnalysisMethodForBaseLayerId(classInitializerId));
             return ClassInitializationInfo.forRuntimeTimeInitializedClass(classInitializer, initInfo.getIsTracked());
         }
     }

@@ -28,7 +28,7 @@ import static com.oracle.svm.core.gc.shenandoah.ShenandoahOptions.ShenandoahRegi
 
 import java.util.ArrayList;
 
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahHeap;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahImageHeapInfo;
 import com.oracle.svm.core.gc.shenandoah.ShenandoahRegionType;

@@ -204,6 +204,8 @@ public abstract class NativeGCAllocationSupport implements GCAllocationSupport {
 
     public abstract int[] allocateMetaspaceIntArray(int length);
 
+    public abstract long[] allocateMetaspaceLongArray(int length);
+
     public abstract Object allocateMetaspaceInstance(DynamicHub hub);
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)

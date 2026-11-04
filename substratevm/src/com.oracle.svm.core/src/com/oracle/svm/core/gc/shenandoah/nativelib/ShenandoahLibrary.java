@@ -60,7 +60,7 @@ import org.graalvm.word.impl.Word;
 @CContext(value = ShenandoahLibraryDependencies.class)
 public class ShenandoahLibrary {
     // GraalVM major, GraalVM minor, interface revision
-    public static final int VERSION = 250502;
+    public static final int VERSION = 250600;
 
     @CFunction(value = "svm_gc_parse_options", transition = Transition.NO_TRANSITION)
     public static native void parseOptions(int nativeImageVersion, int argc, CCharPointerPointer argv, CCharPointer imageBuildHostedArguments, CCharPointer imageBuildRuntimeArguments,
@@ -74,7 +74,7 @@ public class ShenandoahLibrary {
                     Word staticObjectFields, Word staticPrimitiveFields, Word vmOperationThread, Word safepoint, Word runtimeCodeInfoMemory,
                     int referenceMapCompressedOffsetShift, Word threadLocalsReferenceMap,
                     Word classesAssumedReachableForCodeUnloading, boolean perfDataSupport, boolean closedTypeWorld,
-                    boolean useInterfaceHashing, int interfaceHashingMaxId, int dynamicHubHashingInterfaceMask, int dynamicHubHashingShiftOffset,
+                    boolean useInterfaceHashing, boolean usePextInterfaceHashing, int interfaceHashingMaxId, int dynamicHubHashingShiftOffset,
                     Word offsets, int offsetsLength,
                     CFunctionPointer collectForAllocationOp, CFunctionPointer collectFullOp, CFunctionPointer collectDegeneratedOp,
                     CFunctionPointer initMarkOp, CFunctionPointer finalMarkOp, CFunctionPointer initUpdateRefsOp, CFunctionPointer finalUpdateRefsOp,

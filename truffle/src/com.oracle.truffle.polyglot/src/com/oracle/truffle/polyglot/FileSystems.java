@@ -476,6 +476,10 @@ final class FileSystems {
         private FileSystem delegate; // effectively final after patch context
         private ImageHeapPathConverter converter = new ImageHeapPathConverter();
 
+        PreInitializeContextFileSystem() {
+            this((String) null);
+        }
+
         PreInitializeContextFileSystem(String tmpDir) {
             this(newDefaultFileSystem(tmpDir));
         }
@@ -639,6 +643,14 @@ final class FileSystems {
 
         @Override
         public Path getTempDirectory() {
+            if (converter != null && delegate instanceof NIOFileSystem nio && nio.hostTmpDirPath == null) {
+                // Preinitialization can create temporary-directory paths without host I/O access.
+                String tmpDir = System.getProperty("java.io.tmpdir");
+                if (tmpDir == null) {
+                    throw new UnsupportedOperationException("Temporary directories not supported");
+                }
+                return wrap(delegate.parsePath(tmpDir));
+            }
             return wrap(delegate.getTempDirectory());
         }
 

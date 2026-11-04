@@ -64,7 +64,7 @@ import com.oracle.graal.pointsto.util.AnalysisError;
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.code.ImageCodeInfo;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.heap.FillerObject;
 import com.oracle.svm.core.heap.Heap;
@@ -81,7 +81,8 @@ import com.oracle.svm.core.image.ImageHeapObject;
 import com.oracle.svm.core.image.ImageHeapPartition;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.jdk.strings.StringInternSupport;
-import com.oracle.svm.core.meta.MethodOffset;
+import com.oracle.svm.guest.staging.meta.MethodOffset;
+import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.core.util.HostedStringDeduplication;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.HostedConfiguration;
@@ -811,7 +812,7 @@ public final class NativeImageHeap implements ImageHeap {
                 // Need to adjust to reflect displacement between code base and layer's text section
                 return true;
             }
-            ResolvedJavaMethod method = methodOffset.getMethod();
+            ResolvedJavaMethod method = MethodRefSupport.getMethod(methodOffset);
             HostedMethod hMethod = (method instanceof HostedMethod) ? (HostedMethod) method : hUniverse.lookup(method);
             if (NativeImage.isInjectedNotCompiled(hMethod)) {
                 // References code in another (maybe future) layer, which must be patched at runtime

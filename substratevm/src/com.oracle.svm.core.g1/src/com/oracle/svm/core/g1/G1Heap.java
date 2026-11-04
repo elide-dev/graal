@@ -58,7 +58,7 @@ import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.core.code.RuntimeCodeInstallation;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.g1.nativelib.G1Library;
 import com.oracle.svm.core.g1.nativelib.G1Structs.G1InitState;
@@ -208,8 +208,8 @@ public final class G1Heap extends Heap {
         Word performanceData = Word.objectToUntrackedWord(perfData);
         boolean closedTypeWorldHubLayout = SubstrateOptions.useClosedTypeWorldHubLayout();
         boolean useInterfaceHashing = SubstrateOptions.useInterfaceHashing();
+        boolean usePextInterfaceHashing = SubstrateOptions.usePextInterfaceHashing();
         int interfaceHashingMaxId = SubstrateOptions.interfaceHashingMaxId();
-        int dynamicHubHashingInterfaceMask = DynamicHubUtils.HASHING_INTERFACE_MASK;
         int dynamicHubHashingShiftOffset = DynamicHubUtils.HASHING_SHIFT_OFFSET;
         Word offsets = Word.objectToUntrackedWord(accessedFieldOffsets).add(getByteArrayBaseOffset());
         int offsetsLength = accessedFieldOffsets.length;
@@ -240,7 +240,7 @@ public final class G1Heap extends Heap {
                         staticObjectFields, staticPrimitiveFields, vmOperationThread, safepointMaster, runtimeCodeInfoMemory,
                         referenceMapCompressedOffsetShift, threadLocalsReferenceMap,
                         classesAssumedReachableForCodeUnloading, performanceData, closedTypeWorldHubLayout,
-                        useInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingInterfaceMask, dynamicHubHashingShiftOffset,
+                        useInterfaceHashing, usePextInterfaceHashing, interfaceHashingMaxId, dynamicHubHashingShiftOffset,
                         offsets, offsetsLength,
                         collectForAllocationOp, executePauseRemark, executePauseCleanup,
                         collectFullOp, verifyHeapOp, tryInitiateConcMarkOp,

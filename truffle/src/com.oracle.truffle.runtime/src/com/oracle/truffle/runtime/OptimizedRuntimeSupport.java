@@ -56,10 +56,11 @@ import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.impl.RuntimeCallTarget;
 import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.impl.AbstractFastThreadLocal;
 import com.oracle.truffle.api.impl.Accessor.RuntimeSupport;
@@ -93,7 +94,7 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     }
 
     @Override
-    public RootCallTarget newCallTarget(CallTarget source, RootNode rootNode) {
+    public RuntimeCallTarget newCallTarget(CallTarget source, RootNode rootNode) {
         assert OptimizedRuntimeAccessor.NODES.getCallTargetWithoutInitialization(rootNode) == null : "CallTarget for root node already initialized.";
 
         CompilerAsserts.neverPartOfCompilation();
@@ -101,7 +102,7 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     }
 
     @Override
-    public RootCallTarget newCallTarget(CallTarget source, RootNode rootNode, ExecutionSignature signature) {
+    public RuntimeCallTarget newCallTarget(CallTarget source, RootNode rootNode, ExecutionSignature signature) {
         assert OptimizedRuntimeAccessor.NODES.getCallTargetWithoutInitialization(rootNode) == null : "CallTarget for root node already initialized.";
 
         CompilerAsserts.neverPartOfCompilation();
@@ -122,6 +123,11 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     @Override
     public boolean isLoaded(CallTarget callTarget) {
         return ((OptimizedCallTarget) callTarget).isLoaded();
+    }
+
+    @Override
+    public int getBytecodeIndex(FrameInstance frameInstance, Frame frame) {
+        return ((OptimizedFrameInstance) frameInstance).getBytecodeIndex(frame);
     }
 
     @Override
@@ -272,8 +278,9 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
 
     @Override
     public boolean isGuestCallStackFrame(StackTraceElement e) {
-        return e.getMethodName().equals(OptimizedCallTarget.EXECUTE_ROOT_NODE_METHOD_NAME) && e.getClassName().equals(OptimizedCallTarget.class.getName());
-
+        String methodName = e.getMethodName();
+        String className = e.getClassName();
+        return className.equals(OptimizedCallTarget.class.getName()) && methodName.equals(OptimizedCallTarget.EXECUTE_ROOT_NODE_METHOD_NAME);
     }
 
     /**
@@ -313,7 +320,7 @@ final class OptimizedRuntimeSupport extends RuntimeSupport {
     public Object callInlined(Node callNode, CallTarget target, Object... arguments) {
         final OptimizedCallTarget optimizedCallTarget = (OptimizedCallTarget) target;
         try {
-            return optimizedCallTarget.callInlined(callNode, arguments);
+            return optimizedCallTarget.callInlined(callNode, -1, arguments);
         } catch (Throwable t) {
             OptimizedRuntimeAccessor.LANGUAGE.addStackFrameInfo(callNode, null, t, null);
             throw OptimizedCallTarget.rethrow(t);

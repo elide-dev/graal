@@ -62,7 +62,7 @@ import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
-import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.shared.config.ObjectLayout;
 import com.oracle.svm.core.config.ObjectLayoutCompilerSupport;
 import com.oracle.svm.core.encoder.SymbolEncoder;
 import com.oracle.svm.core.graal.nodes.DeoptEntryNode;
@@ -1266,7 +1266,8 @@ public class SubstrateGraphBuilderPlugins {
         if (clazz == null) {
             return null;
         }
-        return ClassInitializationSupport.singleton().shouldFoldAssertionStatus(clazz) ? AssertionsSupport.singleton().desiredAssertionStatus(clazz) : null;
+        ResolvedJavaType type = GuestAccess.get().lookupType(clazz);
+        return ClassInitializationSupport.singleton().shouldFoldAssertionStatus(type) ? AssertionsSupport.singleton().desiredAssertionStatus(type) : null;
     }
 
     protected static long longValue(GraphBuilderContext b, ResolvedJavaMethod targetMethod, ValueNode node, String name) {

@@ -98,7 +98,10 @@ mx --dynamicimports substratevm-gcs --components=ni,nju,svmgc native-unittest \
 Validation used macOS 26.6.2 on Apple Silicon and Labs JDK `25.0.4.1.1+1-jvmci-25.4-b23`.
 The stress test passed in all three modes with both reference encodings, and in generational mode with both fastdebug native libraries.
 The collector supports one isolate per process.
-Runtime class loading requires matching Java and native collector interface version `250502`.
+Runtime class loading requires matching Java and native collector interface version `250600`.
 Use the [runtime class-loading tests](shenandoah-linux.md#test-runtime-class-loading) to validate metadata and code roots.
 Class unloading and Intel macOS are not supported by this integration.
 The static GC archives link against the macOS C++ runtime; this configuration does not require a separate Shenandoah dynamic library or `DYLD_LIBRARY_PATH`.
+
+On the 25.6 line, runtime metadata supports `long[]` interface tables and PEXT interface hashing.
+Build the Java sources and native collector libraries together with interface version `250600`.

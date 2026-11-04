@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,25 +22,29 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.core.c;
+package com.oracle.svm.core.graalos;
 
-import org.graalvm.nativeimage.Platform;
-import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.c.struct.SizeOf;
-import org.graalvm.word.PointerBase;
-import org.graalvm.word.UnsignedWord;
+import org.graalvm.nativeimage.hosted.RuntimeSystemProperties;
 
-@Platforms(Platform.HOSTED_ONLY.class)
-public final class CIsolateDataFactory {
+import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 
-    public static <T extends PointerBase> CIsolateData<T> createStruct(String name, Class<T> clazz) {
-        return create(name, SizeOf.unsigned(clazz));
+@AutomaticallyRegisteredFeature
+public final class GraalOSPropertiesFeature implements InternalFeature {
+    private static final String GRAALOS_PROPERTY = "org.graalvm.nativeimage.graalos";
+
+    @Override
+    public void afterRegistration(AfterRegistrationAccess access) {
+        /* Truffle includes language resources duringSetup, so publish the target before then. */
+        System.setProperty(GRAALOS_PROPERTY, Boolean.toString(SubstrateOptions.GraalOS.getValue()));
     }
 
-    public static <T extends PointerBase> CIsolateData<T> create(String name, UnsignedWord size) {
-        return new CIsolateData<>(name, size.rawValue());
-    }
-
-    private CIsolateDataFactory() {
+    @Override
+    public void beforeAnalysis(BeforeAnalysisAccess access) {
+        if (ImageLayerBuildingSupport.firstImageBuild()) {
+            RuntimeSystemProperties.register(GRAALOS_PROPERTY, Boolean.toString(SubstrateOptions.GraalOS.getValue()));
+        }
     }
 }

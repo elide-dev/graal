@@ -120,6 +120,7 @@ import com.oracle.truffle.api.TruffleSafepoint.InterruptibleFunction;
 import com.oracle.truffle.api.TruffleStackTraceElement;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.FrameExtensions;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -947,6 +948,8 @@ public abstract class Accessor {
 
         public abstract void addStackFrameInfo(Node callNode, RootCallTarget root, Throwable e, Frame frame);
 
+        public abstract void addStackFrameInfo(Node callNode, RootCallTarget root, Throwable e, Frame frame, int bytecodeIndex);
+
         public abstract boolean isThreadAccessAllowed(Env env, Thread current, boolean singleThread);
 
         public abstract void initializeThread(Env env, Thread current);
@@ -1202,6 +1205,8 @@ public abstract class Accessor {
 
         public abstract int getStackTraceElementLimit(Object receiver);
 
+        public abstract int getBytecodeIndex(Object receiver);
+
         public abstract Node getLocation(Object receiver);
 
         public abstract boolean assertGuestObject(Object guestObject);
@@ -1238,15 +1243,17 @@ public abstract class Accessor {
         public void registerExactGeneratedProxyEntries(@SuppressWarnings("unused") Method[] entries) {
         }
 
-        public abstract RootCallTarget newCallTarget(CallTarget source, RootNode rootNode);
+        public abstract RuntimeCallTarget newCallTarget(CallTarget source, RootNode rootNode);
 
-        public RootCallTarget newCallTarget(CallTarget source, RootNode rootNode, @SuppressWarnings("unused") ExecutionSignature signature) {
+        public RuntimeCallTarget newCallTarget(CallTarget source, RootNode rootNode, @SuppressWarnings("unused") ExecutionSignature signature) {
             return newCallTarget(source, rootNode);
         }
 
         public abstract long getCallTargetId(CallTarget target);
 
         public abstract boolean isLoaded(CallTarget callTarget);
+
+        public abstract int getBytecodeIndex(FrameInstance frameInstance, Frame frame);
 
         public abstract void notifyOnLoad(CallTarget callTarget);
 
