@@ -80,6 +80,7 @@ import com.oracle.svm.shared.util.ModuleSupport;
  *
  * <p>
  * The test needs an image built with {@code -H:+RuntimeClassLoading -H:+GraalJITCompileAtRuntime},
+ * {@code -H:Preserve=package=java.util.function} for the runtime-only lambda fixture,
  * {@code --add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED}
  * and {@code --features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature},
  * run with {@code -Dcom.oracle.svm.test.ristretto=true}. Without that property it is skipped. The

@@ -507,10 +507,13 @@ def truffle_unittest_task(extra_build_args=None):
     _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
         '-H:+RuntimeClassLoading',
         '-H:+GraalJITCompileAtRuntime',
+        # The runtime-only lambda fixture needs its JDK functional interfaces in the image.
+        '-H:Preserve=package=java.util.function',
     ]) + [
         '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED',
         '--features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest$TestFeature',
-    ], extra_tests=['com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.svm.test.ristretto.RistrettoVarHandleTest',
+    ], extra_tests=['com.oracle.svm.test.PackedCompressedReferenceTest',
+                    'com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest', 'com.oracle.svm.test.ristretto.RistrettoVarHandleTest',
                     'com.oracle.svm.test.ristretto.RistrettoMethodHandleTest', 'com.oracle.svm.test.ristretto.RistrettoDispatchTest',
                     'com.oracle.svm.test.ristretto.RistrettoCallerClassTest', 'com.oracle.svm.test.ristretto.RistrettoHubExtensionTest',
                     'com.oracle.truffle.sl.test.SLHostExceptionCauseOverrideTest'],
