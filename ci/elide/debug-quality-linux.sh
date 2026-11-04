@@ -10,7 +10,7 @@ cp "$scripts/DebugQualityProbe.java" "$out/src/debugquality/DebugQualityProbe.ja
 "$sdk/bin/javac" --add-modules org.graalvm.nativeimage -g \
   -cp "$sdk/lib/svm/svm-shared.jar" -d "$out/classes" "$out/src/debugquality/DebugQualityProbe.java"
 "$sdk/bin/native-image" -J-Xmx5g -J-XX:ActiveProcessorCount=4 -g -O2 \
-  -H:-SourceLevelDebug -H:+TrackNodeSourcePosition -H:+DebugInfoNonSafepoints \
+  -H:-SourceLevelDebug -H:+TrackNodeSourcePosition -H:+DebugCodeInfoUseSourceMappings \
   -H:DebugInfoSourceSearchPath="$out/src" --initialize-at-build-time=debugquality \
   -cp "$out/classes" debugquality.DebugQualityProbe -o "$out/probe" > "$out/build.log" 2>&1
 test "$("$out/probe" test)" = '42:84'

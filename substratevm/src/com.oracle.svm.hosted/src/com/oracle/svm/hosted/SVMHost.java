@@ -536,9 +536,7 @@ public class SVMHost extends HostVM {
     public GraphBuilderConfiguration updateGraphBuilderConfiguration(GraphBuilderConfiguration config, AnalysisMethod method) {
         GraphBuilderConfiguration updatedConfig = config
                         .withRetainLocalVariables(retainLocalVariables())
-                        .withFullInfopoints((SubstrateOptions.getSourceLevelDebug() ||
-                                        (SubstrateOptions.useDebugInfoGeneration() && SubstrateOptions.DebugInfoNonSafepoints.getValue())) &&
-                                        SubstrateOptions.getSourceLevelDebugFilter().test(method.getDeclaringClass().toJavaName()));
+                        .withFullInfopoints(SubstrateOptions.getSourceLevelDebug() && SubstrateOptions.getSourceLevelDebugFilter().test(method.getDeclaringClass().toJavaName()));
         if (parsingSupport != null) {
             return parsingSupport.updateGraphBuilderConfiguration(updatedConfig, method);
         }
