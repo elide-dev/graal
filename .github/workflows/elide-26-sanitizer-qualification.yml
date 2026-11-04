@@ -25,5 +25,5 @@ jobs:
     uses: ./.github/workflows/elide-sanitizer-natives.yml
     with:
       version: 25.6.0-dev
-      graalpython-ref: bc02b30486cc88e0d8c27c3f888a241183aef1cf
+      graalpython-ref: 64a08ecf26e0fda314d36fb43397a1782c61c124
       toolchain-version: '2026.11.1'
