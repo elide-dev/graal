@@ -5,6 +5,8 @@
 # (the early-access build from the fork's upstream base, ORACLE_EE_TAG) with the fork's code in place
 # of Oracle's open-source code, for the enterprise features: G1, PGO, code compression, ...
 # On Linux and macOS, both carry the Shenandoah GC (svmgc, built from labs-openjdk's substratevm-gcs).
+# Linux amd64 also publishes ASan, TSan, and MSan native-library add-ons, built by the reusable
+# elide-sanitizer-natives workflow. All three must pass before any release artifacts are published.
 #
 # Triggers:
 #   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.5.5-elide.1`, to build and publish.
@@ -91,6 +93,8 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       publish: ${{ steps.meta.outputs.publish }}
+      graalpython_ref: ${{ steps.meta.outputs.graalpython_ref }}
+      toolchain_version: ${{ steps.meta.outputs.toolchain_version }}
     steps:
       - id: meta
         name: Determine version
@@ -116,6 +120,8 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "graalpython_ref=${GRAALPYTHON_REF}" >> "${GITHUB_OUTPUT}"
+          echo "toolchain_version=${ELIDE_TOOLCHAIN_VERSION}" >> "${GITHUB_OUTPUT}"
           echo "Release ${version}, publish=${publish}" >> "${GITHUB_STEP_SUMMARY}"
 
   build:
@@ -510,9 +516,18 @@ jobs:
           rm -rf graal graaljs graalpython labs-openjdk mx out smoke smoke-ee smoke-ee-js labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
           df -Pk . | awk 'NR==2 {printf "free after cleanup: %d GB\n", $4 / 1024 / 1024}'
 
+  sanitizer-natives:
+    name: Sanitizer native-library add-ons
+    needs: meta
+    uses: ./.github/workflows/elide-sanitizer-natives.yml
+    with:
+      version: ${{ needs.meta.outputs.version }}
+      graalpython-ref: ${{ needs.meta.outputs.graalpython_ref }}
+      toolchain-version: ${{ needs.meta.outputs.toolchain_version }}
+
   publish:
     name: Assemble and publish
-    needs: [meta, build]
+    needs: [meta, build, sanitizer-natives]
     runs-on: linux-amd64-cipool
     env:
       VERSION: ${{ needs.meta.outputs.version }}
@@ -563,6 +578,14 @@ jobs:
           # A CE and an EE distribution per platform.
           [ "$(ls stage/${VERSION}/dist/graalvm-ce-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 CE distributions"; exit 1; }
           [ "$(ls stage/${VERSION}/dist/graalvm-ee-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 EE distributions"; exit 1; }
+          for sanitizer in asan tsan msan; do
+            archive="stage/${VERSION}/dist/graalvm-natives-${VERSION}-linux-amd64-sanitizer-${sanitizer}.tar.xz"
+            if [ ! -f "${archive}" ] || [ ! -f "${archive}.sha256" ]; then
+              echo "::error::missing ${sanitizer} native-library add-on"
+              exit 1
+            fi
+            (cd "$(dirname "${archive}")" && sha256sum -c "$(basename "${archive}").sha256")
+          done
       - name: Upload to R2
         if: needs.meta.outputs.publish == 'true'
         uses: elide-tools/r2-upload-action@b59314040b32715ae31337cdbb7418582ade7cff  # main
