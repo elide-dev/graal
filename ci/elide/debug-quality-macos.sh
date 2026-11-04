@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 sdk=${1:?SDK home}
 out=${2:?qualification output}
 scripts=$(cd "$(dirname "$0")" && pwd)
@@ -10,8 +10,8 @@ cp "$scripts/DebugQualityProbe.java" "$out/DebugQualityProbe.java"
   -cp "$sdk/lib/svm/svm-shared.jar" -d "$out/classes" "$out/DebugQualityProbe.java"
 common=(-J-Xmx5g -J-XX:ActiveProcessorCount=4 --no-fallback -g -O2 \
   --initialize-at-build-time=debugquality -cp "$out/classes")
-"$sdk/bin/native-image" "${common[@]}" debugquality.DebugQualityProbe -o "$out/probe" > "$out/executable-build.log" 2>&1
-"$sdk/bin/native-image" "${common[@]}" --shared debugquality.DebugQualityProbe -o "$out/libprobe" > "$out/shared-build.log" 2>&1
+"$sdk/bin/native-image" "${common[@]}" -H:TempDirectory="$out/executable-temp" debugquality.DebugQualityProbe -o "$out/probe" > "$out/executable-build.log" 2>&1
+"$sdk/bin/native-image" "${common[@]}" -H:TempDirectory="$out/shared-temp" --shared debugquality.DebugQualityProbe -o "$out/libprobe" > "$out/shared-build.log" 2>&1
 test "$("$out/probe" test)" = '42:84'
 cat > "$out/harness.c" <<'C'
 #include <stdio.h>

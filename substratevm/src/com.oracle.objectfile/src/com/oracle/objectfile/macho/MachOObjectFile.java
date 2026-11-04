@@ -1596,13 +1596,10 @@ public final class MachOObjectFile extends ObjectFile {
             /* Guess a destination segment name, if we're relocatable. */
             if (name.contains("debug")) {
                 destinationSegmentName = "__DWARF";
-                /*
-                 * Do not set SectionFlag.DEBUG here. On OS X, the linker strips debug sections with
-                 * that flag because debuggers are expected to retrieve them from the original object
-                 * files or from a debug info archive. This should be revisited only together with
-                 * reliable dsymutil(1) debug info archive generation.
-                 */
-                // flags.add(SectionFlag.DEBUG);
+                // The linker records these sections in its debug map instead of
+                // copying unrelocated DWARF into the image. dsymutil then applies
+                // final code/heap addresses while collecting the object's DWARF.
+                flags.add(SectionFlag.DEBUG);
             } else if (flags.contains(
                             SectionFlag.SOME_INSTRUCTIONS) /* || name.equals("__rodata") */) {
                 /*
