@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: elide-dev/labs-openjdk
-          ref: 2271d82dcd2d08bd9a64ab754a3e62d3cd4e05c8
+          ref: ee65bb39b79ad158544b3676fd5c16dc9d3f294e
           path: labs-openjdk
       - name: Determine mx version
         run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
@@ -83,3 +83,25 @@ jobs:
               -R:+UnlockDiagnosticVMOptions -R:+ShenandoahVerify
             done
           done
+      - name: Verify optimized Ristretto and early collection startup
+        working-directory: graal/substratevm
+        run: |
+          ../../mx/mx --java-home="${JAVA_HOME}" --timeout 900 --dynamicimports=substratevm-gcs native-unittest \
+            com.oracle.svm.test.PackedCompressedReferenceTest \
+            com.oracle.svm.test.ristretto.RistrettoHubExtensionTest \
+            com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest \
+            com.oracle.svm.test.ristretto.RistrettoVarHandleTest \
+            com.oracle.svm.test.ristretto.RistrettoMethodHandleTest \
+            com.oracle.svm.test.ristretto.RistrettoDispatchTest \
+            com.oracle.svm.test.ristretto.RistrettoCallerClassTest \
+            --build-args -O3 --gc=shenandoah --macro:truffle --language:nfi \
+            -H:CLibraryPath="${GITHUB_WORKSPACE}/labs-openjdk/mxbuild/linux-amd64/hotspot/linux-amd64/glibc" \
+            -H:+UnlockExperimentalVMOptions -H:ShenandoahDebugLevel=fastdebug \
+            -H:ShenandoahGCMode=generational -H:+RuntimeClassLoading -H:+GraalJITCompileAtRuntime \
+            -H:-SupportCompileInIsolates -H:Preserve=package=java.util.function -H:-UnlockExperimentalVMOptions \
+            -R:+UnlockDiagnosticVMOptions -R:+ShenandoahVerify \
+            --add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto=ALL-UNNAMED \
+            --features=com.oracle.svm.test.ristretto.RistrettoDeoptimizationTest\$TestFeature \
+            --run-args -Dcom.oracle.svm.test.ristretto=true \
+            -Dcom.oracle.svm.test.caller.expectStubs=true -Dcom.oracle.svm.test.caller.expectHandlerPairs=true \
+            -Xms64m -Xmx256m -XX:-UsePerfData --very-verbose --eager-stacktrace
