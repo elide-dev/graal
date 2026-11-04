@@ -9,7 +9,7 @@ cp "$scripts/DebugQualityProbe.java" "$out/DebugQualityProbe.java"
 "$sdk/bin/javac" --add-modules org.graalvm.nativeimage -g \
   -cp "$sdk/lib/svm/svm-shared.jar" -d "$out/classes" "$out/DebugQualityProbe.java"
 common=(-J-Xmx5g -J-XX:ActiveProcessorCount=4 --no-fallback -g -O2 \
-  --initialize-at-build-time=debugquality -cp "$out/classes")
+  -H:-StripDebugInfo --initialize-at-build-time=debugquality -cp "$out/classes")
 "$sdk/bin/native-image" "${common[@]}" -H:TempDirectory="$out/executable-temp" debugquality.DebugQualityProbe -o "$out/probe" > "$out/executable-build.log" 2>&1
 "$sdk/bin/native-image" "${common[@]}" -H:TempDirectory="$out/shared-temp" --shared debugquality.DebugQualityProbe -o "$out/libprobe" > "$out/shared-build.log" 2>&1
 test "$("$out/probe" test)" = '42:84'
@@ -33,6 +33,8 @@ for spec in executable shared; do
   image="$out/probe"
   if [ "$spec" = shared ]; then binary="$out/harness"; image="$out/libprobe.dylib"; fi
   dsym="$image.dSYM/Contents/Resources/DWARF/$(basename "$image")"
+  dsymutil --dump-debug-map "$image" > "$out/$spec.debug-map.yaml" 2>&1
+  dsymutil --verbose -o "$image.dSYM" "$image" > "$out/$spec.dsymutil.txt" 2>&1
   test -s "$dsym"
   dwarfdump --uuid "$image" > "$out/$spec.image-uuid.txt"
   dwarfdump --uuid "$dsym" > "$out/$spec.dsym-uuid.txt"
