@@ -1443,7 +1443,12 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         boolean isStatic = Modifier.isStatic(modifiers);
         log(context, "  [0x%08x] method declaration %s::%s", pos, classEntry.getTypeName(), method.getMethodName());
         AbbrevCode abbrevCode;
-        if (isInlined) {
+        boolean isForeign = classEntry == dwarfSections.getForeignMethodListClassEntry();
+        if (isForeign) {
+            abbrevCode = isInlined
+                            ? (isStatic ? AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE_STATIC : AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE)
+                            : (isStatic ? AbbrevCode.FOREIGN_METHOD_DECLARATION_STATIC : AbbrevCode.FOREIGN_METHOD_DECLARATION);
+        } else if (isInlined) {
             abbrevCode = (isStatic ? AbbrevCode.METHOD_DECLARATION_INLINE_STATIC : AbbrevCode.METHOD_DECLARATION_INLINE);
         } else {
             abbrevCode = (isStatic ? AbbrevCode.METHOD_DECLARATION_STATIC : AbbrevCode.METHOD_DECLARATION);
@@ -1482,10 +1487,13 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         pos = writeAttrAccessibility(modifiers, buffer, pos);
         log(context, "  [0x%08x]     declaration true", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
-        long typeSignature = classEntry.getLayoutTypeSignature();
-        log(context, "  [0x%08x]     containing_type 0x%x (%s)", pos, typeSignature, classEntry.getTypeName());
-        pos = writeTypeReference(typeSignature, buffer, pos);
-        if (abbrevCode == AbbrevCode.METHOD_DECLARATION | abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE) {
+        // The foreign-function list is a CU container, not an emitted class type.
+        if (!isForeign) {
+            long typeSignature = classEntry.getLayoutTypeSignature();
+            log(context, "  [0x%08x]     containing_type 0x%x (%s)", pos, typeSignature, classEntry.getTypeName());
+            pos = writeTypeReference(typeSignature, buffer, pos);
+        }
+        if (!isStatic) {
             /* Record the current position so we can back patch the object pointer. */
             int objectPointerIndex = pos;
             /*

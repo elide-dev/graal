@@ -1239,6 +1239,10 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
         pos = writeMethodDeclarationAbbrev(context, AbbrevCode.METHOD_DECLARATION_STATIC, buffer, pos);
         pos = writeMethodDeclarationAbbrev(context, AbbrevCode.METHOD_DECLARATION_INLINE_STATIC, buffer, pos);
         pos = writeMethodDeclarationAbbrev(context, AbbrevCode.METHOD_DECLARATION_SKELETON, buffer, pos);
+        pos = writeMethodDeclarationAbbrev(context, AbbrevCode.FOREIGN_METHOD_DECLARATION, buffer, pos);
+        pos = writeMethodDeclarationAbbrev(context, AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE, buffer, pos);
+        pos = writeMethodDeclarationAbbrev(context, AbbrevCode.FOREIGN_METHOD_DECLARATION_STATIC, buffer, pos);
+        pos = writeMethodDeclarationAbbrev(context, AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE_STATIC, buffer, pos);
         return pos;
     }
 
@@ -1247,7 +1251,8 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
         pos = writeTag(DwarfTag.DW_TAG_subprogram, buffer, pos);
         pos = writeHasChildren(DwarfHasChildren.DW_CHILDREN_yes, buffer, pos);
-        if (abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE_STATIC) {
+        if (abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE_STATIC ||
+                        abbrevCode == AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE || abbrevCode == AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE_STATIC) {
             pos = writeAttrType(DwarfAttribute.DW_AT_inline, buffer, pos);
             pos = writeAttrForm(DwarfForm.DW_FORM_data1, buffer, pos);
         }
@@ -1274,11 +1279,13 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
         /* This is not in DWARF2 */
         // pos = writeAttrType(DW_AT_virtuality, buffer, pos);
         // pos = writeAttrForm(DW_FORM_data1, buffer, pos);
-        if (abbrevCode != AbbrevCode.METHOD_DECLARATION_SKELETON) {
+        if (abbrevCode == AbbrevCode.METHOD_DECLARATION || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE ||
+                        abbrevCode == AbbrevCode.METHOD_DECLARATION_STATIC || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE_STATIC) {
             pos = writeAttrType(DwarfAttribute.DW_AT_containing_type, buffer, pos);
             pos = writeAttrForm(DwarfForm.DW_FORM_ref_sig8, buffer, pos);
         }
-        if (abbrevCode == AbbrevCode.METHOD_DECLARATION || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE) {
+        if (abbrevCode == AbbrevCode.METHOD_DECLARATION || abbrevCode == AbbrevCode.METHOD_DECLARATION_INLINE ||
+                        abbrevCode == AbbrevCode.FOREIGN_METHOD_DECLARATION || abbrevCode == AbbrevCode.FOREIGN_METHOD_DECLARATION_INLINE) {
             pos = writeAttrType(DwarfAttribute.DW_AT_object_pointer, buffer, pos);
             pos = writeAttrForm(DwarfForm.DW_FORM_ref4, buffer, pos);
         }
