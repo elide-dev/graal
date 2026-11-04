@@ -134,8 +134,6 @@ public class SubstrateOptions {
     @LayerVerifiedOption(kind = Kind.Changed, severity = Severity.Error)//
     @Option(help = "Preserve the local variable information for every Java source line to allow line-by-line stepping in the debugger. Allow the lookup of Java-level method information, e.g., in stack traces.")//
     public static final HostedOptionKey<Boolean> SourceLevelDebug = new HostedOptionKey<>(false);
-    @Option(help = "Preserve source positions between safepoints in optimized native debug information without changing source-level debugging or frame-state pruning.")//
-    public static final HostedOptionKey<Boolean> DebugInfoNonSafepoints = new HostedOptionKey<>(false);
     @Option(help = "Constrain debug info generation to the comma-separated list of package prefixes given to this option.")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> SourceLevelDebugFilter = new HostedOptionKey<>(
                     AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());
@@ -1322,7 +1320,7 @@ public class SubstrateOptions {
     @Option(help = "Specify maximum inlining depth to consider when building DebugCodeInfo") //
     public static final HostedOptionKey<Integer> DebugCodeInfoMaxDepth = new HostedOptionKey<>(Integer.MAX_VALUE);
 
-    @Option(help = "Do not use SourceMappings for generating DebugCodeInfo (i.e. only use Infopoints)") //
+    @Option(help = "Use recorded instruction source mappings as well as safepoints for native debug information") //
     public static final HostedOptionKey<Boolean> DebugCodeInfoUseSourceMappings = new HostedOptionKey<>(false);
 
     @Option(help = "Emit debuginfo debug.svm.imagebuild.* sections with detailed image-build options.")//
