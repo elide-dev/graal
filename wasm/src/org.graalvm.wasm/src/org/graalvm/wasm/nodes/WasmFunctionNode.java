@@ -1978,41 +1978,6 @@ public final class WasmFunctionNode<V128> extends Node implements BytecodeOSRNod
     }
 
     @EarlyInline
-    private static int enterBranchTarget(int offset, State state, VirtualState virtualState, FrameWithoutBoxing frame) {
-        /*
-         * Compiled branches must normalize operand-stack and legacy-catch state before paths merge
-         * at the same bytecode offset. The interpreter has no such merge and can execute the target
-         * label and catch-unwind instructions through normal dispatch, which is still faster than
-         * decoding them here.
-         */
-        if (CompilerDirectives.inCompiledCode()) {
-            return enterCompiledBranchTarget(offset, state, virtualState, frame);
-        }
-        return offset;
-    }
-
-    @EarlyInline
-    private static int enterCompiledBranchTarget(int offset, State state, VirtualState virtualState, FrameWithoutBoxing frame) {
-        final int labelEndOffset = switch (rawPeekU8(state.bytecode, offset)) {
-            case Bytecode.LABEL_U8 -> labelU8Handler(offset, state, virtualState, frame);
-            case Bytecode.LABEL_U16 -> labelU16Handler(offset, state, virtualState, frame);
-            case Bytecode.LABEL_I32 -> labelI32Handler(offset, state, virtualState, frame);
-            default -> throw CompilerDirectives.shouldNotReachHere("Branch target must point to a label");
-        };
-        if (hasLegacyCatchUnwind(state.bytecode, labelEndOffset)) {
-            return legacyCatchUnwindHandler(labelEndOffset, state, frame);
-        }
-        return labelEndOffset;
-    }
-
-    @EarlyInline
-    private static int legacyCatchUnwindHandler(int offset, State state, FrameWithoutBoxing frame) {
-        final int targetDepth = rawPeekI32(state.bytecode, offset + 2);
-        state.activeLegacyCatchCount = unwindLegacyCatchesToDepth(frame, state.legacyCatchBase, state.stackBase, state.activeLegacyCatchCount, targetDepth);
-        return offset + 6;
-    }
-
-    @EarlyInline
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {Bytecode.LABEL_I32}, safepoint = false)
     private static int labelI32Handler(int offset, State state, VirtualState virtualState, FrameWithoutBoxing frame) {

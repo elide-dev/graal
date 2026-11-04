@@ -1,0 +1,25 @@
+name: Elide 25.6 sanitizer qualification
+
+on:
+  push:
+    branches: ['elide-25.6.x']
+    paths:
+      - '.github/workflows/elide-26-sanitizer-qualification.yml'
+      - '.github/workflows/elide-sanitizer-natives.yml'
+      - 'ci/elide/**'
+      - 'substratevm/src/com.oracle.svm.native.*/**'
+      - 'substratevm/mx.substratevm/**'
+      - 'truffle/src/com.oracle.truffle.attach/**'
+      - 'truffle/src/com.oracle.truffle.nfi.native/**'
+      - 'truffle/mx.truffle/**'
+
+permissions:
+  contents: read
+
+jobs:
+  natives:
+    uses: ./.github/workflows/elide-sanitizer-natives.yml
+    with:
+      version: 25.6.0-dev
+      graalpython-ref: 31dbb1af62cf166288e49db7852a4fbc70039ae1
+      toolchain-version: '2026.11.1'
