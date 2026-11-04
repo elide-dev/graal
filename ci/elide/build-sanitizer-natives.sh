@@ -64,6 +64,9 @@ runtime_dir=$("${CC}" --print-runtime-dir)
 export LD_LIBRARY_PATH=${runtime_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 cd "${workspace}/graal/vm"
 mx_args=(--java-home "${JAVA_HOME:?JAVA_HOME}" --env ni-ce --dynamicimports /graalpython
+  # Build only the explicit distributions below. Selecting the SVM component would add musl
+  # targets even though this add-on and its sanitizer sysroot support glibc only.
+  --components=false
   --multitarget=linux-amd64-glibc)
 "${MX:?MX}" "${mx_args[@]}" build --build-logs=silent \
   --alt-cc "${CC}" --alt-cxx "${CXX}" --alt-ar "${AR}" \
