@@ -21,7 +21,7 @@ on:
         type: string
       graalpython-ref:
         description: Immutable GraalPy revision matching the release
-        default: 31dbb1af62cf166288e49db7852a4fbc70039ae1
+        default: bc02b30486cc88e0d8c27c3f888a241183aef1cf
         required: true
         type: string
       toolchain-version:

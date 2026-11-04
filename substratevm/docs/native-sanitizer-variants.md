@@ -3,6 +3,8 @@
 The Elide release pipeline builds Linux amd64 native-library add-ons for AddressSanitizer (ASan), ThreadSanitizer (TSan), and MemorySanitizer (MSan).
 Each add-on uses the matching sanitizer variant of the pinned [Elide toolchain](https://github.com/elide-dev/toolchain).
 You can also run the "Elide sanitizer native libraries" workflow independently to build artifacts without publishing them.
+On `elide-25.6.x`, the "Elide 25.6 sanitizer qualification" workflow builds `25.6.0-dev` add-ons when native build inputs change.
+It retains the archives as CI artifacts without creating a release or changing published add-ons.
 
 ## Contents
 
@@ -52,11 +54,13 @@ Run the build from a workspace containing matching _graal/_ and _graalpython/_ c
 export MX=/path/to/mx/mx
 export JAVA_HOME=/path/to/labsjdk
 export ELIDE_TOOLCHAIN_HOME=/path/to/elide-toolchain
-./graal/ci/elide/build-sanitizer-natives.sh 25.5.5-elide.25 asan "$PWD/sanitizer-out"
+./graal/ci/elide/build-sanitizer-natives.sh 25.6.0-dev asan "$PWD/sanitizer-out"
 ```
 
 Each sanitizer uses separate build output and CMake caches.
+The build selects only Linux amd64 glibc distributions, independent of other native toolchains installed on the builder.
 The build inspects the packaged native libraries for sanitizer references, checks the shared libraries against the release's glibc 2.35 floor, and checks every Native Image archive object for machine code and ThinLTO bitcode.
 A native probe links the packaged `liblibchelper.a` and `libzstd.a` with and without ThinLTO, runs a clean workload, and requires a known sanitizer error to be reported.
+TSan probes retry reported address-layout startup collisions up to 32 times per invocation; sanitizer findings and other errors retain their failure status.
 The ASan job also exercises the packaged Truffle, Native Function Interface (NFI), and GraalPy resources in a JVM, using native Portable Operating System Interface (POSIX), compression, ctypes/libffi, and SQLite support.
 The release workflow requires all three sanitizer jobs to succeed before publication.
