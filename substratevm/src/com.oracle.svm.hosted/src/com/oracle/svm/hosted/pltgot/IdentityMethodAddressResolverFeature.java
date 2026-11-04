@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,7 +35,6 @@ import com.oracle.objectfile.SectionName;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.feature.InternalFeature;
-import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.jvmci.shared.meta.SharedMethod;
 import com.oracle.svm.core.pltgot.IdentityMethodAddressResolver;
 import com.oracle.svm.core.pltgot.MethodAddressResolver;
@@ -43,6 +42,7 @@ import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.image.AbstractImage;
 import com.oracle.svm.hosted.image.NativeImage;
 import com.oracle.svm.hosted.image.RelocatableBuffer;
+import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
@@ -66,8 +66,6 @@ public class IdentityMethodAddressResolverFeature implements InternalFeature {
     // Restrict segment names to 16 chars on Mach-O.
     public static final SectionName SVM_METHODTABLE = new SectionName.ProgbitsSectionName("svm_methodtbl");
 
-    private RelocatableBuffer offsetsSectionBuffer;
-
     private ObjectFile.ProgbitsSectionImpl offsetsSectionBufferImpl;
 
     protected class IdentityMethodAddressResolverSupport implements MethodAddressResolutionSupport {
@@ -89,15 +87,10 @@ public class IdentityMethodAddressResolverFeature implements InternalFeature {
             int wordSize = SubstrateTarget.getWordSize();
             HostedPLTGOTConfiguration.GOTSectionExtent methodTableExtent = HostedPLTGOTConfiguration.GOTSectionExtent.forEntries(got.length, wordSize,
                             imageObjectFile.getFormat());
-            offsetsSectionBuffer = new RelocatableBuffer(methodTableExtent.bufferSize(), imageObjectFile.getByteOrder());
+            RelocatableBuffer offsetsSectionBuffer = new RelocatableBuffer(methodTableExtent.bufferSize(), imageObjectFile.getByteOrder());
             offsetsSectionBufferImpl = new BasicProgbitsSectionImpl(offsetsSectionBuffer.getBackingArray());
             String name = SVM_METHODTABLE.getFormatDependentName(imageObjectFile.getFormat());
             ObjectFile.Section offsetsSection = imageObjectFile.newProgbitsSection(name, imageObjectFile.getPageSize(), true, false, offsetsSectionBufferImpl);
-
-            ObjectFile.RelocationKind relocationKind = ObjectFile.RelocationKind.getDirect(wordSize);
-            for (int gotEntryNo = 0; gotEntryNo < got.length; ++gotEntryNo) {
-                offsetsSectionBuffer.addRelocationWithoutAddend(gotEntryNo * wordSize, relocationKind, MethodRefSupport.createMethodPointer(got[gotEntryNo], false));
-            }
 
             imageObjectFile.createDefinedSymbol(offsetsSection.getName(), offsetsSection, 0, 0, false, false, false);
             boolean internalSymbolsAreGlobal = SubstrateOptions.InternalSymbolsAreGlobal.getValue();
@@ -132,6 +125,17 @@ public class IdentityMethodAddressResolverFeature implements InternalFeature {
     }
 
     private void prepareOffsetsSection(NativeImage image) {
-        image.markRelocationSitesFromBuffer(offsetsSectionBuffer, offsetsSectionBufferImpl);
+        SharedMethod[] got = HostedPLTGOTConfiguration.singleton().getGOTEntryAllocator().getGOT();
+        int wordSize = SubstrateTarget.getWordSize();
+        ObjectFile.RelocationKind relocationKind = ObjectFile.RelocationKind.getDirect(wordSize);
+        for (int gotEntryNo = 0; gotEntryNo < got.length; ++gotEntryNo) {
+            /*
+             * The resolver table must address the exact compiled variant, including deoptimization
+             * targets. MethodRef objects only describe original methods, so emit symbol relocations
+             * directly instead of representing these internal code addresses as MethodPointers.
+             */
+            HostedMethod target = NativeImage.getMethodRefTargetMethod(image.getHeap().hMetaAccess, (HostedMethod) got[gotEntryNo]);
+            offsetsSectionBufferImpl.markRelocationSite(gotEntryNo * wordSize, relocationKind, NativeImage.localSymbolNameForMethod(target), 0);
+        }
     }
 }
