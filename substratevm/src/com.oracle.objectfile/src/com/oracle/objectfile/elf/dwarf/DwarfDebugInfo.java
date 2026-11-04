@@ -50,6 +50,7 @@ import com.oracle.objectfile.elf.dwarf.constants.DwarfLanguage;
 public class DwarfDebugInfo extends DebugInfoBase {
 
     public static final String HEAP_BEGIN_NAME = "__svm_heap_begin";
+    public static final String CODE_BEGIN_NAME = "__svm_code_section";
 
     /*
      * Define all the abbrev section codes we need for our DIEs.

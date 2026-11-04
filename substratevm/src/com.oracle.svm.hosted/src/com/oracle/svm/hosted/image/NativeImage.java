@@ -536,7 +536,8 @@ public abstract class NativeImage extends AbstractImage {
             // Define symbols for the sections.
             if (codeCache.definesTextSectionBoundarySymbols()) {
                 objectFile.createDefinedSymbol(textSection.getName(), textSection, 0, 0, false, false, false);
-                if (ImageLayerBuildingSupport.buildingImageLayer() || SubstrateOptions.DeleteLocalSymbols.getValue()) {
+                if (ImageLayerBuildingSupport.buildingImageLayer() || SubstrateOptions.DeleteLocalSymbols.getValue() ||
+                                (objectFile.getFormat() == ObjectFile.Format.MACH_O && SubstrateOptions.useDebugInfoGeneration())) {
                     /* add a dummy function symbol at the start of the code section */
                     objectFile.createDefinedSymbol(getTextSectionStartSymbol(), textSection, 0, 0, true, true, true);
                 }
