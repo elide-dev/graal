@@ -3,6 +3,10 @@
 This changelog summarizes newly introduced optimizations and other compiler related changes.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
+
+* Fixed boxed integer identity comparisons when the configured cache limit is below the minimum required by the JDK.
+* (GR-80831): Fixed switch-loop recognition for loops without a state phi.
+* (GR-81057): Fixed the final accumulator value in inverted vector folds.
 * (GR-79881, GR-79883): Added aggressive partial loop unrolling and simulation-based loop peeling to the community
   compiler. Aggressive partial unrolling is enabled by default and can be disabled with
   `-Djdk.graal.AggressivePartialUnroll=false`. The original simple partial unrolling remains

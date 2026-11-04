@@ -1137,6 +1137,89 @@ def crema_class_loading_benchmark(args):
     native_image_context_run(build_and_run)
 
 
+def _shenandoah_runtime_test_defaults(args):
+    collector = next((arg.split('=', 1)[1] for arg in reversed(args) if arg.startswith('--gc=')), 'shenandoah')
+    if collector == 'shenandoah':
+        return ['-H:ShenandoahGCMode=passive'], ['-XX:+UnlockDiagnosticVMOptions']
+    return [], []
+
+
+@mx.command(suite.name, 'shenandoah-metaspace-test', '[native-image options]')
+def shenandoah_metaspace_test(args):
+    """Build and run isolated runtime class-loading and metaspace allocation tests."""
+    output_dir = join(svmbuild_dir(), platform_name(), 'shenandoah-metaspace-test')
+    classes_dir = join(output_dir, 'classes')
+    payload_dir = join(output_dir, 'payload')
+    for directory in [classes_dir, payload_dir]:
+        mx_util.ensure_dir_exists(directory)
+    source_dir = join(suite.dir, 'src', 'native-image-tests', 'shenandoah')
+    mx.run([mx.get_jdk().javac, '-d', classes_dir, join(source_dir, 'RuntimeMetaspaceProbe.java')])
+    # Keep the payload off the image classpath so defineClass must parse it at run time.
+    mx.run([mx.get_jdk().javac, '-d', payload_dir, join(source_dir, 'RuntimeLoadedPayload.java')])
+    with native_image_context(IMAGE_ASSERTION_FLAGS) as native_image:
+        mode_args, runtime_args = _shenandoah_runtime_test_defaults(args)
+        build_args = ['--gc=shenandoah'] + svm_experimental_options(mode_args + [
+            '-H:+RuntimeClassLoading', '-H:MaxMetaspaceSize=8m'])
+        image = native_image(build_args + args + ['-cp', classes_dir, '-o', join(output_dir, 'metaspace-test'), 'RuntimeMetaspaceProbe'])
+        mx.run([image, '-Xms32m', '-Xmx64m', '-XX:-UsePerfData', '-XX:+PrintGC'] + runtime_args + [
+                join(payload_dir, 'RuntimeLoadedPayload.class')], timeout=120)
+        mx.run([mx.get_jdk().javac, '-cp', mx.classpath(['SVM']), '-d', classes_dir, join(source_dir, 'MetaspaceAllocationProbe.java')])
+        allocation_image = native_image(build_args + args + [
+            '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.metaspace=ALL-UNNAMED',
+            '--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.heap=ALL-UNNAMED',
+            '-cp', classes_dir, '-o', join(output_dir, 'allocation-test'), 'MetaspaceAllocationProbe'])
+        mx.run([allocation_image, '-Xms32m', '-Xmx64m', '-XX:-UsePerfData'] + runtime_args, timeout=120)
+
+
+@mx.command(suite.name, 'shenandoah-ristretto-test', '[native-image options]')
+def shenandoah_ristretto_test(args):
+    """Compile runtime-loaded bytecode with Ristretto and collect with compiled frames active."""
+    output_dir = join(svmbuild_dir(), platform_name(), 'shenandoah-ristretto-test')
+    classes_dir = join(output_dir, 'classes')
+    payload_dir = join(output_dir, 'payload')
+    for directory in [classes_dir, payload_dir]:
+        mx_util.ensure_dir_exists(directory)
+    source_dir = join(suite.dir, 'src', 'native-image-tests', 'shenandoah')
+    mx.run([mx.get_jdk().javac, '-d', classes_dir, join(source_dir, 'RuntimeMetaspaceProbe.java')])
+    mx.run([mx.get_jdk().javac, '-d', payload_dir, join(source_dir, 'RuntimeLoadedPayload.java')])
+    with native_image_context(IMAGE_ASSERTION_FLAGS) as native_image:
+        mode_args, runtime_args = _shenandoah_runtime_test_defaults(args)
+        build_args = ['--gc=shenandoah'] + svm_experimental_options(mode_args + [
+            '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime', '-H:MaxMetaspaceSize=64m'])
+        image = native_image(build_args + args + ['-cp', classes_dir, '-o', join(output_dir, 'ristretto-test'), 'RuntimeMetaspaceProbe'])
+        captured = mx.OutputCapture()
+        mx.run([image, '-Xms64m', '-Xmx256m', '-XX:-UsePerfData'] + runtime_args + [
+                '-XX:+JITXBatch', '-XX:JITCompileOnly=RuntimeLoadedPayload.applyAsInt',
+                '-XX:+JITTraceCompilation', '-XX:+JITTraceCodeInstallations', '-XX:+PrintGC',
+                join(payload_dir, 'RuntimeLoadedPayload.class'), 'pressure'],
+               out=mx.TeeOutputCapture(captured), err=mx.TeeOutputCapture(captured), timeout=120)
+        if '[Ristretto CodeMap] method=RuntimeLoadedPayload.applyAsInt(int)' not in captured.data:
+            mx.abort('The runtime-loaded payload was not JIT compiled; an interpreter-only run does not validate code roots.')
+
+
+@mx.command(suite.name, 'shenandoah-code-roots-test', '[native-image options]')
+def shenandoah_code_roots_test(args):
+    """Exercise Truffle compiled constants, active frames, invalidation, and weak code roots."""
+    output_dir = join(svmbuild_dir(), platform_name(), 'shenandoah-code-roots-test')
+    classes_dir = join(output_dir, 'classes')
+    if exists(classes_dir):
+        mx.rmtree(classes_dir)
+    mx_util.ensure_dir_exists(classes_dir)
+    source = join(suite.dir, 'src', 'native-image-tests', 'shenandoah', 'TruffleCodeRootsProbe.java')
+    runtime_classpath = mx.classpath(['truffle:TRUFFLE_RUNTIME'])
+    mx.run([mx.get_jdk().javac, '-cp', runtime_classpath,
+            '-processorpath', mx.classpath(['truffle:TRUFFLE_DSL_PROCESSOR']), '-d', classes_dir, source])
+    with native_image_context(IMAGE_ASSERTION_FLAGS) as native_image:
+        build_args = ['--gc=shenandoah', '--macro:truffle-svm', '--initialize-at-build-time=shenandoah',
+                      '--add-exports=org.graalvm.truffle.runtime/com.oracle.truffle.runtime=ALL-UNNAMED']
+        mode_args, runtime_args = _shenandoah_runtime_test_defaults(args)
+        build_args += svm_experimental_options(mode_args + ['-H:-SupportCompileInIsolates'])
+        image = native_image(build_args + args + ['-cp', classes_dir + os.pathsep + runtime_classpath, '-o', join(output_dir, 'truffle-test'), 'shenandoah.TruffleCodeRootsProbe'])
+        mx.run([image, '-Xms128m', '-Xmx512m', '-XX:-UsePerfData',
+                '-Dpolyglot.engine.BackgroundCompilation=false', '-Dpolyglot.engine.CompilationFailureAction=Throw'] + runtime_args, timeout=180)
+
+
+
 @mx.command(suite.name, 'shenandoah-truffle-test', '[native-image options]')
 def shenandoah_truffle_test(args):
     """Build and run Truffle runtime compilation and option validation with Shenandoah."""
@@ -2811,6 +2894,7 @@ lib_jvm_preserved_packages = [
     'sun.jvmstat.perfdata.monitor.protocol.rmi',
     'sun.jvmstat.perfdata.monitor.v1_0',
     'sun.jvmstat.perfdata.monitor.v2_0',
+    'sun.misc',
     'sun.nio.cs.ext',
     'sun.security.util',
     'sun.util',

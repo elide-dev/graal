@@ -288,7 +288,8 @@ public class NativeImage {
     final String oHClass = oH(SubstrateOptions.Class);
     final String oHName = oH(SubstrateOptions.Name);
     final String oHPath = oH(SubstrateOptions.ConcealedOptions.Path);
-    final String oHOptimize = oH(SubstrateOptions.Optimize);
+    // Embedders must not retain the hosted Optimize key and its hosted-only update callback.
+    final String oHOptimize = oH + "Optimize=";
     final String oHUseLibC = oH(SubstrateOptions.UseLibC);
     final String oHEnableStaticExecutable = oHEnabled(SubstrateOptions.StaticExecutable);
     final String oHEnableSharedLibraryFlagPrefix = oHEnabled + SubstrateOptions.SharedLibrary.getName();
@@ -1128,7 +1129,7 @@ public class NativeImage {
 
         if (getHostedOptionArgument(imageBuilderArgs, oHOptimize).isEmpty()) {
             // Ensure fallback -H:Optimize comes before any option that could implicitly modify the optimization level.
-            imageBuilderArgs.add(0, oH(SubstrateOptions.Optimize, OptionOrigin.originDriver) + SubstrateOptions.OPTIMIZE_DEFAULT_VALUE);
+            imageBuilderArgs.add(0, oH + "Optimize@" + OptionOrigin.originDriver + "=" + SubstrateOptions.OPTIMIZE_DEFAULT_VALUE);
         }
 
         if (config.getBuilderInspectServerPath() != null) {

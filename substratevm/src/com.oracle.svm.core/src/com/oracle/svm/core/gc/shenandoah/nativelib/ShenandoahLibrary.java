@@ -60,7 +60,7 @@ import org.graalvm.word.impl.Word;
 @CContext(value = ShenandoahLibraryDependencies.class)
 public class ShenandoahLibrary {
     // GraalVM major, GraalVM minor, interface revision
-    public static final int VERSION = 250501;
+    public static final int VERSION = 250502;
 
     @CFunction(value = "svm_gc_parse_options", transition = Transition.NO_TRANSITION)
     public static native void parseOptions(int nativeImageVersion, int argc, CCharPointerPointer argv, CCharPointer imageBuildHostedArguments, CCharPointer imageBuildRuntimeArguments,

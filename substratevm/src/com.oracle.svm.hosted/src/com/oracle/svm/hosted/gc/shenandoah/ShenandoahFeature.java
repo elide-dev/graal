@@ -130,12 +130,6 @@ public class ShenandoahFeature implements InternalFeature {
         ImageSingletons.add(ShenandoahCommittedMemoryProvider.class, memoryProvider);
 
         if (RuntimeClassLoading.isSupported() && ImageLayerBuildingSupport.firstImageBuild()) {
-            /* The aligned metaspace reservation must leave room for image-heap hubs. */
-            int metaspaceSize = NumUtil.roundUp(SubstrateGCOptions.ConcealedOptions.getMaxMetaspaceSize(), ShenandoahOptions.ShenandoahRegionSize.getValue());
-            if (!new ShenandoahObjectHeader().isInHubAddressSpace(ShenandoahHeap.getNullRegionSize() + metaspaceSize)) {
-                throw UserError.invalidOptionValue(SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize, SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize.getValue(),
-                                "The metaspace reservation leaves no address space for image-heap hubs with the selected Shenandoah object layout");
-            }
             ImageSingletons.add(Metaspace.class, new ShenandoahMetaspace());
         }
 
@@ -144,6 +138,16 @@ public class ShenandoahFeature implements InternalFeature {
 
     @Override
     public void duringSetup(DuringSetupAccess access) {
+        if (RuntimeClassLoading.isSupported() && ImageLayerBuildingSupport.firstImageBuild()) {
+            /* CompressEncoding is installed after feature registration, before setup. */
+            /* The aligned metaspace reservation must leave room for image-heap hubs. */
+            int metaspaceSize = NumUtil.roundUp(SubstrateGCOptions.ConcealedOptions.getMaxMetaspaceSize(), ShenandoahOptions.ShenandoahRegionSize.getValue());
+            if (!new ShenandoahObjectHeader().isInHubAddressSpace(ShenandoahHeap.getNullRegionSize() + metaspaceSize)) {
+                throw UserError.invalidOptionValue(SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize, SubstrateGCOptions.ConcealedOptions.MaxMetaspaceSize.getValue(),
+                                "The metaspace reservation leaves no address space for image-heap hubs with the selected Shenandoah object layout");
+            }
+        }
+
         ShenandoahHeap heap = new ShenandoahHeap();
         ImageSingletons.add(Heap.class, heap);
         ImageSingletons.add(ShenandoahHeap.class, heap);
