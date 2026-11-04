@@ -168,7 +168,8 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -q
           apt-get install -y -q --no-install-recommends build-essential zlib1g-dev git curl ca-certificates \
-            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config gnupg lsb-release gdb
+            python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config gnupg lsb-release \
+            libgmp-dev libmpfr-dev libreadline-dev libncurses-dev libexpat1-dev python3-dev texinfo
           # The workspace belongs to the runner's user, not root.
           git config --global --add safe.directory '*'
           getconf GNU_LIBC_VERSION
@@ -356,31 +357,6 @@ jobs:
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
-      - name: Qualify optimized Java AOT debug information (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          command -v gdb
-          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
-          bash ./graal/ci/elide/debug-quality-linux.sh "${home}" debug-quality-linux
-      - name: Retain Linux debug quality evidence
-        if: always() && runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: debug-quality-${{ matrix.platform }}-${{ github.sha }}
-          path: debug-quality-linux/
-          if-no-files-found: error
-      - name: Qualify Java AOT debug information (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
-          bash ./graal/ci/elide/debug-quality-macos.sh "${home}" debug-quality-macos
-      - name: Retain macOS debug quality evidence
-        if: always() && runner.os == 'macOS'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: debug-quality-macos-${{ github.sha }}
-          path: debug-quality-macos/
-          if-no-files-found: error
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -437,6 +413,42 @@ jobs:
           & "$eeHome\bin\javac.exe" -d . $check
           cmd /c "call `"$vcvars`" x64 && $ni -cp . -o check-blocked-certs CheckBlockedCerts && check-blocked-certs.exe"
           if ($LASTEXITCODE -ne 0) { throw "EE native images do not block the CVE-2026-91403 certificates ($LASTEXITCODE)" }
+
+      # Retain the exact SDK before debugger checks so failed qualifications remain reproducible.
+      - name: Upload distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dist-${{ matrix.platform }}
+          path: out/dist
+          if-no-files-found: error
+          retention-days: 7
+      - name: Qualify optimized Java AOT debug information (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          bash ./graal/ci/elide/build-debugger.sh "${RUNNER_TEMP}/debugger" "${RUNNER_TEMP}/debugger-build"
+          export PATH="${RUNNER_TEMP}/debugger/bin:${PATH}"
+          command -v gdb
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          bash ./graal/ci/elide/debug-quality-linux.sh "${home}" debug-quality-linux
+      - name: Retain Linux debug quality evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-${{ matrix.platform }}-${{ github.sha }}
+          path: debug-quality-linux/
+          if-no-files-found: error
+      - name: Qualify Java AOT debug information (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          bash ./graal/ci/elide/debug-quality-macos.sh "${home}" debug-quality-macos
+      - name: Retain macOS debug quality evidence
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-macos-${{ github.sha }}
+          path: debug-quality-macos/
+          if-no-files-found: error
 
       # The Maven platform builds everything, for maven-deploy; the others, only what the natives
       # come from.
@@ -525,13 +537,6 @@ jobs:
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/smoke-ee.sh "${home}" "${PLATFORM}" smoke-ee-js "${WS}/out/maven" "${VERSION}"
 
-      - name: Upload distribution
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: dist-${{ matrix.platform }}
-          path: out/dist
-          if-no-files-found: error
-          retention-days: 7
       - name: Upload Maven repository
         if: matrix.maven
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
