@@ -69,7 +69,8 @@ On macOS, the debug info is written to a _.dSYM_ bundle next to the native execu
 ## Source File Caching
 
 Declaration file information is retained for types and members, including classes with no compiled methods.
-Their DWARF type units reference the owning class's file table so a debugger can resolve declaration source files independently of executable line information.
+On ELF, their DWARF type units reference the owning class's file table so a debugger can resolve declaration source files independently of executable line information.
+On macOS, types use compilation-unit references that the DWARF linker can preserve in the dSYM bundle, including declaration source files and field types.
 
 The `-g` option also enables caching of sources for any JDK runtime classes, GraalVM classes, and application classes which can be located when generating a native executable.
 By default, the cache is created alongside the generated binary in a subdirectory named `sources`.

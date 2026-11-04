@@ -51,6 +51,7 @@ public class DwarfDebugInfo extends DebugInfoBase {
 
     public static final String HEAP_BEGIN_NAME = "__svm_heap_begin";
     public static final String CODE_BEGIN_NAME = "__svm_code_section";
+    public static final int MACH_O_ADDR_BASE = 8;
 
     /*
      * Define all the abbrev section codes we need for our DIEs.
@@ -118,6 +119,7 @@ public class DwarfDebugInfo extends DebugInfoBase {
         /* Type units whose declarations use the owning class's file table. */
         TYPE_UNIT_FILES,
         CLASS_UNIT_FILES,
+        INTERFACE_LAYOUT_CU,
     }
 
     /**
@@ -199,6 +201,11 @@ public class DwarfDebugInfo extends DebugInfoBase {
             this.heapbaseRegister = rheapbase_x86;
             this.threadRegister = rthread_x86;
         }
+    }
+
+    /** Darwin's DWARF linker cannot preserve signature-based type-unit references. */
+    public boolean useTypeUnits() {
+        return format != ObjectFile.Format.MACH_O;
     }
 
     /** Returns the format of the object file the debug info is written to. */
