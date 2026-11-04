@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,6 +38,7 @@ import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.debug.Assertions;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.NodeClass;
+import jdk.graal.compiler.lir.CastValue;
 import jdk.graal.compiler.lir.ConstantValue;
 import jdk.graal.compiler.nodeinfo.NodeInfo;
 import jdk.graal.compiler.nodes.ConstantNode;
@@ -199,6 +200,19 @@ public final class WordCastNode extends FixedWithNextNode implements LIRLowerabl
         Value value = generator.operand(input);
         ValueKind<?> resultKind = generator.getLIRGeneratorTool().getLIRKind(stamp(NodeView.DEFAULT));
         assert resultKind.getPlatformKind().getSizeInBytes() == value.getPlatformKind().getSizeInBytes() : Assertions.errorMessageContext("resultKind", resultKind, "valueKind", value);
+
+        if (stamp instanceof NarrowOopStamp && value instanceof CastValue cast &&
+                        cast.underlyingValue().getPlatformKind().getSizeInBytes() > value.getPlatformKind().getSizeInBytes()) {
+            /*
+             * A narrowed integer may still occupy a wider register. Compressed references used as
+             * address indices require zero upper bits, including when the reference move is
+             * coalesced with its input. Materialize that extension before changing reference kind.
+             */
+            int bits = value.getPlatformKind().getSizeInBytes() * Byte.SIZE;
+            int storageBits = cast.underlyingValue().getPlatformKind().getSizeInBytes() * Byte.SIZE;
+            var arithmetic = generator.getLIRGeneratorTool().getArithmetic();
+            value = arithmetic.emitNarrow(arithmetic.emitZeroExtend(value, bits, storageBits, true, false), bits);
+        }
 
         if (trackedPointer && LIRKind.isValue(resultKind) && !LIRKind.isValue(value)) {
             // just change the PlatformKind, but don't drop reference information
