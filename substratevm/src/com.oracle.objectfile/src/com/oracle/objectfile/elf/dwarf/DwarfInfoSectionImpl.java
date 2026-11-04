@@ -1259,7 +1259,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         if (hasFile) {
             assert entry instanceof ClassEntry;
             int fileIdx = fieldEntry.getFileIdx();
-            assert fileIdx > 0;
+            assert fileIdx >= 0;
             log(context, "  [0x%08x]     filename  0x%x (%s)", pos, fileIdx, fieldEntry.getFileName());
             pos = writeAttrData2((short) fileIdx, buffer, pos);
             /* At present we definitely don't have line numbers. */
@@ -1616,7 +1616,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         /* We may not have a file and line for a field. */
         if (hasFile) {
             int fileIdx = fieldEntry.getFileIdx();
-            assert fileIdx > 0;
+            assert fileIdx >= 0;
             log(context, "  [0x%08x]     filename  0x%x (%s)", pos, fileIdx, fieldEntry.getFileName());
             pos = writeAttrData2((short) fileIdx, buffer, pos);
             /* At present we definitely don't have line numbers. */

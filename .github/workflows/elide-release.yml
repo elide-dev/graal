@@ -342,6 +342,18 @@ jobs:
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
+      - name: Qualify Java AOT debug information (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          bash ./graal/ci/elide/debug-quality-macos.sh "${home}" debug-quality-macos
+      - name: Retain macOS debug quality evidence
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-macos-${{ github.sha }}
+          path: debug-quality-macos/
+          if-no-files-found: error
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
