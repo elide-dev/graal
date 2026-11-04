@@ -985,6 +985,7 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
         pos = writeCompileUnitAbbrev(context, AbbrevCode.CLASS_UNIT_1, buffer, pos);
         pos = writeCompileUnitAbbrev(context, AbbrevCode.CLASS_UNIT_2, buffer, pos);
         pos = writeCompileUnitAbbrev(context, AbbrevCode.CLASS_UNIT_3, buffer, pos);
+        pos = writeCompileUnitAbbrev(context, AbbrevCode.CLASS_UNIT_FILES, buffer, pos);
         return pos;
     }
 
@@ -1013,6 +1014,10 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
                 pos = writeAttrForm(DwarfForm.DW_FORM_sec_offset, buffer, pos);
             }
         }
+        if (abbrevCode == AbbrevCode.CLASS_UNIT_FILES) {
+            pos = writeAttrType(DwarfAttribute.DW_AT_stmt_list, buffer, pos);
+            pos = writeAttrForm(DwarfForm.DW_FORM_sec_offset, buffer, pos);
+        }
         /*
          * Now terminate.
          */
@@ -1022,14 +1027,23 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
     }
 
     private int writeTypeUnitAbbrev(@SuppressWarnings("unused") DebugContext context, byte[] buffer, int p) {
+        int pos = writeTypeUnitAbbrev(AbbrevCode.TYPE_UNIT, buffer, p);
+        return writeTypeUnitAbbrev(AbbrevCode.TYPE_UNIT_FILES, buffer, pos);
+    }
+
+    private int writeTypeUnitAbbrev(AbbrevCode abbrevCode, byte[] buffer, int p) {
         int pos = p;
-        pos = writeAbbrevCode(AbbrevCode.TYPE_UNIT, buffer, pos);
+        pos = writeAbbrevCode(abbrevCode, buffer, pos);
         pos = writeTag(DwarfTag.DW_TAG_type_unit, buffer, pos);
         pos = writeHasChildren(DwarfHasChildren.DW_CHILDREN_yes, buffer, pos);
         pos = writeAttrType(DwarfAttribute.DW_AT_language, buffer, pos);
         pos = writeAttrForm(DwarfForm.DW_FORM_data1, buffer, pos);
         pos = writeAttrType(DwarfAttribute.DW_AT_use_UTF8, buffer, pos);
         pos = writeAttrForm(DwarfForm.DW_FORM_flag, buffer, pos);
+        if (abbrevCode == AbbrevCode.TYPE_UNIT_FILES) {
+            pos = writeAttrType(DwarfAttribute.DW_AT_stmt_list, buffer, pos);
+            pos = writeAttrForm(DwarfForm.DW_FORM_sec_offset, buffer, pos);
+        }
         /*
          * Now terminate.
          */
@@ -1139,6 +1153,8 @@ public class DwarfAbbrevSectionImpl extends DwarfSectionImpl {
             }
         } else {
             pos = writeAttrType(DwarfAttribute.DW_AT_byte_size, buffer, pos);
+            pos = writeAttrForm(DwarfForm.DW_FORM_data2, buffer, pos);
+            pos = writeAttrType(DwarfAttribute.DW_AT_decl_file, buffer, pos);
             pos = writeAttrForm(DwarfForm.DW_FORM_data2, buffer, pos);
         }
         /*

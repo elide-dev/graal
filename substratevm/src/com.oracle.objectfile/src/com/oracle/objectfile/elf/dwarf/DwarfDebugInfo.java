@@ -113,6 +113,9 @@ public class DwarfDebugInfo extends DebugInfoBase {
         METHOD_PARAMETER_LOCATION_2,
         METHOD_LOCAL_LOCATION_1,
         METHOD_LOCAL_LOCATION_2,
+        /* Type units whose declarations use the owning class's file table. */
+        TYPE_UNIT_FILES,
+        CLASS_UNIT_FILES,
     }
 
     /**

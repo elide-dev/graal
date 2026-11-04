@@ -1923,6 +1923,13 @@ def _debuginfotest(native_image, path, build_only, args):
     if mx.get_os() == 'linux' and not build_only:
         mx.run(gdb_base_command() + ['-x', testhello_py, hello_binary], env=env)
 
+    declaration_binary = build_debug_test('declaration-files', 'declaration_files', [
+        '--initialize-at-build-time=hello', 'hello.DeclarationFiles'
+    ])
+    if mx.get_os() == 'linux' and not build_only:
+        declaration_test = join(sourcepath, 'gdb-tests', 'test_declaration_files.py')
+        mx.run(gdb_base_command() + ['-x', declaration_test, declaration_binary], env=env)
+
 
 def _layereddebuginfotest(native_image, output_path, skip_base_layer, args):
     sourcepath = mx.project('com.oracle.svm.test.debug').source_dirs()[0]

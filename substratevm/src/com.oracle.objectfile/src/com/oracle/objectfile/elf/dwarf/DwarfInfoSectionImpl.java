@@ -635,19 +635,27 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
     }
 
     private int writeTUPreamble(DebugContext context, long typeSignature, String loaderId, byte[] buffer, int p) {
+        return writeTUPreamble(context, typeSignature, loaderId, null, buffer, p);
+    }
+
+    private int writeTUPreamble(DebugContext context, long typeSignature, String loaderId, ClassEntry fileOwner, byte[] buffer, int p) {
         int pos = p;
 
         // Write a type unit header
         pos = writeTUHeader(typeSignature, buffer, pos);
         int typeOffsetPos = pos - 4;
         assert pos == p + TU_DIE_HEADER_SIZE;
-        AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
+        AbbrevCode abbrevCode = fileOwner == null ? AbbrevCode.TYPE_UNIT : AbbrevCode.TYPE_UNIT_FILES;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
         log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
         pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
+
+        if (fileOwner != null) {
+            pos = writeLineSectionOffset(getLineIndex(fileOwner), buffer, pos);
+        }
 
         /* if the class has a loader then embed the children in a namespace */
         if (!loaderId.isEmpty()) {
@@ -792,7 +800,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
 
         String loaderId = interfaceClassEntry.getLoaderId();
         int lengthPos = pos;
-        pos = writeTUPreamble(context, interfaceClassEntry.getLayoutTypeSignature(), loaderId, buffer, pos);
+        pos = writeTUPreamble(context, interfaceClassEntry.getLayoutTypeSignature(), loaderId, interfaceClassEntry, buffer, pos);
 
         log(context, "  [0x%08x] interface layout", pos);
         AbbrevCode abbrevCode = AbbrevCode.INTERFACE_LAYOUT;
@@ -827,7 +835,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
 
         String loaderId = classEntry.getLoaderId();
         int lengthPos = pos;
-        pos = writeTUPreamble(context, classEntry.getLayoutTypeSignature(), loaderId, buffer, pos);
+        pos = writeTUPreamble(context, classEntry.getLayoutTypeSignature(), loaderId, classEntry, buffer, pos);
 
         int refTypeIdx = pos;
         log(context, "  [0x%08x] type layout", pos);
@@ -840,6 +848,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         int size = classEntry.getSize();
         log(context, "  [0x%08x]     byte_size 0x%x", pos, size);
         pos = writeAttrData2((short) size, buffer, pos);
+
+        pos = writeAttrData2((short) classEntry.getFileIdx(), buffer, pos);
 
         StructureTypeEntry superClassEntry = classEntry.getSuperClass();
         if (superClassEntry == null) {
@@ -1063,7 +1073,7 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
                 abbrevCode = AbbrevCode.CLASS_UNIT_3;
             }
         } else {
-            abbrevCode = AbbrevCode.CLASS_UNIT_1;
+            abbrevCode = AbbrevCode.CLASS_UNIT_FILES;
         }
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
@@ -1097,6 +1107,9 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
                 log(context, "  [0x%08x]     loclists_base  0x%x", pos, locationListIndex);
                 pos = writeLocSectionOffset(locationListIndex, buffer, pos);
             }
+        }
+        if (abbrevCode == AbbrevCode.CLASS_UNIT_FILES) {
+            pos = writeLineSectionOffset(getLineIndex(classEntry), buffer, pos);
         }
         /* if the class has a loader then embed the children in a namespace */
         String loaderId = classEntry.getLoaderId();

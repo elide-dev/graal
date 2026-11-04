@@ -76,11 +76,12 @@ public class DwarfLineSectionImpl extends DwarfSectionImpl {
 
         /*
          * We need to create a header, dir table, file table and line number table encoding for each
-         * class CU that contains compiled methods.
+         * class, including classes with declarations but no compiled methods. Type units use
+         * the same file indices as their owning class CU.
          */
 
         int pos = 0;
-        for (ClassEntry classEntry : getInstanceClassesWithCompilation()) {
+        for (ClassEntry classEntry : getInstanceClasses()) {
             setLineIndex(classEntry, pos);
             int headerSize = headerSize();
             int dirTableSize = writeDirTable(null, classEntry, null, 0);
@@ -149,7 +150,7 @@ public class DwarfLineSectionImpl extends DwarfSectionImpl {
 
         enableLog(context);
         log(context, "  [0x%08x] DEBUG_LINE", pos);
-        for (ClassEntry classEntry : getInstanceClassesWithCompilation()) {
+        for (ClassEntry classEntry : getInstanceClasses()) {
             setLineIndex(classEntry, pos);
             int lengthPos = pos;
             pos = writeHeader(classEntry, buffer, pos);
