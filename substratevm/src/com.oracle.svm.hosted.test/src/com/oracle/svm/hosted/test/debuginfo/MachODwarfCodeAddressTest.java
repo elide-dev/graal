@@ -43,6 +43,7 @@ import com.oracle.objectfile.elf.ELFMachine;
 import com.oracle.objectfile.elf.dwarf.DwarfDebugInfo;
 import com.oracle.objectfile.elf.dwarf.DwarfSectionImpl;
 import com.oracle.objectfile.elf.dwarf.constants.DwarfSectionName;
+import com.oracle.objectfile.elf.dwarf.constants.DwarfLanguage;
 import com.oracle.objectfile.macho.MachOCpuType;
 import com.oracle.objectfile.macho.MachOObjectFile;
 
@@ -51,6 +52,17 @@ import jdk.graal.compiler.test.AddExports;
 
 @AddExports({"java.base/sun.nio.ch", "java.base/jdk.internal.ref"})
 public class MachODwarfCodeAddressTest {
+    @Test
+    public void testDebuggerClassDialect() {
+        for (ObjectFile.Format format : new ObjectFile.Format[]{ObjectFile.Format.ELF, ObjectFile.Format.MACH_O}) {
+            DwarfDebugInfo dwarf = new DwarfDebugInfo(ELFMachine.AArch64, ByteOrder.LITTLE_ENDIAN, format);
+            byte[] language = new byte[5];
+            int length = dwarf.getInfoSectionImpl().writeAttrLanguage(dwarf.getLanguageEncoding(), language, 0);
+            Assert.assertEquals(format == ObjectFile.Format.MACH_O ? DwarfLanguage.DW_LANG_C_plus_plus.value() : DwarfLanguage.DW_LANG_Java.value(), language[0]);
+            Assert.assertEquals(format == ObjectFile.Format.MACH_O ? 5 : 1, length);
+        }
+    }
+
     @Test
     public void testDarwinCodeAndHeapAddends() throws Exception {
         for (MachOCpuType cpu : new MachOCpuType[]{MachOCpuType.ARM64, MachOCpuType.X86_64}) {

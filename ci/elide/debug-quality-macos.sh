@@ -47,13 +47,18 @@ for spec in executable shared; do
   # Verifier failures remain failures; retain complete diagnostics alongside
   # independent source, inline and live-variable assertions.
   args=()
-  if [ "$spec" = executable ]; then args=(-o 'settings set target.run-args test'); fi
+  if [ "$spec" = executable ]; then
+    args=(-o 'settings set target.run-args test')
+  else
+    args=(-o "target modules add $image")
+  fi
   debugger=(lldb)
   if sudo -n true 2>/dev/null; then debugger=(sudo -n /usr/bin/lldb); fi
   # The dollar sign belongs to the Java nested-class name sent to LLDB.
   # shellcheck disable=SC2016
   "${debugger[@]}" --batch -o "target create $binary" "${args[@]}" \
-    -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint'" \
+    -o "target symbols add $dsym" \
+    -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint' --skip-prologue false" \
     -o run -o 'frame info' -o 'thread backtrace' -o 'frame select 1' -o 'frame variable value' \
     -o 'image lookup -t "debugquality.DebugQualityProbe$DataOnly"' \
     -o "command script import $out/debug_quality_lldb.py" -o debug-quality-check > "$out/$spec.lldb.txt" 2>&1
