@@ -32,7 +32,7 @@ jobs:
         run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm build --build-logs=silent --dependencies OBJECTFILE
       - name: Build the hosted regression suite
         working-directory: graal
-        run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm build --build-logs=silent --dependencies SVM_HOSTED_TESTS
+        run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm build --build-logs=silent
       - name: Run object and debug information regressions
         working-directory: graal
         run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm unittest ObjectFileLargeOffsetTest MachODwarfCodeAddressTest
