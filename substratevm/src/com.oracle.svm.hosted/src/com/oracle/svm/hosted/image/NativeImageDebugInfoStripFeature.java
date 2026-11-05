@@ -120,7 +120,7 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                 }
                 return true;
             } catch (IOException e) {
-                throw UserError.abort("Generation of separate debuginfo file failed", e);
+                throw UserError.abort(e, "Generation of separate debuginfo file failed: %s", e.getMessage());
             } catch (InterruptedException e) {
                 throw new InterruptImageBuilding("Interrupted during debuginfo file splitting of image " + imageName);
             }
@@ -171,7 +171,7 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                 }
                 return true;
             } catch (IOException e) {
-                throw UserError.abort("Generation of dSYM debug info bundle failed", e);
+                throw UserError.abort(e, "Generation of dSYM debug info bundle failed: %s", e.getMessage());
             } catch (InterruptedException e) {
                 throw new InterruptImageBuilding("Interrupted during debuginfo file splitting of image " + imageName);
             }
