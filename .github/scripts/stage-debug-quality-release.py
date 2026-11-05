@@ -8,9 +8,8 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import urllib.error
-import urllib.request
 from producer_artifact import download_artifact
+from public_release_http import exists as public_exists, sha256 as public_sha256
 
 SOURCE = 'aeca264c6eb37e07920819d43a6e1c93e122363a'
 VERSION = '25.5.5-elide.25'
@@ -95,21 +94,13 @@ def verify(output, require_unpublished=False, remote=False):
         raise ValueError('Unexpected staged release')
     if require_unpublished:
         url = PUBLIC_BASE + VERSION + '/org/graalvm/polyglot/polyglot/' + VERSION + '/polyglot-' + VERSION + '.pom'
-        try:
-            with urllib.request.urlopen(url, timeout=60):
-                raise ValueError('Version is already published; immutable releases must not be overwritten')
-        except urllib.error.HTTPError as error:
-            if error.code != 404:
-                raise
+        if public_exists(url):
+            raise ValueError('Version is already published; immutable releases must not be overwritten')
     def check(item):
         name, expected = item
         path = relative(name)
         if remote:
-            digest = hashlib.sha256()
-            with urllib.request.urlopen(PUBLIC_BASE + VERSION + '/' + path.as_posix(), timeout=120) as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b''):
-                    digest.update(block)
-            actual = digest.hexdigest()
+            actual = public_sha256(PUBLIC_BASE + VERSION + '/' + path.as_posix())
         else:
             actual = sha(output / VERSION / path)
         if actual != expected:
