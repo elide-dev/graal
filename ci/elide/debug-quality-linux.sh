@@ -88,5 +88,6 @@ test "$split_status" -ne 0
 grep -q 'Native debug command exited with code 42' "$out/split-failure.log"
 test ! -e "$out/stripped-after-failure"
 if [[ -f "$out/split-failure" ]]; then
-  readelf -S "$out/split-failure" | grep -q '\.debug_info'
+  readelf -S "$out/split-failure" > "$out/split-failure.sections.txt"
+  grep -q '\.debug_info' "$out/split-failure.sections.txt"
 fi
