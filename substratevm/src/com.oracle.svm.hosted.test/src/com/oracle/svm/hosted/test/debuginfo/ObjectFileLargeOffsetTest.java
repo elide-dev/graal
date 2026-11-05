@@ -41,6 +41,8 @@ import com.oracle.objectfile.LayoutDecisionMap;
 import com.oracle.objectfile.ObjectFile;
 import com.oracle.objectfile.elf.ELFMachine;
 import com.oracle.objectfile.elf.ELFObjectFile;
+import com.oracle.objectfile.macho.MachOCpuType;
+import com.oracle.objectfile.macho.MachOObjectFile;
 
 public class ObjectFileLargeOffsetTest {
     private static final byte[] PAYLOAD = new byte[]{0x12, 0x34, 0x56, 0x78};
@@ -97,6 +99,62 @@ public class ObjectFileLargeOffsetTest {
             Files.deleteIfExists(output);
             Files.delete(directory);
         }
+    }
+
+    private static MachOObjectFile machObjectWithGap(long offset) {
+        MachOObjectFile object = new MachOObjectFile(4096, MachOCpuType.ARM64);
+        ObjectFile.Segment segment = object.getSegments().iterator().next();
+        object.newUserDefinedSection(segment, "__debug_large", 8, new BasicProgbitsSectionImpl(PAYLOAD) {
+            @Override
+            public boolean isLoadable() {
+                return false;
+            }
+
+            @Override
+            public long getOrDecideOffset(Map<ObjectFile.Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
+                return offset;
+            }
+        });
+        return object;
+    }
+
+    @Test
+    public void testMachOffsetBeyondSignedInt() throws Exception {
+        long offset = 0x8000_0020L;
+        Path directory = Files.createTempDirectory("macho-large-offset");
+        Path output = directory.resolve("large.o");
+        try (FileChannel channel = FileChannel.open(output, StandardOpenOption.CREATE_NEW, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.SPARSE)) {
+            machObjectWithGap(offset).write(channel);
+            ByteBuffer header = read(channel, 0, 32);
+            Assert.assertEquals(0xfeedfacf, header.getInt(0));
+            int commands = header.getInt(16);
+            long commandOffset = 32;
+            int found = 0;
+            for (int i = 0; i < commands; i++) {
+                ByteBuffer command = read(channel, commandOffset, 8);
+                if (command.getInt(0) == 0x19) { // LC_SEGMENT_64
+                    ByteBuffer segment = read(channel, commandOffset, 72);
+                    for (int j = 0; j < segment.getInt(64); j++) {
+                        ByteBuffer section = read(channel, commandOffset + 72 + (long) j * 80, 80);
+                        if (Integer.toUnsignedLong(section.getInt(48)) == offset) {
+                            Assert.assertEquals(PAYLOAD.length, section.getLong(40));
+                            Assert.assertArrayEquals(PAYLOAD, read(channel, offset, PAYLOAD.length).array());
+                            found++;
+                        }
+                    }
+                }
+                commandOffset += command.getInt(4);
+            }
+            Assert.assertEquals("The Mach-O section offset must retain its unsigned high bit", 1, found);
+        } finally {
+            Files.deleteIfExists(output);
+            Files.delete(directory);
+        }
+    }
+
+    @Test
+    public void testMachOffsetBeyondUnsignedIntIsRejected() {
+        Assert.assertThrows(IllegalArgumentException.class, () -> machObjectWithGap(0x1_0000_0020L).bake(new ArrayList<>()));
     }
 
     @Test
