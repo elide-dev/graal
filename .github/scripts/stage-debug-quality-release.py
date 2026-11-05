@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from producer_artifact import download_artifact
 
-SOURCE = '8bea32659fab0310f5fb6973adcde9facc7d23fc'
+SOURCE = '16f0a47bfed9dc823c4f8e9906dec15cf61b216b'
 VERSION = '25.5.5-elide.25'
 PUBLIC_BASE = 'https://maven.elide.dev/gvm-elide/'
 
