@@ -57,7 +57,7 @@ for spec in executable shared; do
   # The dollar sign belongs to the Java nested-class name sent to LLDB.
   # shellcheck disable=SC2016
   "${debugger[@]}" --batch -o "target create $binary" "${args[@]}" \
-    -o "target symbols add $dsym" \
+    -o "target symbols add --shlib $image $dsym" \
     -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint' --skip-prologue false" \
     -o run -o 'frame info' -o 'thread backtrace' -o 'frame select 1' -o 'frame variable value' \
     -o 'image lookup -t "debugquality.DebugQualityProbe$DataOnly"' \
