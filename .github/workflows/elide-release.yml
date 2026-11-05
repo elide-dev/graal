@@ -540,9 +540,9 @@ jobs:
         run: |
           # mx maven-deploy runs mvn, which the runners do not have.
           if ! command -v mvn >/dev/null 2>&1; then
-            base="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
-            curl -sSfL -o "${RUNNER_TEMP}/maven.tar.gz" "${base}"
-            echo "$(curl -sSfL "${base}.sha512" | cut -d' ' -f1)  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -
+            base="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+            curl --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 -sSfL -o "${RUNNER_TEMP}/maven.tar.gz" "${base}"
+            echo "$(curl --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 -sSfL "${base}.sha512" | cut -d' ' -f1)  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -
             tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/maven.tar.gz"
             echo "${RUNNER_TEMP}/apache-maven-${MAVEN_VERSION}/bin" >> "${GITHUB_PATH}"
           fi
