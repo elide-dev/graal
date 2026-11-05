@@ -77,7 +77,7 @@ chmod +x "$out/failing-objcopy/objcopy"
 set +e
 PATH="$out/failing-objcopy:$PATH" \
   "$sdk/bin/native-image" -J-Xmx5g -J-XX:ActiveProcessorCount=4 -g -O2 \
-  -H:+ReportExceptionStackTraces -H:+StripDebugInfo -H:+TraceNativeToolUsage \
+  -H:+ReportExceptionStackTraces -H:+StripDebugInfo \
   -H:-SourceLevelDebug -H:+TrackNodeSourcePosition \
   -H:+DebugCodeInfoUseSourceMappings -H:DebugInfoSourceSearchPath="$out/src" \
   --initialize-at-build-time=debugquality -cp "$out/classes" debugquality.DebugQualityProbe \
@@ -86,6 +86,7 @@ split_status=$?
 set -e
 test "$split_status" -ne 0
 grep -q 'Native debug command exited with code 42' "$out/split-failure.log"
+grep -q 'controlled separate-debug write failure' "$out/split-failure.log"
 test ! -e "$out/stripped-after-failure"
 if [[ -f "$out/split-failure" ]]; then
   readelf -S "$out/split-failure" > "$out/split-failure.sections.txt"
