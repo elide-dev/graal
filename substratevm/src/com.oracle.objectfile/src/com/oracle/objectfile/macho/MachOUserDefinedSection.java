@@ -215,6 +215,20 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
         }
     }
 
+    /**
+     * DWARF code addresses use section relocations, as emitted by Darwin compilers. Their inline
+     * value is an object-file address, allowing dsymutil to find each function in the debug map.
+     */
+    public void markLocalCodeRelocationSite(int offset, String symbolName, long addend) {
+        ObjectFile.Symbol symbol = getOwner().getSymbolTable().getSymbol(symbolName);
+        assert symbol.isDefined() && symbol.isFunction();
+        long sectionAddress = (int) getOwner().getDecisionsTaken().get(symbol.getDefinedSection()).getDecidedValue(LayoutDecision.Kind.VADDR);
+        ByteBuffer.wrap(((ObjectFile.ProgbitsSectionImpl) impl).getContent()).order(getOwner().getByteOrder()).putLong(offset, sectionAddress + symbol.getDefinedOffset() + addend);
+        flags.add(SectionFlag.LOC_RELOC);
+        getOrCreateRelocationElement(0).add(MachORelocationInfo.createLocalRelocation(getOrCreateRelocationElement(0), this, offset,
+                        RelocationKind.DIRECT_8, symbolName));
+    }
+
     @Override
     public void markRelocationSite(int offset, ByteBuffer bb, RelocationKind k, String symbolName, long addend) {
         MachORelocationElement el = getOrCreateRelocationElement(addend);

@@ -307,6 +307,11 @@ final class MachORelocationInfo implements RelocationRecord, RelocationMethod {
 
     }
 
+    static MachORelocationInfo createLocalRelocation(MachORelocationElement containingElement, MachOSection relocatedSection, int offset, RelocationKind kind, String symbolName) {
+        return new MachORelocationInfo(containingElement, relocatedSection, offset, kind.getRelocationSize(),
+                        getMachORelocationType(relocatedSection, kind), symbolName, true, 0);
+    }
+
     public static int getEncodedSize() {
         return 8;
     }
@@ -325,8 +330,7 @@ final class MachORelocationInfo implements RelocationRecord, RelocationMethod {
             symbolNum = relocatedSection.getOwner().getSymbolTable().indexOf(sym);
         } else {
             // we're local, so use the section
-            symbolNum = relocatedSection.getOwner().getSections().indexOf(sym.getDefinedSection());
-            assert sym.getDefinedOffset() == 0 : "Relocation for non-external symbol with section base offset != 0 not supported";
+            symbolNum = relocatedSection.getOwner().getSections().indexOf(sym.getDefinedSection()) + 1;
         }
         if (log2length < 0 || log2length >= 4) {
             throw new IllegalArgumentException("Length must be in {1,2,4,8} bytes, so log2length must be in [0,3]");
