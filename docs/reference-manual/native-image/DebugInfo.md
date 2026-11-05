@@ -59,6 +59,7 @@ slightly differently and for some applications this can slow down execution.
 
 When you generate large amounts of debug information, the intermediate object file can exceed 2 GiB.
 Native Image writes this file using 64-bit file offsets without mapping the complete file into a single Java buffer.
+It bounds individual file writes to avoid duplicating large sections in native memory.
 ELF64 section offsets can exceed 4 GiB; object formats with unsigned 32-bit offset fields reject offsets outside their representable range.
 ELF relocation sections are emitted in bounded chunks and can exceed 2 GiB individually.
 Other sections backed by a single Java array remain limited by the maximum Java array size.
