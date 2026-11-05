@@ -537,7 +537,7 @@ public class CountedLoopInfo {
      */
     public boolean isConstantMaxTripCount() {
         // Avoid constructing a derived IV start unless its inputs are constant.
-        return getTripCountLimit() instanceof ConstantNode && getBodyIV().isConstantInit() && getLimitCheckedIV().isConstantStride() &&
+        return getTripCountLimit() instanceof ConstantNode && getLimitCheckedIV().isConstantInit() && getLimitCheckedIV().isConstantStride() &&
                         getBodyIVStart() instanceof ConstantNode;
     }
 
