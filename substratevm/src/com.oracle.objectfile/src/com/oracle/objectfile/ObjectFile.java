@@ -1354,8 +1354,17 @@ public abstract class ObjectFile {
                 long[] position = {offset};
                 ContentSink sink = buffer -> {
                     while (buffer.hasRemaining()) {
-                        int written = outputChannel.write(buffer, position[0]);
-                        position[0] = Math.addExact(position[0], written);
+                        // FileChannel copies heap buffers into temporary native buffers. Bound
+                        // ordinary sections as well as streamed sections to avoid section-sized
+                        // native allocations outside the image builder's Java heap.
+                        int limit = buffer.limit();
+                        buffer.limit(buffer.position() + Math.min(buffer.remaining(), 64 * 1024));
+                        try {
+                            int written = outputChannel.write(buffer, position[0]);
+                            position[0] = Math.addExact(position[0], written);
+                        } finally {
+                            buffer.limit(limit);
+                        }
                     }
                 };
                 if (content instanceof StreamedContent streamed) {

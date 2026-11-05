@@ -52,6 +52,37 @@ import com.oracle.objectfile.elf.ELFRelocationSection;
 
 public class ObjectFileStreamedContentTest {
     @Test
+    public void testContiguousSectionWritesAreBoundedAndHandleShortWrites() throws Exception {
+        byte[] bytes = new byte[5 * 64 * 1024 + 27];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) (i * 31 + 7);
+        }
+        ELFObjectFile object = new ELFObjectFile(4096, ELFMachine.X86_64);
+        object.setByteOrder(ByteOrder.LITTLE_ENDIAN);
+        ObjectFile.Section section = object.newUserDefinedSection(null, ".debug_contiguous", 8, new BasicProgbitsSectionImpl(bytes) {
+            @Override
+            public boolean isLoadable() {
+                return false;
+            }
+        });
+        Path output = Files.createTempFile("objectfile-bounded-writes", ".o");
+        try (FileChannel file = FileChannel.open(output, StandardOpenOption.READ, StandardOpenOption.WRITE);
+                        SparseZeroChannel channel = new SparseZeroChannel(file, null, 7001)) {
+            object.write(channel);
+            Assert.assertTrue("Heap-buffer writes must not request section-sized native copies", channel.maximumRequest <= 64 * 1024);
+            Assert.assertTrue("The fixture must exercise short writes", channel.positionedWrites > bytes.length / (64 * 1024));
+            long offset = (long) object.getDecisionsTaken().get(section).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            ByteBuffer actual = ByteBuffer.allocate(bytes.length);
+            while (actual.hasRemaining()) {
+                Assert.assertTrue(channel.read(actual, offset + actual.position()) > 0);
+            }
+            Assert.assertArrayEquals(bytes, actual.array());
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
     public void testSectionSizeBeyondSignedInt() throws Exception {
         long size = 0x8000_0020L;
         ByteBuffer zeroes = ByteBuffer.allocate(64 * 1024);
@@ -184,20 +215,36 @@ public class ObjectFileStreamedContentTest {
     private static final class SparseZeroChannel extends FileChannel {
         private final FileChannel delegate;
         private final ByteBuffer zeroes;
+        private final int maximumWrite;
+        private int maximumRequest;
+        private int positionedWrites;
 
         SparseZeroChannel(FileChannel delegate, ByteBuffer zeroes) {
+            this(delegate, zeroes, Integer.MAX_VALUE);
+        }
+
+        SparseZeroChannel(FileChannel delegate, ByteBuffer zeroes, int maximumWrite) {
             this.delegate = delegate;
             this.zeroes = zeroes;
+            this.maximumWrite = maximumWrite;
         }
 
         @Override
         public int write(ByteBuffer source, long position) throws IOException {
+            maximumRequest = Math.max(maximumRequest, source.remaining());
+            positionedWrites++;
             if (source == zeroes) {
                 int count = source.remaining();
                 source.position(source.limit());
                 return count;
             }
-            return delegate.write(source, position);
+            int limit = source.limit();
+            source.limit(source.position() + Math.min(source.remaining(), maximumWrite));
+            try {
+                return delegate.write(source, position);
+            } finally {
+                source.limit(limit);
+            }
         }
 
         @Override
