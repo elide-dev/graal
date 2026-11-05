@@ -23,13 +23,21 @@ jobs:
           assert artifact['workflow_run']['id']==41950210115
           assert artifact['workflow_run']['head_sha']=='b1a12a9419c0149e10574d75ecfe76d05f548a66'
           PY
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          repository: elide-dev/graal
-          github-token: ${{ github.token }}
-          run-id: 41950210115
-          artifact-ids: 13381503394
-          path: control
+          persist-credentials: false
+      - name: Download the exact earlier attempt through the artifact API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'.github/scripts')
+          from producer_artifact import download_artifact
+          download_artifact({'artifactId':13381503394,'artifact':'dist-linux-amd64',
+              'run':41950210115,'commit':'b1a12a9419c0149e10574d75ecfe76d05f548a66'},
+              'elide-dev/graal','control')
+          PY
       - name: Verify both original archives against their checksums
         working-directory: control
         run: sha256sum -c *.sha256
