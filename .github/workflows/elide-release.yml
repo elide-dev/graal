@@ -30,6 +30,10 @@ on:
         required: false
         default: false
         type: boolean
+      native_diagnostics:
+        description: Trace native debug tools during nonpublishing source inspection
+        type: boolean
+        default: false
       platform:
         description: "Platform subset for nonpublishing qualification"
         type: choice
@@ -48,6 +52,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  EXTRA_IMAGE_BUILDER_ARGUMENTS: ${{ inputs.native_diagnostics && '-H:+UnlockExperimentalVMOptions -H:+TraceNativeToolUsage -H:+ReportExceptionStackTraces -H:-UnlockExperimentalVMOptions' || '' }}
   GRAALJS_REPOSITORY: elide-dev/graaljs
   GRAALJS_REF: 5a538406fc647e9e44c43c9c6d9b90653f9eda1d  # elide-25.5.x; unchanged for elide.23
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
