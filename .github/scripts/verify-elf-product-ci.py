@@ -26,6 +26,7 @@ def ranges(part):
 for kind in ['product']:
  with image.open('rb') as f:
   elf=ELFFile(f);loaded=[(s.name,s['sh_addr'],s['sh_addr']+s['sh_size']) for s in elf.iter_sections() if s['sh_flags']&6==6 and s['sh_size']]
+ assert loaded, 'No loaded executable sections were available for range classification'
  with gzip.open(out/'verifier.txt.gz','rt') as f:text=f.read()
  check_verifier_completion(verifier_exit, text)
  checks=[];unknown=[];counts={}
@@ -67,4 +68,4 @@ for kind in ['product']:
  assert result['liveDiagnostics']==0
 
 
-assert counts or verifier_exit==0, 'Verifier failed without a classified diagnostic'
+assert (verifier_exit == 0) == (not counts), 'Verifier exit status does not match complete diagnostics'
