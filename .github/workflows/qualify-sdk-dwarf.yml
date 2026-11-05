@@ -1,5 +1,8 @@
 name: Verify final SDK DWARF with the packaged native producer
 on:
+  push:
+    branches: [codex/debug-quality-qualification]
+    paths: [.github/workflows/qualify-sdk-dwarf.yml]
   workflow_dispatch:
 permissions:
   contents: read
