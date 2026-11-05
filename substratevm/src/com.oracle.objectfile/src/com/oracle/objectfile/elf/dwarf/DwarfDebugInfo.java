@@ -134,6 +134,12 @@ public class DwarfDebugInfo extends DebugInfoBase {
      */
     public static final DwarfLanguage LANG_ENCODING = DwarfLanguage.DW_LANG_Java;
 
+    public DwarfLanguage getLanguageEncoding() {
+        // LLDB has no Java type-system plugin. Its native class model preserves our
+        // fields, inheritance, methods and Java source locations without changing code.
+        return getFormat() == ObjectFile.Format.MACH_O ? DwarfLanguage.DW_LANG_C_plus_plus : LANG_ENCODING;
+    }
+
     /* Register constants for AArch64. */
     public static final byte rheapbase_aarch64 = (byte) 27;
     public static final byte rthread_aarch64 = (byte) 28;

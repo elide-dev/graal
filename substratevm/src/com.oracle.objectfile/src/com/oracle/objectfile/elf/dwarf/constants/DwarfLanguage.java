@@ -28,9 +28,10 @@ package com.oracle.objectfile.elf.dwarf.constants;
 
 /*
  * DW_AT_language attribute has a range of pre-defined values but we
- * are only interested in Java.
+ * use Java for GDB and the equivalent native class model for LLDB on Darwin.
  */
 public enum DwarfLanguage {
+    DW_LANG_C_plus_plus((byte) 0x4),
     DW_LANG_Java((byte) 0xb);
 
     private final byte value;

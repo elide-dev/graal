@@ -304,8 +304,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.CLASS_CONSTANT_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
         String name = uniqueDebugString("JAVA");
@@ -403,8 +403,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -462,8 +462,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -697,8 +697,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = fileOwner == null ? AbbrevCode.TYPE_UNIT : AbbrevCode.TYPE_UNIT_FILES;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -766,8 +766,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -963,8 +963,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -1033,8 +1033,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.TYPE_UNIT;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
 
@@ -1134,8 +1134,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         }
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
         String name = classEntry.getFullFileName();
@@ -1791,8 +1791,8 @@ public class DwarfInfoSectionImpl extends DwarfSectionImpl {
         AbbrevCode abbrevCode = AbbrevCode.CLASS_UNIT_1;
         log(context, "  [0x%08x] <0> Abbrev Number %d", pos, abbrevCode.ordinal());
         pos = writeAbbrevCode(abbrevCode, buffer, pos);
-        log(context, "  [0x%08x]     language  %s", pos, "DW_LANG_Java");
-        pos = writeAttrLanguage(DwarfDebugInfo.LANG_ENCODING, buffer, pos);
+        log(context, "  [0x%08x]     language  %s", pos, dwarfSections.getLanguageEncoding());
+        pos = writeAttrLanguage(dwarfSections.getLanguageEncoding(), buffer, pos);
         log(context, "  [0x%08x]     use_UTF8", pos);
         pos = writeFlag(DwarfFlag.DW_FLAG_true, buffer, pos);
         String name = uniqueDebugString("JAVA");
