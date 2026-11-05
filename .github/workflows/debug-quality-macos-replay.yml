@@ -1,0 +1,62 @@
+name: Replay default Darwin debug peers
+on:
+  push:
+    branches: [codex/debug-quality-qualification]
+    paths: [.github/workflows/debug-quality-macos-replay.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: a73fc6ff75044d1dc71958f8e758faef1292b312
+          path: source
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          run-id: 41946815070
+          name: darwin-dwarf-diagnostic
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Verify and debug the exact retained default outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$GITHUB_WORKSPACE/evidence/probes"
+          cp source/ci/elide/debug_quality_lldb.py "$out/debug_quality_lldb.py"
+          chmod +x "$out/probe" "$out/harness"
+          test "$("$out/probe" test)" = '42:84'
+          test "$("$out/harness")" = 42
+          mkdir -p replay
+          shasum -a 256 "$out/probe" "$out/harness" "$out/libprobe.dylib" "$out"/*.dSYM/Contents/Resources/DWARF/* > replay/SHA256SUMS
+          for spec in executable shared; do
+            image="$out/probe"
+            binary="$out/probe"
+            args=(-o 'settings set target.run-args test')
+            if [ "$spec" = shared ]; then
+              image="$out/libprobe.dylib"
+              binary="$out/harness"
+              args=(-o "target modules add $image")
+            fi
+            dsym="$image.dSYM/Contents/Resources/DWARF/$(basename "$image")"
+            dwarfdump --uuid "$image" > "replay/$spec.image-uuid.txt"
+            dwarfdump --uuid "$dsym" > "replay/$spec.dsym-uuid.txt"
+            diff <(awk '{print $2,$3}' "replay/$spec.image-uuid.txt") <(awk '{print $2,$3}' "replay/$spec.dsym-uuid.txt")
+            dwarfdump --verify "$dsym" > "replay/$spec.verify.txt" 2>&1
+            sudo -n /usr/bin/lldb --batch -o "target create $binary" "${args[@]}" \
+              -o "target symbols add --shlib $image $dsym" \
+              -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint' --skip-prologue false" \
+              -o run -o 'thread backtrace' -o 'frame select 1' -o 'frame variable value' \
+              -o "command script import $out/debug_quality_lldb.py" -o debug-quality-check > "replay/$spec.lldb.txt" 2>&1
+            grep -q 'Optimized source, inline chain, live values and code-less declaration verified' "replay/$spec.lldb.txt"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: darwin-default-peer-replay
+          path: replay/
+          if-no-files-found: error
