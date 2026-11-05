@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -54,7 +53,6 @@ import com.oracle.objectfile.pecoff.PECoffObjectFile;
 
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.serviceprovider.GraalServices;
-import sun.nio.ch.DirectBuffer;
 
 /**
  * Abstract superclass for object files. An object file is a binary container for sections,
@@ -559,6 +557,19 @@ public abstract class ObjectFile {
         return ret;
     }
 
+    public static long nextIntegerMultiple(long start, int multipleOf) {
+        long remainder = Math.floorMod(start, multipleOf);
+        return remainder == 0 ? start : Math.addExact(start, multipleOf - remainder);
+    }
+
+    /** Convert a file offset to the bit pattern of an unsigned 32-bit object-format field. */
+    public static int unsignedFileOffset(long offset) {
+        if (offset < 0 || offset > 0xffff_ffffL) {
+            throw new IllegalArgumentException("Object-file offset does not fit an unsigned 32-bit field: " + offset);
+        }
+        return (int) offset;
+    }
+
     public static int nextIntegerMultipleWithCongruence(int start, int multipleOf, int congruentTo, int modulo) {
         int remainder = Math.floorMod(congruentTo - start, modulo);
         if (remainder == 0) {
@@ -685,10 +696,10 @@ public abstract class ObjectFile {
 
     public static class IntegerDecisionComparator implements Comparator<LayoutDecision> {
 
-        private int undecidedValue;
+        private long undecidedValue;
 
         public IntegerDecisionComparator(boolean undecidedIsLarge) {
-            this.undecidedValue = undecidedIsLarge ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+            this.undecidedValue = undecidedIsLarge ? Long.MAX_VALUE : Long.MIN_VALUE;
         }
 
         @Override
@@ -698,10 +709,10 @@ public abstract class ObjectFile {
              * Usually if we're searching for a maximum, we want null/undecided to be low, and if
              * we're searching for a minimum, we want null/undecided to be high.
              */
-            int off0 = (d0 == null || !d0.isTaken()) ? undecidedValue : (int) d0.getValue();
-            int off1 = (d1 == null || !d1.isTaken()) ? undecidedValue : (int) d1.getValue();
+            long off0 = (d0 == null || !d0.isTaken()) ? undecidedValue : ((Number) d0.getValue()).longValue();
+            long off1 = (d1 == null || !d1.isTaken()) ? undecidedValue : ((Number) d1.getValue()).longValue();
 
-            return Integer.compare(off0, off1);
+            return Long.compare(off0, off1);
         }
     }
 
@@ -738,8 +749,8 @@ public abstract class ObjectFile {
         }
     }
 
-    protected static int nextAvailableOffset(final Map<Element, LayoutDecisionMap> alreadyDecided) {
-        int ret = -1;
+    protected static long nextAvailableOffset(final Map<Element, LayoutDecisionMap> alreadyDecided) {
+        long ret = -1;
         List<LayoutDecision> maxOffsetDecisions = maximalDecisionValues(alreadyDecided, LayoutDecision.Kind.OFFSET, new IntegerDecisionComparator(false));
         // break ties using size (nulls to head)
         Collections.sort(maxOffsetDecisions, new SizeTiebreakComparator(alreadyDecided, false));
@@ -752,9 +763,9 @@ public abstract class ObjectFile {
             ret = 0;
         } else {
             assert alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.SIZE).isTaken();
-            int offset = (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.OFFSET).getValue();
+            long offset = (long) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.OFFSET).getValue();
             int size = (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.SIZE).getValue();
-            ret = offset + size;
+            ret = Math.addExact(offset, size);
         }
         return ret;
     }
@@ -809,7 +820,7 @@ public abstract class ObjectFile {
         }
     }
 
-    public static int defaultGetOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, Element el, int offsetHint) {
+    public static long defaultGetOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, Element el, long offsetHint) {
         LayoutDecision vaddrDecision = alreadyDecided.get(el).getDecision(LayoutDecision.Kind.VADDR);
         assert vaddrDecision == null || !vaddrDecision.isTaken() : "Pre-decided virtual addresses require reverse offset/virtual-address constraint handling";
         // Now we are free to worry about the modulo constraint during vaddr assignment only.
@@ -827,7 +838,7 @@ public abstract class ObjectFile {
     }
 
     public static int defaultGetOrDecideVaddr(Map<Element, LayoutDecisionMap> alreadyDecided, Element el, final int vaddrHint) {
-        int fileOffset = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
+        long fileOffset = (long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
         int nextAvailableVaddr = vaddrHint;
 
         Iterable<Element> onCurrentPage = el.getOwner().elementsMappedOnPage(vaddrHint, alreadyDecided);
@@ -838,11 +849,11 @@ public abstract class ObjectFile {
             // with any section mapped on the page, i.e if the page number of our
             // offset doesn't equal the page number of the *end* offset of that
             // section.
-            int existingOffset = (int) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            long existingOffset = (long) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int existingSize = (int) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.SIZE);
-            int existingEndPos = existingOffset + existingSize;
-            int endPageNum = existingEndPos >> el.getOwner().getPageSizeShift();
-            int ourPageNum = fileOffset >> el.getOwner().getPageSizeShift();
+            long existingEndPos = Math.addExact(existingOffset, existingSize);
+            long endPageNum = existingEndPos >> el.getOwner().getPageSizeShift();
+            long ourPageNum = fileOffset >> el.getOwner().getPageSizeShift();
             mustStartNewPage |= endPageNum != ourPageNum;
             if (mustStartNewPage) {
                 break;
@@ -850,7 +861,7 @@ public abstract class ObjectFile {
 
             // also ask the containing object file for any format-specific reasons
             // (think: flags) why mapping these guys on the same page would be bad
-            mustStartNewPage |= !el.getOwner().elementsCanSharePage(el, alreadyMapped, fileOffset, (int) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.OFFSET));
+            mustStartNewPage |= !el.getOwner().elementsCanSharePage(el, alreadyMapped, fileOffset, (long) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.OFFSET));
 
             if (mustStartNewPage) {
                 break;
@@ -873,7 +884,7 @@ public abstract class ObjectFile {
          * create juxtapositions between segments in the vaddr space.
          */
 
-        int myOffset = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
+        long myOffset = (long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
 
         // Note that we'll also start a new segment (explicit or implicit) if
         // - we're the first section in an explicit segment
@@ -910,13 +921,13 @@ public abstract class ObjectFile {
         }
 
         boolean canSharePageWithPredecessor = !(predElement instanceof Section) ||
-                        el.getOwner().elementsCanSharePage(el, predElement, myOffset, (int) alreadyDecided.get(predElement).getDecidedValue(LayoutDecision.Kind.OFFSET));
+                        el.getOwner().elementsCanSharePage(el, predElement, myOffset, (long) alreadyDecided.get(predElement).getDecidedValue(LayoutDecision.Kind.OFFSET));
         boolean predSectionIsAlloc = predElement.isLoadable();
 
         boolean requireModuloConstraint = firstSection || !predSectionIsAlloc || (!inAnySegment && predElement.isLoadable()) || !canSharePageWithPredecessor;
 
         int vaddr = !requireModuloConstraint ? nextIntegerMultiple(nextAvailableVaddr, el.getAlignment())
-                        : ObjectFile.nextIntegerMultipleWithCongruence(nextAvailableVaddr, el.getAlignment(), fileOffset % el.getOwner().getPageSize(), el.getOwner().getPageSize());
+                        : ObjectFile.nextIntegerMultipleWithCongruence(nextAvailableVaddr, el.getAlignment(), (int) (fileOffset % el.getOwner().getPageSize()), el.getOwner().getPageSize());
         nextAvailableVaddr = vaddr + el.getMemSize(alreadyDecided);
 
         return vaddr;
@@ -1127,7 +1138,7 @@ public abstract class ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             return defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
         }
 
@@ -1166,7 +1177,7 @@ public abstract class ObjectFile {
      * @param s1 one section
      * @param s2 another section
      */
-    protected boolean elementsCanSharePage(Element s1, Element s2, int offset1, int offset2) {
+    protected boolean elementsCanSharePage(Element s1, Element s2, long offset1, long offset2) {
         // we require that they are in the same pagesize region in offset-space
         boolean offsetSpaceCompatible = (offset1 >> getPageSizeShift() == offset2 >> getPageSizeShift());
 
@@ -1314,14 +1325,23 @@ public abstract class ObjectFile {
     @SuppressWarnings("try")
     public final void write(FileChannel outputChannel) {
         List<Element> sortedObjectFileElements = new ArrayList<>();
-        int totalSize = bake(sortedObjectFileElements);
+        long totalSize = bake(sortedObjectFileElements);
         try {
-            ByteBuffer buffer = outputChannel.map(MapMode.READ_WRITE, 0, totalSize);
-            try {
-                writeBuffer(sortedObjectFileElements, buffer);
-            } finally {
-                // unmap immediately
-                ((DirectBuffer) buffer).cleaner().clean();
+            for (Element element : sortedObjectFileElements) {
+                long offset = (long) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.OFFSET);
+                int expectedSize = (int) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.SIZE);
+                byte[] content = (byte[]) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.CONTENT);
+                if (content.length != expectedSize) {
+                    throw new IllegalStateException("For element " + element + ", expected size " + expectedSize + " but emitted size " + content.length);
+                }
+                ByteBuffer buffer = ByteBuffer.wrap(content);
+                while (buffer.hasRemaining()) {
+                    int written = outputChannel.write(buffer, offset);
+                    offset = Math.addExact(offset, written);
+                }
+            }
+            if (outputChannel.size() < totalSize) {
+                outputChannel.write(ByteBuffer.wrap(new byte[1]), totalSize - 1);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -1375,7 +1395,7 @@ public abstract class ObjectFile {
         return sb.toString();
     }
 
-    public int bake(List<Element> sortedObjectFileElements) {
+    public long bake(List<Element> sortedObjectFileElements) {
         /*
          * This is the main algorithm for writing headers and sections. We topologically sort the
          * graph of decisions, then force each one.
@@ -1633,7 +1653,7 @@ public abstract class ObjectFile {
             }
 
             Object valueDecided = null;
-            int offsetHint = nextAvailableOffset(decisionsTaken);
+            long offsetHint = nextAvailableOffset(decisionsTaken);
             /*
              * We need a default value for vaddr, i.e. the first vaddr that will be issued. We
              * decide it as follows:
@@ -1694,14 +1714,15 @@ public abstract class ObjectFile {
         sortedObjectFileElements.addAll(elements);
         Collections.sort(sortedObjectFileElements, new ElementComparatorByDecidedOffset(decisionsByElement));
 
-        int totalSize = getMinimumFileSize();
+        long totalSize = getMinimumFileSize();
         for (Element e : sortedObjectFileElements) {
             /*
              * Non-file-backed sections such as ELF NOBITS and Mach-O zerofill currently still
              * participate in the generic file-offset layout. Revisit this if their offsets become
              * observable outside this package's internal layout model.
              */
-            totalSize = Math.max(totalSize, (int) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue() + (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE));
+            totalSize = Math.max(totalSize, Math.addExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue(),
+                            (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE)));
         }
         return totalSize;
     }
@@ -1713,8 +1734,7 @@ public abstract class ObjectFile {
     public void writeBuffer(List<Element> sortedObjectFileElements, ByteBuffer out) {
         /* Emit each one! */
         for (Element e : sortedObjectFileElements) {
-            int off = (int) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue();
-            assert off != Integer.MAX_VALUE; // not allowed any more -- this was a broken approach
+            int off = Math.toIntExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue());
             out.position(off);
             int expectedSize = (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE);
             byte[] content = (byte[]) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.CONTENT);
@@ -1728,7 +1748,7 @@ public abstract class ObjectFile {
         }
     }
 
-    protected abstract int getMinimumFileSize();
+    protected abstract long getMinimumFileSize();
 
     public int getPageSize() {
         assert pageSize > 0 : "Must be initialized";
@@ -1764,10 +1784,10 @@ public abstract class ObjectFile {
             // i.e. can "float to the end"
             LayoutDecisionMap e1decisions = decisionsByElement.get(e1);
             LayoutDecision e1OffsetDecision = e1decisions.getDecision(LayoutDecision.Kind.OFFSET);
-            int e1offset = (e1OffsetDecision != null && e1OffsetDecision.isTaken()) ? (int) e1OffsetDecision.getValue() : Integer.MAX_VALUE;
+            long e1offset = (e1OffsetDecision != null && e1OffsetDecision.isTaken()) ? (long) e1OffsetDecision.getValue() : Long.MAX_VALUE;
             LayoutDecisionMap e2decisions = decisionsByElement.get(e2);
             LayoutDecision e2OffsetDecision = e2decisions.getDecision(LayoutDecision.Kind.OFFSET);
-            int e2offset = (e2OffsetDecision != null && e2OffsetDecision.isTaken()) ? (int) e2OffsetDecision.getValue() : Integer.MAX_VALUE;
+            long e2offset = (e2OffsetDecision != null && e2OffsetDecision.isTaken()) ? (long) e2OffsetDecision.getValue() : Long.MAX_VALUE;
             if (e1offset < e2offset) {
                 return -1;
             } else if (e1offset > e2offset) {

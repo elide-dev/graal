@@ -75,7 +75,7 @@ public class MachOStrtab extends MachOObjectFile.LinkEditElement {
     }
 
     @Override
-    public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+    public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
         return ObjectFile.defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
     }
 

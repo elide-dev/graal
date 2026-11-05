@@ -75,7 +75,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
     }
 
     @Override
-    public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+    public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
         /*
          * We have to be careful about our offset.
          *
@@ -85,7 +85,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
          *
          * - If we're the first section in the text segment, we should have offset at least 4096.
          */
-        int implOffset = impl.getOrDecideOffset(alreadyDecided, offsetHint);
+        long implOffset = impl.getOrDecideOffset(alreadyDecided, offsetHint);
         Segment ourSegment = getSegment();
         Segment prevSegment = null;
         Segment firstSegment = getOwner().getSegments().iterator().next();
@@ -99,7 +99,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
             assert prevSegment == firstSegment;
             if (implOffset < getOwner().getPageSize()) {
                 // we've hit the special case -- pad to 4096 while keeping congruence
-                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), implOffset, getOwner().getPageSize());
+                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) (implOffset % getOwner().getPageSize()), getOwner().getPageSize());
             }
         } else if (getSegment().get(0) == this && ourSegment == firstSegment) {
             if (implOffset < getOwner().getPageSize()) {
@@ -131,12 +131,12 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
         // we should already have decided our file offset
         Object offsetObj = alreadyDecided.get(this).getDecidedValue(LayoutDecision.Kind.OFFSET);
         assert offsetObj != null;
-        assert offsetObj instanceof Integer;
+        assert offsetObj instanceof Long;
         // test for the special case
         if (getSegment() == getOwner().getSegments().iterator().next() && getSegment().get(0) == this) {
             if (implVaddr < getOwner().getPageSize()) {
                 // choose the next congruent
-                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) offsetObj, getOwner().getPageSize());
+                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) ((long) offsetObj % getOwner().getPageSize()), getOwner().getPageSize());
             }
         }
         return implVaddr;

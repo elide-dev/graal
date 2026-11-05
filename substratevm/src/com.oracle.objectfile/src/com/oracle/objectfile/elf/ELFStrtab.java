@@ -95,7 +95,7 @@ public class ELFStrtab extends ELFSection implements Iterable<String> {
     }
 
     @Override
-    public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+    public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
         return ObjectFile.defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
     }
 

@@ -73,7 +73,7 @@ class DyLdInfoCommand extends MachOObjectFile.LoadCommand {
         out.write4Byte(0); // weak_bind size
         out.write4Byte(0); // lazy_bind off
         out.write4Byte(0); // lazy_bind size
-        out.write4Byte((int) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.OFFSET));
+        out.write4Byte(ObjectFile.unsignedFileOffset((long) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.OFFSET)));
         out.write4Byte((int) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.SIZE));
     }
 

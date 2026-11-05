@@ -261,7 +261,7 @@ public class ELFObjectFile extends ObjectFile {
     }
 
     @Override
-    protected boolean elementsCanSharePage(Element s1, Element s2, int off1, int off2) {
+    protected boolean elementsCanSharePage(Element s1, Element s2, long off1, long off2) {
         assert s1 instanceof ELFSection;
         assert s2 instanceof ELFSection;
         ELFSection es1 = (ELFSection) s1;
@@ -650,7 +650,7 @@ public class ELFObjectFile extends ObjectFile {
             contents.ident.abiVersion = (char) getAbiVersion();
             contents.version = getVersion();
             contents.entry = 0;
-            contents.shoff = (int) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            contents.shoff = (long) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.OFFSET);
             contents.flags = (int) getFlags();
             // NOTE: header size depends on ident contents (32/64)
             contents.ehsize = (short) contents.getWrittenSize();
@@ -676,7 +676,7 @@ public class ELFObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             return 0; // we're always at 0
         }
 
@@ -1000,7 +1000,7 @@ public class ELFObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             return defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
         }
 
@@ -1057,7 +1057,7 @@ public class ELFObjectFile extends ObjectFile {
                  */
                 assert s.getImpl().isLoadable() == es.getFlags().contains(ELFSectionFlag.ALLOC);
                 ent.flags = ObjectFile.flagSetAsLong(es.getFlags());
-                ent.fileOffset = (int) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.OFFSET);
+                ent.fileOffset = (long) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.OFFSET);
 
                 if (es.getFlags().contains(ELFSectionFlag.ALLOC) && runtimeDebugInfoGeneration) {
                     // For runtimeDebugInfoGeneration we allow virtualAddress to be set
@@ -1170,7 +1170,7 @@ public class ELFObjectFile extends ObjectFile {
     }
 
     @Override
-    protected int getMinimumFileSize() {
+    protected long getMinimumFileSize() {
         return 0;
     }
 

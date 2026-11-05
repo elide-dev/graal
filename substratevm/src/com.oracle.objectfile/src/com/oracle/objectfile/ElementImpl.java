@@ -51,7 +51,7 @@ public interface ElementImpl {
     /**
      * Implement this method to provide the offset this section should be placed at.
      */
-    int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint);
+    long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint);
 
     /**
      * Implement this method to provide the size of this section.
