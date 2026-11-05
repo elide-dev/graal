@@ -24,8 +24,10 @@
  */
 package com.oracle.svm.hosted.image;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.impl.InternalPlatform;
@@ -159,7 +161,8 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                     /* Generate a dSYM bundle with debug info before stripping the executable. */
                     String dsymName = imageName + dsymExtension;
                     Path dsymPath = outputDirectory.resolve(dsymName);
-                    executeDebugCommand(dsymutilExe, "-o", dsymPath.toString(), imageFilePath);
+                    /* Java layout definitions and their declarations must not be uniqued as C++ ODR types. */
+                    executeDebugCommand(dsymutilExe, "--no-odr", "-o", dsymPath.toString(), imageFilePath);
                     BuildArtifacts.singleton().add(ArtifactType.DEBUG_INFO, dsymPath);
                 }
                 if (SubstrateOptions.DeleteLocalSymbols.getValue()) {
@@ -179,9 +182,14 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
     }
 
     private static void executeDebugCommand(String... arguments) throws IOException, InterruptedException {
-        int exitCode = FileUtils.executeCommand(arguments);
-        if (exitCode != 0) {
-            throw new IOException("Native debug command exited with code " + exitCode + ": " + String.join(" ", arguments));
+        ProcessBuilder command = FileUtils.prepareCommand(Arrays.asList(arguments), null).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        FileUtils.traceCommand(command);
+        Process process = command.start();
+        try (Closeable _ = process::destroy) {
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("Native debug command exited with code " + exitCode + ": " + String.join(" ", arguments));
+            }
         }
     }
 

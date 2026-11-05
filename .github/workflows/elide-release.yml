@@ -455,6 +455,25 @@ jobs:
           path: debug-quality-macos/
           if-no-files-found: error
 
+      - name: Install the published LLVM 23 debug linker (macOS)
+        if: runner.os == 'macOS'
+        run: bash ./graal/ci/elide/install-debug-dsymutil.sh "${RUNNER_TEMP}/debug-quality-dsymutil"
+      - name: Qualify default Native Image output with the LLVM debug linker (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dsymutil --version
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          bash ./graal/ci/elide/debug-quality-macos.sh "${home}" debug-quality-macos-llvm
+      - name: Retain LLVM macOS debug quality evidence
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-macos-llvm-${{ github.sha }}
+          path: |
+            debug-quality-macos-llvm/
+            ${{ runner.temp }}/debug-quality-dsymutil/version.txt
+          if-no-files-found: error
+
       # The Maven platform builds everything, for maven-deploy; the others, only what the natives
       # come from.
       - name: Build languages (Unix)

@@ -5,6 +5,7 @@ out=${2:?qualification output}
 scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
+python3 -m pip install --only-binary=:all: --require-hashes --target "$out/python" -r "$scripts/debug-quality-python.txt"
 mkdir -p "$out/src/debugquality"
 cp "$scripts/DebugQualityProbe.java" "$out/DebugQualityProbe.java"
 cp "$scripts/debug_quality_lldb.py" "$out/debug_quality_lldb.py"
@@ -53,6 +54,12 @@ for spec in executable shared; do
   fi
   debugger=(lldb)
   if sudo -n true 2>/dev/null; then debugger=(sudo -n /usr/bin/lldb); fi
+  PYTHONPATH="$out/python${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 "$scripts/check_macho_reference_graph.py" "$dsym" "$out/$spec.references.json"
+  "${debugger[@]}" --batch "${create[@]}" \
+    -o 'script bp = lldb.debugger.GetSelectedTarget().BreakpointCreateByLocation("DebugQualityProbe.java", 24); assert bp.IsValid() and bp.GetNumLocations() > 0; print("Source file breakpoint verified")' \
+    > "$out/$spec.source-breakpoint.txt" 2>&1
+  grep -q '^Source file breakpoint verified$' "$out/$spec.source-breakpoint.txt"
   # The dollar sign belongs to the Java nested-class name sent to LLDB.
   # shellcheck disable=SC2016
   "${debugger[@]}" --batch "${create[@]}" -o 'image list' \
