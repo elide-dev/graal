@@ -1325,6 +1325,14 @@ public final class GCImpl implements GC {
         return greyToBlackObjectVisitor;
     }
 
+    @Uninterruptible(reason = "Clean retained mark stack memory.")
+    void cleanUnusedNativeMemory() {
+        assert markStack.isEmpty();
+        assert arrayMarkStack.isEmpty();
+        markStack.clean();
+        arrayMarkStack.clean();
+    }
+
     private static class CollectionVMOperation extends NativeVMOperation {
         private final NoAllocationVerifier noAllocationVerifier = NoAllocationVerifier.factory("CollectionVMOperation", false);
 
