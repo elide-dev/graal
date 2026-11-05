@@ -2926,7 +2926,9 @@ lib_jvm_preserved_modules = [
     'jdk.net',
 ]
 
-lib_jvm_experimental_build_args = (['-H:Preserve=module=' + module for module in lib_jvm_preserved_modules] +
+# Keep 'resource' available for application filesystem providers.
+lib_jvm_experimental_build_args = (['-H:ResourceProtocol=org.graalvm.nativeimage.libjvm.resource'] +
+                                   ['-H:Preserve=module=' + module for module in lib_jvm_preserved_modules] +
                                    ['-H:Preserve=package=' + pkg for pkg in lib_jvm_preserved_packages])
 if mx.is_linux():
     lib_jvm_experimental_build_args += [
