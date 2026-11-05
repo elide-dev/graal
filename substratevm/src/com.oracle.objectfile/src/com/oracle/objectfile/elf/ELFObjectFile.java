@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -655,7 +655,7 @@ public class ELFObjectFile extends ObjectFile {
             // NOTE: header size depends on ident contents (32/64)
             contents.ehsize = (short) contents.getWrittenSize();
             contents.shentsize = (short) (new SectionHeaderEntryStruct()).getWrittenSize();
-            int shtSize = (int) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.SIZE);
+            int shtSize = Math.toIntExact((long) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.SIZE));
             assert shtSize % contents.shentsize == 0;
             contents.shnum = (short) (shtSize / contents.shentsize);
             // how to deduce index of shstrtab in the SHT? it's
@@ -681,7 +681,7 @@ public class ELFObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             int size = (new Struct(getType(), getMachine())).getWrittenSize();
             assert sizeHint == -1 || sizeHint == size;
             return size;
@@ -974,7 +974,7 @@ public class ELFObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             // our size is:
             // one per section in the file, plus one dummy, times the size of one entry
             SectionHeaderEntryStruct s = new SectionHeaderEntryStruct();
@@ -1067,7 +1067,7 @@ public class ELFObjectFile extends ObjectFile {
                     ent.virtualAddress = 0L;
                 }
 
-                ent.sectionSize = (int) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.SIZE);
+                ent.sectionSize = (long) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.SIZE);
                 if (ent.sectionSize == 0) {
                     // For NobitsSections we have to use getMemSize as sectionSize
                     ent.sectionSize = es.getMemSize(alreadyDecided);

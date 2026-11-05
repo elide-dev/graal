@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -488,7 +488,7 @@ public final class MachOObjectFile extends ObjectFile {
 
             int loadCommandsSizeInBytes = 0;
             for (LoadCommand cmd : loadCommands) {
-                loadCommandsSizeInBytes += (int) alreadyDecided.get(cmd).getDecidedValue(LayoutDecision.Kind.SIZE);
+                loadCommandsSizeInBytes += Math.toIntExact((long) alreadyDecided.get(cmd).getDecidedValue(LayoutDecision.Kind.SIZE));
             }
             out.pushSeek(0);
             new HeaderStruct(getOwner().getByteOrder() == nativeOrder ? MAGIC : CIGAM, cpuType, MachOObjectFile.this.cpuSubType, loadCommands.size(),
@@ -499,7 +499,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return HeaderStruct.HEADER_SIZE;
         }
 
@@ -1228,13 +1228,13 @@ public final class MachOObjectFile extends ObjectFile {
         protected void writePayload(OutputAssembler out, Map<Element, LayoutDecisionMap> alreadyDecided) {
             // our payload is simply the offset and size of our element
             long elOffset = (long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
-            int elSize = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE);
+            int elSize = Math.toIntExact((long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE));
             out.write4Byte(unsignedFileOffset(elOffset));
             out.write4Byte(elSize);
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return getWrittenSize(8); // 4 + 4 bytes
         }
     }
@@ -1306,7 +1306,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(java.util.Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(java.util.Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             Object decidedContent = alreadyDecided.get(this).getDecidedValue(LayoutDecision.Kind.CONTENT);
             assert decidedContent != null;
             return ((byte[]) decidedContent).length;
@@ -1392,7 +1392,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             // our size is fixed: one entry for every text section
             int count = 0;
             for (Section s : getSections()) {
@@ -1422,7 +1422,7 @@ public final class MachOObjectFile extends ObjectFile {
             for (int i = 0; i < decisionsOfInterest.size(); ++i) {
                 LayoutDecision decision = decisionsOfInterest.get(i);
                 ent.fileOffset = (long) decision.getValue();
-                long fileSize = (int) alreadyDecided.get(decision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE);
+                long fileSize = Math.toIntExact((long) alreadyDecided.get(decision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE));
                 long sectionEndInFile = Math.addExact(ent.fileOffset, fileSize);
                 Long nextOffset = (i + 1 < decisionsOfInterest.size()) ? (long) decisionsOfInterest.get(i + 1).getValue() : null;
                 long nextPageBoundary = nextIntegerMultiple(sectionEndInFile, getPageSize());
@@ -1468,11 +1468,11 @@ public final class MachOObjectFile extends ObjectFile {
         @Override
         protected void writePayload(OutputAssembler out, Map<Element, LayoutDecisionMap> alreadyDecided) {
             out.write4Byte(unsignedFileOffset((long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET)));
-            out.write4Byte((int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE));
+            out.write4Byte(Math.toIntExact((long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE)));
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return getWrittenSize(8); // i.e. two words
         }
     }
@@ -1656,7 +1656,7 @@ public final class MachOObjectFile extends ObjectFile {
             long symtabOffset = (long) alreadyDecided.get(symtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int symtabEntriesCount = symtab.getEntryCount();
             long strtabOffset = (long) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
-            int strtabSize = (int) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.SIZE);
+            int strtabSize = Math.toIntExact((long) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.SIZE));
             writePayloadFields(out, unsignedFileOffset(symtabOffset), symtabEntriesCount, unsignedFileOffset(strtabOffset), strtabSize);
         }
 
@@ -1674,7 +1674,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return getWrittenSize(getPayloadWrittenSize());
         }
 
@@ -1739,7 +1739,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return getWrittenSize(PAYLOAD_SIZE);
         }
     }
@@ -1953,7 +1953,7 @@ public final class MachOObjectFile extends ObjectFile {
 
             long fileOffset = (firstElementByOffset == null) ? 0 : (long) alreadyDecided.get(firstElementByOffset).getDecidedValue(LayoutDecision.Kind.OFFSET);
 
-            long maxOffset = (maxOffsetDecision == null) ? 0 : ((long) maxOffsetDecision.getValue() + (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE));
+            long maxOffset = (maxOffsetDecision == null) ? 0 : ((long) maxOffsetDecision.getValue() + Math.toIntExact((long) alreadyDecided.get(maxOffsetDecision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE)));
             long fileSize = maxOffset - minOffset;
 
             int effectiveMinVaddr = segmentVaddrGivenFirstSectionVaddr(minVaddr);
@@ -2044,7 +2044,7 @@ public final class MachOObjectFile extends ObjectFile {
                                 s.getName(),
                                 s.destinationSegmentName,
                                 s.getElement().isReferenceable() ? (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.VADDR) : 0,
-                                (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.SIZE),
+                                Math.toIntExact((long) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.SIZE)),
                                 unsignedFileOffset((long) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET)),
                                 logAlignment,
                                 ourRelocs == null ? 0 : unsignedFileOffset((long) alreadyDecided.get(ourRelocs).getDecidedValue(LayoutDecision.Kind.OFFSET) + (long) ourRelocs.startIndexFor(s) * ourRelocs.encodedEntrySize()),
@@ -2073,7 +2073,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return getWrittenSize(PAYLOAD_HEADER_SIZE + sectionsInSegment() * SectionInfoStruct.DEFAULT_SIZE);
         }
 

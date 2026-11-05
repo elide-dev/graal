@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -356,7 +356,7 @@ public class PECoffObjectFile extends ObjectFile {
         public byte[] getOrDecideContent(Map<Element, LayoutDecisionMap> alreadyDecided, byte[] contentHint) {
 
             // Calculate Section Count
-            int sectSize = (int) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.SIZE);
+            int sectSize = Math.toIntExact((long) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.SIZE));
             hdr.setSectionCount(sectSize / IMAGE_SECTION_HEADER.totalsize);
 
             // Set offset of symbol table
@@ -374,7 +374,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return IMAGE_FILE_HEADER.totalsize;
         }
 
@@ -516,7 +516,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return (elements.sectionsCount()) * IMAGE_SECTION_HEADER.totalsize;
         }
 
@@ -540,7 +540,7 @@ public class PECoffObjectFile extends ObjectFile {
 
                 // Set offset and size of section
                 ent.setOffset(unsignedFileOffset((long) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.OFFSET)));
-                int sectionSize = (int) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.SIZE);
+                int sectionSize = Math.toIntExact((long) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.SIZE));
 
                 if (sectionSize == 0) {
                     // For NobitsSections we have to use getMemSize as sectionSize
@@ -628,7 +628,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return symtab.getDirectiveSize();
         }
     }

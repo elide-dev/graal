@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -80,15 +80,15 @@ public final class LayoutDecision implements Comparable<LayoutDecision> {
 
     void setValue(Object value) {
         assert this.value == null; // can't re-set
-        assert value instanceof Integer || value instanceof Long || value instanceof byte[];
+        assert value instanceof Integer || value instanceof Long || value instanceof byte[] || value instanceof ObjectFile.StreamedContent;
         this.value = normalizeValue(value);
     }
 
     private Object normalizeValue(Object candidate) {
-        if (kind == Kind.OFFSET && candidate instanceof Number number) {
+        if ((kind == Kind.OFFSET || kind == Kind.SIZE) && candidate instanceof Number number) {
             long offset = number.longValue();
             if (offset < 0) {
-                throw new IllegalArgumentException("Negative object-file offset: " + offset);
+                throw new IllegalArgumentException("Negative object-file offset or size: " + offset);
             }
             return offset;
         }

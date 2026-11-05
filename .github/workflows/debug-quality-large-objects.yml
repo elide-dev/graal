@@ -1,7 +1,7 @@
 name: Qualify large debug object file offsets
 on:
   push:
-    branches: [codex/debug-quality-large-objects]
+    branches: [codex/debug-quality-large-objects, codex/debug-quality-streamed-sections]
   workflow_dispatch:
 permissions:
   contents: read

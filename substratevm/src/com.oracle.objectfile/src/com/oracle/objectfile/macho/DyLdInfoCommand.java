@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -59,7 +59,7 @@ class DyLdInfoCommand extends MachOObjectFile.LoadCommand {
     }
 
     @Override
-    public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+    public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
         return getWrittenSize(10 * 4); // content is a fixed 10 32-bit elements
     }
 
@@ -74,7 +74,7 @@ class DyLdInfoCommand extends MachOObjectFile.LoadCommand {
         out.write4Byte(0); // lazy_bind off
         out.write4Byte(0); // lazy_bind size
         out.write4Byte(ObjectFile.unsignedFileOffset((long) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.OFFSET)));
-        out.write4Byte((int) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.SIZE));
+        out.write4Byte(Math.toIntExact((long) alreadyDecided.get(export).getDecidedValue(LayoutDecision.Kind.SIZE)));
     }
 
 }

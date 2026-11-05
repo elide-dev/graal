@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@ package com.oracle.objectfile.elf;
 
 import static java.lang.Math.toIntExact;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -261,26 +262,63 @@ public class ELFRelocationSection extends ELFSection {
     @Override
     public byte[] getOrDecideContent(Map<Element, LayoutDecisionMap> alreadyDecided, byte[] contentHint) {
         /* We blat out our list of relocation records. */
-        OutputAssembler oa = AssemblyBuffer.createOutputAssembler(ByteBuffer.allocate(entries.size() * new EntryStruct().getWrittenSize()).order(getOwner().getByteOrder()));
+        OutputAssembler oa = AssemblyBuffer.createOutputAssembler(ByteBuffer.allocate(Math.toIntExact(contentSize())).order(getOwner().getByteOrder()));
         for (Entry ent : entries.keySet()) {
-            long offset = !isDynamic() ? ent.offset : (int) alreadyDecided.get(ent.section).getDecidedValue(LayoutDecision.Kind.VADDR) + ent.offset;
-            long info;
-            int symIndex = syms.indexOf(ent.sym);
-            assert symIndex >= 0 : "symbol not found";
-            switch (getOwner().getFileClass()) {
-                case ELFCLASS32:
-                    info = ((symIndex << 8) & 0xffffffffL) + (ent.t.toLong() & 0xffL);
-                    break;
-                case ELFCLASS64:
-                    info = (((long) symIndex) << 32) + (ent.t.toLong() & 0xffffffffL);
-                    break;
-                default:
-                    throw new RuntimeException(getOwner().getFileClass().toString());
-            }
-            long addend = ent.addend;
-            new EntryStruct(offset, info, addend).write(oa);
+            writeEntry(ent, alreadyDecided, oa);
         }
         return oa.getBlob();
+    }
+
+    private long contentSize() {
+        return Math.multiplyExact((long) entries.size(), new EntryStruct().getWrittenSize());
+    }
+
+    private void writeEntry(Entry ent, Map<Element, LayoutDecisionMap> alreadyDecided, OutputAssembler oa) {
+        long offset = !isDynamic() ? ent.offset : (int) alreadyDecided.get(ent.section).getDecidedValue(LayoutDecision.Kind.VADDR) + ent.offset;
+        long info;
+        int symIndex = syms.indexOf(ent.sym);
+        assert symIndex >= 0 : "symbol not found";
+        switch (getOwner().getFileClass()) {
+            case ELFCLASS32:
+                info = ((symIndex << 8) & 0xffffffffL) + (ent.t.toLong() & 0xffL);
+                break;
+            case ELFCLASS64:
+                info = (((long) symIndex) << 32) + (ent.t.toLong() & 0xffffffffL);
+                break;
+            default:
+                throw new RuntimeException(getOwner().getFileClass().toString());
+        }
+        long addend = ent.addend;
+        new EntryStruct(offset, info, addend).write(oa);
+    }
+
+    @Override
+    public ObjectFile.StreamedContent getOrDecideStreamedContent(Map<Element, LayoutDecisionMap> alreadyDecided) {
+        return new ObjectFile.StreamedContent() {
+            @Override
+            public long size() {
+                return contentSize();
+            }
+
+            @Override
+            public void write(ObjectFile.ContentSink sink) throws IOException {
+                int entrySize = new EntryStruct().getWrittenSize();
+                ByteBuffer buffer = ByteBuffer.allocate(64 * 1024 / entrySize * entrySize).order(getOwner().getByteOrder());
+                OutputAssembler oa = AssemblyBuffer.createOutputAssembler(buffer);
+                for (Entry ent : entries.keySet()) {
+                    if (buffer.remaining() < entrySize) {
+                        buffer.flip();
+                        sink.write(buffer);
+                        buffer.clear();
+                    }
+                    writeEntry(ent, alreadyDecided, oa);
+                }
+                if (buffer.position() != 0) {
+                    buffer.flip();
+                    sink.write(buffer);
+                }
+            }
+        };
     }
 
     @Override
@@ -289,8 +327,8 @@ public class ELFRelocationSection extends ELFSection {
     }
 
     @Override
-    public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
-        return entries.size() * (new EntryStruct().getWrittenSize());
+    public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
+        return contentSize();
     }
 
     @Override
