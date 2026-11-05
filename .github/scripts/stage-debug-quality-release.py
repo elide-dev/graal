@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import urllib.error
 import urllib.request
+from producer_artifact import download_artifact
 
 SOURCE = 'b1a12a9419c0149e10574d75ecfe76d05f548a66'
 VERSION = '25.5.5-elide.25'
@@ -36,8 +37,7 @@ def download(package, destination):
         '--json', 'headSha,conclusion'], text=True))
     if metadata['headSha'] != package['commit'] or metadata['conclusion'] != 'success':
         raise ValueError('Expected the exact successful producer build')
-    subprocess.run(['gh', 'run', 'download', str(package['run']), '-R', 'elide-dev/graal',
-                    '-n', package['artifact'], '-D', str(destination)], check=True)
+    download_artifact(package, 'elide-dev/graal', destination)
 
 
 def stage(catalog_path, output):
