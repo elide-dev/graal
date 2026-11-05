@@ -1,21 +1,21 @@
 {
   "linux-amd64": {
     "sdk": {
-      "run": 42017951484,
-      "commit": "aeca264c6eb37e07920819d43a6e1c93e122363a",
+      "run": 42050803674,
+      "commit": "a4175e7179efad06e902c9dcbff5c00875f035ef",
       "artifact": "dist-linux-amd64",
       "file": "graalvm-ee-25.5.5-elide.25-linux-amd64.tar.gz",
-      "sha256": "3d7f5a9a9ed6ef8cf31b55f95bc23f6c243f00829c7ef09d892bbf4798601a77",
+      "sha256": "d747407d36f54870cf321b29f876fa3b5cbb3d809793a150fae524b20f77ecd0",
       "ceFile": "graalvm-ce-25.5.5-elide.25-linux-amd64.tar.gz",
-      "ceSha256": "9e40fb47368c8f32eb4034fabe2d68f3491ec05009d4570527a86a780c768179",
-      "artifactId": 13414070901
+      "ceSha256": "396b9d055aea4a4171258028bd5e71dda553d08caba5d8524135ce6d2fee0d85",
+      "artifactId": 13428764182
     },
     "maven": {
-      "run": 42033125388,
-      "commit": "2c1cfb1b63208700be38850d7501f66ec024bc24",
+      "run": 42064066587,
+      "commit": "6374396f1fe0049b04a62f125e044fe5e1803aff",
       "artifact": "maven-debug-quality",
-      "sha256": "8c80cabfe2da48d0744e68c461609846499cc48daba3c26c08546d0cc9afe339",
-      "artifactId": 13417376051
+      "sha256": "31afd0cfac5c3222195dddfa972637c6c14bec44a5f74899926e7f8b01e98248",
+      "artifactId": 13431169932
     },
     "r8": {
       "run": 41917878782,
@@ -36,21 +36,21 @@
   },
   "linux-arm64": {
     "sdk": {
-      "run": 42017955893,
-      "commit": "aeca264c6eb37e07920819d43a6e1c93e122363a",
+      "run": 42050809560,
+      "commit": "a4175e7179efad06e902c9dcbff5c00875f035ef",
       "artifact": "dist-linux-aarch64",
       "file": "graalvm-ee-25.5.5-elide.25-linux-aarch64.tar.gz",
-      "sha256": "b131c354fb26737ffdadea558b8569c9dde49deead840f717e4dca20e3319de9",
+      "sha256": "d8e3fe7981f76029a213639a6350038b310343aca1e220552647a9f783fd018d",
       "ceFile": "graalvm-ce-25.5.5-elide.25-linux-aarch64.tar.gz",
-      "ceSha256": "643cdd8ee5b072f082ad2fcf9d3fc1bf0b5459eb5c817355832e5a8c4d0f9c63",
-      "artifactId": 13413160456
+      "ceSha256": "3df8f35cf11c8517013a4b3f507f39c0f6282c919a52defdc5fabc43740ef7ae",
+      "artifactId": 13429728719
     },
     "maven": {
-      "run": 42033125388,
-      "commit": "2c1cfb1b63208700be38850d7501f66ec024bc24",
+      "run": 42064066587,
+      "commit": "6374396f1fe0049b04a62f125e044fe5e1803aff",
       "artifact": "maven-debug-quality",
-      "sha256": "8c80cabfe2da48d0744e68c461609846499cc48daba3c26c08546d0cc9afe339",
-      "artifactId": 13417376051
+      "sha256": "31afd0cfac5c3222195dddfa972637c6c14bec44a5f74899926e7f8b01e98248",
+      "artifactId": 13431169932
     },
     "r8": {
       "run": 41917878782,
@@ -71,21 +71,21 @@
   },
   "macos-arm64": {
     "sdk": {
-      "run": 42017961127,
-      "commit": "aeca264c6eb37e07920819d43a6e1c93e122363a",
+      "run": 42050814908,
+      "commit": "a4175e7179efad06e902c9dcbff5c00875f035ef",
       "artifact": "dist-macos-aarch64",
       "file": "graalvm-ee-25.5.5-elide.25-macos-aarch64.tar.gz",
-      "sha256": "56b6d88cee39ae67a8caf8d3a8cee4daa84c39a580de0a7913140a110d63df18",
+      "sha256": "a7f355291daaf79ce842ca586beca91272b234b3a48972fe2dca6aab1f98e293",
       "ceFile": "graalvm-ce-25.5.5-elide.25-macos-aarch64.tar.gz",
-      "ceSha256": "17bfa3a1cbe76a75f8fbcc2fea69125185d8d0258d04734d87cd68e5e25a4264",
-      "artifactId": 13413058722
+      "ceSha256": "f0ada44c16f0d888fb02faf97936e67a508c26d577be55b0989d863307ac8d10",
+      "artifactId": 13428724950
     },
     "maven": {
-      "run": 42033125388,
-      "commit": "2c1cfb1b63208700be38850d7501f66ec024bc24",
+      "run": 42064066587,
+      "commit": "6374396f1fe0049b04a62f125e044fe5e1803aff",
       "artifact": "maven-debug-quality",
-      "sha256": "8c80cabfe2da48d0744e68c461609846499cc48daba3c26c08546d0cc9afe339",
-      "artifactId": 13417376051
+      "sha256": "31afd0cfac5c3222195dddfa972637c6c14bec44a5f74899926e7f8b01e98248",
+      "artifactId": 13431169932
     },
     "r8": {
       "run": 41917878782,
@@ -106,21 +106,21 @@
   },
   "windows-amd64": {
     "sdk": {
-      "run": 42017965633,
-      "commit": "aeca264c6eb37e07920819d43a6e1c93e122363a",
+      "run": 42050820679,
+      "commit": "a4175e7179efad06e902c9dcbff5c00875f035ef",
       "artifact": "dist-windows-amd64",
       "file": "graalvm-ee-25.5.5-elide.25-windows-amd64.zip",
-      "sha256": "25d635e9b810d6d54b2c54ac4ff14c0b2e57942371feb87010e7a56d477f3ec1",
+      "sha256": "fd6ecaf4b8f48caaef872efe4b4909f6fe2c136bca031df3ef1893915ec01f8b",
       "ceFile": "graalvm-ce-25.5.5-elide.25-windows-amd64.zip",
-      "ceSha256": "4e6b5868cb6c3f2f60ec756cc1840d4ffc3531b66dd922608c4d9a3a701c33fa",
-      "artifactId": 13412540779
+      "ceSha256": "adcb10186f7582daa8cdaf4379b18da5a4f3c4bb0cc0f854327bc211222a264d",
+      "artifactId": 13429821405
     },
     "maven": {
-      "run": 42033125388,
-      "commit": "2c1cfb1b63208700be38850d7501f66ec024bc24",
+      "run": 42064066587,
+      "commit": "6374396f1fe0049b04a62f125e044fe5e1803aff",
       "artifact": "maven-debug-quality",
-      "sha256": "8c80cabfe2da48d0744e68c461609846499cc48daba3c26c08546d0cc9afe339",
-      "artifactId": 13417376051
+      "sha256": "31afd0cfac5c3222195dddfa972637c6c14bec44a5f74899926e7f8b01e98248",
+      "artifactId": 13431169932
     },
     "r8": {
       "run": 41917878782,
