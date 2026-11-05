@@ -1,0 +1,39 @@
+name: Verify final SDK DWARF with the packaged native producer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux-amd64, linux-arm64]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install the pinned ELF reader
+        run: |
+          python3 -m pip install --only-binary=:all: --require-hashes -r .github/qualification/debug-quality-python.txt
+      - name: Verify the exact final producer evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/qualify-sdk-dwarf.py '${{ matrix.platform }}'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualified-sdk-dwarf-${{ matrix.platform }}
+          path: |
+            qualified-sdk/verification/
+            qualified-sdk/type-files.json
+            qualified-sdk/provenance.json
+            qualified-sdk/probe/gdb.txt
+            qualified-sdk/probe/SHA256SUMS
+            qualified-sdk/probe/artifact.json
+          retention-days: 90
+          if-no-files-found: error
