@@ -36,11 +36,9 @@ jobs:
           for spec in executable shared; do
             image="$out/probe"
             binary="$out/probe"
-            args=(-o 'settings set target.run-args test')
             if [ "$spec" = shared ]; then
               image="$out/libprobe.dylib"
               binary="$out/harness"
-              args=(-o "target modules add $image")
             fi
             dsym="$image.dSYM/Contents/Resources/DWARF/$(basename "$image")"
             dwarfdump --uuid "$image" > "replay/$spec.image-uuid.txt"
@@ -48,14 +46,13 @@ jobs:
             diff <(awk '{print $2,$3}' "replay/$spec.image-uuid.txt") <(awk '{print $2,$3}' "replay/$spec.dsym-uuid.txt")
             dwarfdump --verify "$dsym" > "replay/$spec.verify.txt" 2>&1
             if [ "$spec" = executable ]; then
-              create=(-o "target create --no-dependents=true --symfile $dsym $binary")
+              create=(-o "target create --no-dependents=true --symfile $dsym $binary" -o 'settings set target.run-args test')
             else
-              args=()
               create=(-o "target create --no-dependents=true $binary" -o "target modules add --symfile $dsym $image")
             fi
             # The runner owns these log files; only the debugger needs sudo.
             # shellcheck disable=SC2024
-            sudo -n /usr/bin/lldb --batch "${create[@]}" "${args[@]}" -o 'image list' \
+            sudo -n /usr/bin/lldb --batch "${create[@]}" -o 'image list' \
               -o "breakpoint set --func-regex 'DebugQualityProbe.*checkpoint' --skip-prologue false" \
               -o run -o 'thread backtrace' -o 'frame select 1' -o 'frame variable value' \
               -o "command script import $out/debug_quality_lldb.py" -o debug-quality-check > "replay/$spec.lldb.txt" 2>&1
