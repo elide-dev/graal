@@ -179,7 +179,7 @@ public class PECoffObjectFile extends ObjectFile {
     }
 
     @Override
-    protected boolean elementsCanSharePage(Element s1, Element s2, int off1, int off2) {
+    protected boolean elementsCanSharePage(Element s1, Element s2, long off1, long off2) {
         if (s1 instanceof PECoffSection && s2 instanceof PECoffSection) {
             PECoffSection es1 = (PECoffSection) s1;
             PECoffSection es2 = (PECoffSection) s2;
@@ -360,7 +360,7 @@ public class PECoffObjectFile extends ObjectFile {
             hdr.setSectionCount(sectSize / IMAGE_SECTION_HEADER.totalsize);
 
             // Set offset of symbol table
-            hdr.setSymbolOff((int) alreadyDecided.get(symtab).getDecidedValue(LayoutDecision.Kind.OFFSET));
+            hdr.setSymbolOff(unsignedFileOffset((long) alreadyDecided.get(symtab).getDecidedValue(LayoutDecision.Kind.OFFSET)));
 
             // Set symbol table count
             hdr.setSymbolCount(symtab.getSymbolCount());
@@ -369,7 +369,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             return 0; // we're always at 0
         }
 
@@ -539,7 +539,7 @@ public class PECoffObjectFile extends ObjectFile {
                                 sectionIndex + 1);
 
                 // Set offset and size of section
-                ent.setOffset((int) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.OFFSET));
+                ent.setOffset(unsignedFileOffset((long) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.OFFSET)));
                 int sectionSize = (int) alreadyDecided.get(es).getDecidedValue(LayoutDecision.Kind.SIZE);
 
                 if (sectionSize == 0) {
@@ -557,11 +557,11 @@ public class PECoffObjectFile extends ObjectFile {
                 }
 
                 // Set relocation table count and offset for this section
-                int relocBaseOffset = ((int) alreadyDecided.get(rt).getDecidedValue(LayoutDecision.Kind.OFFSET));
+                long relocBaseOffset = ((long) alreadyDecided.get(rt).getDecidedValue(LayoutDecision.Kind.OFFSET));
                 int relocCount = rt.getRelocCount(sectionIndex);
                 if (relocCount > 0) {
                     ent.setRelcount(relocCount);
-                    ent.setReloff(relocBaseOffset + rt.getRelocOffset(sectionIndex));
+                    ent.setReloff(unsignedFileOffset(relocBaseOffset + rt.getRelocOffset(sectionIndex)));
                 }
 
                 out.align(PECoffSectionStruct.getShdrAlign());
@@ -578,7 +578,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             // return defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
             return IMAGE_FILE_HEADER.totalsize;
         }
@@ -602,7 +602,7 @@ public class PECoffObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             // Put the directives immediately after the section header table.
             return IMAGE_FILE_HEADER.totalsize + ((elements.sectionsCount()) * IMAGE_SECTION_HEADER.totalsize);
         }
@@ -689,7 +689,7 @@ public class PECoffObjectFile extends ObjectFile {
     }
 
     @Override
-    protected int getMinimumFileSize() {
+    protected long getMinimumFileSize() {
         return 0;
     }
 

@@ -1227,7 +1227,7 @@ public final class MachOObjectFile extends ObjectFile {
         @Override
         protected void writePayload(OutputAssembler out, Map<Element, LayoutDecisionMap> alreadyDecided) {
             // our payload is simply the offset and size of our element
-            int elOffset = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            long elOffset = (long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int elSize = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE);
             out.write4Byte(elOffset);
             out.write4Byte(elSize);
@@ -1260,7 +1260,7 @@ public final class MachOObjectFile extends ObjectFile {
             for (Symbol sym : symbolsOfInterest()) {
                 Section s = sym.getDefinedSection();
                 assert s != null;
-                int sectionOffset = (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET);
+                long sectionOffset = (long) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET);
                 fileOffsets.add(sectionOffset + (int) sym.getDefinedOffset());
             }
 
@@ -1422,7 +1422,7 @@ public final class MachOObjectFile extends ObjectFile {
             for (int i = 0; i < decisionsOfInterest.size(); ++i) {
                 LayoutDecision decision = decisionsOfInterest.get(i);
                 ent.fileOffset = (int) decision.getValue();
-                int fileSize = (int) alreadyDecided.get(decision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE);
+                long fileSize = (int) alreadyDecided.get(decision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE);
                 int sectionEndInFile = ent.fileOffset + fileSize;
                 Integer nextOffset = (i + 1 < decisionsOfInterest.size()) ? (int) decisionsOfInterest.get(i + 1).getValue() : null;
                 int nextPageBoundary = (sectionEndInFile % getPageSize()) == 0 ? sectionEndInFile : (((sectionEndInFile >> getPageSizeShift()) + 1) << getPageSizeShift());
@@ -1467,7 +1467,7 @@ public final class MachOObjectFile extends ObjectFile {
 
         @Override
         protected void writePayload(OutputAssembler out, Map<Element, LayoutDecisionMap> alreadyDecided) {
-            out.write4Byte((int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET));
+            out.write4Byte(unsignedFileOffset((long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET)));
             out.write4Byte((int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE));
         }
 
@@ -1653,11 +1653,11 @@ public final class MachOObjectFile extends ObjectFile {
 
         @Override
         protected void writePayload(OutputAssembler out, Map<Element, LayoutDecisionMap> alreadyDecided) {
-            int symtabOffset = (int) alreadyDecided.get(symtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            long symtabOffset = (long) alreadyDecided.get(symtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int symtabEntriesCount = symtab.getEntryCount();
-            int strtabOffset = (int) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            long strtabOffset = (long) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int strtabSize = (int) alreadyDecided.get(symtab.strtab).getDecidedValue(LayoutDecision.Kind.SIZE);
-            writePayloadFields(out, symtabOffset, symtabEntriesCount, strtabOffset, strtabSize);
+            writePayloadFields(out, unsignedFileOffset(symtabOffset), symtabEntriesCount, unsignedFileOffset(strtabOffset), strtabSize);
         }
 
         private void writePayloadFields(OutputAssembler out, int symtabOffset, int symtabEntriesCount, int strtabOffset, int strtabSize) {
@@ -1820,10 +1820,10 @@ public final class MachOObjectFile extends ObjectFile {
     }
 
     /** See the note about 'effectiveFileSize' in {@link Segment64Command#writePayload}. */
-    private int minimumFileSize = 0;
+    private long minimumFileSize = 0;
 
     @Override
-    protected int getMinimumFileSize() {
+    protected long getMinimumFileSize() {
         return minimumFileSize;
     }
 
@@ -1940,7 +1940,7 @@ public final class MachOObjectFile extends ObjectFile {
             // same job for file offsets -- not all elements have vaddrs!
             // NOTE: the vaddr case is redundant, but is a useful sanity check
             List<LayoutDecision> minOffsetDecisions = ObjectFile.minimalDecisionValues(decidedAboutOurElements, LayoutDecision.Kind.OFFSET, new IntegerDecisionComparator(true));
-            int minOffset = (minOffsetDecisions == null || minOffsetDecisions.size() == 0) ? 0 : (int) minOffsetDecisions.get(0).getValue();
+            long minOffset = (minOffsetDecisions == null || minOffsetDecisions.size() == 0) ? 0 : (long) minOffsetDecisions.get(0).getValue();
             List<LayoutDecision> maxOffsetDecisions = ObjectFile.maximalDecisionValues(decidedAboutOurElements, LayoutDecision.Kind.OFFSET, new IntegerDecisionComparator(false));
             // break ties using size
             Collections.sort(maxOffsetDecisions, new SizeTiebreakComparator(decidedAboutOurElements, false));
@@ -1951,10 +1951,10 @@ public final class MachOObjectFile extends ObjectFile {
             @SuppressWarnings("unused")
             Element lastElementByOffset = (maxOffsetDecision == null) ? null : maxOffsetDecision.getElement();
 
-            int fileOffset = (firstElementByOffset == null) ? 0 : (int) alreadyDecided.get(firstElementByOffset).getDecidedValue(LayoutDecision.Kind.OFFSET);
+            long fileOffset = (firstElementByOffset == null) ? 0 : (long) alreadyDecided.get(firstElementByOffset).getDecidedValue(LayoutDecision.Kind.OFFSET);
 
-            int maxOffset = (maxOffsetDecision == null) ? 0 : ((int) maxOffsetDecision.getValue() + (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE));
-            int fileSize = maxOffset - minOffset;
+            long maxOffset = (maxOffsetDecision == null) ? 0 : ((long) maxOffsetDecision.getValue() + (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE));
+            long fileSize = maxOffset - minOffset;
 
             int effectiveMinVaddr = segmentVaddrGivenFirstSectionVaddr(minVaddr);
 
@@ -1962,9 +1962,9 @@ public final class MachOObjectFile extends ObjectFile {
             /* If this is wrong, it means that 4KB was not enough padding in initialVaddr(). */
 
             int prePadding = minVaddr - effectiveMinVaddr;
-            int effectiveVmSize = vmSize + prePadding;
-            int effectiveFileOffset = fileOffset - prePadding;
-            int effectiveFileSize = fileSize + prePadding;
+            long effectiveVmSize = vmSize + prePadding;
+            long effectiveFileOffset = fileOffset - prePadding;
+            long effectiveFileSize = fileSize + prePadding;
 
             /*
              * Round up effectiveFileSize to the nearest page boundary, to match what the stock
@@ -2045,9 +2045,9 @@ public final class MachOObjectFile extends ObjectFile {
                                 s.destinationSegmentName,
                                 s.getElement().isReferenceable() ? (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.VADDR) : 0,
                                 (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.SIZE),
-                                (int) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET),
+                                unsignedFileOffset((long) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET)),
                                 logAlignment,
-                                ourRelocs == null ? 0 : (int) alreadyDecided.get(ourRelocs).getDecidedValue(LayoutDecision.Kind.OFFSET) + ourRelocs.startIndexFor(s) * ourRelocs.encodedEntrySize(),
+                                ourRelocs == null ? 0 : unsignedFileOffset((long) alreadyDecided.get(ourRelocs).getDecidedValue(LayoutDecision.Kind.OFFSET) + (long) ourRelocs.startIndexFor(s) * ourRelocs.encodedEntrySize()),
                                 ourRelocs == null ? 0 : ourRelocs.countFor(s),
                                 (int) ObjectFile.flagSetAsLong(s.flags) | s.type.getValue(),
                                 /* reserved1 */ 0,
@@ -2399,7 +2399,7 @@ public final class MachOObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             return ObjectFile.defaultGetOrDecideOffset(alreadyDecided, this, offsetHint);
         }
 

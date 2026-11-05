@@ -156,7 +156,7 @@ public class LLVMObjectFile extends ObjectFile {
     }
 
     @Override
-    protected int getMinimumFileSize() {
+    protected long getMinimumFileSize() {
         return 0;
     }
 
@@ -367,7 +367,7 @@ public class LLVMObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+        public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
             // We are always at 0.
             return 0;
         }

@@ -58,7 +58,7 @@ public final class LayoutDecision implements Comparable<LayoutDecision> {
         this.element = element;
 
         assert !(value instanceof LayoutDecision);
-        this.value = value;
+        this.value = normalizeValue(value);
     }
 
     @Override
@@ -80,8 +80,19 @@ public final class LayoutDecision implements Comparable<LayoutDecision> {
 
     void setValue(Object value) {
         assert this.value == null; // can't re-set
-        assert value instanceof Integer || value instanceof byte[];
-        this.value = value;
+        assert value instanceof Integer || value instanceof Long || value instanceof byte[];
+        this.value = normalizeValue(value);
+    }
+
+    private Object normalizeValue(Object candidate) {
+        if (kind == Kind.OFFSET && candidate instanceof Number number) {
+            long offset = number.longValue();
+            if (offset < 0) {
+                throw new IllegalArgumentException("Negative object-file offset: " + offset);
+            }
+            return offset;
+        }
+        return candidate;
     }
 
     public Object getValue() {

@@ -75,7 +75,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
     }
 
     @Override
-    public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+    public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
         /*
          * We have to be careful about our offset.
          *

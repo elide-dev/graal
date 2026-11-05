@@ -101,7 +101,7 @@ public class LLVMUserDefinedSection extends LLVMSection implements ObjectFile.Re
     }
 
     @Override
-    public int getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, int offsetHint) {
+    public long getOrDecideOffset(Map<Element, LayoutDecisionMap> alreadyDecided, long offsetHint) {
         return impl.getOrDecideOffset(alreadyDecided, offsetHint);
     }
 

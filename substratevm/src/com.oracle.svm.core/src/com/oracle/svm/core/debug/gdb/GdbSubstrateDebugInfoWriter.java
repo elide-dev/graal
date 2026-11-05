@@ -77,7 +77,7 @@ public class GdbSubstrateDebugInfoWriter implements SubstrateDebugInfoWriter {
         // Generate debug info and bake the object file.
         objectFile.installDebugInfo(debugInfoProvider);
         ArrayList<ObjectFile.Element> sortedObjectFileElements = new ArrayList<>();
-        int debugInfoSize = objectFile.bake(sortedObjectFileElements);
+        int debugInfoSize = Math.toIntExact(objectFile.bake(sortedObjectFileElements));
 
         // Store the object file in a byte array -> This is now an in-memory object file.
         NonmovableArray<Byte> debugInfoData = NonmovableArrays.createByteArray(debugInfoSize, NmtCategory.Code);
