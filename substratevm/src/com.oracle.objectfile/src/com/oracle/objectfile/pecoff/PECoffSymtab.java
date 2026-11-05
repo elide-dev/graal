@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -247,7 +247,7 @@ public class PECoffSymtab extends ObjectFile.Element implements SymbolTable {
     }
 
     @Override
-    public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+    public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
         return getWrittenSize();
     }
 

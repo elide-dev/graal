@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@
 package com.oracle.objectfile;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -741,11 +742,11 @@ public abstract class ObjectFile {
             LayoutDecision sizeDecision0 = d0 == null ? null : alreadyDecided.get(d0.getElement()).getDecision(LayoutDecision.Kind.SIZE);
             LayoutDecision sizeDecision1 = d1 == null ? null : alreadyDecided.get(d1.getElement()).getDecision(LayoutDecision.Kind.SIZE);
 
-            int defaultValue = nullsToTail ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-            int s0 = (sizeDecision0 == null || !sizeDecision0.isTaken()) ? defaultValue : (int) sizeDecision0.getValue();
-            int s1 = (sizeDecision1 == null || !sizeDecision1.isTaken()) ? defaultValue : (int) sizeDecision1.getValue();
+            long defaultValue = nullsToTail ? Long.MAX_VALUE : Long.MIN_VALUE;
+            long s0 = (sizeDecision0 == null || !sizeDecision0.isTaken()) ? defaultValue : (long) sizeDecision0.getValue();
+            long s1 = (sizeDecision1 == null || !sizeDecision1.isTaken()) ? defaultValue : (long) sizeDecision1.getValue();
 
-            return Integer.compare(s0, s1);
+            return Long.compare(s0, s1);
         }
     }
 
@@ -764,7 +765,7 @@ public abstract class ObjectFile {
         } else {
             assert alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.SIZE).isTaken();
             long offset = (long) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.OFFSET).getValue();
-            int size = (int) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.SIZE).getValue();
+            long size = (long) alreadyDecided.get(maxOffsetDecision.getElement()).getDecision(LayoutDecision.Kind.SIZE).getValue();
             ret = Math.addExact(offset, size);
         }
         return ret;
@@ -833,7 +834,7 @@ public abstract class ObjectFile {
         return defaultGetOrDecide(alreadyDecided, el, LayoutDecision.Kind.CONTENT, contentHint);
     }
 
-    public static int defaultGetOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, Element el, int sizeHint) {
+    public static long defaultGetOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, Element el, long sizeHint) {
         return defaultGetOrDecide(alreadyDecided, el, LayoutDecision.Kind.SIZE, sizeHint);
     }
 
@@ -850,7 +851,7 @@ public abstract class ObjectFile {
             // offset doesn't equal the page number of the *end* offset of that
             // section.
             long existingOffset = (long) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.OFFSET);
-            int existingSize = (int) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.SIZE);
+            long existingSize = (long) alreadyDecided.get(alreadyMapped).getDecidedValue(LayoutDecision.Kind.SIZE);
             long existingEndPos = Math.addExact(existingOffset, existingSize);
             long endPageNum = existingEndPos >> el.getOwner().getPageSizeShift();
             long ourPageNum = fileOffset >> el.getOwner().getPageSizeShift();
@@ -1095,7 +1096,7 @@ public abstract class ObjectFile {
          */
         @Override
         public int getMemSize(Map<Element, LayoutDecisionMap> alreadyDecided) {
-            return (int) alreadyDecided.get(this).getDecidedValue(LayoutDecision.Kind.SIZE);
+            return Math.toIntExact((long) alreadyDecided.get(this).getDecidedValue(LayoutDecision.Kind.SIZE));
         }
 
     }
@@ -1143,7 +1144,7 @@ public abstract class ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             return defaultGetOrDecideSize(alreadyDecided, this, sizeHint);
         }
 
@@ -1314,6 +1315,22 @@ public abstract class ObjectFile {
     private final Map<Element, List<BuildDependency>> dependenciesByDependingElement = new IdentityHashMap<>();
     private final Map<Element, List<BuildDependency>> dependenciesByDependedOnElement = new IdentityHashMap<>();
 
+    /** A section may be larger than one Java byte array. Each supplied chunk is consumed fully. */
+    @FunctionalInterface
+    public interface ContentSink {
+        void write(ByteBuffer chunk) throws IOException;
+    }
+
+    public interface StreamedContent {
+        long size();
+
+        void write(ContentSink sink) throws IOException;
+    }
+
+    private static long contentSize(Object content) {
+        return content instanceof StreamedContent streamed ? streamed.size() : ((byte[]) content).length;
+    }
+
     public void write(DebugContext context, Path outputFile) throws IOException {
         try (FileChannel channel = FileChannel.open(outputFile, StandardOpenOption.WRITE, StandardOpenOption.READ, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE)) {
             withDebugContext(context, "ObjectFile.write", () -> {
@@ -1329,15 +1346,25 @@ public abstract class ObjectFile {
         try {
             for (Element element : sortedObjectFileElements) {
                 long offset = (long) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.OFFSET);
-                int expectedSize = (int) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.SIZE);
-                byte[] content = (byte[]) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.CONTENT);
-                if (content.length != expectedSize) {
-                    throw new IllegalStateException("For element " + element + ", expected size " + expectedSize + " but emitted size " + content.length);
+                long expectedSize = (long) decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.SIZE);
+                Object content = decisionsTaken.get(element).getDecidedValue(LayoutDecision.Kind.CONTENT);
+                if (contentSize(content) != expectedSize) {
+                    throw new IllegalStateException("For element " + element + ", expected size " + expectedSize + " but emitted size " + contentSize(content));
                 }
-                ByteBuffer buffer = ByteBuffer.wrap(content);
-                while (buffer.hasRemaining()) {
-                    int written = outputChannel.write(buffer, offset);
-                    offset = Math.addExact(offset, written);
+                long[] position = {offset};
+                ContentSink sink = buffer -> {
+                    while (buffer.hasRemaining()) {
+                        int written = outputChannel.write(buffer, position[0]);
+                        position[0] = Math.addExact(position[0], written);
+                    }
+                };
+                if (content instanceof StreamedContent streamed) {
+                    streamed.write(sink);
+                } else {
+                    sink.write(ByteBuffer.wrap((byte[]) content));
+                }
+                if (position[0] - offset != expectedSize) {
+                    throw new IllegalStateException("Incorrect streamed content size for " + element);
                 }
             }
             if (outputChannel.size() < totalSize) {
@@ -1672,7 +1699,8 @@ public abstract class ObjectFile {
             } else {
                 switch (d.getKind()) {
                     case CONTENT:
-                        valueDecided = e.getOrDecideContent(decisionsTaken, new byte[0]);
+                        StreamedContent streamed = e.getImpl().getOrDecideStreamedContent(decisionsTaken);
+                        valueDecided = streamed != null ? streamed : e.getOrDecideContent(decisionsTaken, new byte[0]);
                         assert valueDecided != null;
                         break;
                     case OFFSET:
@@ -1681,11 +1709,11 @@ public abstract class ObjectFile {
                         break;
                     case SIZE:
                         // for the size hint, we pass the content's byte[] size if we know it
-                        byte[] decidedContent = null;
+                        Object decidedContent = null;
                         if (decisionsTaken.get(e).getDecision(LayoutDecision.Kind.CONTENT) != null) {
-                            decidedContent = (byte[]) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.CONTENT).getValue();
+                            decidedContent = decisionsTaken.get(e).getDecision(LayoutDecision.Kind.CONTENT).getValue();
                         }
-                        valueDecided = e.getOrDecideSize(decisionsTaken, decidedContent != null ? decidedContent.length : -1);
+                        valueDecided = e.getOrDecideSize(decisionsTaken, decidedContent != null ? contentSize(decidedContent) : -1);
                         assert valueDecided != null;
                         assert !(valueDecided instanceof Integer && (int) valueDecided == -1);
                         break;
@@ -1722,7 +1750,7 @@ public abstract class ObjectFile {
              * observable outside this package's internal layout model.
              */
             totalSize = Math.max(totalSize, Math.addExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue(),
-                            (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE)));
+                            (long) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE)));
         }
         return totalSize;
     }
@@ -1736,9 +1764,17 @@ public abstract class ObjectFile {
         for (Element e : sortedObjectFileElements) {
             int off = Math.toIntExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue());
             out.position(off);
-            int expectedSize = (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE);
-            byte[] content = (byte[]) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.CONTENT);
-            out.put(content);
+            long expectedSize = (long) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE);
+            Object content = decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.CONTENT);
+            if (content instanceof StreamedContent streamed) {
+                try {
+                    streamed.write(out::put);
+                } catch (IOException exception) {
+                    throw new UncheckedIOException(exception);
+                }
+            } else {
+                out.put((byte[]) content);
+            }
             int emittedSize = out.position() - off;
             assert emittedSize >= 0;
             if (emittedSize != expectedSize) {

@@ -1,7 +1,7 @@
 name: Qualify large debug object file offsets
 on:
   push:
-    branches: [codex/debug-quality-large-objects]
+    branches: [codex/debug-quality-large-objects, codex/debug-quality-streamed-sections]
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
         run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm build --build-logs=silent
       - name: Run object and debug information regressions
         working-directory: graal
-        run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm unittest ObjectFileLargeOffsetTest MachODwarfCodeAddressTest
+        run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm unittest ObjectFileLargeOffsetTest ObjectFileStreamedContentTest MachODwarfCodeAddressTest
       - name: Check source formatting
         working-directory: graal
         run: ../mx/mx --java-home "$JAVA_HOME" -p substratevm checkstyle

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -373,7 +373,7 @@ public class LLVMObjectFile extends ObjectFile {
         }
 
         @Override
-        public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+        public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
             // We return a dummy word to avoid having another section with an offset of 0.
             return Long.BYTES;
         }

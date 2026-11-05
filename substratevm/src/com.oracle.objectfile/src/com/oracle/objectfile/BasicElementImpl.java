@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -87,7 +87,7 @@ public abstract class BasicElementImpl implements ElementImpl {
     }
 
     @Override
-    public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
+    public long getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, long sizeHint) {
         return ObjectFile.defaultGetOrDecideSize(alreadyDecided, element, sizeHint);
     }
 
@@ -98,7 +98,7 @@ public abstract class BasicElementImpl implements ElementImpl {
 
     @Override
     public int getMemSize(Map<Element, LayoutDecisionMap> alreadyDecided) {
-        return (int) alreadyDecided.get(element).getDecidedValue(LayoutDecision.Kind.SIZE);
+        return Math.toIntExact((long) alreadyDecided.get(element).getDecidedValue(LayoutDecision.Kind.SIZE));
     }
 
     @Override
