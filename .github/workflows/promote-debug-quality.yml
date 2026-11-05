@@ -1,5 +1,8 @@
 name: Preview or promote the exact debug quality SDK artifacts
 on:
+  push:
+    branches: [codex/debug-quality-qualification]
+    paths: [.github/workflows/promote-debug-quality.yml]
   workflow_dispatch:
     inputs:
       publish:
@@ -10,6 +13,7 @@ permissions:
   contents: read
 jobs:
   preview:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.stage.outputs.version }}
@@ -33,7 +37,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
   publish:
-    if: inputs.publish
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
     needs: preview
     runs-on: ubuntu-24.04
     steps:
