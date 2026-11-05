@@ -1,0 +1,110 @@
+{
+  "linux-amd64": {
+    "sdk": {
+      "run": 41950210115,
+      "commit": "b1a12a9419c0149e10574d75ecfe76d05f548a66",
+      "artifact": "dist-linux-amd64",
+      "file": "graalvm-ee-25.5.5-elide.25-linux-amd64.tar.gz",
+      "sha256": "4e5f0bd0aea174167c74725358c44e252c30f3b51d1e609f3549d6a495e27e86",
+      "ceFile": "graalvm-ce-25.5.5-elide.25-linux-amd64.tar.gz",
+      "ceSha256": "baefaae6cf4b1ed37707d0bc0dc8ff65f5331ac7f04d81f0ec8926c4455a59fd",
+      "artifactId": 13385103459
+    },
+    "maven": {
+      "run": 41965346191,
+      "commit": "9155a175861dc320d3c4e3f9298be3d4e9829e1e",
+      "artifact": "maven-debug-quality",
+      "sha256": "1ceb60dbf44d0516c5fac10017d9cf5e1eb2f1ef3080098676a23d65f8e08e7e",
+      "artifactId": 13387287345
+    },
+    "r8": {
+      "run": 41917878782,
+      "commit": "03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "artifact": "r8-aot-debug-quality-03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "file": "r8.jar",
+      "sha256": "ffbb43a07d342a0b927ddea3b931a540db93d85c2cd5d40ebd8cc889b81226c4",
+      "artifactId": 13366802059
+    }
+  },
+  "linux-arm64": {
+    "sdk": {
+      "run": 41950213572,
+      "commit": "b1a12a9419c0149e10574d75ecfe76d05f548a66",
+      "artifact": "dist-linux-aarch64",
+      "file": "graalvm-ee-25.5.5-elide.25-linux-aarch64.tar.gz",
+      "sha256": "c7911b07f07e10bd8b39e11e1d3bb7140ac37eaedd8f7a48184dd18fbd7e0780",
+      "ceFile": "graalvm-ce-25.5.5-elide.25-linux-aarch64.tar.gz",
+      "ceSha256": "ef8ef61f0ef8723cc6932f4f6e30d773d40a780d792975f1de16ae47833b46a1",
+      "artifactId": 13381994441
+    },
+    "maven": {
+      "run": 41965346191,
+      "commit": "9155a175861dc320d3c4e3f9298be3d4e9829e1e",
+      "artifact": "maven-debug-quality",
+      "sha256": "1ceb60dbf44d0516c5fac10017d9cf5e1eb2f1ef3080098676a23d65f8e08e7e",
+      "artifactId": 13387287345
+    },
+    "r8": {
+      "run": 41917878782,
+      "commit": "03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "artifact": "r8-aot-debug-quality-03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "file": "r8.jar",
+      "sha256": "ffbb43a07d342a0b927ddea3b931a540db93d85c2cd5d40ebd8cc889b81226c4",
+      "artifactId": 13366802059
+    }
+  },
+  "macos-arm64": {
+    "sdk": {
+      "run": 41950206440,
+      "commit": "b1a12a9419c0149e10574d75ecfe76d05f548a66",
+      "artifact": "dist-macos-aarch64",
+      "file": "graalvm-ee-25.5.5-elide.25-macos-aarch64.tar.gz",
+      "sha256": "a5cab06e34bd4697179c215c803dbe8bf52b6ebbf6c1ba2f59286fc7ace40b92",
+      "ceFile": "graalvm-ce-25.5.5-elide.25-macos-aarch64.tar.gz",
+      "ceSha256": "830d3cf901e095d21537f9e384d9d959f47c5158c6aeb1ec5366a5f38337d937",
+      "artifactId": 13382459348
+    },
+    "maven": {
+      "run": 41965346191,
+      "commit": "9155a175861dc320d3c4e3f9298be3d4e9829e1e",
+      "artifact": "maven-debug-quality",
+      "sha256": "1ceb60dbf44d0516c5fac10017d9cf5e1eb2f1ef3080098676a23d65f8e08e7e",
+      "artifactId": 13387287345
+    },
+    "r8": {
+      "run": 41917878782,
+      "commit": "03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "artifact": "r8-aot-debug-quality-03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "file": "r8.jar",
+      "sha256": "ffbb43a07d342a0b927ddea3b931a540db93d85c2cd5d40ebd8cc889b81226c4",
+      "artifactId": 13366802059
+    }
+  },
+  "windows-amd64": {
+    "sdk": {
+      "run": 41950217147,
+      "commit": "b1a12a9419c0149e10574d75ecfe76d05f548a66",
+      "artifact": "dist-windows-amd64",
+      "file": "graalvm-ee-25.5.5-elide.25-windows-amd64.zip",
+      "sha256": "ed65396cd1869c655543f3191bcd9b65ad1fec427277186ca5524bafdde2714c",
+      "ceFile": "graalvm-ce-25.5.5-elide.25-windows-amd64.zip",
+      "ceSha256": "1a90c28bb82632cbc501482d2b39facb8e7c083c70dbc8fc10070052dab70eb9",
+      "artifactId": 13381394274
+    },
+    "maven": {
+      "run": 41965346191,
+      "commit": "9155a175861dc320d3c4e3f9298be3d4e9829e1e",
+      "artifact": "maven-debug-quality",
+      "sha256": "1ceb60dbf44d0516c5fac10017d9cf5e1eb2f1ef3080098676a23d65f8e08e7e",
+      "artifactId": 13387287345
+    },
+    "r8": {
+      "run": 41917878782,
+      "commit": "03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "artifact": "r8-aot-debug-quality-03557e2c25cb75883f2c97566a99961d16d8f9ef",
+      "file": "r8.jar",
+      "sha256": "ffbb43a07d342a0b927ddea3b931a540db93d85c2cd5d40ebd8cc889b81226c4",
+      "artifactId": 13366802059
+    }
+  }
+}
