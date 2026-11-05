@@ -131,12 +131,12 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
         // we should already have decided our file offset
         Object offsetObj = alreadyDecided.get(this).getDecidedValue(LayoutDecision.Kind.OFFSET);
         assert offsetObj != null;
-        assert offsetObj instanceof Integer;
+        assert offsetObj instanceof Long;
         // test for the special case
         if (getSegment() == getOwner().getSegments().iterator().next() && getSegment().get(0) == this) {
             if (implVaddr < getOwner().getPageSize()) {
                 // choose the next congruent
-                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) offsetObj, getOwner().getPageSize());
+                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) ((long) offsetObj % getOwner().getPageSize()), getOwner().getPageSize());
             }
         }
         return implVaddr;
