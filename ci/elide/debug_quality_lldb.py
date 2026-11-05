@@ -20,7 +20,9 @@ def check(debugger, command, result, internal_dict):
         assert declared.IsValid(), "Code-less DataOnly type is missing"
         fields = [declared.GetFieldAtIndex(index).GetName() for index in range(declared.GetNumberOfFields())]
         assert "value" in fields and "other" in fields, fields
-        assert declared.GetDeclaration().GetFileSpec().GetFilename() == "DebugQualityProbe.java"
+        lookup = lldb.SBCommandReturnObject()
+        debugger.GetCommandInterpreter().HandleCommand('image lookup -t "debugquality.DebugQualityProbe$DataOnly"', lookup)
+        assert lookup.Succeeded() and "decl = DebugQualityProbe.java" in lookup.GetOutput(), lookup.GetOutput()
         result.PutCString("Optimized source, inline chain, live values and code-less declaration verified")
     except Exception as error:
         result.SetError(str(error))
