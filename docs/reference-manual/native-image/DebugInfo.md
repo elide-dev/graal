@@ -60,7 +60,9 @@ slightly differently and for some applications this can slow down execution.
 When you generate large amounts of debug information, the intermediate object file can exceed 2 GiB.
 Native Image writes this file using 64-bit file offsets without mapping the complete file into a single Java buffer.
 ELF64 section offsets can exceed 4 GiB; object formats with unsigned 32-bit offset fields reject offsets outside their representable range.
-Individual sections remain limited by the maximum Java array size.
+ELF relocation sections are emitted in bounded chunks and can exceed 2 GiB individually.
+Other sections backed by a single Java array remain limited by the maximum Java array size.
+If a separate-debug generation command fails, Native Image aborts before stripping the executable.
 
 The basic `perf report` command, which displays a histogram showing percentage execution time in each Java method, only requires passing flags `-g` and `-H:+SourceLevelDebug` to the `native-image` command.
 However, more sophisticated uses of `perf` (for example, `perf annotate`) and use of
