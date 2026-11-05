@@ -62,20 +62,23 @@ mkdir -p "$out/failing-objcopy"
 cat > "$out/failing-objcopy/objcopy" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ${1:-} == --version ]]; then exec "$REAL_OBJCOPY" "$@"; fi
+if [[ ${1:-} == --version ]]; then
+  echo 'Controlled debug-split failure fixture'
+  exit 0
+fi
 if [[ ${1:-} == --only-keep-debug ]]; then
   echo 'controlled separate-debug write failure' >&2
   exit 42
 fi
-touch "$STRIP_AFTER_FAILURE"
-exec "$REAL_OBJCOPY" "$@"
+: > "${BASH_SOURCE[0]%/*}/../stripped-after-failure"
+exit 99
 SH
 chmod +x "$out/failing-objcopy/objcopy"
 set +e
-REAL_OBJCOPY="$(command -v objcopy)" STRIP_AFTER_FAILURE="$out/stripped-after-failure" \
-  PATH="$out/failing-objcopy:$PATH" \
+PATH="$out/failing-objcopy:$PATH" \
   "$sdk/bin/native-image" -J-Xmx5g -J-XX:ActiveProcessorCount=4 -g -O2 \
-  -H:+ReportExceptionStackTraces -H:-SourceLevelDebug -H:+TrackNodeSourcePosition \
+  -H:+ReportExceptionStackTraces -H:+StripDebugInfo -H:+TraceNativeToolUsage \
+  -H:-SourceLevelDebug -H:+TrackNodeSourcePosition \
   -H:+DebugCodeInfoUseSourceMappings -H:DebugInfoSourceSearchPath="$out/src" \
   --initialize-at-build-time=debugquality -cp "$out/classes" debugquality.DebugQualityProbe \
   -o "$out/split-failure" > "$out/split-failure.log" 2>&1

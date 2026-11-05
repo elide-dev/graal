@@ -163,8 +163,8 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                     BuildArtifacts.singleton().add(ArtifactType.DEBUG_INFO, dsymPath);
                 }
                 if (SubstrateOptions.DeleteLocalSymbols.getValue()) {
-                    /* Strip debug info and local symbols. */
-                    executeDebugCommand(stripExe, imageFilePath);
+                    /* Keep dynamic-linkage symbols referenced by Mach-O indirect symbol tables. */
+                    executeDebugCommand(stripExe, "-S", "-x", imageFilePath);
                 } else {
                     /* Strip debug info only. */
                     executeDebugCommand(stripExe, "-S", imageFilePath);
