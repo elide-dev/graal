@@ -99,7 +99,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
             assert prevSegment == firstSegment;
             if (implOffset < getOwner().getPageSize()) {
                 // we've hit the special case -- pad to 4096 while keeping congruence
-                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), implOffset, getOwner().getPageSize());
+                return ObjectFile.nextIntegerMultipleWithCongruence(getOwner().getPageSize(), impl.getAlignment(), (int) (implOffset % getOwner().getPageSize()), getOwner().getPageSize());
             }
         } else if (getSegment().get(0) == this && ourSegment == firstSegment) {
             if (implOffset < getOwner().getPageSize()) {
