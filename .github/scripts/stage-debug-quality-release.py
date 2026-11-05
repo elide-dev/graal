@@ -11,7 +11,7 @@ import subprocess
 from producer_artifact import download_artifact
 from public_release_http import exists as public_exists, sha256 as public_sha256
 
-SOURCE = '5f590fc86b0d28479f533b7f862bcbb57510357e'
+SOURCE = 'dbb0f37f0ad987d040ffd7240bffc8de824b488d'
 VERSION = '25.5.5-elide.25'
 PUBLIC_BASE = 'https://maven.elide.dev/gvm-elide/'
 
