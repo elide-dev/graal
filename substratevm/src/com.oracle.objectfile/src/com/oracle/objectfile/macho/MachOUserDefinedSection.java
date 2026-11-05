@@ -85,7 +85,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
          *
          * - If we're the first section in the text segment, we should have offset at least 4096.
          */
-        int implOffset = impl.getOrDecideOffset(alreadyDecided, offsetHint);
+        long implOffset = impl.getOrDecideOffset(alreadyDecided, offsetHint);
         Segment ourSegment = getSegment();
         Segment prevSegment = null;
         Segment firstSegment = getOwner().getSegments().iterator().next();

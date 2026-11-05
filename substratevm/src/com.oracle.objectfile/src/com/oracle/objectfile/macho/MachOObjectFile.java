@@ -1229,7 +1229,7 @@ public final class MachOObjectFile extends ObjectFile {
             // our payload is simply the offset and size of our element
             long elOffset = (long) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.OFFSET);
             int elSize = (int) alreadyDecided.get(el).getDecidedValue(LayoutDecision.Kind.SIZE);
-            out.write4Byte(elOffset);
+            out.write4Byte(unsignedFileOffset(elOffset));
             out.write4Byte(elSize);
         }
 
@@ -1256,16 +1256,16 @@ public final class MachOObjectFile extends ObjectFile {
         @Override
         public byte[] getOrDecideContent(Map<Element, LayoutDecisionMap> alreadyDecided, byte[] contentHint) {
             OutputAssembler out = AssemblyBuffer.createOutputAssembler(getOwner().getByteOrder());
-            TreeSet<Integer> fileOffsets = new TreeSet<>(); // merge duplicates (aliased symbols)
+            TreeSet<Long> fileOffsets = new TreeSet<>(); // merge duplicates (aliased symbols)
             for (Symbol sym : symbolsOfInterest()) {
                 Section s = sym.getDefinedSection();
                 assert s != null;
                 long sectionOffset = (long) alreadyDecided.get(s).getDecidedValue(LayoutDecision.Kind.OFFSET);
-                fileOffsets.add(sectionOffset + (int) sym.getDefinedOffset());
+                fileOffsets.add(Math.addExact(sectionOffset, sym.getDefinedOffset()));
             }
 
-            Integer previousOffset = null;
-            for (Integer i : fileOffsets) {
+            Long previousOffset = null;
+            for (Long i : fileOffsets) {
                 if (previousOffset == null) {
                     // write the offset from starting fileoff of the text segment
                     // -- *which should be 0*!
@@ -1357,7 +1357,7 @@ public final class MachOObjectFile extends ObjectFile {
 
         class EntryStruct {
 
-            int fileOffset;
+            long fileOffset;
             short length;
             short entryKind;
 
@@ -1366,7 +1366,7 @@ public final class MachOObjectFile extends ObjectFile {
             }
 
             void write(OutputAssembler oa) {
-                oa.write4Byte(fileOffset);
+                oa.write4Byte(unsignedFileOffset(fileOffset));
                 oa.write2Byte(length);
                 oa.write2Byte(entryKind);
             }
@@ -1421,11 +1421,11 @@ public final class MachOObjectFile extends ObjectFile {
             EntryStruct ent = new EntryStruct();
             for (int i = 0; i < decisionsOfInterest.size(); ++i) {
                 LayoutDecision decision = decisionsOfInterest.get(i);
-                ent.fileOffset = (int) decision.getValue();
+                ent.fileOffset = (long) decision.getValue();
                 long fileSize = (int) alreadyDecided.get(decision.getElement()).getDecidedValue(LayoutDecision.Kind.SIZE);
-                int sectionEndInFile = ent.fileOffset + fileSize;
-                Integer nextOffset = (i + 1 < decisionsOfInterest.size()) ? (int) decisionsOfInterest.get(i + 1).getValue() : null;
-                int nextPageBoundary = (sectionEndInFile % getPageSize()) == 0 ? sectionEndInFile : (((sectionEndInFile >> getPageSizeShift()) + 1) << getPageSizeShift());
+                long sectionEndInFile = Math.addExact(ent.fileOffset, fileSize);
+                Long nextOffset = (i + 1 < decisionsOfInterest.size()) ? (long) decisionsOfInterest.get(i + 1).getValue() : null;
+                long nextPageBoundary = nextIntegerMultiple(sectionEndInFile, getPageSize());
                 ent.length = (short) (nextOffset == null ? nextPageBoundary : Math.min(nextPageBoundary, nextOffset));
                 ent.entryKind = (short) 0;
                 ent.write(out);
@@ -1828,7 +1828,7 @@ public final class MachOObjectFile extends ObjectFile {
     }
 
     @Override
-    public int bake(List<Element> sortedObjectFileElements) {
+    public long bake(List<Element> sortedObjectFileElements) {
         minimumFileSize = 0; // re-zero it for this write-out
         return super.bake(sortedObjectFileElements);
     }

@@ -562,7 +562,8 @@ public abstract class ObjectFile {
         return remainder == 0 ? start : Math.addExact(start, multipleOf - remainder);
     }
 
-    protected static int unsignedFileOffset(long offset) {
+    /** Convert a file offset to the bit pattern of an unsigned 32-bit object-format field. */
+    public static int unsignedFileOffset(long offset) {
         if (offset < 0 || offset > 0xffff_ffffL) {
             throw new IllegalArgumentException("Object-file offset does not fit an unsigned 32-bit field: " + offset);
         }
@@ -1733,7 +1734,7 @@ public abstract class ObjectFile {
     public void writeBuffer(List<Element> sortedObjectFileElements, ByteBuffer out) {
         /* Emit each one! */
         for (Element e : sortedObjectFileElements) {
-            long off = Math.toIntExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue());
+            int off = Math.toIntExact((long) decisionsTaken.get(e).getDecision(LayoutDecision.Kind.OFFSET).getValue());
             out.position(off);
             int expectedSize = (int) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.SIZE);
             byte[] content = (byte[]) decisionsTaken.get(e).getDecidedValue(LayoutDecision.Kind.CONTENT);

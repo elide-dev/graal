@@ -100,6 +100,14 @@ public class ObjectFileLargeOffsetTest {
     }
 
     @Test
+    public void testUnsignedOffsetFieldBounds() {
+        Assert.assertEquals(Integer.MIN_VALUE, ObjectFile.unsignedFileOffset(0x8000_0000L));
+        Assert.assertEquals(-1, ObjectFile.unsignedFileOffset(0xffff_ffffL));
+        Assert.assertThrows(IllegalArgumentException.class, () -> ObjectFile.unsignedFileOffset(-1));
+        Assert.assertThrows(IllegalArgumentException.class, () -> ObjectFile.unsignedFileOffset(0x1_0000_0000L));
+    }
+
+    @Test
     public void testSmallFileMatchesBufferWriter() throws Exception {
         ELFObjectFile buffered = objectWithGap(4096);
         ArrayList<ObjectFile.Element> elements = new ArrayList<>();
