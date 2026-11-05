@@ -13,6 +13,17 @@ root = Path('qualified-sdk')
 root.mkdir()
 catalog = json.loads(Path('.github/qualification/debug-quality-producers.json').read_text())
 sdk = catalog[platform]['sdk']
+overrides = os.environ.get('QUALIFICATION_SDK_RUNS', '')
+if overrides:
+    import re
+    runs = json.loads(overrides)
+    source = os.environ['QUALIFICATION_SDK_SOURCE']
+    assert set(runs) == {'linux-amd64', 'linux-arm64'}
+    assert re.fullmatch('[0-9a-f]{40}', source)
+    assert all(type(run) is int and run > 0 for run in runs.values())
+    sdk = {'run': runs[platform], 'commit': source, 'scope': 'Exact successful normal full SDK build'}
+    metadata = json.loads(subprocess.check_output(['gh', 'run', 'view', str(sdk['run']), '--repo', 'elide-dev/graal', '--json', 'headSha,conclusion'], text=True))
+    assert metadata['headSha'] == source and metadata['conclusion'] == 'success'
 name = 'debug-quality-' + {'linux-amd64': 'linux-amd64', 'linux-arm64': 'linux-aarch64'}[platform] + '-' + sdk['commit']
 metadata = json.loads(subprocess.check_output(['gh', 'api', f"repos/elide-dev/graal/actions/runs/{sdk['run']}/artifacts?per_page=100"], text=True))
 artifact = max((item for item in metadata['artifacts'] if item['name'] == name and not item['expired']), key=lambda item: item['id'])
