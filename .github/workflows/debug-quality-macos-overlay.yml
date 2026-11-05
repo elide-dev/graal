@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      SOURCE: 12396483d857252e31527288ba920d6f05e12ab4
+      SOURCE: 7f4f824d84e0f542c04dc7fd16809e065d4f52f8
       SDK_SOURCE: bcd8a6d9abbd91f19f4ba688ad3bfa1049d70cd4
       SDK_RUN: '41935403545'
       VERSION: 25.5.5-elide.25
