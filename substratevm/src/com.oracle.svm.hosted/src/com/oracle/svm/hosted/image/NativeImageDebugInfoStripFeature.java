@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -107,16 +107,16 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                     /* Generate a separate debug file before stripping the executable. */
                     String debugInfoName = imageName + debugExtension;
                     Path debugInfoFilePath = outputDirectory.resolve(debugInfoName);
-                    FileUtils.executeCommand(objcopyExe, "--only-keep-debug", imageFilePath, debugInfoFilePath.toString());
+                    executeDebugCommand(objcopyExe, "--only-keep-debug", imageFilePath, debugInfoFilePath.toString());
                     BuildArtifacts.singleton().add(ArtifactType.DEBUG_INFO, debugInfoFilePath);
-                    FileUtils.executeCommand(objcopyExe, "--add-gnu-debuglink=" + debugInfoFilePath, imageFilePath);
+                    executeDebugCommand(objcopyExe, "--add-gnu-debuglink=" + debugInfoFilePath, imageFilePath);
                 }
                 if (SubstrateOptions.DeleteLocalSymbols.getValue()) {
                     /* Strip debug info and local symbols. */
-                    FileUtils.executeCommand(objcopyExe, "--strip-all", imageFilePath);
+                    executeDebugCommand(objcopyExe, "--strip-all", imageFilePath);
                 } else {
                     /* Strip debug info only. */
-                    FileUtils.executeCommand(objcopyExe, "--strip-debug", imageFilePath);
+                    executeDebugCommand(objcopyExe, "--strip-debug", imageFilePath);
                 }
                 return true;
             } catch (IOException e) {
@@ -159,15 +159,15 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
                     /* Generate a dSYM bundle with debug info before stripping the executable. */
                     String dsymName = imageName + dsymExtension;
                     Path dsymPath = outputDirectory.resolve(dsymName);
-                    FileUtils.executeCommand(dsymutilExe, "-o", dsymPath.toString(), imageFilePath);
+                    executeDebugCommand(dsymutilExe, "-o", dsymPath.toString(), imageFilePath);
                     BuildArtifacts.singleton().add(ArtifactType.DEBUG_INFO, dsymPath);
                 }
                 if (SubstrateOptions.DeleteLocalSymbols.getValue()) {
                     /* Strip debug info and local symbols. */
-                    FileUtils.executeCommand(stripExe, imageFilePath);
+                    executeDebugCommand(stripExe, imageFilePath);
                 } else {
                     /* Strip debug info only. */
-                    FileUtils.executeCommand(stripExe, "-S", imageFilePath);
+                    executeDebugCommand(stripExe, "-S", imageFilePath);
                 }
                 return true;
             } catch (IOException e) {
@@ -177,4 +177,12 @@ public class NativeImageDebugInfoStripFeature implements InternalFeature {
             }
         }
     }
+
+    private static void executeDebugCommand(String... arguments) throws IOException, InterruptedException {
+        int exitCode = FileUtils.executeCommand(arguments);
+        if (exitCode != 0) {
+            throw new IOException("Native debug command exited with code " + exitCode + ": " + String.join(" ", arguments));
+        }
+    }
+
 }

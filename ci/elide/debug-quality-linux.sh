@@ -56,3 +56,34 @@ GDB
 gdb --batch -q -x "$out/values.gdb" "$out/probe" > "$out/gdb.txt" 2>&1
 grep -q 'Optimized source, inline chain, live values and code-less declaration verified' "$out/gdb.txt"
 sha256sum "$out/probe" "$out/probe.debug" > "$out/SHA256SUMS"
+
+# A failed debug split must abort before the executable can lose its only DWARF copy.
+mkdir -p "$out/failing-objcopy"
+cat > "$out/failing-objcopy/objcopy" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${1:-} == --version ]]; then exec "$REAL_OBJCOPY" "$@"; fi
+if [[ ${1:-} == --only-keep-debug ]]; then
+  echo 'controlled separate-debug write failure' >&2
+  exit 42
+fi
+touch "$STRIP_AFTER_FAILURE"
+exec "$REAL_OBJCOPY" "$@"
+SH
+chmod +x "$out/failing-objcopy/objcopy"
+set +e
+REAL_OBJCOPY="$(command -v objcopy)" STRIP_AFTER_FAILURE="$out/stripped-after-failure" \
+  PATH="$out/failing-objcopy:$PATH" \
+  "$sdk/bin/native-image" -J-Xmx5g -J-XX:ActiveProcessorCount=4 -g -O2 \
+  -H:+ReportExceptionStackTraces -H:-SourceLevelDebug -H:+TrackNodeSourcePosition \
+  -H:+DebugCodeInfoUseSourceMappings -H:DebugInfoSourceSearchPath="$out/src" \
+  --initialize-at-build-time=debugquality -cp "$out/classes" debugquality.DebugQualityProbe \
+  -o "$out/split-failure" > "$out/split-failure.log" 2>&1
+split_status=$?
+set -e
+test "$split_status" -ne 0
+grep -q 'Native debug command exited with code 42' "$out/split-failure.log"
+test ! -e "$out/stripped-after-failure"
+if [[ -f "$out/split-failure" ]]; then
+  readelf -S "$out/split-failure" | grep -q '\.debug_info'
+fi
