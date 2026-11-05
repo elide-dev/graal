@@ -6,6 +6,13 @@ def check_verifier_completion(status, output):
     expected = "No errors." if status == 0 else "Errors detected."
     assert output.rstrip().endswith(expected), "Verifier did not emit its complete final result"
 
+def error_blocks(output):
+    # Progress and warnings can include their own DIE dumps. They terminate the
+    # preceding diagnostic, but must not hide any later error record.
+    for block in re.split(r'(?m)(?=^(?:error:|warning:|Verifying ))', output):
+        if block.startswith('error:'):
+            yield block
+
 image=Path(sys.argv[1]).resolve()
 peer=Path(sys.argv[2]).resolve()
 verifier=Path(sys.argv[3]).resolve()
@@ -30,8 +37,7 @@ for kind in ['product']:
  with gzip.open(out/'verifier.txt.gz','rt') as f:text=f.read()
  check_verifier_completion(verifier_exit, text)
  checks=[];unknown=[];counts={}
- for block in re.split(r'(?m)(?=^error:)',text):
-  if not block.startswith('error:'):continue
+ for block in error_blocks(text):
   category=block.splitlines()[0]
   if category=='error: Aggregated error counts:' or re.fullmatch(r'error: .* occurred [0-9]+ time\(s\)\.',category):continue
   counts[category]=counts.get(category,0)+1
@@ -60,6 +66,8 @@ for kind in ['product']:
   else:unknown.append(category);continue
   live=[(a,b,name) for a,b in affected for name,c,d in loaded if a<d and c<b]
   checks.append({'category':category,'dieOffsets':[re.match(r'0x[0-9a-f]+',p)[0] for p in parts],'affectedRanges':affected,'liveIntersections':live, 'liveDiagnosticText':block[:5000] if live else None})
+ aggregate=sum(map(int,re.findall(r'(?m)^error: .* occurred ([0-9]+) time\(s\)\.',text)))
+ assert sum(counts.values())==aggregate, 'Parsed error records do not match the complete LLVM aggregate'
  result={'artifact':str(image),'debugPeer':str(peer),'binarySha256':sha(image),'debugSha256':sha(peer),'verifierSha256':sha(verifier),'verifierExitCode':verifier_exit,'verifierCompleted':True,'loadedExecutableSections':loaded,'counts':counts,'unknown':unknown,'liveDiagnostics':sum(bool(c['liveIntersections']) for c in checks),'scope':'Compute the actual overlapping or uncontained portions for every diagnostic, then intersect each with every loaded executable section; empty/dead ranges retain their diagnostics.','checks':checks}
  with gzip.open(out/'range-classification.json.gz','wt') as f:json.dump(result,f)
  print(kind,'range checks',len(checks),'live',result['liveDiagnostics'],'unknown',len(unknown),flush=True)
