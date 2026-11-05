@@ -59,6 +59,7 @@ import com.oracle.objectfile.elf.dwarf.constants.DwarfSectionName;
 import com.oracle.objectfile.elf.dwarf.constants.DwarfTag;
 import com.oracle.objectfile.elf.dwarf.constants.DwarfUnitHeader;
 import com.oracle.objectfile.elf.dwarf.constants.DwarfVersion;
+import com.oracle.objectfile.macho.MachOUserDefinedSection;
 
 import jdk.graal.compiler.debug.DebugContext;
 import org.graalvm.collections.EconomicSet;
@@ -252,17 +253,14 @@ public abstract class DwarfSectionImpl extends BasicProgbitsSectionImpl {
         if (dwarfSections.isRuntimeCompilation()) {
             pos = writeLong(l, buffer, p);
         } else {
-            /*
-             * Mark address so it is relocated relative to the start of the text segment.
-             * Use format-aware section name since Mach-O uses __text instead of .text.
-             */
-            // Darwin's linker debug map omits the local section symbol. Use the
-            // exported code-boundary anchor so dsymutil can resolve live PCs.
-            String codeSymbol = owner.getFormat() == ObjectFile.Format.MACH_O
-                            ? DwarfDebugInfo.CODE_BEGIN_NAME
-                            : SectionName.TEXT.getFormatDependentName(owner.getFormat());
-            markRelocationSite(pos, ObjectFile.RelocationKind.DIRECT_8, codeSymbol, l);
+            // Initialize first: Mach-O stores relocation addends in the bytes themselves.
             pos = writeLong(0, buffer, pos);
+            if (owner.getFormat() == ObjectFile.Format.MACH_O) {
+                // dsymutil maps local object addresses to the individual linked functions.
+                ((MachOUserDefinedSection) getElement()).markLocalCodeRelocationSite(p, DwarfDebugInfo.CODE_BEGIN_NAME, l);
+            } else {
+                markRelocationSite(p, ObjectFile.RelocationKind.DIRECT_8, SectionName.TEXT.getFormatDependentName(owner.getFormat()), l);
+            }
         }
         return pos;
     }
@@ -275,8 +273,8 @@ public abstract class DwarfSectionImpl extends BasicProgbitsSectionImpl {
             /*
              * Mark address so it is relocated relative to the start of the heap.
              */
-            markRelocationSite(pos, ObjectFile.RelocationKind.DIRECT_8, DwarfDebugInfo.HEAP_BEGIN_NAME, l);
             pos = writeLong(0, buffer, pos);
+            markRelocationSite(p, ObjectFile.RelocationKind.DIRECT_8, DwarfDebugInfo.HEAP_BEGIN_NAME, l);
         }
         return pos;
     }
@@ -701,6 +699,12 @@ public abstract class DwarfSectionImpl extends BasicProgbitsSectionImpl {
         EconomicSet<BuildDependency> deps = super.getDependencies(decisions);
         String targetName = targetName();
         ObjectFile owner = getElement().getOwner();
+        if (owner.getFormat() == ObjectFile.Format.MACH_O) {
+            // A local Mach-O relocation contains the target's object-file virtual address.
+            ObjectFile.Element text = owner.elementForName(SectionName.TEXT.getFormatDependentName(owner.getFormat()));
+            deps.add(BuildDependency.createOrGet(decisions.get(getElement()).getDecision(LayoutDecision.Kind.CONTENT),
+                            decisions.get(text).getDecision(LayoutDecision.Kind.VADDR)));
+        }
         ObjectFile.Element targetSection = owner.elementForName(targetName);
         /*
          * On Mach-O, section names have different prefixes (e.g., __text instead of .text).
