@@ -1,6 +1,11 @@
 from pathlib import Path
 import re,json,gzip,sys,subprocess,hashlib
 from elftools.elf.elffile import ELFFile
+def check_verifier_completion(status, output):
+    assert status in (0, 1), f"Verifier terminated abnormally: {status}"
+    expected = "No errors." if status == 0 else "Errors detected."
+    assert output.rstrip().endswith(expected), "Verifier did not emit its complete final result"
+
 image=Path(sys.argv[1]).resolve()
 peer=Path(sys.argv[2]).resolve()
 verifier=Path(sys.argv[3]).resolve()
@@ -22,6 +27,7 @@ for kind in ['product']:
  with image.open('rb') as f:
   elf=ELFFile(f);loaded=[(s.name,s['sh_addr'],s['sh_addr']+s['sh_size']) for s in elf.iter_sections() if s['sh_flags']&6==6 and s['sh_size']]
  with gzip.open(out/'verifier.txt.gz','rt') as f:text=f.read()
+ check_verifier_completion(verifier_exit, text)
  checks=[];unknown=[];counts={}
  for block in re.split(r'(?m)(?=^error:)',text):
   if not block.startswith('error:'):continue
@@ -53,7 +59,7 @@ for kind in ['product']:
   else:unknown.append(category);continue
   live=[(a,b,name) for a,b in affected for name,c,d in loaded if a<d and c<b]
   checks.append({'category':category,'dieOffsets':[re.match(r'0x[0-9a-f]+',p)[0] for p in parts],'affectedRanges':affected,'liveIntersections':live, 'liveDiagnosticText':block[:5000] if live else None})
- result={'artifact':str(image),'debugPeer':str(peer),'binarySha256':sha(image),'debugSha256':sha(peer),'verifierSha256':sha(verifier),'verifierExitCode':verifier_exit,'loadedExecutableSections':loaded,'counts':counts,'unknown':unknown,'liveDiagnostics':sum(bool(c['liveIntersections']) for c in checks),'scope':'Compute the actual overlapping or uncontained portions for every diagnostic, then intersect each with every loaded executable section; empty/dead ranges retain their diagnostics.','checks':checks}
+ result={'artifact':str(image),'debugPeer':str(peer),'binarySha256':sha(image),'debugSha256':sha(peer),'verifierSha256':sha(verifier),'verifierExitCode':verifier_exit,'verifierCompleted':True,'loadedExecutableSections':loaded,'counts':counts,'unknown':unknown,'liveDiagnostics':sum(bool(c['liveIntersections']) for c in checks),'scope':'Compute the actual overlapping or uncontained portions for every diagnostic, then intersect each with every loaded executable section; empty/dead ranges retain their diagnostics.','checks':checks}
  with gzip.open(out/'range-classification.json.gz','wt') as f:json.dump(result,f)
  print(kind,'range checks',len(checks),'live',result['liveDiagnostics'],'unknown',len(unknown),flush=True)
  (out/'summary.json').write_text(json.dumps({key:value for key,value in result.items() if key!='checks'},indent=2)+'\n')
