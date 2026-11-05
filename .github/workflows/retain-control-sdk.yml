@@ -1,0 +1,44 @@
+name: Retain the original SDK control archive bytes
+on:
+  push:
+    branches: [codex/debug-quality-qualification]
+    paths: [.github/workflows/retain-control-sdk.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retain:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the immutable control artifact identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/elide-dev/graal/actions/artifacts/13381503394 > artifact.json
+          python3 - <<'PY'
+          import json
+          artifact=json.load(open('artifact.json'))
+          assert artifact['id']==13381503394 and not artifact['expired']
+          assert artifact['name']=='dist-linux-amd64'
+          assert artifact['workflow_run']['id']==41950210115
+          assert artifact['workflow_run']['head_sha']=='b1a12a9419c0149e10574d75ecfe76d05f548a66'
+          PY
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          repository: elide-dev/graal
+          github-token: ${{ github.token }}
+          run-id: 41950210115
+          artifact-ids: 13381503394
+          path: control
+      - name: Verify both original archives against their checksums
+        working-directory: control
+        run: sha256sum -c *.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: debug-quality-control-sdk-linux-amd64-attempt1
+          path: |
+            control/
+            artifact.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
