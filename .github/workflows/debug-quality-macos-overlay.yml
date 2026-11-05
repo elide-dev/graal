@@ -59,7 +59,7 @@ jobs:
           shasum -a 256 "$sdk/lib/svm/builder/objectfile.jar" "$GITHUB_WORKSPACE/evidence/objectfile.before.jar" > "$GITHUB_WORKSPACE/evidence/objectfile-sha256.txt"
       - name: Exercise the Darwin producer and debugger
         run: |
-          graal/ci/elide/debug-quality-macos.sh "$GITHUB_WORKSPACE/sdk/graalvm-ee-$VERSION-macos-aarch64/Contents/Home" evidence/probes
+          bash graal/ci/elide/debug-quality-macos.sh "$GITHUB_WORKSPACE/sdk/graalvm-ee-$VERSION-macos-aarch64/Contents/Home" evidence/probes
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
