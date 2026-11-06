@@ -1,29 +1,52 @@
 name: Verify final SDK DWARF with the packaged native producer
 on:
-  push:
-    branches: [codex/debug-quality-qualification]
-    paths: [.github/workflows/qualify-sdk-dwarf.yml]
   workflow_dispatch:
     inputs:
+      platform:
+        description: One existing Linux SDK platform
+        type: choice
+        default: linux-amd64
+        options: [linux-amd64, linux-arm64]
+      retain_recovery:
+        description: Retain named accepted/reproduction evidence for 90 days; review before expiry
+        type: boolean
+        default: false
       source:
-        description: Optional exact source for successful normal Linux SDK builds
+        description: Exact source for successful normal Linux SDK builds
         type: string
-        default: ''
+        required: true
       runs:
-        description: Optional JSON map of linux-amd64 and linux-arm64 full SDK run IDs
+        description: Exact JSON map of linux-amd64 and linux-arm64 full SDK run IDs
         type: string
-        default: ''
+        required: true
+concurrency:
+  group: symbolication-qualification-${{ github.repository }}
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
   verify:
+    timeout-minutes: 60
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        platform: [linux-amd64, linux-arm64]
+        platform: ${{ fromJSON(inputs.platform == 'linux-amd64' && '["linux-amd64"]' || inputs.platform == 'linux-arm64' && '["linux-arm64"]' || '[]') }}
     steps:
+      - name: Require explicit exact producer inputs
+        env:
+          SOURCE: ${{ inputs.source }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          assert re.fullmatch('[0-9a-f]{40}', os.environ['SOURCE'])
+          runs = json.loads(os.environ['RUNS'])
+          assert set(runs) == {'linux-amd64', 'linux-arm64'}
+          assert all(type(run) is int and run > 0 for run in runs.values())
+          PY
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
@@ -42,7 +65,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: qualified-sdk-dwarf-${{ matrix.platform }}
+          name: ${{ inputs.retain_recovery && 'recovery' || 'diagnostic' }}-sdk-dwarf-${{ matrix.platform }}
           path: |
             qualified-sdk/verification/
             qualified-sdk/type-files.json
@@ -50,5 +73,5 @@ jobs:
             qualified-sdk/probe/gdb.txt
             qualified-sdk/probe/SHA256SUMS
             qualified-sdk/probe/artifact.json
-          retention-days: 90
+          retention-days: ${{ inputs.retain_recovery && 90 || 7 }}
           if-no-files-found: error
