@@ -25,6 +25,7 @@
 package com.oracle.truffle.tools.dap.instrument;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -46,6 +47,7 @@ import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionStability;
 import org.graalvm.options.OptionType;
 import org.graalvm.options.OptionValues;
+import org.graalvm.polyglot.io.MessageTransport;
 
 import com.oracle.truffle.api.Option;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
@@ -216,9 +218,19 @@ public final class DAPInstrument extends TruffleInstrument {
             final InetSocketAddress socketAddress = hostAndPort.createSocket();
             final int port = socketAddress.getPort();
             final ExecutionContext context = new ExecutionContext(env, info, err, options.get(Internal), options.get(Initialization));
+            dapServer = new DebugProtocolServerListener(context, options.get(Suspend), options.get(WaitAttached), options.get(Initialization), options.get(SourcePath));
+            // A message transport installed on the engine takes the session, as it does for the
+            // inspector; the socket below is bound only when no transport claims the URI.
+            final URI uri = new URI("ws", null, socketAddress.getAddress().getHostAddress(), port, "/dap", null, null);
+            try {
+                if (dapServer.start(uri)) {
+                    return;
+                }
+            } catch (MessageTransport.VetoException vex) {
+                throw new IOException(vex.getLocalizedMessage());
+            }
             final ServerSocket serverSocket = new ServerSocket(port, options.get(SocketBacklogSize), socketAddress.getAddress());
             serverSocket.setReuseAddress(true);
-            dapServer = new DebugProtocolServerListener(context, options.get(Suspend), options.get(WaitAttached), options.get(Initialization), options.get(SourcePath));
             dapServer.start(serverSocket).exceptionally(throwable -> {
                 throwable.printStackTrace(err);
                 return null;

@@ -34,6 +34,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
+import org.graalvm.polyglot.io.MessageEndpoint;
+import org.graalvm.polyglot.io.MessageTransport;
+
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.tools.dap.types.DebugProtocolServer.Session;
 
@@ -52,6 +55,7 @@ public final class DebugProtocolServerListener {
     private DebugProtocolServerImpl session;
     private ServerSocket serverSocket;
     private Socket clientSocket;
+    private TransportSession transport;
     private Thread thread;
     private boolean disposed;
 
@@ -95,6 +99,71 @@ public final class DebugProtocolServerListener {
         thread.setName("DAP client connection thread");
         thread.start();
         return completion;
+    }
+
+    /**
+     * Serves clients through the engine's message transport instead of a socket, as the inspector
+     * does; after a client leaves, the next one is offered a fresh endpoint at the same URI.
+     *
+     * @param uri the server URI handed to {@code Env.startServer}
+     * @return {@code false} when no transport claims the URI, so the caller binds a socket instead
+     */
+    public synchronized boolean start(URI uri) throws IOException, MessageTransport.VetoException {
+        TransportSession first = new TransportSession();
+        MessageEndpoint client = env.startServer(uri, first);
+        if (client == null) {
+            return false;
+        }
+        first.opened(client);
+        transport = first;
+        info.println("[Graal DAP] Starting server on " + uri);
+        thread = env.createSystemThread(() -> serveTransport(uri, first));
+        thread.setName("DAP client connection thread");
+        thread.start();
+        return true;
+    }
+
+    private void serveTransport(URI uri, TransportSession first) {
+        TransportSession current = first;
+        while (true) {
+            DebugProtocolServerImpl server;
+            synchronized (this) {
+                if (disposed) {
+                    current.close();
+                    return;
+                }
+                if (session == null) {
+                    ExecutionContext context = new ExecutionContext(env, info, err, inspectInternal, inspectInitialization);
+                    session = DebugProtocolServerImpl.create(context, false, false, context.isInspectInitialization(), sourcePath);
+                }
+                server = session;
+                transport = current;
+            }
+            try {
+                Session.connect(server, current.getInput(), current.getOutput(), Runnable::run, current::close, server::dispose).get();
+            } catch (InterruptedException | ExecutionException error) {
+                err.println("[Graal DAP] Session failed: " + error.getLocalizedMessage());
+            } finally {
+                server.dispose();
+                synchronized (this) {
+                    session = null;
+                    transport = null;
+                }
+            }
+            TransportSession next = new TransportSession();
+            MessageEndpoint client;
+            try {
+                client = env.startServer(uri, next);
+            } catch (IOException | MessageTransport.VetoException error) {
+                err.println("[Graal DAP] Cannot re-open " + uri + ": " + error.getLocalizedMessage());
+                return;
+            }
+            if (client == null) {
+                return;
+            }
+            next.opened(client);
+            current = next;
+        }
     }
 
     private void run() throws IOException, InterruptedException, ExecutionException {
@@ -155,12 +224,14 @@ public final class DebugProtocolServerListener {
         Thread clientThread;
         DebugProtocolServerImpl server;
         Socket socket;
+        TransportSession endpoint;
         synchronized (this) {
             disposed = true;
             close(serverSocket);
             clientThread = thread;
             server = session;
             socket = clientSocket;
+            endpoint = transport;
         }
         try {
             if (server != null) {
@@ -170,6 +241,9 @@ public final class DebugProtocolServerListener {
             }
         } finally {
             close(socket);
+            if (endpoint != null) {
+                endpoint.close();
+            }
             if (clientThread != null && clientThread != Thread.currentThread()) {
                 boolean interrupted = false;
                 while (clientThread.isAlive()) {
