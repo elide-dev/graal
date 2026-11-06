@@ -92,6 +92,9 @@ final class NativeSignature {
 
     static class ExecuteHelper {
 
+        /** Calls with at most this many arguments keep their argument pointers on the stack. */
+        private static final int MAX_STACK_ARGS = 16;
+
         static int alignUp(int index, int alignment) {
             int mask = alignment - 1;
             assert (alignment & mask) == 0 : "not a power of 2";
@@ -102,8 +105,14 @@ final class NativeSignature {
         static void execute(NativeTruffleContext ctx, ffi_cif cif, PointerBase ret, long functionPointer, byte[] primArgs, int patchCount, int[] patchOffsets, Object[] objArgs,
                         LocalNativeScope scope) {
             int nargs = cif.nargs();
-            WordPointer argPtrs = UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
-            // TODO WordPointer argPtrs = StackValue.get(nargs, SizeOf.get(WordPointer.class));
+            /*
+             * Stack allocations need a constant size, so calls with up to MAX_STACK_ARGS arguments
+             * (almost all of them) use a fixed stack buffer and only longer ones allocate. Like the
+             * environment below, the buffer only lives for this native call.
+             */
+            WordPointer stackArgPtrs = UnsafeStackValue.get(MAX_STACK_ARGS, WordPointer.class);
+            boolean argPtrsOnStack = nargs <= MAX_STACK_ARGS;
+            WordPointer argPtrs = argPtrsOnStack ? stackArgPtrs : UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
 
             NativeTruffleEnv env = UnsafeStackValue.get(NativeTruffleEnv.class);
             NFIInitialization.initializeEnv(env, ctx);
@@ -143,7 +152,9 @@ final class NativeSignature {
 
                 ffiCall(cif, Word.pointer(functionPointer), ret, argPtrs, ErrnoMirror.errnoMirror.getAddress());
             } finally {
-                UnmanagedMemory.free(argPtrs);
+                if (!argPtrsOnStack) {
+                    UnmanagedMemory.free(argPtrs);
+                }
             }
         }
 
