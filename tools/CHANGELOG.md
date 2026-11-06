@@ -7,6 +7,8 @@ This changelog summarizes major changes between Truffle Tools versions.
 * GR-80275: DAP debugger clients can detach and reconnect to the same running polyglot engine.
   Each connection uses fresh debugger state, and disconnecting resumes suspended guest execution.
   While a client is attached, another client that connects gets an error response to its first request and is disconnected.
+* The DAP server serves sessions over a `MessageTransport` installed with `Engine.Builder.serverTransport` or `Context.Builder.serverTransport`, as the Chrome inspector does.
+  It offers the transport `ws://<host>:<port>/dap` before opening a socket, and offers a new endpoint after each client disconnects.
 
 ## Version 25.1.3
 * GR-72122: `--cpusampler.DumpInterval` and `--cpusampler.ResetAfterIntervalDump` options were added to dump the sampler output at a specified interval, optionally clearing all sampler data after each dump. Interval-based dumping is disabled by default; the sampler output is dumped only at the end.

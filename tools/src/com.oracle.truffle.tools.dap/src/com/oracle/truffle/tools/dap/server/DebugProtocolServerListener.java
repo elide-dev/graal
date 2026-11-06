@@ -38,14 +38,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import org.graalvm.polyglot.io.MessageEndpoint;
+import org.graalvm.polyglot.io.MessageTransport;
+
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.tools.dap.types.DebugProtocolServer;
 import com.oracle.truffle.tools.dap.types.DebugProtocolServer.Session;
 
 /**
- * Owns an Engine's listening socket and serves one debugger client at a time. Each connection gets
- * fresh debugger and protocol state. A client that connects while another one is attached gets an
- * error response to its first request and is disconnected; the attached session is not disturbed.
+ * Owns an Engine's listening socket, or its endpoint on the engine's message transport, and serves
+ * one debugger client at a time. Each connection gets fresh debugger and protocol state.
+ * <p>
+ * On a socket, a client that connects while another one is attached gets an error response to its
+ * first request and is disconnected; the attached session is not disturbed.
+ * <p>
+ * On a message transport, the listener holds exactly one endpoint at a time and asks the transport
+ * for the next one only after the attached client has left and its session has been cleaned up.
+ * The transport therefore has no endpoint to hand a second client while a session is attached;
+ * refusing or queueing such clients is up to the transport. Messages that arrive on an endpoint
+ * after it was closed are discarded and never reach a later session.
  */
 public final class DebugProtocolServerListener {
 
@@ -65,6 +76,8 @@ public final class DebugProtocolServerListener {
     private ServerSocket serverSocket;
     /** The attached client's transport, until it is closed. */
     private Socket clientSocket;
+    /** The endpoint offered to, or attached to, the message transport's client. */
+    private TransportSession transport;
     /** Serves the current client and cleans up after it. */
     private Thread sessionThread;
     private Throwable sessionFailure;
@@ -111,6 +124,128 @@ public final class DebugProtocolServerListener {
         thread.setName("DAP client connection thread");
         thread.start();
         return completion;
+    }
+
+    /**
+     * Serves clients through the engine's message transport instead of a socket, as the inspector
+     * does. After a client leaves and its session is cleaned up, the transport is offered a fresh
+     * endpoint at the same URI for the next client.
+     *
+     * @param uri the server URI handed to {@code Env.startServer}
+     * @return completion of the session loop and all session cleanup, or {@code null} when no
+     *         transport claims the URI, so the caller binds a socket instead
+     * @throws MessageTransport.VetoException if the transport does not allow a server at the URI
+     */
+    public CompletableFuture<Void> start(URI uri) throws IOException, MessageTransport.VetoException {
+        TransportSession first = new TransportSession();
+        MessageEndpoint client = env.startServer(uri, first);
+        if (client == null) {
+            return null;
+        }
+        first.opened(client);
+        CompletableFuture<Void> completion = new CompletableFuture<>();
+        synchronized (this) {
+            transport = first;
+            info.println("[Graal DAP] Starting server on message transport " + uri);
+            thread = env.createSystemThread(() -> {
+                try {
+                    serveTransport(uri, first);
+                    completion.complete(null);
+                } catch (Throwable error) {
+                    completion.completeExceptionally(error);
+                }
+            });
+            thread.setName("DAP transport session thread");
+            thread.start();
+        }
+        return completion;
+    }
+
+    private void serveTransport(URI uri, TransportSession first) throws Throwable {
+        TransportSession endpoint = first;
+        try {
+            while (endpoint != null) {
+                DebugProtocolServerImpl server;
+                synchronized (this) {
+                    if (disposed) {
+                        break;
+                    }
+                    if (session == null) {
+                        ExecutionContext context = new ExecutionContext(env, info, err, inspectInternal, inspectInitialization);
+                        // Suspend/WaitAttached are startup options, not reconnect options.
+                        session = DebugProtocolServerImpl.create(context, false, false, context.isInspectInitialization(), sourcePath);
+                    }
+                    server = session;
+                }
+                TransportSession current = endpoint;
+                try {
+                    // Completes after the client's pending requests and cleanup have finished.
+                    Session.connect(server, current.getInput(), current.getOutput(), Runnable::run, current::close, server::dispose).get();
+                } finally {
+                    server.dispose();
+                    current.close();
+                    synchronized (this) {
+                        if (session == server) {
+                            session = null;
+                        }
+                        if (transport == current) {
+                            transport = null;
+                        }
+                    }
+                }
+                endpoint = reopen(uri);
+            }
+        } finally {
+            if (endpoint != null) {
+                endpoint.close();
+            }
+            DebugProtocolServerImpl server;
+            synchronized (this) {
+                disposed = true;
+                transport = null;
+                server = session;
+                session = null;
+            }
+            if (server != null) {
+                server.dispose();
+            }
+        }
+    }
+
+    /**
+     * Offers the transport a fresh endpoint for the next client, as
+     * {@code InspectorInstrument.restartServerEndpointOnClose} does.
+     *
+     * @return the new endpoint, or {@code null} once no further clients are served
+     */
+    private TransportSession reopen(URI uri) throws IOException {
+        synchronized (this) {
+            if (disposed) {
+                return null;
+            }
+        }
+        TransportSession next = new TransportSession();
+        MessageEndpoint client;
+        try {
+            client = env.startServer(uri, next);
+        } catch (MessageTransport.VetoException vex) {
+            info.println("[Graal DAP] Message transport declined " + uri + ": " + vex.getLocalizedMessage());
+            return null;
+        }
+        if (client == null) {
+            info.println("[Graal DAP] Message transport no longer serves " + uri);
+            return null;
+        }
+        next.opened(client);
+        synchronized (this) {
+            if (disposed) {
+                // dispose() did not see this endpoint; close it here.
+                next.close();
+                return null;
+            }
+            transport = next;
+        }
+        return next;
     }
 
     private void run() throws Throwable {
@@ -305,12 +440,14 @@ public final class DebugProtocolServerListener {
         Thread acceptThread;
         DebugProtocolServerImpl server;
         Socket socket;
+        TransportSession endpoint;
         synchronized (this) {
             disposed = true;
             close(serverSocket);
             acceptThread = thread;
             server = session;
             socket = clientSocket;
+            endpoint = transport;
         }
         try {
             if (server != null) {
@@ -320,7 +457,12 @@ public final class DebugProtocolServerListener {
             }
         } finally {
             close(socket);
-            // The accept thread joins the session and refusal threads before it ends.
+            if (endpoint != null) {
+                // Ends the transport session; its thread then disposes it and stops.
+                endpoint.close();
+            }
+            // The accept thread joins the session and refusal threads before it ends; the
+            // transport session thread serves its session itself.
             join(acceptThread);
         }
     }

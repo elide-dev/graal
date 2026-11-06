@@ -25,6 +25,7 @@
 package com.oracle.truffle.tools.dap.instrument;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -37,6 +38,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import org.graalvm.options.OptionCategory;
@@ -46,6 +48,7 @@ import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionStability;
 import org.graalvm.options.OptionType;
 import org.graalvm.options.OptionValues;
+import org.graalvm.polyglot.io.MessageTransport;
 
 import com.oracle.truffle.api.Option;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
@@ -212,20 +215,39 @@ public final class DAPInstrument extends TruffleInstrument {
         assert options.hasSetOptions();
 
         final HostAndPort hostAndPort = options.get(Dap);
+        DebugProtocolServerListener listener = null;
         try {
             final InetSocketAddress socketAddress = hostAndPort.createSocket();
             final int port = socketAddress.getPort();
             final ExecutionContext context = new ExecutionContext(env, info, err, options.get(Internal), options.get(Initialization));
-            final ServerSocket serverSocket = new ServerSocket(port, options.get(SocketBacklogSize), socketAddress.getAddress());
-            serverSocket.setReuseAddress(true);
-            dapServer = new DebugProtocolServerListener(context, options.get(Suspend), options.get(WaitAttached), options.get(Initialization), options.get(SourcePath));
-            dapServer.start(serverSocket).exceptionally(throwable -> {
+            // Startup suspension is installed before a transport or socket can deliver a client.
+            listener = new DebugProtocolServerListener(context, options.get(Suspend), options.get(WaitAttached), options.get(Initialization), options.get(SourcePath));
+            // A message transport installed on the engine takes the sessions, as it does for the
+            // inspector; the socket is bound only when no transport claims the URI.
+            final URI uri = new URI("ws", null, socketAddress.getAddress().getHostAddress(), port, "/dap", null, null);
+            CompletableFuture<Void> completion;
+            try {
+                completion = listener.start(uri);
+            } catch (MessageTransport.VetoException vex) {
+                throw new IOException(vex.getLocalizedMessage());
+            }
+            if (completion == null) {
+                final ServerSocket serverSocket = new ServerSocket(port, options.get(SocketBacklogSize), socketAddress.getAddress());
+                serverSocket.setReuseAddress(true);
+                completion = listener.start(serverSocket);
+            }
+            dapServer = listener;
+            completion.exceptionally(throwable -> {
                 throwable.printStackTrace(err);
                 return null;
             });
         } catch (ThreadDeath td) {
             throw td;
         } catch (Throwable e) {
+            if (listener != null && dapServer != listener) {
+                // Nothing will serve the listener; release the startup suspension it installed.
+                listener.dispose();
+            }
             String message = String.format(Locale.ENGLISH, "[Graal DAP] Starting server on %s failed: %s", hostAndPort.getHostPort(), e.getLocalizedMessage());
             new DAPIOException(message, e).printStackTrace(err);
         }

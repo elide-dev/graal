@@ -24,6 +24,15 @@ If a second debugger connects while one is attached, it receives an error respon
 The attached session is not affected.
 The `--dap.Suspend` and `--dap.WaitAttached` options apply to startup, not to subsequent sessions.
 
+When you embed GraalVM and install a `MessageTransport` with `Engine.Builder.serverTransport` or `Context.Builder.serverTransport`, the DAP server first offers the transport the URI `ws://<host>:<port>/dap`, as the [Chrome DevTools Protocol implementation](chrome-debugger.md) does.
+If the transport accepts the URI, each text message carries one DAP message body without the `Content-Length` header, and no socket is opened.
+If the transport returns `null`, the DAP server listens on the socket as usual.
+If the transport vetoes the URI, the DAP server reports an error and does not start.
+The transport receives one endpoint at a time.
+After a debugger disconnects and its session is cleaned up, the DAP server offers the transport a new endpoint at the same URI for the next debugger.
+While a debugger is attached, the transport has no endpoint for a second debugger, so the transport decides whether to refuse or queue it.
+Messages that arrive on an endpoint after it is closed are discarded and do not reach later sessions.
+
 Then you need a DAP client to connect to the open DAP port. VS Code will be used as an example.
 
 1&#46; Save this Node.js application in a file named _App.js_:
