@@ -41,7 +41,9 @@ import org.graalvm.word.WordBase;
 
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.handles.PrimitiveArrayView;
 import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.nodes.CFunctionEpilogueNode;
@@ -95,6 +97,9 @@ final class NativeSignature {
         /** Calls with at most this many arguments keep their argument pointers on the stack. */
         private static final int MAX_STACK_ARGS = 16;
 
+        /** Primitive argument buffers up to this size are copied to the stack instead of pinned. */
+        private static final int MAX_STACK_PRIM_BYTES = 256;
+
         static int alignUp(int index, int alignment) {
             int mask = alignment - 1;
             assert (alignment & mask) == 0 : "not a power of 2";
@@ -117,8 +122,23 @@ final class NativeSignature {
             NativeTruffleEnv env = UnsafeStackValue.get(NativeTruffleEnv.class);
             NFIInitialization.initializeEnv(env, ctx);
 
-            try (PrimitiveArrayView primBuffer = PrimitiveArrayView.createForReading(primArgs)) {
-                Pointer prim = primBuffer.addressOfArrayElement(0);
+            /*
+             * Native code only reads the primitive argument buffer, so a small one is copied to the
+             * stack rather than pinned: every pin allocates a PinnedObject and links it into a
+             * global list that only a GC cleans up, which made pinning the largest cost of a call.
+             */
+            Pointer stackPrim = UnsafeStackValue.get(MAX_STACK_PRIM_BYTES);
+            PrimitiveArrayView primView = null;
+            Pointer prim;
+            if (primArgs.length <= MAX_STACK_PRIM_BYTES) {
+                copyToNative(primArgs, stackPrim, primArgs.length);
+                prim = stackPrim;
+            } else {
+                primView = PrimitiveArrayView.createForReading(primArgs);
+                prim = primView.addressOfArrayElement(0);
+            }
+
+            try {
 
                 int primIdx = 0;
                 for (int i = 0; i < nargs; i++) {
@@ -152,10 +172,23 @@ final class NativeSignature {
 
                 ffiCall(cif, Word.pointer(functionPointer), ret, argPtrs, ErrnoMirror.errnoMirror.getAddress());
             } finally {
+                if (primView != null) {
+                    primView.close();
+                }
                 if (!argPtrsOnStack) {
                     UnmanagedMemory.free(argPtrs);
                 }
             }
+        }
+
+        private static void copyToNative(byte[] array, Pointer destination, int length) {
+            copyToNative(array, ObjectLayout.singleton().getArrayBaseOffset(Byte.BYTES), destination, length);
+        }
+
+        @Uninterruptible(reason = "Reads the array through its address, so the GC must not move it.")
+        private static void copyToNative(byte[] array, int baseOffset, Pointer destination, int length) {
+            Pointer source = Word.objectToUntrackedPointer(array).add(baseOffset);
+            UnmanagedMemoryUtil.copy(source, destination, Word.unsigned(length));
         }
 
         /**
