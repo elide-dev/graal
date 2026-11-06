@@ -224,6 +224,11 @@ final class NodeAccessor extends Accessor {
         }
 
         @Override
+        public void visitCloneableNodes(RootNode rootNode, NodeVisitor visitor) {
+            rootNode.visitCloneableNodes(visitor);
+        }
+
+        @Override
         public Node findInstrumentableCallNode(RootNode root, Node callNode, Frame frame, int bytecodeIndex) {
             Node node = root.findInstrumentableCallNode(callNode, frame, bytecodeIndex);
             assert node == null || node.getRootNode() != null : "Invariant violated: Returned instrumentable call node is not adopted.";
