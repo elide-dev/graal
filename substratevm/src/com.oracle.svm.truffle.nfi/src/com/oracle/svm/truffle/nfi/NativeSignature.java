@@ -27,6 +27,8 @@ package com.oracle.svm.truffle.nfi;
 import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getOffset;
 import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getTag;
 
+import java.nio.charset.StandardCharsets;
+
 import org.graalvm.nativeimage.UnmanagedMemory;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.struct.CFieldAddress;
@@ -100,6 +102,9 @@ final class NativeSignature {
         /** Primitive argument buffers up to this size are copied to the stack instead of pinned. */
         private static final int MAX_STACK_PRIM_BYTES = 256;
 
+        /** String arguments up to this total size, terminators included, are copied to the stack. */
+        private static final int MAX_STACK_STRING_BYTES = 256;
+
         static int alignUp(int index, int alignment) {
             int mask = alignment - 1;
             assert (alignment & mask) == 0 : "not a power of 2";
@@ -138,6 +143,10 @@ final class NativeSignature {
                 prim = primView.addressOfArrayElement(0);
             }
 
+            /* Strings up to MAX_STACK_STRING_BYTES in all are copied to the stack, too. */
+            Pointer stackStrings = UnsafeStackValue.get(MAX_STACK_STRING_BYTES);
+            int stackStringsUsed = 0;
+
             try {
 
                 int primIdx = 0;
@@ -157,8 +166,18 @@ final class NativeSignature {
                         WordBase handle = scope.createLocalHandle(obj);
                         prim.writeWord(offset, handle);
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.STRING) {
-                        PointerBase strPtr = scope.refString((String) obj);
-                        prim.writeWord(offset, strPtr);
+                        String str = (String) obj;
+                        byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
+                        if (stackStringsUsed + utf8.length + 1 <= MAX_STACK_STRING_BYTES) {
+                            // Like a pinned copy, the string is only valid during the call.
+                            Pointer copy = stackStrings.add(stackStringsUsed);
+                            copyToNative(utf8, copy, utf8.length);
+                            copy.writeByte(utf8.length, (byte) 0);
+                            stackStringsUsed += utf8.length + 1;
+                            prim.writeWord(offset, copy);
+                        } else {
+                            prim.writeWord(offset, scope.refString(str));
+                        }
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.KEEPALIVE) {
                         // nothing to do
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.ENV) {
