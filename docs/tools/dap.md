@@ -20,6 +20,8 @@ The usage of Debug Adapter Protocol is similar to the existing [Chrome DevTools 
 The DAP server supports successive debugger connections to the same polyglot engine, with one active session at a time.
 Disconnecting an attached debugger leaves the application running and releases the session's breakpoints and debugger state.
 Another debugger can attach without restarting the application or replacing its engine.
+If a second debugger connects while one is attached, it receives an error response to its first request and is disconnected.
+The attached session is not affected.
 The `--dap.Suspend` and `--dap.WaitAttached` options apply to startup, not to subsequent sessions.
 
 Then you need a DAP client to connect to the open DAP port. VS Code will be used as an example.
