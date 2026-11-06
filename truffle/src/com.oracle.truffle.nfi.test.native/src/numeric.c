@@ -97,3 +97,14 @@ GEN_NUMERIC_TEST(FP80, long double)
 #if defined(__aarch64__) && !defined(__MACH__) && !defined(__APPLE__)
 GEN_NUMERIC_TEST(FP128, long double)
 #endif
+
+/* Argument counts on both sides of the SVM backend's stack buffer for argument pointers (16). */
+EXPORT int64_t sum_16_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6, int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11,
+                             int64_t a12, int64_t a13, int64_t a14, int64_t a15, int64_t a16) {
+    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 + a16;
+}
+
+EXPORT int64_t sum_17_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6, int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11,
+                             int64_t a12, int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17) {
+    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 + a16 + a17;
+}
