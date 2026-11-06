@@ -70,6 +70,7 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
+import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
@@ -86,6 +87,7 @@ import com.oracle.svm.core.code.FactoryMethodHolder;
 import com.oracle.svm.core.code.FactoryThrowMethodHolder;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.foreign.AbiUtils;
+import com.oracle.svm.core.foreign.DowncallHandleLinker;
 import com.oracle.svm.core.foreign.ForeignFunctionsRuntime;
 import com.oracle.svm.core.foreign.JavaEntryPointInfo;
 import com.oracle.svm.core.foreign.NativeEntryPointHelper;
@@ -101,10 +103,12 @@ import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
 import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
 import com.oracle.svm.core.sboutlining.OutlinedSBMethodHolder;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.ConditionalConfigurationRegistry;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
@@ -197,7 +201,17 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
 
     private AbiUtils abiUtils;
     private ForeignFunctionsRuntime foreignFunctionsRuntime;
-    private UpcallStubRenamingSubstitutionProcessor upcallStubRenamingSubstitutionProcessor;
+    private ForeignStubRenamingSubstitutionProcessor stubRenamingSubstitutionProcessor;
+    /**
+     * Links the invocation of downcall handles in runtime-compiled code, or null when the image
+     * has no runtime compilation or downcalls are not specialized at build time.
+     */
+    private DowncallHandleLinker downcallHandleLinker;
+    /** The downcalls whose handle was created at build time; see {@link #createSpecializedDowncall}. */
+    private final ConcurrentMap<SharedDesc, Boolean> specializedDowncalls = new ConcurrentHashMap<>();
+    /** Entry methods of downcall handles that are not yet registered for runtime compilation. */
+    private final Deque<AnalysisMethod> pendingRuntimeCompilationEntries = new ConcurrentLinkedDeque<>();
+    private volatile FeatureImpl.BeforeAnalysisAccessImpl analysisAccess;
     private volatile Lookup implLookup;
 
     private final Deque<Object> nativeEntryPointsInImageHeap = new ConcurrentLinkedDeque<>();
@@ -346,6 +360,12 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
                     DowncallStub stub = createStub(DowncallStubFactory.INSTANCE, nepi);
                     if (stub != null) {
                         createStub(DowncallStubInvokerFactory.INSTANCE, nepi.methodType());
+                    }
+                    if (specializesDowncalls()) {
+                        specializedDowncalls.computeIfAbsent(sharedDesc, _ -> {
+                            createSpecializedDowncall(sharedDesc, options);
+                            return Boolean.TRUE;
+                        });
                     }
                 });
             } catch (IllegalArgumentException e) {
@@ -523,14 +543,27 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         ImageSingletons.add(ForeignSupport.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignFunctionsRuntime.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignHostedSupport.class, this);
+        if (specializesDowncalls() && RuntimeCompilation.isEnabled()) {
+            downcallHandleLinker = new DowncallHandleLinker();
+            ImageSingletons.add(RuntimeMethodHandleLinker.class, downcallHandleLinker);
+        }
+    }
+
+    /**
+     * Whether the method handles of registered downcalls are created at image build time, with
+     * bindings specialized by the JDK, in place of handles with interpreted bindings linked at run
+     * time.
+     */
+    private static boolean specializesDowncalls() {
+        return ForeignFunctionsRuntime.areFunctionCallsSupported() && SubstrateOptions.ConcealedOptions.SpecializeForeignDowncalls.getValue();
     }
 
     @Override
     public void duringSetup(DuringSetupAccess a) {
         var access = (FeatureImpl.DuringSetupAccessImpl) a;
         accessSupport.duringSetup(access.getMetaAccess(), access.getUniverse());
-        upcallStubRenamingSubstitutionProcessor = new UpcallStubRenamingSubstitutionProcessor();
-        access.registerSubstitutionProcessor(upcallStubRenamingSubstitutionProcessor);
+        stubRenamingSubstitutionProcessor = new ForeignStubRenamingSubstitutionProcessor();
+        access.registerSubstitutionProcessor(stubRenamingSubstitutionProcessor);
         if (SubstrateOptions.isSharedArenaSupportEnabled()) {
             ImageSingletons.add(SharedArenaSupport.class, new SharedArenaSupportImpl());
         }
@@ -783,7 +816,7 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
              */
             MethodHandle specializedBindings = lookupAndReadMethodHandleField(bindingsMaker);
             Class<?> upcallStubClass = feature.getImplLookup().revealDirect(specializedBindings).getDeclaringClass();
-            feature.upcallStubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
+            feature.stubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
             return bindingsMaker;
         }
 
@@ -913,6 +946,11 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         var access = (FeatureImpl.BeforeAnalysisAccessImpl) a;
 
         accessSupport.setAnalysisAccess(a);
+        if (downcallHandleLinker != null) {
+            downcallHandleLinker.initialize(access.getMetaAccess(), field -> access.registerAsAccessed((AnalysisField) field, "Read by the downcall handle linker in runtime compilation"));
+        }
+        analysisAccess = access;
+        registerPendingEntriesForRuntimeCompilation();
 
         for (String simpleName : VAR_HANDLE_SEGMENT_ACCESSORS) {
             Class<?> varHandleSegmentAsXClass = ReflectionUtil.lookupClass(JLI_PACKAGE + '.' + simpleName);
@@ -958,6 +996,54 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             initSafeArenaAccessors(access);
         } catch (Throwable t) {
             throw GraalError.shouldNotReachHere(t);
+        }
+    }
+
+    /**
+     * Creates the method handle of a registered downcall at image build time, so that the JDK
+     * specializes its bindings to bytecode, and registers it for {@code Linker.downcallHandle}
+     * calls at image run time (see {@link ForeignFunctionsRuntime#getSpecializedDowncallHandle}).
+     * If the image has runtime compilation, also generates the entry method of the handle and
+     * registers it for runtime compilation, so that runtime-compiled code invokes the handle
+     * directly (see {@link DowncallHandleLinker}).
+     */
+    private void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
+        MethodHandle handle = DowncallHandleEntryGenerator.createDowncallHandle(LINKER, desc.fd, options);
+        FunctionDescriptor strippedFd = DowncallHandleEntryGenerator.stripNames(desc.fd);
+        LinkerOptions linkerOptions = LinkerOptions.forDowncall(strippedFd, options);
+        if (!foreignFunctionsRuntime.addSpecializedDowncallHandle(strippedFd, linkerOptions, handle)) {
+            return;
+        }
+        String digest = Digest.digestAsHex(platform() + "|" + strippedFd + "|" + linkerOptions);
+        Lookup lookup = getImplLookup();
+        Class<?> stubClass = DowncallHandleEntryGenerator.findSpecializedStubClass(handle, lookup);
+        stubRenamingSubstitutionProcessor.register(stubClass, "L" + DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+        if (downcallHandleLinker != null) {
+            Method entry = DowncallHandleEntryGenerator.generateEntry(handle, lookup);
+            stubRenamingSubstitutionProcessor.register(entry.getDeclaringClass(), "L" + DowncallHandleEntryGenerator.ENTRY_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+            AnalysisMethod entryMethod = accessSupport.analysisMetaAccess.lookupJavaMethod(entry);
+            downcallHandleLinker.registerEntry(handle, entryMethod);
+            pendingRuntimeCompilationEntries.add(entryMethod);
+            registerPendingEntriesForRuntimeCompilation();
+        }
+    }
+
+    /**
+     * Registers the generated entry methods for runtime compilation once the analysis access is
+     * available. Entry methods are created by conditional tasks, which may run before the analysis
+     * starts and while it runs.
+     */
+    private void registerPendingEntriesForRuntimeCompilation() {
+        FeatureImpl.BeforeAnalysisAccessImpl access = analysisAccess;
+        if (access == null || downcallHandleLinker == null) {
+            return;
+        }
+        RuntimeCompilationFeature runtimeCompilation = RuntimeCompilationFeature.singleton();
+        synchronized (pendingRuntimeCompilationEntries) {
+            AnalysisMethod entry;
+            while ((entry = pendingRuntimeCompilationEntries.poll()) != null) {
+                runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
+            }
         }
     }
 

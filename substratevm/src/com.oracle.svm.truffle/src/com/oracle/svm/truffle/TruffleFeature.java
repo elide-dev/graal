@@ -698,6 +698,8 @@ public class TruffleFeature implements InternalFeature {
     private static boolean runtimeCompilationForbidden(ResolvedJavaMethod method) {
         if (GuestAnnotationAccess.isAnnotationPresent(method, TruffleBoundary.class)) {
             return true;
+        } else if (isRuntimeBoundary(method)) {
+            return true;
         } else if (UninterruptibleAnnotationUtils.isUninterruptible(method)) {
             UninterruptibleGuestValue uninterruptibleAnnotation = UninterruptibleAnnotationUtils.getAnnotation(method);
             if (uninterruptibleAnnotation == null || !uninterruptibleAnnotation.mayBeInlined()) {
@@ -711,6 +713,38 @@ public class TruffleFeature implements InternalFeature {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Methods of the native image runtime that are treated like methods annotated with
+     * {@link TruffleBoundary}: they are called from runtime-compiled code but never inlined into
+     * it.
+     * <ul>
+     * <li>{@code MethodHandle.invokeBasic} and the {@code linkTo} methods box their arguments and
+     * run the lambda form interpreter, so their code is unsuitable for partial evaluation, and the
+     * call site of a method handle that partial evaluation cannot resolve is better compiled as a
+     * call to them. A call site whose handle is a compilation constant is resolved by the method
+     * handle intrinsification at image build time (when the handle is a constant then), or by a
+     * {@link com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker} during partial
+     * evaluation.</li>
+     * <li>The downcall stubs of the Foreign Function and Memory API perform a transition to native
+     * code, which runtime-compiled code cannot contain, so the intrinsified invocation of a
+     * downcall handle calls them.</li>
+     * </ul>
+     */
+    public static boolean isRuntimeBoundary(ResolvedJavaMethod method) {
+        String name = method.getName();
+        String declaringClass = method.getDeclaringClass().toJavaName(true);
+        return switch (declaringClass) {
+            case "java.lang.invoke.MethodHandle" -> switch (name) {
+                case "invokeBasic", "linkToStatic", "linkToSpecial", "linkToVirtual", "linkToInterface", "linkToNative", "asType" -> true;
+                default -> false;
+            };
+            /* Called by the JDK's invokeExact and invoke adapters when their type check fails. */
+            case "java.lang.invoke.Invokers" -> "newWrongMethodTypeException".equals(name);
+            case "com.oracle.svm.core.foreign.DowncallStubsHolder" -> true;
+            default -> false;
+        };
     }
 
     boolean isBlocklisted(ResolvedJavaMethod method) {

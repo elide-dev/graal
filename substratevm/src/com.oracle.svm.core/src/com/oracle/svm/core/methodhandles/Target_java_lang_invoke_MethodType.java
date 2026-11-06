@@ -50,6 +50,9 @@ final class Target_java_lang_invoke_MethodType {
      */
     @Alias @RecomputeFieldValue(kind = Kind.Reset) //
     private String methodDescriptor;
+
+    @Alias
+    native Class<?> leadingReferenceParameter();
 }
 
 @TargetClass(className = "java.lang.invoke.Invokers")
