@@ -90,7 +90,9 @@ final class DowncallHandleEntryGenerator {
     /**
      * Finds the hidden class with the specialized bindings of the downcall handle: the handle is
      * a chain of bound method handles around the direct method handle of the class's
-     * {@code invoke} method.
+     * {@code invoke} method. Returns null if the handle does not invoke such a class, for example
+     * because the JDK of the image builder interprets the bindings
+     * ({@code -Djdk.internal.foreign.DowncallLinker.USE_SPEC=false}).
      */
     static Class<?> findSpecializedStubClass(MethodHandle handle, Lookup lookup) {
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -116,7 +118,7 @@ final class DowncallHandleEntryGenerator {
                 }
             }
         }
-        throw VMError.shouldNotReachHere("The downcall handle %s does not invoke a specialized stub", handle);
+        return null;
     }
 
     private static Class<?> directTargetClass(MethodHandle handle, Lookup lookup) {

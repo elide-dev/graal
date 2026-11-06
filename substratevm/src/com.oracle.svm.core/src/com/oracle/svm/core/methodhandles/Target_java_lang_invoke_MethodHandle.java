@@ -40,7 +40,6 @@ import java.util.Arrays;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.hosted.FieldValueTransformer;
 
 import com.oracle.svm.core.ForeignSupport;
 import com.oracle.svm.core.annotate.Alias;
@@ -51,6 +50,7 @@ import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
+import com.oracle.svm.core.fieldvaluetransformer.FieldValueTransformerWithAvailability;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.hub.RuntimeClassLoading.NoRuntimeClassLoading;
 import com.oracle.svm.core.hub.crema.CremaSupport;
@@ -65,6 +65,7 @@ import com.oracle.svm.guest.staging.reflect.target.Target_java_lang_reflect_Meth
 import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_ConstructorAccessor;
 import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_MethodAccessor;
 import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
+import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
@@ -95,7 +96,7 @@ final class Target_java_lang_invoke_MethodHandle {
      * for the handles it creates from them.
      */
     @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Custom, declClass = LinkInfoComputer.class) //
-    Object linkInfo;
+    MethodHandleLinkInfo linkInfo;
 
     @Alias
     native Target_java_lang_invoke_MemberName internalMemberName();
@@ -434,9 +435,18 @@ final class Target_java_lang_invoke_MethodHandleImpl_WrappedMember {
     native void constructor(MethodHandle target, MethodType type, Target_java_lang_invoke_MemberName member, boolean isInvokeSpecial, Class<?> callerClass);
 }
 
-/** Computes {@link Target_java_lang_invoke_MethodHandle#linkInfo} for the handles in the image heap. */
+/**
+ * Computes {@link Target_java_lang_invoke_MethodHandle#linkInfo} for the handles in the image heap.
+ * The value is only available after the analysis: the linker learns its handles from tasks that
+ * run during the analysis, and a handle may be scanned before the task that registers it runs.
+ */
 @Platforms(Platform.HOSTED_ONLY.class)
-final class LinkInfoComputer implements FieldValueTransformer {
+final class LinkInfoComputer implements FieldValueTransformerWithAvailability {
+    @Override
+    public boolean isAvailable() {
+        return BuildPhaseProvider.isAnalysisFinished();
+    }
+
     @Override
     public Object transform(Object receiver, Object originalValue) {
         return RuntimeMethodHandleLinker.isAvailable() ? RuntimeMethodHandleLinker.singleton().hostedLinkInfo(receiver) : null;

@@ -76,8 +76,14 @@ public class SubstratePEGraphDecoder extends PEGraphDecoder {
             ValueNode[] arguments = result.arguments().toArray(ValueNode.EMPTY_ARRAY);
             RuntimeMethodHandleLinker.LinkedInvoke linked = RuntimeMethodHandleLinker.singleton().link(result.targetMethod(), arguments, providers, graph);
             if (linked != null) {
-                /* The call target is not in the graph yet, so a new one is created in its place. */
-                return new MethodCallTargetNode(InvokeKind.Static, linked.target(), linked.arguments(), result.returnStamp(), null);
+                /*
+                 * The call target is not in the graph yet and its argument list cannot be changed
+                 * before it is, so a new one takes its place, also for the invoke should the entry
+                 * method not be inlined.
+                 */
+                MethodCallTargetNode linkedTarget = new MethodCallTargetNode(InvokeKind.Static, linked.target(), linked.arguments(), result.returnStamp(), null);
+                invokeData.callTarget = linkedTarget;
+                return linkedTarget;
             }
         }
         return result;

@@ -73,6 +73,7 @@ import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
 import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.configure.ConfigurationParser;
@@ -101,8 +102,10 @@ import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
 import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
 import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
 import com.oracle.svm.core.sboutlining.OutlinedSBMethodHolder;
@@ -355,17 +358,15 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             try {
                 LinkerOptions linkerOptions = LinkerOptions.forDowncall(desc, options);
                 SharedDesc sharedDesc = new SharedDesc(desc, linkerOptions);
+                Linker.Option[] optionsCopy = options.clone();
                 runConditionalTask(condition, _ -> {
                     NativeEntryPointInfo nepi = abiUtils.makeNativeEntrypoint(sharedDesc.fd, sharedDesc.options);
                     DowncallStub stub = createStub(DowncallStubFactory.INSTANCE, nepi);
                     if (stub != null) {
                         createStub(DowncallStubInvokerFactory.INSTANCE, nepi.methodType());
                     }
-                    if (specializesDowncalls()) {
-                        specializedDowncalls.computeIfAbsent(sharedDesc, _ -> {
-                            createSpecializedDowncall(sharedDesc, options);
-                            return Boolean.TRUE;
-                        });
+                    if (specializesDowncalls() && specializedDowncalls.putIfAbsent(sharedDesc, Boolean.TRUE) == null) {
+                        createSpecializedDowncall(sharedDesc, optionsCopy);
                     }
                 });
             } catch (IllegalArgumentException e) {
@@ -543,7 +544,7 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         ImageSingletons.add(ForeignSupport.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignFunctionsRuntime.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignHostedSupport.class, this);
-        if (specializesDowncalls() && RuntimeCompilation.isEnabled()) {
+        if (specializesDowncalls()) {
             downcallHandleLinker = new DowncallHandleLinker();
             ImageSingletons.add(RuntimeMethodHandleLinker.class, downcallHandleLinker);
         }
@@ -552,10 +553,14 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
     /**
      * Whether the method handles of registered downcalls are created at image build time, with
      * bindings specialized by the JDK, in place of handles with interpreted bindings linked at run
-     * time.
+     * time, and invoked directly from runtime-compiled code. Only images with runtime compilation
+     * benefit: from AOT-compiled code, a handle that is not a compilation constant is invoked by
+     * the lambda form interpreter either way. Layered images are not supported, because the
+     * entry methods of the handles are indexed per layer (see {@link DowncallHandleLinker}).
      */
     private static boolean specializesDowncalls() {
-        return ForeignFunctionsRuntime.areFunctionCallsSupported() && SubstrateOptions.ConcealedOptions.SpecializeForeignDowncalls.getValue();
+        return ForeignFunctionsRuntime.areFunctionCallsSupported() && SubstrateOptions.ConcealedOptions.SpecializeForeignDowncalls.getValue() && RuntimeCompilation.isEnabled() &&
+                        !ImageLayerBuildingSupport.buildingImageLayer();
     }
 
     @Override
@@ -948,6 +953,13 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         accessSupport.setAnalysisAccess(a);
         if (downcallHandleLinker != null) {
             downcallHandleLinker.initialize(access.getMetaAccess(), field -> access.registerAsAccessed((AnalysisField) field, "Read by the downcall handle linker in runtime compilation"));
+            /*
+             * The values of MethodHandle.linkInfo are only available after the analysis, so the
+             * analysis is told that the field holds instances of its declared type or null.
+             */
+            AnalysisType linkInfoType = access.getMetaAccess().lookupJavaType(MethodHandleLinkInfo.class);
+            access.registerAsInHeap(linkInfoType, "Values of MethodHandle.linkInfo, computed after the analysis");
+            access.getBigBang().injectFieldTypes(access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()), List.of(linkInfoType), true);
         }
         analysisAccess = access;
         registerPendingEntriesForRuntimeCompilation();
@@ -1007,25 +1019,34 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
      * registers it for runtime compilation, so that runtime-compiled code invokes the handle
      * directly (see {@link DowncallHandleLinker}).
      */
-    private void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
-        MethodHandle handle = DowncallHandleEntryGenerator.createDowncallHandle(LINKER, desc.fd, options);
+    private synchronized void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
         FunctionDescriptor strippedFd = DowncallHandleEntryGenerator.stripNames(desc.fd);
         LinkerOptions linkerOptions = LinkerOptions.forDowncall(strippedFd, options);
-        if (!foreignFunctionsRuntime.addSpecializedDowncallHandle(strippedFd, linkerOptions, handle)) {
+        if (foreignFunctionsRuntime.getSpecializedDowncallHandle(strippedFd, linkerOptions) != null) {
+            /* Registered before with a descriptor that differs only in layout names. */
             return;
         }
-        String digest = Digest.digestAsHex(platform() + "|" + strippedFd + "|" + linkerOptions);
+        MethodHandle handle = DowncallHandleEntryGenerator.createDowncallHandle(LINKER, desc.fd, options);
         Lookup lookup = getImplLookup();
         Class<?> stubClass = DowncallHandleEntryGenerator.findSpecializedStubClass(handle, lookup);
-        stubRenamingSubstitutionProcessor.register(stubClass, "L" + DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
-        if (downcallHandleLinker != null) {
-            Method entry = DowncallHandleEntryGenerator.generateEntry(handle, lookup);
-            stubRenamingSubstitutionProcessor.register(entry.getDeclaringClass(), "L" + DowncallHandleEntryGenerator.ENTRY_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
-            AnalysisMethod entryMethod = accessSupport.analysisMetaAccess.lookupJavaMethod(entry);
-            downcallHandleLinker.registerEntry(handle, entryMethod);
-            pendingRuntimeCompilationEntries.add(entryMethod);
-            registerPendingEntriesForRuntimeCompilation();
+        if (stubClass == null) {
+            /* The JDK of the image builder interprets the bindings of the handle: nothing to gain. */
+            return;
         }
+        String digest = Digest.digestAsHex(platform() + "|" + strippedFd + "|variadic=" + linkerOptions.isVariadicFunction() +
+                        (linkerOptions.isVariadicFunction() ? ":" + linkerOptions.firstVariadicArgIndex() : "") +
+                        "|capturedState=" + linkerOptions.capturedCallStateMask() +
+                        "|critical=" + linkerOptions.isCritical() +
+                        "|heap=" + linkerOptions.allowsHeapAccess());
+        stubRenamingSubstitutionProcessor.register(stubClass, "L" + DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+        Method entry = DowncallHandleEntryGenerator.generateEntry(handle, lookup);
+        stubRenamingSubstitutionProcessor.register(entry.getDeclaringClass(), "L" + DowncallHandleEntryGenerator.ENTRY_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+        AnalysisMethod entryMethod = accessSupport.analysisMetaAccess.lookupJavaMethod(entry);
+        /* The handle is registered with the linker before it becomes reachable through the map. */
+        downcallHandleLinker.registerEntry(handle, entryMethod);
+        VMError.guarantee(foreignFunctionsRuntime.addSpecializedDowncallHandle(strippedFd, linkerOptions, handle));
+        pendingRuntimeCompilationEntries.add(entryMethod);
+        registerPendingEntriesForRuntimeCompilation();
     }
 
     /**

@@ -76,7 +76,8 @@ public interface RuntimeMethodHandleLinker {
      * form interpreter. Its receiver is the handle.
      */
     static boolean isInvokeBasic(ResolvedJavaMethod method) {
-        return !method.isStatic() && "invokeBasic".equals(method.getName()) && "java.lang.invoke.MethodHandle".equals(method.getDeclaringClass().toJavaName(true));
+        /* The name is checked first because resolving the declaring class name is more expensive. */
+        return "invokeBasic".equals(method.getName()) && !method.isStatic() && "java.lang.invoke.MethodHandle".equals(method.getDeclaringClass().toJavaName(true));
     }
 
     /**
@@ -85,14 +86,14 @@ public interface RuntimeMethodHandleLinker {
      * {@link Target_java_lang_invoke_MethodHandle#linkInfo}.
      */
     @Platforms(Platform.HOSTED_ONLY.class)
-    Object hostedLinkInfo(Object methodHandle);
+    MethodHandleLinkInfo hostedLinkInfo(Object methodHandle);
 
     /**
      * Returns the link information of the handle that {@link java.lang.invoke.MethodHandle#bindTo}
      * creates from a handle with the link information {@code linkInfo} and the bound value, or
      * null if the bound handle cannot be linked directly.
      */
-    Object bindLinkInfo(Object linkInfo, Object boundValue);
+    MethodHandleLinkInfo bindLinkInfo(MethodHandleLinkInfo linkInfo, Object boundValue);
 
     /**
      * Links a call of {@link #isInvokeBasic MethodHandle.invokeBasic} to a direct target. The

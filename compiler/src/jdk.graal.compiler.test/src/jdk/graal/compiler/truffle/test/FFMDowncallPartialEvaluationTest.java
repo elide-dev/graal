@@ -34,6 +34,8 @@ import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
@@ -136,6 +138,28 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
             int x = (int) frame.getArguments()[0];
             try {
                 return (int) handle.invokeExact(symbol, x);
+            } catch (Throwable t) {
+                throw CompilerDirectives.shouldNotReachHere(t);
+            }
+        }
+    }
+
+    /** {@code int abs(int)} through {@code MethodHandle.invoke} with the handle's exact type. */
+    static final class AbsGenericInvokeRoot extends RootNode {
+        private final MethodHandle handle;
+        private final MemorySegment symbol;
+
+        AbsGenericInvokeRoot(MethodHandle handle, MemorySegment symbol) {
+            super(null);
+            this.handle = handle;
+            this.symbol = symbol;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            int x = (int) frame.getArguments()[0];
+            try {
+                return (int) handle.invoke(symbol, x);
             } catch (Throwable t) {
                 throw CompilerDirectives.shouldNotReachHere(t);
             }
@@ -303,14 +327,18 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         System.out.printf("ffm-downcall-graph: %s: %d nodes, %d allocations, invokes=%s%n", name, graph.getNodeCount(), allocationCount(graph), invokeTargets(graph));
     }
 
+    /** The name of a downcall stub: {@code downcall_<arguments>_<return>[_r][_c][_t]_<digest>}. */
+    private static final Pattern STUB_NAME = Pattern.compile("com\\.oracle\\.svm\\.core\\.foreign\\.DowncallStubsHolder\\.downcall_([A-Z]*_[A-Z](?:_[rct])*)_[^_(]+\\(.*");
+
     /**
      * Asserts that the partially evaluated graph calls the downcall stub directly: exactly one
-     * call of a method of {@code DowncallStubsHolder}, no call into the method handle runtime
-     * and no allocation. Calls that remain are those of the handle's bindings that partial
-     * evaluation cannot inline, such as the acquisition of the sessions of memory segment
-     * arguments.
+     * call of a method of {@code DowncallStubsHolder}, whose name starts with
+     * {@code expectedStub} (the stub's argument and return kinds and its flags), no call into
+     * the method handle runtime and no allocation. Calls that remain are those of the handle's
+     * bindings that partial evaluation cannot inline, such as the acquisition of the sessions of
+     * memory segment arguments.
      */
-    private void assertDirectDowncall(String name, RootNode root, Object... arguments) {
+    private void assertDirectDowncall(String name, String expectedStub, RootNode root, Object... arguments) {
         if (!checkGraphs()) {
             return;
         }
@@ -321,7 +349,9 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         for (String target : targets) {
             assertTrue("method handle runtime call in " + name + ": " + targets, !target.contains(".invokeBasic(") && !target.contains(".linkToNative(") && !target.contains(".invokeExact(") &&
                             !target.contains("_MT(") && !target.contains("DowncallLinker"));
-            if (target.startsWith("com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_")) {
+            Matcher stub = STUB_NAME.matcher(target);
+            if (stub.matches()) {
+                Assert.assertEquals("downcall stub in " + name + ": " + targets, expectedStub, stub.group(1));
                 stubCalls++;
             }
         }
@@ -407,7 +437,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     public void testAbsBuildTimeHandle() {
         MemorySegment abs = symbol("abs");
         AbsRoot root = new AbsRoot(Descriptors.ABS_HANDLE, abs);
-        assertDirectDowncall("abs (build-time handle)", root, -7);
+        assertDirectDowncall("abs (build-time handle)", "JI_I", root, -7);
         OptimizedCallTarget target = compile(root, -7);
         Assert.assertEquals(7, target.call(-7));
         Assert.assertEquals(42, target.call(42));
@@ -419,7 +449,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         MemorySegment abs = symbol("abs");
         MethodHandle handle = Linker.nativeLinker().downcallHandle(Descriptors.ABS);
         AbsRoot root = new AbsRoot(handle, abs);
-        assertDirectDowncall("abs (run-time handle)", root, -7);
+        assertDirectDowncall("abs (run-time handle)", "JI_I", root, -7);
         OptimizedCallTarget target = compile(root, -7);
         Assert.assertEquals(7, target.call(-7));
         Assert.assertEquals(42, target.call(42));
@@ -430,11 +460,22 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     public void testAbsRuntimeHandleBoundToSymbol() {
         MethodHandle handle = Linker.nativeLinker().downcallHandle(symbol("abs"), Descriptors.ABS);
         AbsBoundRoot root = new AbsBoundRoot(handle);
-        assertDirectDowncall("abs (run-time handle bound to the symbol)", root, -7);
+        assertDirectDowncall("abs (run-time handle bound to the symbol)", "JI_I", root, -7);
         OptimizedCallTarget target = compile(root, -7);
         Assert.assertEquals(7, target.call(-7));
         Assert.assertEquals(42, target.call(42));
         report("Truffle PE, abs, run-time handle bound to the symbol", timeCalls(target, new Object[]{-12345}, 12345));
+    }
+
+    @Test
+    public void testAbsGenericInvoke() {
+        MemorySegment abs = symbol("abs");
+        AbsGenericInvokeRoot root = new AbsGenericInvokeRoot(Linker.nativeLinker().downcallHandle(Descriptors.ABS), abs);
+        assertDirectDowncall("abs (MethodHandle.invoke)", "JI_I", root, -7);
+        OptimizedCallTarget target = compile(root, -7);
+        Assert.assertEquals(7, target.call(-7));
+        Assert.assertEquals(42, target.call(42));
+        report("Truffle PE, abs, run-time handle, MethodHandle.invoke", timeCalls(target, new Object[]{-12345}, 12345));
     }
 
     @Test
@@ -461,7 +502,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     public void testLabsBuildTimeHandle() {
         MemorySegment labs = symbol("labs");
         LabsRoot root = new LabsRoot(Descriptors.LABS_HANDLE, labs);
-        assertDirectDowncall("labs (build-time handle)", root, -7L);
+        assertDirectDowncall("labs (build-time handle)", "JJ_J", root, -7L);
         OptimizedCallTarget target = compile(root, -7L);
         Assert.assertEquals(7L, target.call(-7L));
         Assert.assertEquals(1L << 40, target.call(-(1L << 40)));
@@ -474,7 +515,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment string = arena.allocateFrom("Hello, World!");
             StrlenRoot root = new StrlenRoot(Descriptors.STRLEN_HANDLE, strlen);
-            assertDirectDowncall("strlen (build-time handle)", root, string);
+            assertDirectDowncall("strlen (build-time handle)", "JJ_J", root, string);
             OptimizedCallTarget target = compile(root, string);
             Assert.assertEquals(13L, target.call(string));
             report("Truffle PE, strlen, build-time handle", timeCalls(target, new Object[]{string}, 13L));
@@ -485,7 +526,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     public void testAbsCriticalBuildTimeHandle() {
         MemorySegment abs = symbol("abs");
         AbsRoot root = new AbsRoot(Descriptors.ABS_CRITICAL_HANDLE, abs);
-        assertDirectDowncall("abs critical (build-time handle)", root, -7);
+        assertDirectDowncall("abs critical (build-time handle)", "JI_I_t", root, -7);
         OptimizedCallTarget target = compile(root, -7);
         Assert.assertEquals(7, target.call(-7));
         report("Truffle PE, abs critical(false), build-time handle", timeCalls(target, new Object[]{-12345}, 12345));
@@ -497,7 +538,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment captureState = arena.allocate(Linker.Option.captureStateLayout());
             AbsErrnoRoot root = new AbsErrnoRoot(Descriptors.ABS_ERRNO_HANDLE, abs);
-            assertDirectDowncall("abs errno (build-time handle)", root, captureState, -7);
+            assertDirectDowncall("abs errno (build-time handle)", "JJI_I_c", root, captureState, -7);
             OptimizedCallTarget target = compile(root, captureState, -7);
             Assert.assertEquals(7, target.call(captureState, -7));
             report("Truffle PE, abs captureCallState(errno), build-time handle", timeCalls(target, new Object[]{captureState, -12345}, 12345));

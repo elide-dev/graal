@@ -35,6 +35,7 @@ import java.util.function.Consumer;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
 import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
 import com.oracle.svm.guest.staging.util.ImageHeapList;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
@@ -75,21 +76,27 @@ import jdk.vm.ci.meta.Signature;
  * code neither boxes arguments nor runs the lambda form interpreter.
  * <p>
  * Supported are the handles returned by {@code Linker.downcallHandle} for a registered function
- * descriptor and linker options, with or without the function address bound as the first argument.
- * Handles derived from them through other combinators are invoked as before.
+ * descriptor and linker options, with or without the function address bound as the first argument,
+ * invoked through {@code invokeExact} or through {@code invoke} with the handle's type. Handles
+ * derived from them through other combinators are invoked as before. A handle that application
+ * code creates at image build time is the builder's handle, and therefore linked, because the JDK
+ * linker caches the handle of a descriptor in a soft reference and the builder's strong reference
+ * keeps that reference from being cleared.
+ * <p>
+ * The entry methods are indexed per image, so layered images are not supported (see
+ * {@code ForeignFunctionsFeature}).
  */
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = Duplicable.class, other = PartiallyLayerAware.class)
 public final class DowncallHandleLinker implements RuntimeMethodHandleLinker {
-    /** The entry methods, indexed by {@link DowncallHandleInfo#entryIndex}. */
+    /** The entry methods, indexed by {@link MethodHandleLinkInfo#getEntryIndex()}. */
     private final List<ResolvedJavaMethod> entries = ImageHeapList.create(ResolvedJavaMethod.class);
 
-    private ResolvedJavaType infoType;
     private ResolvedJavaField linkInfoField;
     private ResolvedJavaField entryIndexField;
-    private ResolvedJavaField boundAddressField;
+    private ResolvedJavaField boundValueField;
 
     @Platforms(Platform.HOSTED_ONLY.class) //
-    private final Map<Object, DowncallHandleInfo> hostedInfos = Collections.synchronizedMap(new IdentityHashMap<>());
+    private final Map<Object, MethodHandleLinkInfo> hostedInfos = Collections.synchronizedMap(new IdentityHashMap<>());
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public DowncallHandleLinker() {
@@ -101,11 +108,10 @@ public final class DowncallHandleLinker implements RuntimeMethodHandleLinker {
      */
     @Platforms(Platform.HOSTED_ONLY.class)
     public void initialize(MetaAccessProvider metaAccess, Consumer<ResolvedJavaField> registerAsAccessed) {
-        infoType = metaAccess.lookupJavaType(DowncallHandleInfo.class);
         linkInfoField = metaAccess.lookupJavaField(RuntimeMethodHandleLinker.linkInfoField());
-        entryIndexField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(DowncallHandleInfo.class, "entryIndex"));
-        boundAddressField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(DowncallHandleInfo.class, "boundAddress"));
-        for (ResolvedJavaField field : List.of(linkInfoField, entryIndexField, boundAddressField)) {
+        entryIndexField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(MethodHandleLinkInfo.class, "entryIndex"));
+        boundValueField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(MethodHandleLinkInfo.class, "boundValue"));
+        for (ResolvedJavaField field : List.of(linkInfoField, entryIndexField, boundValueField)) {
             registerAsAccessed.accept(field);
         }
     }
@@ -123,19 +129,19 @@ public final class DowncallHandleLinker implements RuntimeMethodHandleLinker {
             index = entries.size();
             entries.add(entry);
         }
-        DowncallHandleInfo previous = hostedInfos.put(handle, new DowncallHandleInfo(index, null));
+        MethodHandleLinkInfo previous = hostedInfos.put(handle, new MethodHandleLinkInfo(index, null));
         VMError.guarantee(previous == null, "Downcall handle registered twice: %s", handle);
     }
 
     @Override
-    public Object hostedLinkInfo(Object methodHandle) {
+    public MethodHandleLinkInfo hostedLinkInfo(Object methodHandle) {
         return hostedInfos.get(methodHandle);
     }
 
     @Override
-    public Object bindLinkInfo(Object linkInfo, Object boundValue) {
-        if (linkInfo instanceof DowncallHandleInfo info && info.boundAddress == null && boundValue instanceof MemorySegment address) {
-            return new DowncallHandleInfo(info.entryIndex, address);
+    public MethodHandleLinkInfo bindLinkInfo(MethodHandleLinkInfo linkInfo, Object boundValue) {
+        if (linkInfo.getBoundValue() == null && boundValue instanceof MemorySegment) {
+            return new MethodHandleLinkInfo(linkInfo.getEntryIndex(), boundValue);
         }
         return null;
     }
@@ -152,11 +158,11 @@ public final class DowncallHandleLinker implements RuntimeMethodHandleLinker {
         ConstantReflectionProvider constantReflection = providers.getConstantReflection();
         MetaAccessProvider metaAccess = providers.getMetaAccess();
         JavaConstant info = constantReflection.readFieldValue(linkInfoField, handle);
-        if (info == null || info.isNull() || !infoType.equals(metaAccess.lookupJavaType(info))) {
+        if (info == null || info.isNull()) {
             return null;
         }
         ResolvedJavaMethod entry = entries.get(constantReflection.readFieldValue(entryIndexField, info).asInt());
-        JavaConstant boundAddress = constantReflection.readFieldValue(boundAddressField, info);
+        JavaConstant boundAddress = constantReflection.readFieldValue(boundValueField, info);
         int boundCount = boundAddress.isNull() ? 0 : 1;
 
         /*
