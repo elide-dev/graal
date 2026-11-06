@@ -207,7 +207,8 @@ final class NativeSignature {
         @Uninterruptible(reason = "Reads the array through its address, so the GC must not move it.")
         private static void copyToNative(byte[] array, int baseOffset, Pointer destination, int length) {
             Pointer source = Word.objectToUntrackedPointer(array).add(baseOffset);
-            UnmanagedMemoryUtil.copy(source, destination, Word.unsigned(length));
+            // A heap array and a stack buffer never overlap, so no direction check is needed.
+            UnmanagedMemoryUtil.copyForward(source, destination, Word.unsigned(length));
         }
 
         /**
