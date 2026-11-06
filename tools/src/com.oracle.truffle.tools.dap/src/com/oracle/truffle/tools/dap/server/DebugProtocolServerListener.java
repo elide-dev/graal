@@ -26,22 +26,33 @@ package com.oracle.truffle.tools.dap.server;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
+import com.oracle.truffle.tools.dap.types.DebugProtocolServer;
 import com.oracle.truffle.tools.dap.types.DebugProtocolServer.Session;
 
 /**
- * Owns an Engine's listening socket and serves one debugger client at a time.
- * Each connection gets fresh debugger and protocol state.
+ * Owns an Engine's listening socket and serves one debugger client at a time. Each connection gets
+ * fresh debugger and protocol state. A client that connects while another one is attached gets an
+ * error response to its first request and is disconnected; the attached session is not disturbed.
  */
 public final class DebugProtocolServerListener {
+
+    /** How long a refused client may take to send its first request. */
+    private static final int REFUSAL_TIMEOUT_MILLIS = 5000;
+    /** Further clients are closed without a response while this many are being refused. */
+    private static final int MAX_PENDING_REFUSALS = 8;
 
     private final TruffleInstrument.Env env;
     private final PrintWriter info;
@@ -49,9 +60,14 @@ public final class DebugProtocolServerListener {
     private final boolean inspectInternal;
     private final boolean inspectInitialization;
     private final List<URI> sourcePath;
+    private final Map<Socket, Thread> refusals = new HashMap<>();
     private DebugProtocolServerImpl session;
     private ServerSocket serverSocket;
+    /** The attached client's transport, until it is closed. */
     private Socket clientSocket;
+    /** Serves the current client and cleans up after it. */
+    private Thread sessionThread;
+    private Throwable sessionFailure;
     private Thread thread;
     private boolean disposed;
 
@@ -97,48 +113,37 @@ public final class DebugProtocolServerListener {
         return completion;
     }
 
-    private void run() throws IOException, InterruptedException, ExecutionException {
+    private void run() throws Throwable {
         info.println("[Graal DAP] Starting server and listening on " + serverSocket.getLocalSocketAddress());
         try (ServerSocket listener = serverSocket) {
-            while (!listener.isClosed()) {
-                try (Socket socket = listener.accept()) {
-                    DebugProtocolServerImpl server;
-                    synchronized (this) {
-                        if (disposed) {
-                            break;
-                        }
-                        clientSocket = socket;
-                        if (session == null) {
-                            ExecutionContext context = new ExecutionContext(env, info, err, inspectInternal, inspectInitialization);
-                            // Suspend/WaitAttached are startup options, not reconnect options.
-                            session = DebugProtocolServerImpl.create(context, false, false, context.isInspectInitialization(), sourcePath);
-                        }
-                        server = session;
-                    }
-                    info.println("[Graal DAP] Client connected on " + socket.getRemoteSocketAddress());
-                    try {
-                        // The accept thread also reads this client's requests. Cleanup and pending
-                        // request completion finish before another client is accepted.
-                        Session.connect(server, socket.getInputStream(), socket.getOutputStream(), Runnable::run, () -> close(socket), server::dispose).get();
-                    } finally {
-                        server.dispose();
-                        synchronized (this) {
-                            session = null;
-                            clientSocket = null;
-                        }
-                    }
-                }
+            while (accept(listener.accept())) {
+                // The accept thread never serves a client, so it can refuse extra clients.
             }
         } catch (IOException error) {
             synchronized (this) {
-                if (!disposed) {
+                // A failed session closes the listener; its failure is reported below instead.
+                if (!disposed && sessionFailure == null) {
                     throw error;
                 }
             }
         } finally {
+            Thread clientThread;
+            List<Thread> refusalThreads;
+            synchronized (this) {
+                if (!disposed) {
+                    // The accept loop failed. On dispose, dispose() closes the client's transport
+                    // after reporting termination to it.
+                    disposed = true;
+                    close(clientSocket);
+                }
+                clientThread = sessionThread;
+                refusals.keySet().forEach(this::close);
+                refusalThreads = new ArrayList<>(refusals.values());
+            }
+            join(clientThread);
+            refusalThreads.forEach(DebugProtocolServerListener::join);
             DebugProtocolServerImpl server;
             synchronized (this) {
-                disposed = true;
                 server = session;
                 session = null;
             }
@@ -146,19 +151,164 @@ public final class DebugProtocolServerListener {
                 server.dispose();
             }
         }
+        Throwable failure;
+        synchronized (this) {
+            failure = sessionFailure;
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     /**
-     * Closes the listener and active transport and joins the client thread.
+     * Serves or refuses a new connection.
+     *
+     * @return {@code false} once this listener is disposed
+     */
+    private boolean accept(Socket socket) {
+        Thread previous;
+        synchronized (this) {
+            if (disposed) {
+                close(socket);
+                return false;
+            }
+            if (clientSocket != null) {
+                refuse(socket, clientSocket.getRemoteSocketAddress());
+                return true;
+            }
+            previous = sessionThread;
+        }
+        // The previous client's transport is closed; its cleanup (resuming suspended threads,
+        // completing pending requests) finishes before the next session starts.
+        join(previous);
+        synchronized (this) {
+            if (disposed) {
+                close(socket);
+                return false;
+            }
+            clientSocket = socket;
+            if (session == null) {
+                ExecutionContext context = new ExecutionContext(env, info, err, inspectInternal, inspectInitialization);
+                // Suspend/WaitAttached are startup options, not reconnect options.
+                session = DebugProtocolServerImpl.create(context, false, false, context.isInspectInitialization(), sourcePath);
+            }
+            DebugProtocolServerImpl server = session;
+            info.println("[Graal DAP] Client connected on " + socket.getRemoteSocketAddress());
+            sessionThread = env.createSystemThread(() -> serve(server, socket));
+            sessionThread.setName("DAP client session thread");
+            sessionThread.start();
+        }
+        return true;
+    }
+
+    private void serve(DebugProtocolServerImpl server, Socket socket) {
+        try {
+            // Completes after the client's pending requests and cleanup have finished.
+            Session.connect(server, socket.getInputStream(), socket.getOutputStream(), Runnable::run, () -> release(socket), server::dispose).get();
+        } catch (Throwable error) {
+            ServerSocket listener;
+            synchronized (this) {
+                if (sessionFailure == null) {
+                    sessionFailure = error;
+                }
+                listener = disposed ? null : serverSocket;
+            }
+            // A failed session stops the listener, as when sessions ran on the accept thread.
+            close(listener);
+        } finally {
+            server.dispose();
+            release(socket);
+            synchronized (this) {
+                if (session == server) {
+                    session = null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Closes an attached client's transport; the next client may connect from now on.
+     */
+    private void release(Socket socket) {
+        synchronized (this) {
+            if (clientSocket == socket) {
+                clientSocket = null;
+            }
+        }
+        close(socket);
+    }
+
+    /**
+     * Answers the first request of a client that connected while another one is attached, then
+     * closes the connection. Runs on its own thread so neither the attached session nor the
+     * accept loop waits for the refused client.
+     */
+    private void refuse(Socket socket, SocketAddress active) {
+        assert Thread.holdsLock(this);
+        info.println("[Graal DAP] Refused client on " + socket.getRemoteSocketAddress() + ": client on " + active + " is attached.");
+        if (refusals.size() >= MAX_PENDING_REFUSALS) {
+            close(socket);
+            return;
+        }
+        String reason = "Another debugger client is attached to this process (" + active + "). Disconnect it before attaching a new one.";
+        DebugProtocolServer.LoggerProxy logger = session.getLogger();
+        Thread refusal = env.createSystemThread(() -> {
+            try {
+                socket.setSoTimeout(REFUSAL_TIMEOUT_MILLIS);
+                Session.refuse(socket.getInputStream(), socket.getOutputStream(), reason, logger);
+                // Closing with unread input would reset the connection and could drop the
+                // response, so wait for the client to close first.
+                socket.shutdownOutput();
+                drain(socket.getInputStream());
+            } catch (IOException error) {
+                // The refused client went away or stayed silent; nothing else depends on it.
+            } finally {
+                close(socket);
+                synchronized (this) {
+                    refusals.remove(socket);
+                }
+            }
+        });
+        refusal.setName("DAP refused client thread");
+        refusals.put(socket, refusal);
+        refusal.start();
+    }
+
+    private static void drain(InputStream in) throws IOException {
+        byte[] buffer = new byte[1024];
+        while (in.read(buffer) != -1) {
+            // Discard requests sent before the refusal arrived.
+        }
+    }
+
+    private static void join(Thread thread) {
+        if (thread == null || thread == Thread.currentThread()) {
+            return;
+        }
+        boolean interrupted = false;
+        while (thread.isAlive()) {
+            try {
+                thread.join();
+            } catch (InterruptedException error) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Closes the listener and active transport and joins the client threads.
      */
     public void dispose() {
-        Thread clientThread;
+        Thread acceptThread;
         DebugProtocolServerImpl server;
         Socket socket;
         synchronized (this) {
             disposed = true;
             close(serverSocket);
-            clientThread = thread;
+            acceptThread = thread;
             server = session;
             socket = clientSocket;
         }
@@ -170,19 +320,8 @@ public final class DebugProtocolServerListener {
             }
         } finally {
             close(socket);
-            if (clientThread != null && clientThread != Thread.currentThread()) {
-                boolean interrupted = false;
-                while (clientThread.isAlive()) {
-                    try {
-                        clientThread.join();
-                    } catch (InterruptedException error) {
-                        interrupted = true;
-                    }
-                }
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+            // The accept thread joins the session and refusal threads before it ends.
+            join(acceptThread);
         }
     }
 

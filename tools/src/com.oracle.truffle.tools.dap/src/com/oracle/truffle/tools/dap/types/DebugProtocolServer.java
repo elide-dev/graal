@@ -806,6 +806,39 @@ public class DebugProtocolServer {
             return t instanceof CompletionException ? asExceptionWithMessage(t.getCause()) : t instanceof ExceptionWithMessage ? (ExceptionWithMessage) t : null;
         }
 
+        /**
+         * Turns away a client that cannot be served: its first request gets an error response
+         * naming the reason. The caller closes the transport afterwards.
+         *
+         * @param in the refused client's input
+         * @param out the refused client's output
+         * @param reason why the client is refused, shown to the user
+         * @param logger receives malformed-input reports
+         * @throws IOException if reading the request or writing the response fails
+         */
+        public static void refuse(InputStream in, OutputStream out, String reason, LoggerProxy logger) throws IOException {
+            byte[] messageBytes = readMessageBytes(in, logger);
+            if (messageBytes == null) {
+                return;
+            }
+            int requestSeq = 0;
+            String command = null;
+            try {
+                JSONObject message = new JSONObject(new String(messageBytes, StandardCharsets.UTF_8));
+                if ("request".equals(message.optString("type"))) {
+                    requestSeq = message.optInt("seq");
+                    command = message.optString("command", null);
+                }
+            } catch (RuntimeException e) {
+                // Malformed input still gets the refusal, without a request to answer.
+                logger.log(Level.FINE, "Malformed message from a refused DAP client", e);
+            }
+            ErrorResponse response = (ErrorResponse) ErrorResponse.create(ErrorResponse.ResponseBody.create().setError(
+                            Message.create(1105, "{_reason}").setVariables(Collections.singletonMap("_reason", reason)).setShowUser(true)),
+                            requestSeq, false, command, 1).setMessage(reason);
+            writeMessageBytes(out, getJSONData(response).toString().getBytes(StandardCharsets.UTF_8));
+        }
+
         public static Future<?> connect(DebugProtocolServer server, InputStream in, OutputStream out, Executor executor) {
             return connect(server, in, out, executor, () -> {
             }, () -> {
