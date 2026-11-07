@@ -70,7 +70,7 @@ env:
   # read bitcode from a newer major, so this must not be newer than theirs. The Linux legs use
   # the pinned Elide toolchain for reproducible compiler and linker versions.
   LTO_LLVM_MAJOR: "23"
-  ELIDE_TOOLCHAIN_VERSION: "2026.11.1"
+  ELIDE_TOOLCHAIN_VERSION: "2026.11.4"
   # The Oracle GraalVM build the EE distribution is made from (ci/elide/build-ee.py). It must be
   # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
   # Update it when the fork moves to a new upstream base.
@@ -166,7 +166,7 @@ jobs:
           getconf GNU_LIBC_VERSION
       - name: Install Elide toolchain (Linux)
         if: runner.os == 'Linux'
-        uses: elide-dev/toolchain/action@4677dd77b520b609bb0e548e6e7a4dadadbb2d14  # v2026.11.1
+        uses: elide-dev/toolchain/action@26e397d63e9f1cbce5a97cf7b0954594cc30e644  # v2026.11.4
         with:
           version: ${{ env.ELIDE_TOOLCHAIN_VERSION }}
       - name: Allow long paths (Windows)
