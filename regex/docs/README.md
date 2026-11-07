@@ -97,6 +97,9 @@ These options define how TRegex should interpret a given regular expression:
   * `ECMAScript`: ECMAScript/JavaScript syntax (default).
   * `Python`: Python 3 syntax.
   * `Ruby`: Ruby syntax.
+  * `JavaUtilPattern`: `java.util.regex.Pattern` syntax.
+  * `OracleDB`: Oracle Database syntax.
+  * `RE2`: [RE2](https://github.com/google/re2/wiki/Syntax) syntax, see [RE2 Flavor](#re2-flavor).
 * `Encoding`: specifies the string encoding to match against. Possible values:
   * `UTF-8`
   * `UTF-16` (default)
@@ -120,3 +123,53 @@ These options define how TRegex should interpret a given regular expression:
 * `StepExecution`: dump tracing information about all DFA matcher runs.
 
 All options except `Flavor` and `Encoding` are boolean and `false` by default.
+
+### RE2 Flavor
+
+The `RE2` flavor implements the syntax and the default matching semantics of [RE2](https://github.com/google/re2/wiki/Syntax).
+Select it with the `Flavor=RE2` option, either in the source string or as a Truffle source option (`regex.Flavor`), for example:
+
+```java
+Source source = Source.newBuilder("regex", "Flavor=RE2,Encoding=UTF-16/(?i)^(?P<user>\\w+)@example\\.com$/", "myRegex").mimeType("application/tregex").internal(true).build();
+```
+
+RE2 guarantees that matching runs in time linear in the size of the input.
+The `RE2` flavor therefore always implies `ForceLinearExecution`: TRegex never uses its backtracking engine for RE2 regexes.
+If TRegex cannot execute a regex with its automaton-based engines, parsing returns a null value instead of a compiled regex.
+This happens when a regex exceeds the automaton size limits, typically because of large counted repetitions with many optional iterations, such as `.{0,1000}`.
+Counted repetitions of moderate size, for example `\w{1,255}` or `.{0,500}`, are supported.
+
+The flags part of the source string may contain the RE2 flag letters `i`, `m`, `s`, and `U`.
+They have the same effect as a leading `(?flags)` group in the pattern.
+The `flags` property of the compiled regex exposes them as boolean members `i`, `m`, `s`, and `U`.
+
+The following features of RE2's default (`LikePerl`) syntax are supported:
+
+* Leftmost-first (Perl-like) alternation and repetition priority, with greedy, lazy (`*?`, `+?`, `??`, `{n,m}?`), and counted (`{n}`, `{n,}`, `{n,m}`) repetitions. The maximum repetition count is 1000, and nested counted repetitions may not exceed a combined count of 1000. Stacked repetition operators such as `a**` are syntax errors. An invalid counted repetition such as `a{,2}` is a literal.
+* Capture groups, non-capturing groups `(?:re)`, and named capture groups `(?P<name>re)` and `(?<name>re)`. Duplicate names are allowed; a name refers to its leftmost group.
+* Flags `i` (case-insensitive), `m` (multi-line), `s` (`.` matches `\n`), and `U` (swap greedy and lazy repetitions), set with `(?flags)` until the end of the enclosing group, or scoped with `(?flags:re)`. Flags can be cleared with `-`, for example `(?i-s)`.
+* Empty-width assertions `^`, `$`, `\A`, `\z`, `\b`, and `\B`. Without the `m` flag, `^` and `$` match only at the beginning and the end of the text. In particular, `$` does not match before a trailing newline.
+* `.`, which matches any character except `\n` unless the `s` flag is set.
+* The ASCII-only Perl classes `\d`, `\s` (`[\t\n\f\r ]`), `\w`, and their negations, and ASCII word boundaries.
+* Unicode general categories and scripts, for example `\pN`, `\p{Lu}`, `\p{Greek}`, `\PN`, and `\p{^Greek}`, as well as `\p{Any}`.
+* Bracket expressions with ranges, negation, Perl and Unicode classes, and the ASCII POSIX classes such as `[[:alpha:]]` and `[[:^alpha:]]`.
+* Escapes `\a`, `\f`, `\t`, `\n`, `\r`, `\v`, octal escapes such as `\123`, hexadecimal escapes `\x7F` and `\x{10FFFF}`, escaped punctuation, and literal text `\Q...\E`.
+* Case-insensitive matching based on simple Unicode case folding, for example `(?i)k` matches `K` and `\u212A` (KELVIN SIGN).
+
+The following features are not supported:
+
+* `\C` (match a single byte). Like Go's `regexp` package, TRegex rejects `\C` with a syntax error.
+* RE2's leftmost-longest (POSIX) matching mode (`longest_match`).
+
+Backreferences, look-around assertions, possessive quantifiers, and atomic groups are not part of the RE2 syntax and are rejected with a syntax error, as in RE2.
+Error messages follow RE2, for example `invalid escape sequence: \1` or `invalid perl operator: (?=`.
+
+TRegex reports match positions in units of the input encoding.
+Use `Encoding=UTF-8` to retrieve byte offsets like RE2, or `Encoding=UTF-16` (the default) to retrieve offsets into Java strings.
+Like Go's `regexp` package, `\B` only considers positions between code points, while RE2 also considers positions inside multi-byte UTF-8 sequences.
+
+The search tests of RE2 (`re2-search.txt`, taken from the Go project) are part of the TRegex test suite, see _RE2ConformanceTest.java_.
+All leftmost-first cases pass except those in which the body of a `*` or `+` loop prefers to match the empty string, such as `(|a)*`.
+RE2 stops such a loop after an empty first iteration, while TRegex continues with the next alternative of the loop body.
+For example, `(|a)*` matches the empty string at the start of `aaa` in RE2, and the whole string `aaa` in TRegex.
+This difference only affects match boundaries and capture group positions; whether a regex matches at all is not affected.
