@@ -59,6 +59,8 @@ import com.oracle.truffle.regex.flavor.java.JavaFlavorProvider;
 import com.oracle.truffle.regex.flavor.js.JSFlavorProvider;
 import com.oracle.truffle.regex.flavor.oracledb.OracleDBFlavorProvider;
 import com.oracle.truffle.regex.flavor.python.PythonFlavorProvider;
+import com.oracle.truffle.regex.flavor.re2.RE2FlavorProvider;
+import com.oracle.truffle.regex.flavor.re2.RE2RegexParser;
 import com.oracle.truffle.regex.flavor.ruby.RubyFlavorProvider;
 import com.oracle.truffle.regex.result.RegexResult;
 import com.oracle.truffle.regex.tregex.TRegexOptions;
@@ -76,6 +78,10 @@ import com.oracle.truffle.regex.tregex.string.Encoding;
  * <li><b>ECMAScript</b>: ECMAScript/JavaScript syntax (default).</li>
  * <li><b>Python</b>: Python 3 syntax</li>
  * <li><b>Ruby</b>: Ruby syntax.</li>
+ * <li><b>JavaUtilPattern</b>: {@code java.util.regex.Pattern} syntax.</li>
+ * <li><b>OracleDB</b>: Oracle Database syntax.</li>
+ * <li><b>RE2</b>: <a href="https://github.com/google/re2/wiki/Syntax">RE2</a> syntax. Implies
+ * {@code ForceLinearExecution}.</li>
  * </ul>
  * </li>
  * <li><b>Encoding</b>: specifies the string encoding to match against. Possible values:
@@ -201,9 +207,10 @@ public final class RegexOptions {
     public static final String FLAVOR_ORACLE_DB = "OracleDB";
     public static final String FLAVOR_ECMASCRIPT = "ECMAScript";
     public static final String FLAVOR_JAVA = "JavaUtilPattern";
+    public static final String FLAVOR_RE2 = "RE2";
 
     private static final RegexFlavor[] FLAVOR_CACHE = new RegexFlavor[FlavorOption.values().length];
-    private static final String[] FLAVOR_OPTIONS = {FLAVOR_PYTHON, FLAVOR_RUBY, FLAVOR_ORACLE_DB, FLAVOR_ECMASCRIPT, FLAVOR_JAVA};
+    private static final String[] FLAVOR_OPTIONS = {FLAVOR_PYTHON, FLAVOR_RUBY, FLAVOR_ORACLE_DB, FLAVOR_ECMASCRIPT, FLAVOR_JAVA, FLAVOR_RE2};
 
     static {
         FLAVOR_CACHE[FlavorOption.ECMAScript.ordinal()] = new JSFlavorProvider().get();
@@ -211,6 +218,7 @@ public final class RegexOptions {
         FLAVOR_CACHE[FlavorOption.Ruby.ordinal()] = new RubyFlavorProvider().get();
         FLAVOR_CACHE[FlavorOption.OracleDB.ordinal()] = new OracleDBFlavorProvider().get();
         FLAVOR_CACHE[FlavorOption.JavaUtilPattern.ordinal()] = new JavaFlavorProvider().get();
+        FLAVOR_CACHE[FlavorOption.RE2.ordinal()] = new RE2FlavorProvider().get();
     }
 
     public enum FlavorOption {
@@ -218,7 +226,8 @@ public final class RegexOptions {
         Python,
         Ruby,
         OracleDB,
-        JavaUtilPattern;
+        JavaUtilPattern,
+        RE2;
 
         RegexFlavor get() {
             return FLAVOR_CACHE[ordinal()];
@@ -229,7 +238,7 @@ public final class RegexOptions {
         return FlavorOption.ECMAScript.get();
     }
 
-    @Option(category = OptionCategory.USER, stability = OptionStability.STABLE, help = "Regex flavor to use.", usageSyntax = "ECMAScript|JavaUtilPattern|OracleDB|Python|Ruby") //
+    @Option(category = OptionCategory.USER, stability = OptionStability.STABLE, help = "Regex flavor to use.", usageSyntax = "ECMAScript|JavaUtilPattern|OracleDB|Python|RE2|Ruby") //
     public static final OptionKey<FlavorOption> Flavor = new OptionKey<>(FlavorOption.ECMAScript);
 
     public static final String ENCODING_NAME = "Encoding";
@@ -876,6 +885,9 @@ public final class RegexOptions {
                 case 'J':
                     return expectValue(FlavorOption.JavaUtilPattern, FLAVOR_JAVA, FLAVOR_OPTIONS).get();
                 case 'R':
+                    if (src.startsWith(FLAVOR_RE2, i)) {
+                        return expectValue(FlavorOption.RE2, FLAVOR_RE2, FLAVOR_OPTIONS).get();
+                    }
                     return expectValue(FlavorOption.Ruby, FLAVOR_RUBY, FLAVOR_OPTIONS).get();
                 case 'O':
                     return expectValue(FlavorOption.OracleDB, FLAVOR_ORACLE_DB, FLAVOR_OPTIONS).get();
@@ -991,8 +1003,23 @@ public final class RegexOptions {
         }
 
         public RegexOptions build() {
-            return new RegexOptions(flags, maxDFASize, maxBackTrackerCompileSize, flavor, encoding, matchingMode, pythonLocale, javaJDKVersion, maxParserTreeSize,
-                            quantifierUnrollThresholdSingleCC, quantifierUnrollThresholdGroup);
+            int effectiveFlags = flags;
+            short unrollLimitSingleCC = quantifierUnrollThresholdSingleCC;
+            short unrollLimitGroup = quantifierUnrollThresholdGroup;
+            if (flavor == FlavorOption.RE2.get()) {
+                // RE2 guarantees linear-time matching, so the RE2 flavor never falls back to the
+                // backtracking engine.
+                effectiveFlags |= FORCE_LINEAR_EXECUTION;
+                // Counted repetitions that are not unrolled can only be executed by the
+                // backtracking engine (except in boolean match mode). RE2 limits counted
+                // repetitions to RE2RegexParser.MAX_REPEAT, and RE2 itself expands them, so we
+                // allow unrolling up to that limit. The overall AST and automaton size limits
+                // still apply.
+                unrollLimitSingleCC = (short) Math.max(unrollLimitSingleCC, RE2RegexParser.MAX_REPEAT);
+                unrollLimitGroup = (short) Math.max(unrollLimitGroup, RE2RegexParser.MAX_REPEAT);
+            }
+            return new RegexOptions(effectiveFlags, maxDFASize, maxBackTrackerCompileSize, flavor, encoding, matchingMode, pythonLocale, javaJDKVersion, maxParserTreeSize,
+                            unrollLimitSingleCC, unrollLimitGroup);
         }
     }
 }
