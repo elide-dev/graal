@@ -39,11 +39,9 @@ import com.oracle.svm.core.nodes.foreign.MemoryArenaValidInScopeNode;
 import com.oracle.svm.shared.util.BasedOnJDKFile;
 
 import jdk.internal.access.foreign.MappedMemoryUtilsProxy;
-import jdk.internal.foreign.AbstractMemorySegmentImpl;
 import jdk.internal.foreign.MemorySessionImpl;
 import jdk.internal.misc.ScopedMemoryAccess;
 import jdk.internal.misc.ScopedMemoryAccess.ScopedAccessError;
-import jdk.internal.vm.vector.VectorSupport;
 
 /**
  * Support for shared arenas on SVM:
@@ -84,6 +82,23 @@ import jdk.internal.vm.vector.VectorSupport;
  * explicitly allowed by registering them in
  * {@code com.oracle.svm.hosted.foreign.ForeignFunctionsFeature#initSafeArenaAccessors}.</li>
  * </ol>
+ * <p>
+ * The @Scoped Vector API accessors (e.g. {@code loadFromMemorySegmentScopedInternal} or
+ * {@code storeIntoMemorySegmentMaskedScopedInternal}) are not substituted and are instrumented by
+ * the parser like the other @Scoped methods. With Vector API support enabled, the call to
+ * {@code VectorSupport.load}, {@code loadMasked}, {@code store}, or {@code storeMasked} becomes a
+ * Vector API macro node that the high tier expands into a SIMD memory access (a {@code ReadNode},
+ * {@code WriteNode}, {@code SimdMaskedReadNode}, or {@code SimdMaskedWriteNode}). The shared arena
+ * phase runs in the mid tier and handles these accesses like any other memory access in the
+ * scoped region. If the macro node cannot be expanded, it is lowered back into a call of the
+ * {@code VectorSupport} method, which calls the {@code defaultImpl} provided by
+ * {@code jdk.incubator.vector}. These fallbacks access a memory segment only through
+ * {@code MemorySegment.get} and {@code MemorySegment.set}, that is, through other @Scoped methods
+ * that check the session themselves. The fallback call is also the last operation of the scoped
+ * region. It is therefore registered as a safe callee in
+ * {@code com.oracle.svm.hosted.foreign.ForeignFunctionsFeature#initSafeArenaAccessors}, and
+ * {@link Target_jdk_internal_vm_vector_VectorSupport_SharedArenas} prevents it from being inlined
+ * when it is not intrinsified (for example, if Vector API support is disabled).
  *
  * @noinspection CaughtExceptionImmediatelyRethrown
  */
@@ -184,77 +199,6 @@ public final class Target_jdk_internal_misc_ScopedMemoryAccess {
         } catch (ScopedAccessError e) {
             throw e;
         }
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    private static <V extends VectorSupport.Vector<E>, E, S extends VectorSupport.VectorSpecies<E>> V loadFromMemorySegmentScopedInternal(MemorySessionImpl session,
-                    Class<? extends V> vmClass, Class<E> e, int length,
-                    AbstractMemorySegmentImpl msp, long offset,
-                    S s,
-                    VectorSupport.LoadOperation<AbstractMemorySegmentImpl, V, S> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    private static <V extends VectorSupport.Vector<E>, E, S extends VectorSupport.VectorSpecies<E>, M extends VectorSupport.VectorMask<E>> V loadFromMemorySegmentMaskedScopedInternal(
-                    MemorySessionImpl session, Class<? extends V> vmClass,
-                    Class<M> maskClass, Class<E> e, int length,
-                    AbstractMemorySegmentImpl msp, long offset, M m,
-                    S s, int offsetInRange,
-                    VectorSupport.LoadVectorMaskedOperation<AbstractMemorySegmentImpl, V, S, M> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    public static <V extends VectorSupport.Vector<E>, E> void storeIntoMemorySegment(Class<? extends V> vmClass, Class<E> e, int length,
-                    V v,
-                    AbstractMemorySegmentImpl msp, long offset,
-                    VectorSupport.StoreVectorOperation<AbstractMemorySegmentImpl, V> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    private static <V extends VectorSupport.Vector<E>, E> void storeIntoMemorySegmentScopedInternal(MemorySessionImpl session,
-                    Class<? extends V> vmClass, Class<E> e, int length,
-                    V v,
-                    AbstractMemorySegmentImpl msp, long offset,
-                    VectorSupport.StoreVectorOperation<AbstractMemorySegmentImpl, V> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    public static <V extends VectorSupport.Vector<E>, E, M extends VectorSupport.VectorMask<E>> void storeIntoMemorySegmentMasked(Class<? extends V> vmClass, Class<M> maskClass, Class<E> e,
-                    int length, V v, M m,
-                    AbstractMemorySegmentImpl msp, long offset,
-                    VectorSupport.StoreVectorMaskedOperation<AbstractMemorySegmentImpl, V, M> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
-    }
-
-    @SuppressWarnings("unused")
-    @Substitute
-    @TargetElement(onlyWith = SharedArenasEnabled.class)
-    @AlwaysInline("Safepoints must be visible in caller")
-    private static <V extends VectorSupport.Vector<E>, E, M extends VectorSupport.VectorMask<E>> void storeIntoMemorySegmentMaskedScopedInternal(MemorySessionImpl session,
-                    Class<? extends V> vmClass, Class<M> maskClass,
-                    Class<E> e, int length, V v, M m,
-                    AbstractMemorySegmentImpl msp, long offset,
-                    VectorSupport.StoreVectorMaskedOperation<AbstractMemorySegmentImpl, V, M> defaultImpl) {
-        throw SharedArenasEnabled.vectorAPIUnsupported();
     }
 
     /**

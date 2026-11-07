@@ -4,6 +4,9 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* (GR-65162) Shared arenas (`Arena.ofShared()`) can now be used together with Vector API support.
+  Vector API loads and stores from and to memory segments of a shared arena are checked against a concurrent close of the arena like other memory segment accesses.
+  Shared arena support is no longer disabled by default when Vector API support is enabled, and enabling both `-H:+SharedArenaSupport` and `-H:+VectorAPISupport` no longer fails the build.
 * (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
   Requesting an unlinkable provider still fails at run time.
 
