@@ -475,12 +475,26 @@ jobs:
         if: matrix.maven
         env:
           MAVEN_VERSION: 3.9.11
+          # apache-maven-3.9.11-bin.tar.gz, as published on Maven Central and downloads.apache.org.
+          MAVEN_SHA512: bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978
         run: |
           # mx maven-deploy runs mvn, which the runners do not have.
           if ! command -v mvn >/dev/null 2>&1; then
-            base="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
-            curl -sSfL -o "${RUNNER_TEMP}/maven.tar.gz" "${base}"
-            echo "$(curl -sSfL "${base}.sha512" | cut -d' ' -f1)  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -
+            # archive.apache.org times out or resets connections from the runners, so Maven Central
+            # comes first. The pinned checksum keeps every source honest.
+            name="apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+            for url in \
+                "https://repo1.maven.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/${name}" \
+                "https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/${name}" \
+                "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/${name}"; do
+              if curl -sSfL --retry 4 --retry-all-errors --connect-timeout 30 -o "${RUNNER_TEMP}/maven.tar.gz" "${url}" \
+                  && echo "${MAVEN_SHA512}  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -; then
+                break
+              fi
+              echo "::warning::Maven download from ${url} failed"
+              rm -f "${RUNNER_TEMP}/maven.tar.gz"
+            done
+            [ -f "${RUNNER_TEMP}/maven.tar.gz" ] || { echo "::error::could not download Maven ${MAVEN_VERSION}"; exit 1; }
             tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/maven.tar.gz"
             echo "${RUNNER_TEMP}/apache-maven-${MAVEN_VERSION}/bin" >> "${GITHUB_PATH}"
           fi
