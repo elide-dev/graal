@@ -53,6 +53,7 @@ In a native executable with runtime compilation, for example one that runs a Gra
 `Linker.downcallHandle` returns that handle at run time for the registered function descriptor and linker options.
 Code compiled at run time invokes such a handle directly when the handle is a compilation constant: the compiled code converts the arguments and calls the native function without boxing and without the method handle interpreter.
 This applies to `invokeExact`, and to `invoke` when the call site has the handle's type, on the handle returned by `Linker.downcallHandle`, with or without the function address bound as its first argument.
+This applies to code of Graal languages only. In an image without one, for example where the only runtime compilation is of classes loaded at run time (`-H:+GraalJITCompileAtRuntime`), downcall handles are not prepared for runtime compilation.
 The option `-H:-SpecializeForeignDowncalls` disables the build-time creation of downcall handles.
 
 #### Downcalls
