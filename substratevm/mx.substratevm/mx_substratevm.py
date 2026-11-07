@@ -477,10 +477,14 @@ def truffle_unittest_task(extra_build_args=None):
             'jdk.graal.compiler.truffle.test.ConstantOptionKeyPartialEvaluationTest',
             # GR-75881
             'jdk.graal.compiler.truffle.test.GR75881Test',
+            # Downcalls through constant FFM method handles are compiled to direct calls of the
+            # downcall stub during partial evaluation. The test registers its downcalls through a feature.
+            'jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest',
         ]
         test_build_args = (extra_build_args +
                            svm_experimental_options(['-H:-SupportCompileInIsolates']) +
-                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true'])
+                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true',
+                            '--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature'])
         native_unittest(tests + truffle_args(test_build_args))
 
         # Static objects with field-based storage are pods in an image. With VirtualizePods (the

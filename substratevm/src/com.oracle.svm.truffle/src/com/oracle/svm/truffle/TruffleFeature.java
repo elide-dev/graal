@@ -130,6 +130,7 @@ import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.jdk.VectorAPIEnabled;
+import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
 import com.oracle.svm.core.jdk.resources.MissingResourceRegistrationUtils;
 import com.oracle.svm.core.reflect.MissingReflectionRegistrationUtils;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
@@ -698,6 +699,8 @@ public class TruffleFeature implements InternalFeature {
     private static boolean runtimeCompilationForbidden(ResolvedJavaMethod method) {
         if (GuestAnnotationAccess.isAnnotationPresent(method, TruffleBoundary.class)) {
             return true;
+        } else if (isRuntimeBoundary(method)) {
+            return true;
         } else if (UninterruptibleAnnotationUtils.isUninterruptible(method)) {
             UninterruptibleGuestValue uninterruptibleAnnotation = UninterruptibleAnnotationUtils.getAnnotation(method);
             if (uninterruptibleAnnotation == null || !uninterruptibleAnnotation.mayBeInlined()) {
@@ -711,6 +714,42 @@ public class TruffleFeature implements InternalFeature {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Methods of the native image runtime that are treated like methods annotated with
+     * {@link TruffleBoundary}: they are called from runtime-compiled code but never inlined into
+     * it.
+     * <ul>
+     * <li>{@code MethodHandle.invokeBasic} and the {@code linkTo} methods box their arguments and
+     * run the lambda form interpreter, so their code is unsuitable for partial evaluation, and the
+     * call site of a method handle that partial evaluation cannot resolve is better compiled as a
+     * call to them. A call site whose handle is a compilation constant is resolved by the method
+     * handle intrinsification at image build time (when the handle is a constant then), or by a
+     * {@link RuntimeMethodHandleLinker} during partial evaluation. The type adaptation of
+     * {@code MethodHandle.asType} that misses the handle's cache is a boundary as well, so that
+     * {@code asType} itself folds to the handle when the types are equal, as it is called by the
+     * adapter of {@code MethodHandle.invoke}.</li>
+     * <li>The downcall stubs of the Foreign Function and Memory API perform a transition to native
+     * code, which runtime-compiled code cannot contain, so the intrinsified invocation of a
+     * downcall handle calls them.</li>
+     * </ul>
+     */
+    public static boolean isRuntimeBoundary(ResolvedJavaMethod method) {
+        if (RuntimeMethodHandleLinker.isInvokeBasic(method)) {
+            return true;
+        }
+        /* The name is checked first because resolving the declaring class name is more expensive. */
+        return switch (method.getName()) {
+            case "linkToStatic", "linkToSpecial", "linkToVirtual", "linkToInterface", "linkToNative", "setAsTypeCache" -> isDeclaredBy(method, "java.lang.invoke.MethodHandle");
+            /* Called by the JDK's invokeExact and invoke adapters when their type check fails. */
+            case "newWrongMethodTypeException" -> isDeclaredBy(method, "java.lang.invoke.Invokers");
+            default -> isDeclaredBy(method, "com.oracle.svm.core.foreign.DowncallStubsHolder");
+        };
+    }
+
+    private static boolean isDeclaredBy(ResolvedJavaMethod method, String className) {
+        return className.equals(method.getDeclaringClass().toJavaName(true));
     }
 
     boolean isBlocklisted(ResolvedJavaMethod method) {

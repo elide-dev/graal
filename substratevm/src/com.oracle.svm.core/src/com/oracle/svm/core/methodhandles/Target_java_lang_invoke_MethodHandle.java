@@ -38,14 +38,19 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
+
 import com.oracle.svm.core.ForeignSupport;
 import com.oracle.svm.core.annotate.Alias;
 import com.oracle.svm.core.annotate.Delete;
+import com.oracle.svm.core.annotate.Inject;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
+import com.oracle.svm.core.fieldvaluetransformer.FieldValueTransformerWithAvailability;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.hub.RuntimeClassLoading.NoRuntimeClassLoading;
 import com.oracle.svm.core.hub.crema.CremaSupport;
@@ -60,6 +65,7 @@ import com.oracle.svm.guest.staging.reflect.target.Target_java_lang_reflect_Meth
 import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_ConstructorAccessor;
 import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_MethodAccessor;
 import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
+import com.oracle.svm.shared.BuildPhaseProvider;
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.util.VMError;
 
@@ -83,6 +89,15 @@ final class Target_java_lang_invoke_MethodHandle {
     @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
     Target_java_lang_invoke_LambdaForm form;
 
+    /**
+     * Describes how a runtime compiler can invoke this handle directly, or null for a handle that
+     * is only invoked through its lambda forms; see {@link RuntimeMethodHandleLinker}. The image
+     * builder computes the value for the handles in the image heap and {@link #bindTo} derives it
+     * for the handles it creates from them.
+     */
+    @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Custom, declClass = LinkInfoComputer.class) //
+    MethodHandleLinkInfo linkInfo;
+
     @Alias
     native Target_java_lang_invoke_MemberName internalMemberName();
 
@@ -94,6 +109,24 @@ final class Target_java_lang_invoke_MethodHandle {
 
     @Alias
     native Class<?> internalCallerClass();
+
+    @Alias
+    native Target_java_lang_invoke_BoundMethodHandle bindArgumentL(int pos, Object value);
+
+    /**
+     * Same as the original, except that the bound handle inherits the {@link #linkInfo} of this
+     * handle when a {@link RuntimeMethodHandleLinker} can link it: the JDK creates the handle of
+     * {@code Linker.downcallHandle(MemorySegment, FunctionDescriptor, Linker.Option...)} this way.
+     */
+    @Substitute
+    public MethodHandle bindTo(Object x) {
+        Object value = SubstrateUtil.cast(type, Target_java_lang_invoke_MethodType.class).leadingReferenceParameter().cast(x);
+        Target_java_lang_invoke_BoundMethodHandle bound = bindArgumentL(0, value);
+        if (linkInfo != null && RuntimeMethodHandleLinker.isAvailable()) {
+            SubstrateUtil.cast(bound, Target_java_lang_invoke_MethodHandle.class).linkInfo = RuntimeMethodHandleLinker.singleton().bindLinkInfo(linkInfo, value);
+        }
+        return SubstrateUtil.cast(bound, MethodHandle.class);
+    }
 
     /* All MethodHandle.invoke* methods funnel through here. */
     @Substitute(polymorphicSignature = true)
@@ -400,4 +433,22 @@ final class Target_java_lang_invoke_MethodHandleImpl_WrappedMember {
     @Alias
     @TargetElement(name = CONSTRUCTOR_NAME)
     native void constructor(MethodHandle target, MethodType type, Target_java_lang_invoke_MemberName member, boolean isInvokeSpecial, Class<?> callerClass);
+}
+
+/**
+ * Computes {@link Target_java_lang_invoke_MethodHandle#linkInfo} for the handles in the image heap.
+ * The value is only available after the analysis: the linker learns its handles from tasks that
+ * run during the analysis, and a handle may be scanned before the task that registers it runs.
+ */
+@Platforms(Platform.HOSTED_ONLY.class)
+final class LinkInfoComputer implements FieldValueTransformerWithAvailability {
+    @Override
+    public boolean isAvailable() {
+        return BuildPhaseProvider.isAnalysisFinished();
+    }
+
+    @Override
+    public Object transform(Object receiver, Object originalValue) {
+        return RuntimeMethodHandleLinker.isAvailable() ? RuntimeMethodHandleLinker.singleton().hostedLinkInfo(receiver) : null;
+    }
 }
