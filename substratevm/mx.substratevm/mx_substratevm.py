@@ -651,6 +651,11 @@ def svm_gate_body(args, tasks):
         if t:
             with native_image_context(IMAGE_ASSERTION_FLAGS):
                 native_unittests_task(args.extra_image_builder_arguments)
+                # Ristretto requires runtime compilation, which no feature configures for the
+                # analysis without Truffle. Downcalls registered at build time must then not be
+                # specialized for runtime compilation (elide-dev/graal#198).
+                native_unittest(['com.oracle.svm.test.foreign.ForeignTests', '--build-args'] + svm_experimental_options([
+                    '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime']) + args.extra_image_builder_arguments)
 
     generic_field_type_tags = [GraalTags.native_unittests, GraalTags.all_native_unittests, GraalTags.generic_field_type]
     with Task('generic field type', tasks, tags=generic_field_type_tags) as t:

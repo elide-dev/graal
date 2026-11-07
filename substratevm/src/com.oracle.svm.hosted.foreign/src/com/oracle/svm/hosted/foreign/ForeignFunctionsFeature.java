@@ -215,6 +215,14 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
     /** Entry methods of downcall handles that are not yet registered for runtime compilation. */
     private final Deque<AnalysisMethod> pendingRuntimeCompilationEntries = new ConcurrentLinkedDeque<>();
     private volatile FeatureImpl.BeforeAnalysisAccessImpl analysisAccess;
+    /**
+     * Whether the entry methods of downcall handles are registered for runtime compilation: null
+     * until the first {@link #duringAnalysis}, when all features have configured runtime
+     * compilation in {@link #beforeAnalysis}. False if runtime compilation was not configured for
+     * the analysis, as in an image whose only runtime compiler is Ristretto, which does not use
+     * the {@link DowncallHandleLinker} (elide-dev/graal#198).
+     */
+    private volatile Boolean entriesForRuntimeCompilation;
     private volatile Lookup implLookup;
 
     private final Deque<Object> nativeEntryPointsInImageHeap = new ConcurrentLinkedDeque<>();
@@ -962,7 +970,6 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             access.getBigBang().injectFieldTypes(access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()), List.of(linkInfoType), true);
         }
         analysisAccess = access;
-        registerPendingEntriesForRuntimeCompilation();
 
         for (String simpleName : VAR_HANDLE_SEGMENT_ACCESSORS) {
             Class<?> varHandleSegmentAsXClass = ReflectionUtil.lookupClass(JLI_PACKAGE + '.' + simpleName);
@@ -1020,6 +1027,10 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
      * directly (see {@link DowncallHandleLinker}).
      */
     private synchronized void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
+        if (Boolean.FALSE.equals(entriesForRuntimeCompilation)) {
+            /* No runtime-compiled code can invoke the handle directly: nothing to gain. */
+            return;
+        }
         FunctionDescriptor strippedFd = DowncallHandleEntryGenerator.stripNames(desc.fd);
         LinkerOptions linkerOptions = LinkerOptions.forDowncall(strippedFd, options);
         if (foreignFunctionsRuntime.getSpecializedDowncallHandle(strippedFd, linkerOptions) != null) {
@@ -1050,21 +1061,42 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
     }
 
     /**
-     * Registers the generated entry methods for runtime compilation once the analysis access is
-     * available. Entry methods are created by conditional tasks, which may run before the analysis
-     * starts and while it runs.
+     * Registers the generated entry methods for runtime compilation once all features have run
+     * {@link #beforeAnalysis}, which is when runtime compilation is configured for the analysis
+     * (for Truffle, by {@code TruffleFeature}). Entry methods are created by conditional tasks,
+     * which may run before the analysis starts and while it runs. Returns whether an entry method
+     * was registered.
      */
-    private void registerPendingEntriesForRuntimeCompilation() {
+    private boolean registerPendingEntriesForRuntimeCompilation() {
         FeatureImpl.BeforeAnalysisAccessImpl access = analysisAccess;
-        if (access == null || downcallHandleLinker == null) {
-            return;
+        Boolean register = entriesForRuntimeCompilation;
+        if (access == null || downcallHandleLinker == null || register == null) {
+            return false;
         }
         RuntimeCompilationFeature runtimeCompilation = RuntimeCompilationFeature.singleton();
+        boolean registered = false;
         synchronized (pendingRuntimeCompilationEntries) {
             AnalysisMethod entry;
             while ((entry = pendingRuntimeCompilationEntries.poll()) != null) {
-                runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
+                if (register) {
+                    runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
+                    registered = true;
+                }
             }
+        }
+        return registered;
+    }
+
+    @Override
+    public void duringAnalysis(DuringAnalysisAccess access) {
+        if (downcallHandleLinker == null) {
+            return;
+        }
+        if (entriesForRuntimeCompilation == null) {
+            entriesForRuntimeCompilation = RuntimeCompilationFeature.singleton().isConfiguredForAnalysis();
+        }
+        if (registerPendingEntriesForRuntimeCompilation()) {
+            access.requireAnalysisIteration();
         }
     }
 

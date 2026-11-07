@@ -360,6 +360,17 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
         analysisProviders = customHostedProviders;
     }
 
+    /**
+     * Whether a feature configured runtime compilation for the analysis (see
+     * {@link #initializeAnalysisProviders}), as Truffle does. Only then can methods be registered
+     * with {@link #prepareMethodForRuntimeCompilation}. Ristretto, which compiles bytecode loaded
+     * at run time, requires this feature but does not configure it. Valid once all features have
+     * run {@code beforeAnalysis}.
+     */
+    public boolean isConfiguredForAnalysis() {
+        return analysisProviders != null;
+    }
+
     public String[] getCallTrace(CallTreeInfo callTreeInfo, AnalysisMethod method) {
         return CallTreeInfo.getCallTrace(callTreeInfo, method, registeredRuntimeCompilations);
     }
