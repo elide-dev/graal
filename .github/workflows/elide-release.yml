@@ -260,8 +260,10 @@ jobs:
           if [ "${RUNNER_OS}" = "Linux" ]; then
             echo "LANG=C.UTF-8" >> "${GITHUB_ENV}"
             echo "LC_ALL=C.UTF-8" >> "${GITHUB_ENV}"
-            # Build SVM's static C libraries as fat LTO objects (see LTO_LLVM_MAJOR).
+            # Build SVM's static C libraries as fat LTO objects (see LTO_LLVM_MAJOR), for glibc and
+            # musl. The toolchain's musl clang carries its musl sysroot, whose libc.a has bitcode too.
             echo "SVM_LTO_CC=${ELIDE_TOOLCHAIN_HOME}/bin/clang" >> "${GITHUB_ENV}"
+            echo "SVM_LTO_MUSL_CC=${ELIDE_TOOLCHAIN_HOME}/bin/$(uname -m)-unknown-linux-musl-clang" >> "${GITHUB_ENV}"
           else
             echo "LANG=en_US.UTF-8" >> "${GITHUB_ENV}"
           fi
