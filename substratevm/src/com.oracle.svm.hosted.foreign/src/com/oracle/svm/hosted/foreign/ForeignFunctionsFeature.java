@@ -43,11 +43,13 @@ import java.lang.invoke.VarHandle;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
@@ -103,7 +105,6 @@ import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
 import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
@@ -157,6 +158,7 @@ import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.replacements.MethodHandleWithExceptionPlugin;
 import jdk.graal.compiler.util.Digest;
 import jdk.graal.compiler.word.WordTypes;
+import jdk.internal.foreign.AbstractMemorySegmentImpl;
 import jdk.internal.foreign.MemorySessionImpl;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.abi.AbstractLinker;
@@ -482,7 +484,6 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         @Override
         public BasePhase<MidTierContext> createOptimizeSharedArenaAccessPhase(boolean hosted) {
             VMError.guarantee(SubstrateOptions.isSharedArenaSupportEnabled(), "Support for shared arenas must be enabled");
-            VMError.guarantee(!VectorAPIEnabled.getValue(), "Shared arenas cannot be used together with Vector API support (GR-65162)");
 
             PhaseSuite<MidTierContext> sharedArenaPhases = new PhaseSuite<>();
             if (hosted) {
@@ -1192,7 +1193,57 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             Class<?> concreteHeapSegmentImpl = ReflectionUtil.lookupClass(heapSegmentImpl);
             registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(concreteHeapSegmentImpl, "unsafeGetBase"));
         }
+
+        /*
+         * If both heap and native segments reach a scoped Vector API accessor, the call cannot be
+         * devirtualized and targets the abstract method. This is safe as long as the segment
+         * hierarchy is sealed and contains no other implementations than the ones registered
+         * above.
+         */
+        verifySegmentAccessorImplementations(metaAccess, AbstractMemorySegmentImpl.class);
+        registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(AbstractMemorySegmentImpl.class, "unsafeGetBase"));
+        registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(AbstractMemorySegmentImpl.class, "unsafeGetOffset"));
+
+        /*
+         * The @Scoped Vector API accessors 'ScopedMemoryAccess.(load|store)*MemorySegment*' call
+         * 'VectorSupport.(load|store)(Masked)'. If Vector API support is enabled, these calls are
+         * intrinsified and expanded into SIMD memory accesses that the shared arena phase checks
+         * like any other access. If expansion is not possible, the call to the 'VectorSupport'
+         * method remains. It is the last operation of the scoped region and only invokes the
+         * 'defaultImpl' lambda of 'jdk.incubator.vector', which accesses the segment through
+         * 'MemorySegment.get' and 'MemorySegment.set'. These are @Scoped accessors that check the
+         * session themselves, so the call cannot access the memory of a closed arena.
+         */
+        Class<?> vectorSupport = ReflectionUtil.lookupClass("jdk.internal.vm.vector.VectorSupport");
+        for (Method method : vectorSupport.getDeclaredMethods()) {
+            if (VECTOR_SUPPORT_MEMORY_ACCESSORS.contains(method.getName())) {
+                registerSafeArenaAccessorMethod(metaAccess, method);
+            }
+        }
     }
+
+    /**
+     * Verifies that {@code klass} and all its subclasses are sealed or final and that every
+     * implementation of {@code unsafeGetBase} and {@code unsafeGetOffset} in this hierarchy has
+     * been registered as safe arena accessor.
+     */
+    private void verifySegmentAccessorImplementations(MetaAccessProvider metaAccess, Class<?> klass) {
+        VMError.guarantee(klass.isSealed() || Modifier.isFinal(klass.getModifiers()), "Memory segment implementation %s must be sealed or final", klass.getName());
+        for (Method method : klass.getDeclaredMethods()) {
+            if ((method.getName().equals("unsafeGetBase") || method.getName().equals("unsafeGetOffset")) && !Modifier.isAbstract(method.getModifiers()) && !method.isBridge()) {
+                VMError.guarantee(neverAccessesSharedArenaMethods.contains(metaAccess.lookupJavaMethod(method)), "%s must be registered as safe arena accessor", method);
+            }
+        }
+        if (klass.isSealed()) {
+            for (Class<?> subclass : klass.getPermittedSubclasses()) {
+                verifySegmentAccessorImplementations(metaAccess, subclass);
+            }
+        }
+    }
+
+    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+13/src/java.base/share/classes/jdk/internal/misc/X-ScopedMemoryAccess.java.template") //
+    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+13/src/jdk.incubator.vector/share/classes/jdk/incubator/vector/X-Vector.java.template") //
+    private static final Set<String> VECTOR_SUPPORT_MEMORY_ACCESSORS = Set.of("load", "loadMasked", "store", "storeMasked");
 
     protected void registerSafeArenaAccessorClass(MetaAccessProvider metaAccess, Class<?> klass) {
         neverAccessesSharedArena.add(metaAccess.lookupJavaType(klass));

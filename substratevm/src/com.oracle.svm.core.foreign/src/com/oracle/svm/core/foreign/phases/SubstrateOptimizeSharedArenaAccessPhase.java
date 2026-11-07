@@ -1046,12 +1046,18 @@ public class SubstrateOptimizeSharedArenaAccessPhase extends BasePhase<MidTierCo
                         continue;
                     }
                     visited.mark(cur);
+                    /*
+                     * Compare with the key before skipping fixed nodes: the session, segment, or
+                     * offset of a scope can itself be a fixed node, for example the result of an
+                     * invoke. A Vector API access to offset 0 of such a segment only reaches the
+                     * segment through its address computation.
+                     */
+                    if (cur == key) {
+                        return true;
+                    }
                     // fixed nodes are checked themselves
                     if (cur instanceof FixedNode) {
                         continue;
-                    }
-                    if (cur == key) {
-                        return true;
                     }
                     for (Node input : cur.inputs()) {
                         toProcess.push(input);

@@ -1341,6 +1341,7 @@ suite = {
                 "jdk.management.jfr",
                 "java.instrument",
                 "java.rmi",
+                "jdk.incubator.vector",
             ],
             "requiresConcealed" : {
                 "java.base" : [
@@ -1359,6 +1360,8 @@ suite = {
             "checkstyle": "com.oracle.svm.test",
             "checkstyleVersion" : "10.21.0",
             "workingSets": "SVM",
+            # warning: [incubating] using incubating module(s): jdk.incubator.vector
+            "javac.lint.overrides" : "-incubating",
             "annotationProcessors": [
                 "compiler:GRAAL_PROCESSOR",
                 "SVM_PROCESSOR",
