@@ -496,6 +496,11 @@ def truffle_unittest_task(extra_build_args=None):
         # Compiled code that materializes and deoptimizes pods, with compilation in isolates.
         native_unittest(['jdk.graal.compiler.truffle.test.StaticObjectEscapeTest'] + truffle_args(extra_build_args + pod_build_args))
 
+    # C interface calls (an inlinable NO_TRANSITION leaf, and transitioning function pointer and
+    # CFunction calls, which must be emitted as calls to their AOT stubs) in runtime-compiled
+    # Truffle code. The test class carries its own @NativeImageBuildArgs (--macro:truffle).
+    native_unittest(['com.oracle.svm.truffle.test.CFunctionRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
+
     _truffle_runtime_compilation_test(extra_build_args)
     # Compilation isolates hand the installed code's metadata over to the client isolate, which
     # must keep native memory tracking consistent (elide-dev/graal#194).
