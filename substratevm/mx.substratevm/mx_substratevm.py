@@ -497,6 +497,9 @@ def truffle_unittest_task(extra_build_args=None):
         native_unittest(['jdk.graal.compiler.truffle.test.StaticObjectEscapeTest'] + truffle_args(extra_build_args + pod_build_args))
 
     _truffle_runtime_compilation_test(extra_build_args)
+    # Compilation isolates hand the installed code's metadata over to the client isolate, which
+    # must keep native memory tracking consistent (elide-dev/graal#194).
+    _truffle_runtime_compilation_test(extra_build_args + ['--enable-monitoring=nmt'])
     # Runtime compilation must also work when AOT calls are routed through the PLT/GOT. Then
     # runtime-compiled code reaches PLT stubs via vtables.
     _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
