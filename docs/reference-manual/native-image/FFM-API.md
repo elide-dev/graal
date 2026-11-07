@@ -20,6 +20,16 @@ Modules that are permitted to perform _restricted_ native operations (including 
 
 Native Image supports all foreign memory features.
 
+### Shared Arenas
+
+Shared arenas (`Arena.ofShared()`) are supported by default.
+Support can be disabled using the `-H:-SharedArenaSupport` option, along with `-H:+UnlockExperimentalVMOptions`.
+A shared arena can be closed by one thread while other threads access its memory.
+Native Image closes a shared arena at a safepoint, and code that accesses the memory of a shared arena checks that the arena is still open after each safepoint.
+An access to the memory of a closed arena throws an `IllegalStateException`.
+
+Shared arenas can be used together with the Vector API (`jdk.incubator.vector`), including vector loads and stores from and to memory segments, such as `IntVector.fromMemorySegment` and `IntVector.intoMemorySegment`.
+
 ## Foreign Functions
 
 The FFM API enables Java code to call _down_ to native functions, and conversely allows native code to call _up_ to invoke Java code via method handles.

@@ -67,7 +67,6 @@ import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.heap.ReferenceHandler;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.option.GCOptionValue;
 import com.oracle.svm.core.thread.VMOperationControl;
 import com.oracle.svm.core.util.UserError;
@@ -1876,15 +1875,7 @@ public class SubstrateOptions {
     public static final HostedOptionKey<Boolean> VectorAPISupport = new HostedOptionKey<>(true);
 
     @Option(help = "Enable support for Arena.ofShared ", type = Expert)//
-    public static final HostedOptionKey<Boolean> SharedArenaSupport = new HostedOptionKey<>(true, key -> {
-        if (isSharedArenaSupportEnabled()) {
-            // GR-65162: Shared arenas cannot be used together with Vector API support
-            UserError.guarantee(!VectorAPIEnabled.getValue(), "Support for Arena.ofShared (which is part of the FFM API) is not available with Vector API support. " +
-                            "Either disable Vector API support using %s or replace usages of Arena.ofShared with Arena.ofAuto and disable shared arena support using %s.",
-                            SubstrateOptionsParser.commandArgument(VectorAPISupport, "-"),
-                            SubstrateOptionsParser.commandArgument(key, "-"));
-        }
-    });
+    public static final HostedOptionKey<Boolean> SharedArenaSupport = new HostedOptionKey<>(true);
 
     @Fold
     public static boolean isSharedArenaSupportEnabled() {
@@ -1893,10 +1884,6 @@ public class SubstrateOptions {
         }
         if (SubstrateOptions.SharedArenaSupport.hasBeenSet()) {
             return true;
-        }
-        if (VectorAPIEnabled.getValue()) {
-            // GR-65162: Shared arenas cannot be used together with Vector API support
-            return false;
         }
         return Platform.includedIn(PLATFORM_JNI.class) && Platform.includedIn(NATIVE_ONLY.class);
     }
