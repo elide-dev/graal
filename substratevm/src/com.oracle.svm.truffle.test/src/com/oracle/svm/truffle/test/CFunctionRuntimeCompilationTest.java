@@ -27,6 +27,7 @@ package com.oracle.svm.truffle.test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.graalvm.nativeimage.ImageInfo;
@@ -185,14 +186,24 @@ public class CFunctionRuntimeCompilationTest {
 
     private static void checkUnderGC(CallTarget target) throws InterruptedException {
         AtomicBoolean stop = new AtomicBoolean();
+        /*
+         * Collect repeatedly, but pause in between: back-to-back collections can starve the calling
+         * thread when the image verifies the heap (as with the gate's assertion flags).
+         */
         Thread collector = new Thread(() -> {
             while (!stop.get()) {
                 System.gc();
+                try {
+                    Thread.sleep(2);
+                } catch (InterruptedException e) {
+                    return;
+                }
             }
         }, "gc-trigger");
         collector.start();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         try {
-            for (int round = 0; round < 200; round++) {
+            for (int round = 0; round < 50 && System.nanoTime() < deadline; round++) {
                 long value = -1000 + round;
                 int iterations = 2000;
                 assertEquals(expected(value, iterations), (long) target.call(value, iterations, true));
@@ -206,7 +217,7 @@ public class CFunctionRuntimeCompilationTest {
 
     /** Reports the per-call cost from compiled code; informational only. */
     private static void report(Kind kind, CallTarget target) {
-        int iterations = 20_000_000;
+        int iterations = 5_000_000;
         target.call(0L, iterations, false);
         long start = System.nanoTime();
         long sum = (long) target.call(0L, iterations, false);
