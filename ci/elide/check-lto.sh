@@ -11,7 +11,7 @@ major=$2
 home=$3
 work=$4
 
-libs="libjvm.a libsvm_container.a liblibchelper.a"
+libs="libjvm.a libsvm_container.a liblibchelper.a libzstd.a"
 mkdir -p "${work}"
 work=$(cd "${work}" && pwd)
 
@@ -77,6 +77,40 @@ for lib in ${libs}; do
     status=1
   fi
 done
+
+# A fully static musl image links with ThinLTO into the toolchain's musl libc.a and SVM's musl
+# libraries. Both are fat objects with bitcode, so the LTO reaches libc itself. glibc's own archives
+# are native only, which is why the glibc link above can only check SVM's libraries. The toolchain's <arch>-linux-musl-gcc
+# shim is clang with the musl sysroot, and its driver uses the archives' bitcode on -flto links.
+musl_cc="${llvm_bin}/$(uname -m)-linux-musl-gcc"
+if [ "$(uname -m)" != x86_64 ]; then
+  # Native Image supports --libc=musl only on amd64.
+  echo "musl: skipped on $(uname -m)"
+elif [ ! -x "${musl_cc}" ]; then
+  echo "MISSING ${musl_cc}"
+  status=1
+else
+  rm -rf "${work}/link-musl" && mkdir -p "${work}/link-musl" && cd "${work}/link-musl"
+  cp "${work}/link/Hello.class" .
+  PATH="${llvm_bin}:${PATH}" "${home}/bin/native-image" -cp . -o hello-thinlto-musl --static --libc=musl \
+    -H:NativeLinkerOption=-flto=thin -H:NativeLinkerOption=-Wl,--save-temps \
+    -H:TempDirectory="${work}/link-musl/tmp" Hello
+  ./hello-thinlto-musl
+  resolution=$(find "${work}/link-musl" -name 'hello-thinlto-musl.resolution.txt' | head -1)
+  if [ -z "${resolution}" ]; then
+    echo "musl: no ThinLTO resolution file, so the link did not use LTO"
+    status=1
+  else
+    # libc and SVM's musl libraries (see SVM_LTO_MUSL_CC in mx_substratevm.py) must all take part.
+    for lib in libc.a ${libs}; do
+      members=$(grep -o "/${lib//./\\.}([^)]*)" "${resolution}" | sort -u | wc -l)
+      echo "musl ${lib}: ${members} members linked from bitcode by ThinLTO"
+      if [ "${members}" -eq 0 ]; then
+        status=1
+      fi
+    done
+  fi
+fi
 
 if [ "${status}" -ne 0 ]; then
   echo "LTO check failed"
