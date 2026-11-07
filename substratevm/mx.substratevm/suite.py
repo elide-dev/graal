@@ -1367,6 +1367,19 @@ suite = {
             "jacoco" : "exclude",
         },
 
+        "com.oracle.svm.truffle.test": {
+            "subDir": "src",
+            "sourceDirs": ["src"],
+            "dependencies": [
+                "com.oracle.svm.test",
+                "truffle:TRUFFLE_API",
+            ],
+            "checkstyle": "com.oracle.svm.test",
+            "workingSets": "SVM",
+            "javaCompliance" : "24+",
+            "jacoco" : "exclude",
+        },
+
         "com.oracle.svm.test.debug": {
             "subDir": "src",
             "sourceDirs": ["src"],
@@ -3157,6 +3170,24 @@ suite = {
             "sdk:NATIVEIMAGE",
             "SVM",
             "SVM_CONFIGURE",
+          ],
+          "testDistribution" : True,
+        },
+
+        # Tests that need the Truffle API (built with --macro:truffle); kept out of SVM_TESTS so the
+        # default svmjunit image does not include Truffle.
+        "SVM_TRUFFLE_TESTS" : {
+          "subDir": "src",
+          "relpath" : True,
+          "dependencies" : [
+            "com.oracle.svm.truffle.test",
+          ],
+          "distDependencies": [
+            "mx:JUNIT_TOOL",
+            "sdk:NATIVEIMAGE",
+            "SVM",
+            "SVM_TESTS",
+            "truffle:TRUFFLE_API",
           ],
           "testDistribution" : True,
         },

@@ -146,6 +146,7 @@ import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompiledMethod;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompiledMethodSupport;
 import com.oracle.svm.hosted.BytecodeHandlerFeature;
+import com.oracle.svm.hosted.code.CCallStubMethod;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.FeatureImpl.AfterAnalysisAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
@@ -733,10 +734,23 @@ public class TruffleFeature implements InternalFeature {
      * <li>The downcall stubs of the Foreign Function and Memory API perform a transition to native
      * code, which runtime-compiled code cannot contain, so the intrinsified invocation of a
      * downcall handle calls them.</li>
+     * <li>The stubs of {@code @CFunction} and {@code @InvokeCFunctionPointer} calls that change the
+     * thread state. Runtime-compiled code cannot contain such a transition (the
+     * {@code CFunctionSnippets} are hosted-only, and deoptimization while in native code would
+     * need the deoptimization stub to do the transition), so it calls the stub's AOT code. Calls
+     * without a transition are still inlined.</li>
      * </ul>
      */
     public static boolean isRuntimeBoundary(ResolvedJavaMethod method) {
         if (RuntimeMethodHandleLinker.isInvokeBasic(method)) {
+            return true;
+        }
+        if (method instanceof AnalysisMethod analysisMethod && analysisMethod.getWrapped() instanceof CCallStubMethod stub && !stub.allowRuntimeCompilation()) {
+            /*
+             * The stub of a @CFunction or @InvokeCFunctionPointer call that changes the thread
+             * state cannot be runtime compiled (see CFunctionCallStubMethod.allowRuntimeCompilation),
+             * so runtime-compiled code calls its AOT version, which does the transition.
+             */
             return true;
         }
         /* The name is checked first because resolving the declaring class name is more expensive. */
