@@ -57,6 +57,12 @@ final class IsolatedRuntimeMethodInfoAccess {
         }
     }
 
+    /**
+     * Stops tracking the memory of {@code installInfo} in the current (compilation) isolate before
+     * it is handed over to the client isolate, which takes ownership with
+     * {@link #startTrackingInCurrentIsolate}. The memory is not freed, so the NMT headers must stay
+     * valid for the client isolate's tracking (see {@link NativeMemoryTracking#untrackForTransfer}).
+     */
     public static void untrackInCurrentIsolate(CodeInstallInfo installInfo) {
         CodeInfo info = installInfo.getCodeInfo();
         RuntimeCodeInfoMemory.singleton().remove(info);
@@ -70,11 +76,11 @@ final class IsolatedRuntimeMethodInfoAccess {
         NonmovableArrays.untrackUnmanagedArray(adjusterData.getHandles());
 
         if (VMInspectionOptions.hasNativeMemoryTrackingSupport()) {
-            NativeMemoryTracking.singleton().untrack(installInfo);
-            NativeMemoryTracking.singleton().untrack(installInfo.getAdjusterData());
-            NativeMemoryTracking.singleton().untrack(installInfo.getCodeInfo());
-            NativeMemoryTracking.singleton().untrack(adjusterData.getAddresses());
-            NativeMemoryTracking.singleton().untrack(adjusterData.getHandles());
+            NativeMemoryTracking.singleton().untrackForTransfer(installInfo);
+            NativeMemoryTracking.singleton().untrackForTransfer(installInfo.getAdjusterData());
+            NativeMemoryTracking.singleton().untrackForTransfer(installInfo.getCodeInfo());
+            NativeMemoryTracking.singleton().untrackForTransfer(adjusterData.getAddresses());
+            NativeMemoryTracking.singleton().untrackForTransfer(adjusterData.getHandles());
         }
     }
 
@@ -94,7 +100,7 @@ final class IsolatedRuntimeMethodInfoAccess {
         public void apply(NonmovableArray<?> array) {
             NonmovableArrays.untrackUnmanagedArray(array);
             if (VMInspectionOptions.hasNativeMemoryTrackingSupport()) {
-                NativeMemoryTracking.singleton().untrack(array);
+                NativeMemoryTracking.singleton().untrackForTransfer(array);
             }
         }
     };

@@ -89,9 +89,6 @@ import jdk.vm.ci.code.InstalledCode;
                 "--features=com.oracle.svm.test.continuations.ContinuationsWithRuntimeCompilationTest$TestFeature",
                 "-H:+VMContinuationsWithRuntimeCompilation",
                 "-H:MaxRuntimeCompileMethods=1000",
-                // Compile in the image's own isolate: isolated compilation trips an NMT header check
-                // (IsolatedRuntimeMethodInfoAccess.startTrackingInCurrentIsolate) when NMT is enabled.
-                "-H:-SupportCompileInIsolates",
 })
 public class ContinuationsWithRuntimeCompilationTest {
 
