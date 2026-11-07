@@ -4126,9 +4126,9 @@ class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
 
 def mx_register_dynamic_suite_constituents(register_project, register_distribution):
     register_project(SubstrateCompilerFlagsBuilder())
-    lto_toolchain = _lto_ninja_toolchain()
-    if lto_toolchain:
-        register_distribution(lto_toolchain)
+    for lto_toolchain in (_lto_ninja_toolchain(), _lto_musl_ninja_toolchain()):
+        if lto_toolchain:
+            register_distribution(lto_toolchain)
     register_project(BaseJDKStaticLibrarySymbolsBuilder())
     register_project(SVMStaticLibrarySymbolsBuilder())
 
@@ -4159,8 +4159,9 @@ def _lto_ninja_toolchain():
     LTO link can include them while every other link keeps using the machine code. SVM_LTO_CXX and
     SVM_LTO_AR default to clang++ and llvm-ar next to SVM_LTO_CC.
 
-    Only ELF targets support fat LTO objects, so this is Linux (glibc) only. Other native projects
-    and the musl variants keep their toolchains.
+    Only ELF targets support fat LTO objects, so this is Linux only. This toolchain builds the glibc
+    variants; see _lto_musl_ninja_toolchain for the musl ones. Other native projects keep their
+    toolchains.
     """
     cc = mx.get_env('SVM_LTO_CC')
     if not cc or not mx.is_linux():
@@ -4181,6 +4182,37 @@ CXXFLAGS={flags}
     layout = {'toolchain.ninja': {'source_type': 'string', 'value': toolchain}}
     return mx.LayoutDirDistribution(suite, 'SVM_LTO_NINJA_TOOLCHAIN', ['mx:GCC_NINJA_TOOLCHAIN'], layout, None, True, None,
                                     native_toolchain={'kind': 'ninja', 'compiler': 'svm-lto', 'target': {}})
+
+
+def _lto_musl_ninja_toolchain():
+    """
+    The "svm-lto" ninja toolchain for the musl variants of the libraries that _lto_ninja_toolchain
+    builds for glibc. It exists only if SVM_LTO_MUSL_CC names a clang that targets musl, such as an
+    <arch>-unknown-linux-musl-clang whose configuration file supplies a musl sysroot. The libraries
+    are then fat LTO objects as well, so a static musl image linked with ThinLTO optimizes them
+    together with a libc that also carries bitcode. Without it, the musl variants are built by GCC
+    (sdk:MUSL_NINJA_TOOLCHAIN) and contain machine code only. SVM_LTO_MUSL_CXX defaults to the
+    matching clang++, SVM_LTO_MUSL_AR to llvm-ar next to SVM_LTO_MUSL_CC.
+    """
+    cc = mx.get_env('SVM_LTO_MUSL_CC')
+    if not cc or not mx.is_linux():
+        return None
+    bin_dir = dirname(cc)
+    cxx = mx.get_env('SVM_LTO_MUSL_CXX') or (cc + '++' if cc.endswith('clang') else join(bin_dir, 'clang++'))
+    ar = mx.get_env('SVM_LTO_MUSL_AR') or join(bin_dir, 'llvm-ar')
+    flags = '-flto=thin -ffat-lto-objects'
+    toolchain = f"""
+include <ninja-toolchain:GCC_NINJA_TOOLCHAIN>
+CC={cc}
+CXX={cxx}
+AR={ar}
+CFLAGS={flags}
+CXXFLAGS={flags}
+LDFLAGS=
+"""
+    layout = {'toolchain.ninja': {'source_type': 'string', 'value': toolchain}}
+    return mx.LayoutDirDistribution(suite, 'SVM_LTO_MUSL_NINJA_TOOLCHAIN', ['mx:GCC_NINJA_TOOLCHAIN'], layout, None, True, None,
+                                    native_toolchain={'kind': 'ninja', 'compiler': 'svm-lto', 'target': {'libc': 'musl'}})
 
 
 class JDKLayoutTARDistribution(mx.LayoutTARDistribution):
