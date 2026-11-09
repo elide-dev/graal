@@ -70,6 +70,11 @@ jobs:
           repository: elide-dev/graalpython
           ref: ${{ inputs.graalpython-ref }}
           path: graalpython
+      # The runners are persistent and shared with other workflows of this repository, which leave
+      # their own checkouts here (for example source/). mx resolves suites in sibling directories, so
+      # a second graal tree makes every suite import ambiguous ("Multiple suites match").
+      - name: Remove other workflows' checkouts
+        run: find . -mindepth 1 -maxdepth 1 ! -name graal ! -name graalpython ! -name refcache -print -exec rm -rf {} +
       - name: Set up environment
         run: |
           {
