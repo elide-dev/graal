@@ -78,12 +78,13 @@ public class NFICallOverheadTest extends NFITest {
 
         @Override
         public final Object executeTest(VirtualFrame frame) throws InteropException {
-            compiled = CompilerDirectives.inCompiledCode();
+            boolean startedCompiled = CompilerDirectives.inCompiledCode();
             int iterations = (Integer) frame.getArguments()[0];
             long accumulated = 0;
             for (int i = 0; i < iterations; i++) {
                 accumulated += call(i);
             }
+            compiled = startedCompiled && CompilerDirectives.inCompiledCode();
             return accumulated;
         }
 
