@@ -24,11 +24,12 @@
  */
 package com.oracle.svm.interpreter.ristretto.compile;
 
-import com.oracle.svm.interpreter.ristretto.RistrettoUtils;
+import com.oracle.svm.interpreter.InterpreterKnownCompiledEntryPoints;
+import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
+import com.oracle.svm.interpreter.ristretto.meta.RistrettoMethod;
 import com.oracle.svm.interpreter.ristretto.meta.RistrettoMetaAccess;
 
 import jdk.graal.compiler.core.common.PermanentBailoutException;
-import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.java.BytecodeParser;
 import jdk.graal.compiler.java.GraphBuilderPhase;
 import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
@@ -110,11 +111,16 @@ public class RistrettoParser extends BytecodeParser {
     }
 
     private static boolean hasCompiledEntry(ResolvedJavaMethod targetMethod) {
-        try {
-            return RistrettoUtils.wasAOTCompiled(targetMethod);
-        } catch (GraalError notInterpreterMetadata) {
+        InterpreterResolvedJavaMethod interpreterMethod;
+        if (targetMethod instanceof RistrettoMethod method) {
+            interpreterMethod = method.getInterpreterMethod();
+        } else if (targetMethod instanceof InterpreterResolvedJavaMethod method) {
+            interpreterMethod = method;
+        } else {
             return false;
         }
+        return interpreterMethod.hasNativeEntryPoint() && interpreterMethod.getNativeEntryPoint().isNonNull() &&
+                        !interpreterMethod.getNativeEntryPoint().equal(InterpreterKnownCompiledEntryPoints.getMethodNotCompiledHandler());
     }
 
     private static boolean isCompilerDirectivePluginTarget(ResolvedJavaMethod targetMethod) {
