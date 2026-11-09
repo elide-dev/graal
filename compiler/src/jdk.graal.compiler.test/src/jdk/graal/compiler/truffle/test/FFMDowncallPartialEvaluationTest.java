@@ -327,6 +327,14 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         }
     }
 
+    @Override
+    @Before
+    public void onlyWhiteBox() {
+        if (checkGraphs()) {
+            super.onlyWhiteBox();
+        }
+    }
+
     @Before
     public void setup() {
         Assume.assumeTrue("the downcall stubs are only registered in the native image", ImageInfo.inImageRuntimeCode());
