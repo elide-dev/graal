@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -63,6 +63,7 @@ public abstract class RegexFlavor {
     protected static final int EMPTY_CHECKS_ON_MANDATORY_LOOP_ITERATIONS = 1 << 9;
     protected static final int BACKREFERENCE_IGNORE_CASE_MULTI_CHAR_EXPANSION = 1 << 10;
     protected static final int LOOKBEHINDS_REQUIRE_FIXED_WIDTH_PATTERN = 1 << 11;
+    protected static final int RE2_EMPTY_CHECKS = 1 << 13;
 
     private final int traits;
 
@@ -146,6 +147,29 @@ public abstract class RegexFlavor {
      */
     public boolean emptyChecksOnMandatoryLoopIterations() {
         return hasTrait(EMPTY_CHECKS_ON_MANDATORY_LOOP_ITERATIONS);
+    }
+
+    /**
+     * Regex flavors with this feature check empty loop iterations like RE2, which expands
+     * {@code x{n,m}} into nested copies of {@code x} and {@code x{n,}} into {@code n-1} copies of
+     * {@code x} followed by {@code x+}, and whose NFA simulation stops a thread when it revisits
+     * a state at the same position. For a quantified expression that can match the empty string,
+     * this means:
+     * <ul>
+     * <li>Iterations of bounded quantifiers are never subject to empty checks.</li>
+     * <li>In an unbounded quantifier, the last mandatory iteration (the first iteration of
+     * {@code x+}) may match the empty string, but then the loop ends: the empty check fails and the
+     * matcher continues after the loop instead of backtracking. For example, {@code (?:|a)+}
+     * matches {@code ""} on {@code "aaa"}.</li>
+     * <li>Optional iterations of an unbounded quantifier must not match the empty string, as in
+     * ECMAScript.</li>
+     * </ul>
+     * The flavor's parser must rewrite {@code x*} with a nullable {@code x} to {@code (?:x+|)} (or
+     * {@code (?:|x+)} if non-greedy), so that the first iteration of every unbounded loop is
+     * mandatory.
+     */
+    public boolean usesRE2EmptyChecks() {
+        return hasTrait(RE2_EMPTY_CHECKS);
     }
 
     /**

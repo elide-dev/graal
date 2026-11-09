@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -267,7 +267,8 @@ public class RegexASTPostProcessor {
                 curTerm.setExpandedQuantifier(unroll);
                 curTerm.setMandatoryQuantifier(mandatory);
                 curTerm.setOptionalQuantifier(optional);
-                curTerm.setEmptyGuard(true);
+                // RE2 has no empty checks in bounded loops, see RegexFlavor#usesRE2EmptyChecks.
+                curTerm.setEmptyGuard(!(unroll && !quantifier.isInfiniteLoop() && ast.getFlavor().usesRE2EmptyChecks()));
                 if (!term.isInLookBehindAssertion()) {
                     createOptional(term, quantifier, unroll, mandatory, optional, recurse - 1);
                 }
@@ -330,6 +331,14 @@ public class RegexASTPostProcessor {
                         curTerm.asGroup().setQuantifier(quantifier);
                         curTerm.setExpandedQuantifier(true);
                         curTerm.setMandatoryQuantifier(true);
+                        if (i == quantifier.getMin() - 1 && quantifier.isInfiniteLoop() && toExpand.mayMatchEmptyString() && ast.getFlavor().usesRE2EmptyChecks() &&
+                                        !toExpand.isInLookBehindAssertion()) {
+                            // In RE2, the loop ends if the last mandatory iteration of an unbounded
+                            // quantifier matches the empty string, see
+                            // RegexFlavor#usesRE2EmptyChecks. The empty guard marks this copy for
+                            // the empty check in NFATraversalRegexASTVisitor.
+                            curTerm.setEmptyGuard(true);
+                        }
                     }
                 } else if (mandatoryOptionalSplit) {
                     createOptional(toExpand, quantifier, false, true, false, 0);

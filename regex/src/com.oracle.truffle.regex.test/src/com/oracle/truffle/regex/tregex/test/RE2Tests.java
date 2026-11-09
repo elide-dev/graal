@@ -104,6 +104,81 @@ public class RE2Tests extends RegexTestBase {
     }
 
     @Test
+    public void nullableLoops() {
+        // elide-dev/graal#206: RE2 ends an unbounded loop after an empty first iteration instead
+        // of trying the next alternative of the loop body, so these match the empty string.
+        test("(?:|a)*", "", "aaa", 0, true, 0, 0);
+        test("^(?:(?:|a)*)", "", "aaa", 0, true, 0, 0);
+        test("(?:|a)+", "", "aaa", 0, true, 0, 0);
+        test("^(?:(?:|a)+)", "", "aaa", 0, true, 0, 0);
+        for (String pattern : new String[]{"(?:|a)*", "^(?:(?:|a)*)", "(?:|a)+", "^(?:(?:|a)+)", "(|a){2,}", "(?:|a){0,40}"}) {
+            Value regex = compileRegex(pattern, "");
+            Assert.assertFalse(pattern, regex.isNull());
+            Assert.assertFalse(pattern, regex.getMember("isBacktracking").asBoolean());
+        }
+        // The same holds for later search positions, e.g. for global replacement.
+        test("(?:|a)*", "", "aaa", 1, true, 1, 1);
+        test("(?:|a)*", "", "aaa", 2, true, 2, 2);
+        test("(?:|a)*", "", "aaa", 3, true, 3, 3);
+        test("(|a)+", "", "aaa", 1, true, 1, 1, 1, 1);
+        test("(|a)+", "", "aaa", 3, true, 3, 3, 3, 3);
+        test("(?:a|(?:|b))*", "", "abab", 1, true, 1, 1);
+        test("(?:a|(?:|b))*", "", "abab", 2, true, 2, 4);
+        // Empty first iterations end the loop, empty later iterations are rejected, and bounded
+        // loops have no empty checks at all. Expected results were checked against C++ RE2.
+        test("(?:a|)*", "", "aaa", 0, true, 0, 3);
+        test("(?:a|)+", "", "aaa", 0, true, 0, 3);
+        test("(?:|a)*?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a)+?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,}", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,}?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){0,3}", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,3}", "", "aaa", 0, true, 0, 0);
+        test("(|a)*", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a)+", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a){2,}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a){0,3}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(a|)*", "", "aaa", 0, true, 0, 3, 2, 3);
+        test("((|a))*", "", "aaa", 0, true, 0, 0, 0, 0, 0, 0);
+        test("(a|()|b)*", "", "ab", 0, true, 0, 2, 1, 2, -1, -1);
+        test("(a|()|b){1,3}", "", "ab", 0, true, 0, 1, 1, 1, 1, 1);
+        test("(?:()|(a))*", "", "aa", 0, true, 0, 0, 0, 0, -1, -1);
+        test("(?:()|(a)){2,}", "", "aa", 0, true, 0, 0, 0, 0, -1, -1);
+        test("(?:a|(?:|b))*", "", "ab", 0, true, 0, 2);
+        test("(?:a|(?:|b))*", "", "b", 0, true, 0, 0);
+        test("(?:a|(?:|b))+", "", "ab", 0, true, 0, 2);
+        test("(?:a|(?:|b)){2,}", "", "ab", 0, true, 0, 1);
+        test("(?:a|(?:|b)){1,3}", "", "ab", 0, true, 0, 1);
+        test("(a*|b)*", "", "b", 0, true, 0, 0, 0, 0);
+        test("(a*|b)*", "", "ab", 0, true, 0, 2, 1, 2);
+        test("(a*|b){2,}", "", "ab", 0, true, 0, 1, 1, 1);
+        test("(?:|a)*b", "", "aaab", 0, true, 0, 4);
+        test("(?:|a)*$", "", "aaa", 0, true, 0, 3);
+        test("(?:\\b|a)*", "", "aaa", 0, true, 0, 0);
+        test("(?:\\b|a)*", "", "xaa", 0, true, 0, 0);
+        test("(?:a|\\b|b)+", "", "xy", 0, true, 0, 0);
+        test("(){0,2}\\b", "", "baa", 0, true, 0, 0, 0, 0);
+        test("(^|\\b){0,2}", "", "a", 0, true, 0, 0, 0, 0);
+        test("(a?){3,}?\\B", "", "bab", 0, true, 1, 2, 2, 2);
+        test("(a??)*", "", "aa", 0, true, 0, 0, 0, 0);
+        test("(a*?)+", "", "aa", 0, true, 0, 0, 0, 0);
+    }
+
+    @Test
+    public void nullableLoopsNotUnrolled() {
+        // Quantifiers that are too large to be unrolled.
+        String longAlternative = "b".repeat(120);
+        test("(?:|a){0,40}", "", "aaa", 0, true, 0, 0);
+        test("(|a){0,40}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(?:a|(?:|b)){2,40}", "", "ab", 0, true, 0, 1);
+        test("(?:|a){30,}", "", "aaa", 0, true, 0, 0);
+        test("(?:a|(?:|b)){30,}", "", "ab", 0, true, 0, 1);
+        test("(?:|a|" + longAlternative + ")+", "", "aaa", 0, true, 0, 0);
+        test("(?:|a|" + longAlternative + ")*", "", "aaa", 0, true, 0, 0);
+        test("(a|()|b|" + longAlternative + ")+", "", "ab", 0, true, 0, 2, 1, 2, -1, -1);
+    }
+
+    @Test
     public void anchors() {
         // Without the m flag, $ matches only at the very end of the text, not before a final
         // newline.

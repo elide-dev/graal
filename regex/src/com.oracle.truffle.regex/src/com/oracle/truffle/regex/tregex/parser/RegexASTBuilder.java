@@ -768,7 +768,11 @@ public final class RegexASTBuilder {
                 return;
             }
         } else {
-            if (quantifier.getMin() == 0 && (curTerm.isLookAroundAssertion() || curTermIsZeroWidthGroup ||
+            // In RE2, a bounded quantifier runs all of its iterations, even empty ones, so we must
+            // not drop zero-width groups that can set capture groups.
+            boolean keepZeroWidthGroup = curTermIsZeroWidthGroup && options.getFlavor().usesRE2EmptyChecks() &&
+                            curTerm.asGroup().getCaptureGroupsHi() > curTerm.asGroup().getCaptureGroupsLo();
+            if (quantifier.getMin() == 0 && (curTerm.isLookAroundAssertion() || curTermIsZeroWidthGroup && !keepZeroWidthGroup ||
                             curTerm.isCharacterClass() && curTerm.asCharacterClass().getCharSet().matchesNothing())) {
                 // NB: If JavaScript ever gets possessive quantifiers, we might have to adjust this.
                 removeCurTerm();

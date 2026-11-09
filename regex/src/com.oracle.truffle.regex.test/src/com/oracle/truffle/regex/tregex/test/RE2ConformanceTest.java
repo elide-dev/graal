@@ -49,7 +49,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeSet;
 
 import org.graalvm.polyglot.PolyglotException;
@@ -72,32 +71,13 @@ import com.oracle.truffle.regex.tregex.string.Encoding;
  * <p>
  * TRegex implements RE2's default leftmost-first semantics, so the full and partial match
  * results are checked (in UTF-8 and in UTF-16, with offsets converted to UTF-16 code units),
- * while the two leftmost-longest results are skipped and counted.
+ * while the two leftmost-longest results are skipped and counted. Regexes that contain RE2's
+ * {@code \C} (match a single byte), which TRegex does not support, are expected to cause a syntax
+ * error instead.
  */
 public class RE2ConformanceTest extends RegexTestBase {
 
     private static final String TEST_DATA = "re2data/re2-search.txt";
-
-    /**
-     * Known differences, in the format {@code <line>:<mode>}. RE2's {@code \C} (match a single
-     * byte) is not supported and causes a syntax error, which is checked separately.
-     * <p>
-     * RE2 stops a loop whose first iteration matched the empty string (in RE2's Pike VM, the next
-     * iteration would revisit the loop's start state at the same position). TRegex rejects empty
-     * iterations of a loop after the mandatory ones like ECMAScript does, and continues with the
-     * next alternative of the loop body instead. For example, {@code (?:|a)*} matches {@code ""}
-     * on {@code "aaa"} in RE2, but {@code "aaa"} in TRegex. This only affects match boundaries
-     * and capture groups, never whether a regex matches.
-     */
-    private static final Set<String> KNOWN_DIFFERENCES = Set.of(
-                    // (?:|a)* on "aaa"
-                    "3754:partial",
-                    // ^(?:(?:|a)*) on "aaa"
-                    "3760:partial",
-                    // (?:|a)+ on "aaa"
-                    "3770:partial",
-                    // ^(?:(?:|a)+) on "aaa"
-                    "3776:partial");
 
     private static final String[] MODE_NAMES = {"full", "partial", "full-longest", "partial-longest"};
 
@@ -113,7 +93,7 @@ public class RE2ConformanceTest extends RegexTestBase {
 
     private record Stats(int[] counts) {
         Stats() {
-            this(new int[6]);
+            this(new int[5]);
         }
     }
 
@@ -122,7 +102,6 @@ public class RE2ConformanceTest extends RegexTestBase {
     private static final int SKIPPED_LONGEST = 2;
     private static final int SKIPPED_ANY_BYTE = 3;
     private static final int SKIPPED_NON_ASCII_NOT_WORD_BOUNDARY = 4;
-    private static final int KNOWN = 5;
 
     @Test
     public void re2SearchUTF8() throws IOException {
@@ -189,10 +168,6 @@ public class RE2ConformanceTest extends RegexTestBase {
                 }
                 for (int mode = 0; mode < 2; mode++) {
                     String id = lineNo + ":" + MODE_NAMES[mode];
-                    if (KNOWN_DIFFERENCES.contains(id)) {
-                        stats.counts[KNOWN]++;
-                        continue;
-                    }
                     stats.counts[CHECKED]++;
                     int[] expected = convertOffsets(parseResult(results[mode]), text, encoding);
                     String actual = run(compiled[mode], encoding, text);
@@ -207,8 +182,8 @@ public class RE2ConformanceTest extends RegexTestBase {
                 Assert.fail("unexpected line " + lineNo + ": " + line);
             }
         }
-        System.out.printf("%nRE2 conformance (%s): %d checked, %d passed, %d known differences, %d longest-match skipped, %d \\C skipped, %d non-ASCII \\B skipped%n",
-                        encoding.getName(), stats.counts[CHECKED], stats.counts[PASSED], stats.counts[KNOWN], stats.counts[SKIPPED_LONGEST], stats.counts[SKIPPED_ANY_BYTE],
+        System.out.printf("%nRE2 conformance (%s): %d checked, %d passed, %d longest-match skipped, %d \\C skipped, %d non-ASCII \\B skipped%n",
+                        encoding.getName(), stats.counts[CHECKED], stats.counts[PASSED], stats.counts[SKIPPED_LONGEST], stats.counts[SKIPPED_ANY_BYTE],
                         stats.counts[SKIPPED_NON_ASCII_NOT_WORD_BOUNDARY]);
         if (!failures.isEmpty()) {
             Assert.fail(failures.size() + " RE2 conformance failures:\n" + String.join("\n", new TreeSet<>(failures)));
