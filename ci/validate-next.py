@@ -5,10 +5,13 @@ import json
 import os
 from pathlib import Path
 import platform
+import resource
 import shutil
 import subprocess
 import tempfile
 import time
+
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 source = Path.cwd()
 subject = json.loads((source / 'ci/next-subject.json').read_text())
@@ -98,5 +101,5 @@ finally:
     if baseline.exists():
         for path in subject['tests']:
             (baseline / path).unlink(missing_ok=True)
-        subprocess.run(['git', 'worktree', 'remove', str(baseline)], check=False)
+        subprocess.run(['git', 'worktree', 'remove', str(baseline)], check=True)
     shutil.rmtree(scratch, ignore_errors=True)
