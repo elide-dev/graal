@@ -1622,6 +1622,10 @@ public class SubstrateOptions {
                 throw UserError.invalidOptionValue(optionKey, true, "Support for the Foreign Function and Memory API is not available with the LLVM backend.");
             }
         }
+
+        @Option(help = "Create the method handles of registered foreign downcalls at image build time, with their bindings specialized to bytecode by the JDK, " +
+                        "and invoke them directly from runtime-compiled code.", type = Expert) //
+        public static final HostedOptionKey<Boolean> SpecializeForeignDowncalls = new HostedOptionKey<>(true);
     }
 
     @Option(help = "Overwrites the available number of processors provided by the OS. Any value <= 0 means using the processor count from the OS.")//

@@ -26,19 +26,24 @@ package com.oracle.svm.core.foreign;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
+import java.util.Objects;
+import java.util.function.Function;
 
 import com.oracle.svm.core.annotate.Alias;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.foreign.ForeignFunctionsRuntime.LinkRequest;
+import com.oracle.svm.shared.util.BasedOnJDKFile;
 
 import jdk.internal.foreign.abi.AbstractLinker;
 import jdk.internal.foreign.abi.AbstractLinker.UpcallStubFactory;
 import jdk.internal.foreign.abi.LinkerOptions;
+import jdk.internal.foreign.abi.SharedUtils;
 import jdk.internal.foreign.abi.aarch64.linux.LinuxAArch64Linker;
 import jdk.internal.foreign.abi.aarch64.macos.MacOsAArch64Linker;
 import jdk.internal.foreign.abi.x64.sysv.SysVx64Linker;
@@ -55,10 +60,69 @@ public final class Target_jdk_internal_foreign_abi_AbstractLinker {
     @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.NewInstance, declClassName = "jdk.internal.foreign.abi.SoftReferenceCache") //
     private Target_jdk_internal_foreign_abi_SoftReferenceCache UPCALL_CACHE;
     // Checkstyle: resume
+
+    @Alias
+    native void checkLayouts(FunctionDescriptor descriptor);
+
+    @Alias
+    static native FunctionDescriptor stripNames(FunctionDescriptor function);
+
+    @Alias
+    native void validateVariadicLayouts(FunctionDescriptor function, LinkerOptions optionSet);
+
+    @Alias
+    native MethodHandle arrangeDowncall(MethodType inferredMethodType, FunctionDescriptor function, LinkerOptions options);
+
+    /**
+     * Same as the original, except that a downcall handle that the image builder created for the
+     * function descriptor and options is used in place of a handle linked at run time. The image
+     * builder's handle has the same type and behavior, but its bindings are specialized to
+     * bytecode by the JDK rather than interpreted, and runtime compilation can invoke it directly;
+     * see {@link DowncallHandleLinker}.
+     */
+    @Substitute
+    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+18/src/java.base/share/classes/jdk/internal/foreign/abi/AbstractLinker.java#L107-L123")
+    private MethodHandle downcallHandle0(FunctionDescriptor function, Linker.Option... options) {
+        Objects.requireNonNull(function);
+        Objects.requireNonNull(options);
+        checkLayouts(function);
+        FunctionDescriptor strippedFunction = stripNames(function);
+        LinkerOptions optionSet = LinkerOptions.forDowncall(strippedFunction, options);
+        validateVariadicLayouts(strippedFunction, optionSet);
+
+        return DOWNCALL_CACHE.get(new Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest(strippedFunction, optionSet), linkRequest -> {
+            FunctionDescriptor fd = linkRequest.descriptor();
+            MethodHandle specialized = ForeignFunctionsRuntime.singleton().getSpecializedDowncallHandle(fd, linkRequest.options());
+            if (specialized != null) {
+                return specialized;
+            }
+            MethodType type = fd.toMethodType();
+            MethodHandle handle = arrangeDowncall(type, fd, linkRequest.options());
+            handle = SharedUtils.maybeCheckCaptureSegment(handle, linkRequest.options());
+            handle = SharedUtils.maybeInsertAllocator(fd, handle);
+            return handle;
+        });
+    }
+}
+
+@TargetClass(className = "jdk.internal.foreign.abi.AbstractLinker", innerClass = "LinkRequest", onlyWith = ForeignAPIPredicates.Enabled.class)
+final class Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest {
+    @Alias
+    @SuppressWarnings("unused")
+    Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest(FunctionDescriptor descriptor, LinkerOptions options) {
+    }
+
+    @Alias
+    native FunctionDescriptor descriptor();
+
+    @Alias
+    native LinkerOptions options();
 }
 
 @TargetClass(className = "jdk.internal.foreign.abi.SoftReferenceCache", onlyWith = ForeignAPIPredicates.Enabled.class)
 final class Target_jdk_internal_foreign_abi_SoftReferenceCache {
+    @Alias
+    native <K, V> V get(K key, Function<K, V> valueFactory);
 }
 
 /**

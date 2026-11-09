@@ -122,6 +122,12 @@ public class ForeignFunctionsRuntime implements ForeignSupport, OptimizeSharedAr
     private final EconomicMap<MethodType, FunctionPointerHolder> downcallStubInvokers = ImageHeapMap.create("downcallStubInvokers");
     private final EconomicMap<DirectUpcallKey, FunctionPointerHolder> directUpcallStubs = ImageHeapMap.create("directUpcallStubs");
     private final EconomicMap<JavaEntryPointInfo, FunctionPointerHolder> upcallStubs = ImageHeapMap.create("upcallStubs");
+    /**
+     * The downcall handles created at image build time, by the arguments of
+     * {@code AbstractLinker.downcallHandle0} after the JDK normalized them; see
+     * {@link DowncallHandleLinker}.
+     */
+    private final EconomicMap<DowncallHandleKey, MethodHandle> specializedDowncallHandles = ImageHeapMap.create("specializedDowncallHandles");
     private final EconomicSet<ResolvedJavaType> neverAccessesSharedArenaTypes = EconomicSet.create();
     private final EconomicSet<ResolvedJavaMethod> neverAccessesSharedArenaMethods = EconomicSet.create();
 
@@ -182,6 +188,23 @@ public class ForeignFunctionsRuntime implements ForeignSupport, OptimizeSharedAr
         assert SubstrateOptions.isForeignAPIEnabled();
         throw VMError.unsupportedFeature("Calling foreign functions is currently not supported on platform: " +
                         (OS.getCurrent().className + "-" + SubstrateUtil.getArchitectureName()).toLowerCase(Locale.ROOT));
+    }
+
+    /** The key of a downcall handle: the function descriptor without layout names and the linker options. */
+    private record DowncallHandleKey(FunctionDescriptor descriptor, LinkerOptions options) {
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public boolean addSpecializedDowncallHandle(FunctionDescriptor descriptor, LinkerOptions options, MethodHandle handle) {
+        return specializedDowncallHandles.putIfAbsent(new DowncallHandleKey(descriptor, options), handle) == null;
+    }
+
+    /**
+     * Returns the downcall handle that was created at image build time for the function descriptor
+     * and linker options, or null if there is none. The descriptor must not have layout names.
+     */
+    public MethodHandle getSpecializedDowncallHandle(FunctionDescriptor descriptor, LinkerOptions options) {
+        return specializedDowncallHandles.get(new DowncallHandleKey(descriptor, options));
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
