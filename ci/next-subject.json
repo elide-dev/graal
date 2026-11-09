@@ -1,0 +1,29 @@
+{
+  "candidate": "crema-no-ffm",
+  "repository": "graal",
+  "upstreamBase": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+  "cleanHead": "3bd25413ab9288529a82d289220882930e21f1b8",
+  "tests": [
+    "substratevm/mx.substratevm/mx_substratevm.py"
+  ],
+  "regression": [
+    "helloworld",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:+RuntimeClassLoading",
+    "-H:-ForeignAPISupport",
+    "--parallelism=8",
+    "-J-Xmx8g"
+  ],
+  "suite": [
+    "native-unittest",
+    "ForeignTests",
+    "--build-args",
+    "--parallelism=8",
+    "-J-Xmx8g",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:+RuntimeClassLoading",
+    "--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature"
+  ],
+  "diagnostic": "TypeNotFoundError",
+  "generatedSample": "substratevm/svmbuild/HelloWorld.java"
+}

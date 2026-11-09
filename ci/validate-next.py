@@ -5,10 +5,13 @@ import json
 import os
 from pathlib import Path
 import platform
+import resource
 import shutil
 import subprocess
 import tempfile
 import time
+
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 source = Path.cwd()
 subject = json.loads((source / 'ci/next-subject.json').read_text())
@@ -85,8 +88,17 @@ try:
     dependencies = ['--dependencies', 'TRUFFLE_JS_TESTS,GRAALJS_LAUNCHER,truffle:TRUFFLE_RUNTIME'] if suite == 'graal-js' else []
     run('baseline-build', baseline, ['build', '--build-logs=silent', *dependencies])
     run('baseline-reproducer', baseline, subject['regression'], expected=subject['diagnostic'])
+    if subject.get('generatedSample'):
+        sample = scratch / 'build-baseline' / subject['generatedSample']
+        shutil.copyfile(sample, results / 'baseline-sample.java')
     run('candidate-build', source, ['build', '--build-logs=silent', *dependencies])
     run('candidate-reproducer', source, subject['regression'])
+    if subject.get('generatedSample'):
+        sample = scratch / 'build-candidate' / subject['generatedSample']
+        shutil.copyfile(sample, results / 'candidate-sample.java')
+        if (results / 'baseline-sample.java').read_bytes() != sample.read_bytes():
+            raise RuntimeError('Generated sample bytes differ')
+        (results / 'generated-sample-sha256.txt').write_text(hashlib.sha256(sample.read_bytes()).hexdigest() + '\n')
     if subject.get('suite'):
         run('regressions', source, subject['suite'])
     run('checkstyle', source, ['checkstyle', '--primary'], timeout=600)
@@ -97,6 +109,10 @@ finally:
     # Logs/identities remain in artifact output; delete only owned disposable builds.
     if baseline.exists():
         for path in subject['tests']:
-            (baseline / path).unlink(missing_ok=True)
-        subprocess.run(['git', 'worktree', 'remove', str(baseline)], check=False)
+            tracked = subprocess.run(['git', 'ls-files', '--error-unmatch', '--', path], cwd=baseline, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+            if tracked:
+                subprocess.run(['git', 'restore', '--source=' + subject['upstreamBase'], '--worktree', '--', path], cwd=baseline, check=True)
+            else:
+                (baseline / path).unlink(missing_ok=True)
+        subprocess.run(['git', 'worktree', 'remove', str(baseline)], check=True)
     shutil.rmtree(scratch, ignore_errors=True)
