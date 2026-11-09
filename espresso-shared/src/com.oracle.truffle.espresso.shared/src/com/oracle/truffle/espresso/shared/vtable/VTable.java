@@ -239,6 +239,9 @@ public final class VTable {
                 }
                 TableEntryRef<C, M, F> entry = TableEntryRef.create(parentMethod);
                 if (parentMethod.getDeclaringClass().isInterface()) {
+                    // The parent's table already holds an implicit interface method slot for this
+                    // method, which this type reuses: interface resolution must not add another.
+                    currentLocations.markImplicitInterfaceMethodSlot();
                     // This is a miranda method from the parent's. Though this type does not declare
                     // a method that can override it, one of its interfaces may be more specific, so
                     // we need a full resolution here.
@@ -388,6 +391,9 @@ public final class VTable {
             private TableEntry<C, M, F> target;
             // Whether the declaration should be added to the vtable.
             boolean shouldPopulate = true;
+            // Whether the vtable already has an implicit interface method slot for this method,
+            // inherited from the parent's table or added to the miranda list.
+            private boolean hasImplicitInterfaceMethodSlot;
             // Cached result of itable resolution.
             private TableEntry<C, M, F> resolved;
             private boolean selectionFailure;
@@ -431,6 +437,10 @@ public final class VTable {
                     result.asSelectionFailure();
                 }
                 return result;
+            }
+
+            void markImplicitInterfaceMethodSlot() {
+                hasImplicitInterfaceMethodSlot = true;
             }
 
             boolean markEquivalentEntry() {
@@ -482,12 +492,16 @@ public final class VTable {
                  * No method in classes. Lookup in interfaces. This will be a miranda method. This
                  * also handles default method selection, if appropriate.
                  *
-                 * Note: By construction of the locations map, each MethodKey is added only once to
-                 * the miranda list, so it does not need to be a Set.
+                 * Note: Each MethodKey is added at most once to the miranda list, and only if the
+                 * parent's table does not already hold a slot for it, so it does not need to be a
+                 * Set. The resolution is not cached when a fallback lookup is needed, so this is
+                 * reached once per interface declaring the method, and each subclass would
+                 * otherwise append another copy of every inherited miranda.
                  */
                 TableEntry<C, M, F> miranda = resolveMaximallySpecific();
-                if (!inVTable) {
+                if (!inVTable && !hasImplicitInterfaceMethodSlot) {
                     // Handling a miranda NOT from a parent's table, we can add it
+                    hasImplicitInterfaceMethodSlot = true;
                     TableEntryRef<C, M, F> mirandaRef = TableEntryRef.create(miranda);
                     if (selectionFailure) {
                         mirandaRef.asSelectionFailure();
