@@ -46,6 +46,7 @@ import org.graalvm.polyglot.Value;
 import org.junit.Assert;
 import org.junit.Test;
 
+import com.oracle.truffle.api.strings.TruffleString;
 import com.oracle.truffle.regex.tregex.string.Encoding;
 
 public class RE2Tests extends RegexTestBase {
@@ -482,6 +483,55 @@ public class RE2Tests extends RegexTestBase {
         test("(\u00e9+)(x)", "", Encoding.LATIN_1, "a\u00e9\u00e9x", 0, true, 1, 4, 1, 3, 3, 4);
         test("\\p{Greek}", "", Encoding.UTF_8, "a\u03b1", 0, true, 1, 3);
         test("(?i)\u212a", "", Encoding.UTF_8, "xk", 0, true, 1, 2);
+    }
+
+    @Test
+    public void fromIndexInsideSurrogatePair() {
+        // RE2 matches on code points and never reports a match starting before fromIndex. A
+        // fromIndex pointing to the low surrogate of a valid pair is moved forward to the next
+        // code point boundary, not back to the high surrogate.
+        String input = "\ud83d\ude00x";
+        test(".", "", input, 0, true, 0, 2);
+        test(".", "", input, 1, true, 2, 3);
+        test(".", "", input, 2, true, 2, 3);
+        test(".", "", input, 3, false);
+        for (String pattern : new String[]{"", "a*"}) {
+            test(pattern, "", input, 0, true, 0, 0);
+            test(pattern, "", input, 1, true, 2, 2);
+            test(pattern, "", input, 2, true, 2, 2);
+            test(pattern, "", input, 3, true, 3, 3);
+        }
+        test("\\x{1F600}", "", input, 1, false);
+        test("x", "", input, 1, true, 2, 3);
+        // anchored matching modes apply the same normalization
+        test(".", "", OPT_MATCHING_MODE_MATCH, input, 1, true, 2, 3);
+        test("", "", OPT_MATCHING_MODE_FULLMATCH, "\ud83d\ude00", 1, true, 2, 2);
+        // a lone low surrogate is not part of a pair and is matched in place
+        test(".", "", "x\ude00x", 1, true, 1, 2);
+    }
+
+    @Test
+    public void fromIndexInsideSurrogatePairEmptyMatchProgression() {
+        // An iterator that retries at end + 1 after an empty match must make progress.
+        String input = "\ud83d\ude00x";
+        TruffleString tInput = TruffleString.fromJavaStringUncached(input, TruffleString.Encoding.UTF_16);
+        for (String pattern : new String[]{"", "a*"}) {
+            Value regex = compileRegex(pattern, "");
+            StringBuilder matches = new StringBuilder();
+            int fromIndex = 0;
+            while (fromIndex <= input.length()) {
+                Value result = regex.invokeMember("exec", tInput, fromIndex);
+                if (!result.getMember("isMatch").asBoolean()) {
+                    break;
+                }
+                int start = result.invokeMember("getStart", 0).asInt();
+                int end = result.invokeMember("getEnd", 0).asInt();
+                Assert.assertTrue(pattern + " from " + fromIndex + " returned [" + start + "," + end + ")", start >= fromIndex);
+                matches.append('[').append(start).append(',').append(end).append(')');
+                fromIndex = end == start ? end + 1 : end;
+            }
+            Assert.assertEquals(pattern, "[0,0)[2,2)[3,3)", matches.toString());
+        }
     }
 
     @Test
