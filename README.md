@@ -27,4 +27,3 @@ All three fork jobs passed; exact source identities, expected baseline failures,
 See the [validation record](pipeline/validation/next-cohort.json), [independent reviews](pipeline/reviews/next-README.md), [source identities](pipeline/validation/next-source-identities.json), and [checksummed artifact index](pipeline/validation/next-artifacts.json).
 This is the manual fork-first flow; it does not complete the separate automatic qualification pipeline.
 Earlier interrupted reviews, unsuccessful helper builds and held alternatives remain recorded.
-
