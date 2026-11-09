@@ -1,0 +1,110 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 82.26306509971619
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest",
+      "--build-args",
+      "--parallelism=8",
+      "--macro:truffle",
+      "--language:nfi",
+      "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:MaxRuntimeCompileMethods=5000",
+      "--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature",
+      "--run-args",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 1,
+    "seconds": 42.03808069229126
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+    "exit": 0,
+    "seconds": 80.1830222606659
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest",
+      "--build-args",
+      "--parallelism=8",
+      "--macro:truffle",
+      "--language:nfi",
+      "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:MaxRuntimeCompileMethods=5000",
+      "--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature",
+      "--run-args",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+    "exit": 0,
+    "seconds": 120.326491355896
+  },
+  {
+    "label": "substratevm-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+    "exit": 0,
+    "seconds": 35.834243297576904
+  },
+  {
+    "label": "compiler-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "compiler",
+    "revision": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+    "exit": 0,
+    "seconds": 34.434590339660645
+  }
+]

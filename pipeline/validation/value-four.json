@@ -6,7 +6,7 @@
   "actualCIJobs": 8,
   "newInfrastructure": false,
   "actualDollarCost": "Unavailable; not inferred",
-  "publicEvidence": "https://github.com/elide-dev/graal/tree/b83a4de78880c063a06ed82a1ceab8eda184463e",
+  "publicEvidence": "https://github.com/elide-dev/graal/tree/ac5a2f7caac9ed2a9d5e0b6c4aedd7180d4000ce",
   "candidates": [
     {
       "candidate": "nfi",
@@ -30,7 +30,7 @@
         "status": "completed",
         "conclusion": "success"
       },
-      "validationSummary": "Identical bytes pass576tests on both revisions; final-source equivalence, style and all12 timing logs inspected."
+      "validationSummary": "Identical bytes pass 576 tests on both revisions; final-source equivalence, style and all 12 timing logs inspected."
     },
     {
       "candidate": "ffm",
@@ -47,7 +47,16 @@
         "ffm-second.json",
         "ffm-isolate-confirmation.json"
       ],
-      "artifactsInspected": false
+      "artifactsInspected": true,
+      "replacementRun": {
+        "id": 42681819780,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42681819780",
+        "status": "completed",
+        "conclusion": "success",
+        "validationQualified": false,
+        "validationReason": "Workflow green; all 14 tests assumption-skipped. Runtime coverage is unqualified. Corrected harness awaits a new CI allowance."
+      },
+      "validationSummary": "Local executed tests retained; this fork CI run provides build/style evidence only."
     },
     {
       "candidate": "jfr",
@@ -69,7 +78,8 @@
         "url": "https://github.com/elide-dev/graal/actions/runs/42680550473",
         "status": "completed",
         "conclusion": "success"
-      }
+      },
+      "upstreamPR": "https://github.com/oracle/graal/pull/14967"
     },
     {
       "candidate": "ristretto",
@@ -97,7 +107,7 @@
   ],
   "remainingGates": [
     "NFI and FFM: verify Elide product shipment and repeatable product measurements.",
-    "FFM: inspect final bounded fork CI; baseline image analysis remains unsuitable for runtime timing.",
+    "FFM: rerun corrected harness under a new allowance; attempt 8 skipped all 14 tests. Baseline image analysis remains unsuitable for timing.",
     "Exact-fork regression validation remains pending on corrective PRs 233\u2013235."
   ]
 }

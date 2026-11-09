@@ -1,0 +1,6 @@
+{
+  "head": "c78ed2f51a4c4695652a22bde81212d76f056a7f",
+  "testedHead": "0c0971105cc1e235d29cfd1b6c50156811f670da",
+  "status": "prepared_not_run",
+  "reason": "Eight CI attempts exhausted; source production and tests unchanged."
+}

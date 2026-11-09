@@ -19,6 +19,7 @@
     "--language:nfi",
     "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
     "-H:+UnlockExperimentalVMOptions",
+    "-H:-SupportCompileInIsolates",
     "-H:MaxRuntimeCompileMethods=5000",
     "--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature",
     "--run-args",

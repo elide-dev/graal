@@ -161,8 +161,12 @@
       "number": 8,
       "candidate": "ffm",
       "head": "0c0971105cc1e235d29cfd1b6c50156811f670da",
-      "status": "prepared",
-      "reason": "Final authorized CI attempt; JFR attempt 7 reconciled and inspected green. FFM remains held for product gates."
+      "status": "completed",
+      "reason": "Workflow green but all 14 candidate tests skipped whitebox assumptions. No runtime coverage credited. Corrected scaffold disables SupportCompileInIsolates for graph mode and rejects missing graph/body markers; no replacement authorized within exhausted 8-run ceiling.",
+      "id": 42681819780,
+      "conclusion": "success",
+      "artifactsInspected": true,
+      "validationQualified": false
     }
   ],
   "concurrency": 1,

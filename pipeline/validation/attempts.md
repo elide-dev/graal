@@ -1,6 +1,6 @@
 # Validation History
 
-Ristretto is filed upstream as oracle/graal#14966; JFR has passed inspected fork validation and is being prepared for filing. NFI and FFM remain held for product qualification.
+Ristretto is filed upstream as oracle/graal#14966; JFR is filed as oracle/graal#14967 after inspected green validation. NFI and FFM remain held for product qualification.
 The clean upstream base is 66f3cd8b560c12131eb948b56edb45da7960dc25.
 
 - NFI review found unsafe additive string bounds and a missing Windows test export. The authorized correction uses remaining capacity. A later review demonstrated that entry-only compiled-state reporting could hide deoptimization; the test now checks both entry and completion. Initial 574-test and expanded 576-test local runs are retained; final-head CI passes 576 tests on each revision.
@@ -17,3 +17,5 @@ Original findings and detailed limitations are in the review reports. Unsuccessf
 NFI run42676648896 passes576tests on each revision, exact-source checks, primary checkstyle and12alternating process measurements. Ristretto run42678280743 builds both revisions; baseline fails with the intended Object.clone bailout and the fixed candidate passes both native tests. Both artifact sets were downloaded and inspected. JFR run 42680550473 also passes: baseline exits 1 with missing instance allocation samples; candidate exits 0 with all strict probe assertions. Both revisions use identical probe/provider bytes and native archive. Checkstyle and source equivalence pass.
 
 CI attempt 6 built the public native component but failed baseline image construction because the harness supplied a header directory instead of its parent. Attempt 7 corrected only that scaffold path and passed. The source ZIP received the same header-root correction. Attempt 8 starts FFM validation after attempt 7 was inspected; it is the final authorized CI attempt.
+
+Attempt 8 (42681819780) returned workflow success but all 14 FFM tests had whitebox assumptions. Artifact inspection rejected it as runtime validation. Its graph-mode command omitted -H:-SupportCompileInIsolates; local graph-enabled runs explicitly used that flag. The future harness is corrected to set it and reject skipped/missing graph output. No ninth CI attempt was launched.

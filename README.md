@@ -1,7 +1,9 @@
 # GraalVM Value Candidates
 
-Manual fork-first preparation evidence, separate from automatic qualification.
-All four candidates remain drafts pending their stated gates.
-See pipeline/validation/attempts.md and the per-candidate reproducer packages.
+Manual fork-first evidence, separate from automatic qualification.
 
-Ristretto upstream: https://github.com/oracle/graal/pull/14966. JFR exact-source fork validation is now green (run 42680550473); see pipeline/validation/jfr-ci. Optimization product gates remain pending.
+Ristretto: https://github.com/oracle/graal/pull/14966. Native G1/JFR: https://github.com/oracle/graal/pull/14967. Both have inspected green exact-source fork CI.
+
+NFI and FFM remain fork drafts held for product shipment and measurements. FFM CI attempt 8 is unqualified: every test skipped despite workflow success. Corrected scaffolding awaits a new CI allowance. Local executed graph and isolate evidence is retained separately.
+
+See pipeline/validation/attempts.md, batch-budget.json, value-four.json, reviews, and the checksummed reproducer ZIPs.
