@@ -713,6 +713,10 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
                         }
                         printFailingRuntimeMethodTrace(treeInfo, failingRuntimeMethod, errorMethod);
                         System.out.println("error: " + e.getMessage());
+                        if (e.getCause() != null) {
+                            /* The parsing error itself does not say what went wrong. */
+                            System.out.println("cause: " + e.getCause());
+                        }
                     }
                 }
             }
@@ -868,7 +872,8 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
             PointsToAnalysisMethod aMethod = (PointsToAnalysisMethod) graph.method();
             MethodVariant.MethodVariantKey methodVariantKey = aMethod.getMethodVariantKey();
             Supplier<Boolean> graphChecker = DeoptimizationUtils.createGraphChecker(graph,
-                            methodVariantKey == RUNTIME_COMPILED_METHOD ? DeoptimizationUtils.RUNTIME_COMPILATION_INVALID_NODES : DeoptimizationUtils.AOT_COMPILATION_INVALID_NODES);
+                            methodVariantKey == RUNTIME_COMPILED_METHOD ? DeoptimizationUtils.RUNTIME_COMPILATION_INVALID_NODES : DeoptimizationUtils.AOT_COMPILATION_INVALID_NODES,
+                            methodVariantKey != DEOPT_TARGET_METHOD);
             if (methodVariantKey != ORIGINAL_METHOD) {
                 if (!graphChecker.get()) {
                     recordFailed(aMethod);

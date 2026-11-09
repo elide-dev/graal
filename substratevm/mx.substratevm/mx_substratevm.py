@@ -500,6 +500,10 @@ def truffle_unittest_task(extra_build_args=None):
     # CFunction calls, which must be emitted as calls to their AOT stubs) in runtime-compiled
     # Truffle code. The test class carries its own @NativeImageBuildArgs (--macro:truffle).
     native_unittest(['com.oracle.svm.truffle.test.CFunctionRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
+    # Runtime compiled code that uses classes initialized at run time: a folded static field of a
+    # class whose initializer is simulated, and an inlined method of a class that is not simulated
+    # (elide-dev/graal#209). The test class carries its own @NativeImageBuildArgs (--macro:truffle).
+    native_unittest(['com.oracle.svm.truffle.test.SimulatedClassInitializerRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
 
     _truffle_runtime_compilation_test(extra_build_args)
     # Compilation isolates hand the installed code's metadata over to the client isolate, which
