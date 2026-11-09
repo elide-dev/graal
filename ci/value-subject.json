@@ -1,0 +1,34 @@
+{
+  "kind": "nfi",
+  "upstreamBase": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "cleanHead": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+  "tests": [
+    "truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c",
+    "truffle/src/com.oracle.truffle.nfi.test.native/src/string.c",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java"
+  ],
+  "styleSuites": [
+    "substratevm",
+    "truffle"
+  ],
+  "regression": [
+    "native-unittest",
+    "--preserve-image",
+    "com.oracle.truffle.nfi.test",
+    "--build-args",
+    "--parallelism=8",
+    "--macro:truffle",
+    "--language:nfi",
+    "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:MaxRuntimeCompileMethods=2000",
+    "--run-args",
+    "-Dnative.test.path=../nfi-test-native",
+    "-Dnfi.test.reportCallOverhead=true",
+    "-Dpolyglot.engine.BackgroundCompilation=false",
+    "--very-verbose",
+    "--enable-timing"
+  ]
+}
