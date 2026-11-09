@@ -1263,6 +1263,21 @@ def shenandoah_gc_stress(args):
         mx.run([image, '-Xms32m', '-Xmx64m', '-XX:+UnlockDiagnosticVMOptions', '-XX:+PrintGC'], timeout=120)
 
 
+@mx.command(suite.name, 'shenandoah-safepoint-stress', '[native-image options]')
+def shenandoah_safepoint_stress(args):
+    """Build and run old-generation cycles of generational Shenandoah under a storm of non-GC safepoints."""
+    output_dir = join(svmbuild_dir(), platform_name(), 'shenandoah-safepoint-stress')
+    mx_util.ensure_dir_exists(output_dir)
+    source = join(suite.dir, 'src', 'native-image-tests', 'shenandoah', 'GenerationalSafepointStress.java')
+    mx.run([mx.get_jdk().javac, '-d', output_dir, source])
+    with native_image_context(IMAGE_ASSERTION_FLAGS) as native_image:
+        build_args = ['--gc=shenandoah'] + args + svm_experimental_options(['-H:ShenandoahGCMode=generational'])
+        image = native_image(build_args + ['-cp', output_dir, '-o', join(output_dir, 'safepointstress'), 'GenerationalSafepointStress'])
+        # Promote early so that old-generation cycles (and their coalesce-and-fill phase) run often. Heap verification
+        # makes every pause so slow that old cycles hardly run, so it is disabled even if requested (elide-dev/graal#203).
+        mx.run([image, '-Xms32m', '-Xmx128m', '-XX:MaxTenuringThreshold=1', '-XX:+UnlockDiagnosticVMOptions', '-XX:-ShenandoahVerify', '-XX:+PrintGC'], timeout=300)
+
+
 def runtime_classpath_resource_test_task(extra_build_args=None):
     svm_tests_jar = mx.distribution('substratevm:SVM_TESTS').path
     build_args = svm_experimental_options(['-H:+ClassForNameRespectsClassLoader']) + [
