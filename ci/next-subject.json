@@ -1,0 +1,17 @@
+{
+  "candidate": "superclass-flags",
+  "repository": "graal",
+  "upstreamBase": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+  "cleanHead": "e3d79d3595992718296ad201cea273ccbb3468d8",
+  "tests": [
+    "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/RuntimeClassLoadingSuperclassModifiersTest.java"
+  ],
+  "regression": [
+    "native-unittest",
+    "RuntimeClassLoadingSuperclassModifiersTest",
+    "--build-args",
+    "--parallelism=8",
+    "-J-Xmx8g"
+  ],
+  "diagnostic": "is a subclass of final class"
+}
