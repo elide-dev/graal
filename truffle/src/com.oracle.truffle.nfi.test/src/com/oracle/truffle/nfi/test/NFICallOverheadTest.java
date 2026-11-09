@@ -45,6 +45,7 @@ import org.junit.Assume;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -65,6 +66,7 @@ public class NFICallOverheadTest extends NFITest {
     private abstract static class CallLoopNode extends NFITestRootNode {
 
         final Object function;
+        volatile boolean compiled;
         @Child InteropLibrary interop;
         @Child InteropLibrary results;
 
@@ -76,6 +78,7 @@ public class NFICallOverheadTest extends NFITest {
 
         @Override
         public final Object executeTest(VirtualFrame frame) throws InteropException {
+            compiled = CompilerDirectives.inCompiledCode();
             int iterations = (Integer) frame.getArguments()[0];
             long accumulated = 0;
             for (int i = 0; i < iterations; i++) {
@@ -150,7 +153,14 @@ public class NFICallOverheadTest extends NFITest {
         for (int round = 0; round < MEASURED_ROUNDS; round++) {
             long start = System.nanoTime();
             long result = (Long) target.call(MEASURED_ITERATIONS);
-            best = Math.min(best, System.nanoTime() - start);
+            long elapsed = System.nanoTime() - start;
+            best = Math.min(best, elapsed);
+            if (Boolean.getBoolean("nfi.test.reportCallOverhead")) {
+                Assert.assertTrue("measured call must execute compiled code", node.compiled);
+                // Checkstyle: stop
+                System.out.printf("NFI call sample: %s round=%d %.2f ns/call%n", name, round, (double) elapsed / n);
+                // Checkstyle: resume
+            }
             Assert.assertEquals(name, expected, result);
         }
         // Read at run time: a static final field would be folded when the image is built.

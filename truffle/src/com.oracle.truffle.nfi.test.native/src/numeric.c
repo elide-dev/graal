@@ -108,3 +108,27 @@ EXPORT int64_t sum_17_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int
                              int64_t a12, int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17) {
     return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 + a16 + a17;
 }
+
+EXPORT int64_t sum_32_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6,
+                int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11, int64_t a12,
+                int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17, int64_t a18,
+                int64_t a19, int64_t a20, int64_t a21, int64_t a22, int64_t a23, int64_t a24,
+                int64_t a25, int64_t a26, int64_t a27, int64_t a28, int64_t a29, int64_t a30,
+                int64_t a31, int64_t a32) {
+    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 +
+           a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 +
+           a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30 +
+           a31 + a32;
+}
+
+EXPORT int64_t sum_33_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6,
+                int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11, int64_t a12,
+                int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17, int64_t a18,
+                int64_t a19, int64_t a20, int64_t a21, int64_t a22, int64_t a23, int64_t a24,
+                int64_t a25, int64_t a26, int64_t a27, int64_t a28, int64_t a29, int64_t a30,
+                int64_t a31, int64_t a32, int64_t a33) {
+    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 +
+           a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 +
+           a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30 +
+           a31 + a32 + a33;
+}

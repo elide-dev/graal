@@ -48,7 +48,7 @@ import com.oracle.truffle.api.interop.InteropException;
 /**
  * Calls with many arguments. The Native Image backend keeps the argument pointers of calls with up
  * to 16 arguments in a stack buffer and allocates them for longer calls, so both sides of that
- * limit are checked.
+ * limit are checked. Calls with 32 and 33 long arguments also cross the primitive buffer limit.
  */
 public class ManyArgumentsNFITest extends NFITest {
 
@@ -76,5 +76,15 @@ public class ManyArgumentsNFITest extends NFITest {
     @Test
     public void testSeventeenArguments() throws InteropException {
         testSum(17);
+    }
+
+    @Test
+    public void testThirtyTwoArguments() throws InteropException {
+        testSum(32);
+    }
+
+    @Test
+    public void testThirtyThreeArguments() throws InteropException {
+        testSum(33);
     }
 }
