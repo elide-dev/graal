@@ -1,0 +1,55 @@
+{
+  "subject": {
+    "kind": "nfi",
+    "upstreamBase": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "cleanHead": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+    "tests": [
+      "truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c",
+      "truffle/src/com.oracle.truffle.nfi.test.native/src/string.c",
+      "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java",
+      "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java",
+      "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java"
+    ],
+    "styleSuites": [
+      "substratevm",
+      "truffle"
+    ],
+    "regression": [
+      "native-unittest",
+      "--preserve-image",
+      "com.oracle.truffle.nfi.test",
+      "--build-args",
+      "--parallelism=8",
+      "--macro:truffle",
+      "--language:nfi",
+      "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:MaxRuntimeCompileMethods=2000",
+      "--run-args",
+      "-Dnative.test.path=../nfi-test-native",
+      "-Dnfi.test.reportCallOverhead=true",
+      "-Dpolyglot.engine.AllowExperimentalOptions=true",
+      "-Dpolyglot.engine.BackgroundCompilation=false",
+      "--very-verbose",
+      "--enable-timing"
+    ]
+  },
+  "forkHead": "c19e68dc95129424460a3ad987e7e8d3a8daa2f1",
+  "scaffold": [
+    ".github/workflows/upstream-value.yml",
+    "ci/validate-value.py",
+    "ci/value-subject.json"
+  ],
+  "testHashes": {
+    "truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c": "4a36096e0ddbe21f76c189aad75bf7506485a99c45fdd4097a6e529a476b997a",
+    "truffle/src/com.oracle.truffle.nfi.test.native/src/string.c": "f2959ac4436d2ad2e4486ca1c0c1a2f89cb3564224ad9f52105a091b3dd315d0",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java": "966d4c009987fdc004f579c1a14a582922309e7762dd503cfb5429d3aea4e371",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java": "466b9d7fbda5a780cd6ab210c0f42865c56e51b3d85d490b70bb247769ef7c1f",
+    "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java": "395d0ed188200e40b0f91155615e7f6d9c29cfb0afb856151e4e12f9ed9b9343"
+  },
+  "mx": "e64ff8c8cca770c8cdbb62617ebd0fa17dd184b1",
+  "platform": "Linux-7.0.0-1017-gcp-x86_64-with-glibc2.35",
+  "architecture": "x86_64",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           52 bits physical, 57 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  16\nOn-line CPU(s) list:                     0-15\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 9B45\nCPU family:                              26\nModel:                                   2\nThread(s) per core:                      2\nCore(s) per socket:                      8\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                5391.89\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext mwaitx ssbd ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr wbnoinvd arat avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b avx512_vp2intersect flush_l1d\nHypervisor vendor:                       KVM\nVirtualization type:                     full\nL1d cache:                               384 KiB (8 instances)\nL1i cache:                               256 KiB (8 instances)\nL2 cache:                                8 MiB (8 instances)\nL3 cache:                                32 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-15\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
+  "jdk": "openjdk version \"25.0.5.1\" 2026-11-17\nOpenJDK Runtime Environment (build 25.0.5.1+0-jvmci-25.6-b27)\nOpenJDK 64-Bit Server VM (build 25.0.5.1+0-jvmci-25.6-b27, mixed mode, sharing)\n"
+}

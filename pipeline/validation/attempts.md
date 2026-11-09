@@ -11,3 +11,7 @@ The clean upstream base is 66f3cd8b560c12131eb948b56edb45da7960dc25.
 - NFI and FFM optimization publication still requires verified Elide product shipment and repeatable product measurements. Component release presence and local timings do not establish those gates.
 
 Original findings and detailed limitations are in the review reports. Unsuccessful local attempts remain retained in the operator evidence chain; this public selection omits private product material and large crash/core files.
+
+## Inspected CI results
+
+NFI run42676648896 passes576tests on each revision, exact-source checks, primary checkstyle and12alternating process measurements. Ristretto run42678280743 builds both revisions; baseline fails with the intended Object.clone bailout and the fixed candidate passes both native tests. Both artifact sets were downloaded and inspected. JFR validation is still pending.

@@ -1,0 +1,7 @@
++ ulimit -c 0
++ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ variant=omitted
++ shift
++ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-omitted -Xmx256m -Xms32m
+NATIVE_G1_JFR_OMITTED_ALLOCATIONS=PASS

@@ -1,0 +1,802 @@
+Warning: 449 classes in /build/caches/graal-value-ci-42676648896/baseline/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42676648896/baseline/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/graal-value-ci-42676648896/baseline/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/graal-value-ci-42676648896/baseline/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42676648896/baseline/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42676648896/baseline/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42676648896/baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42676648896/baseline/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.truffle.nfi.test.ArrayNFITest com.oracle.truffle.nfi.test.DeoptTest com.oracle.truffle.nfi.test.ErrnoNFITest com.oracle.truffle.nfi.test.ExceptionNFITest com.oracle.truffle.nfi.test.FloatingNFITest com.oracle.truffle.nfi.test.ForbiddenNFITest com.oracle.truffle.nfi.test.GlobalNFITest com.oracle.truffle.nfi.test.ImplicitConvertNFITest com.oracle.truffle.nfi.test.IntegerLimitsNFITest com.oracle.truffle.nfi.test.IsolatedNamespaceTest com.oracle.truffle.nfi.test.KeyInfoNFITest com.oracle.truffle.nfi.test.LoadNFILibraryTest com.oracle.truffle.nfi.test.ManyArgumentsNFITest com.oracle.truffle.nfi.test.NFICallOverheadTest com.oracle.truffle.nfi.test.NullArrayNFITest com.oracle.truffle.nfi.test.NullNFITest com.oracle.truffle.nfi.test.NullableNFITest com.oracle.truffle.nfi.test.NumericNFITest com.oracle.truffle.nfi.test.ObjectNFITest com.oracle.truffle.nfi.test.PointerNFITest com.oracle.truffle.nfi.test.RegisterPackageNFITest com.oracle.truffle.nfi.test.SignatureExecuteNFITest com.oracle.truffle.nfi.test.StringAsInterfaceNFITest com.oracle.truffle.nfi.test.StringNFITest com.oracle.truffle.nfi.test.ThreadErrnoNFITest com.oracle.truffle.nfi.test.ThreadNFITest com.oracle.truffle.nfi.test.VarargsNFITest com.oracle.truffle.nfi.test.WrappedPrimitiveNFITest com.oracle.truffle.nfi.test.parser.ClosureParseSignatureTest com.oracle.truffle.nfi.test.parser.ErrorParseSignatureTest com.oracle.truffle.nfi.test.parser.ParseLibraryDescriptorTest com.oracle.truffle.nfi.test.parser.SimpleParseSignatureTest com.oracle.truffle.nfi.test.parser.VarargsParseSignatureTest
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+WARNING: package com.oracle.truffle.object.basic not in org.graalvm.truffle
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.oracle.truffle.api.object.DynamicObject (file:/build/caches/graal-value-ci-42676648896/baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/truffle-api.jar)
+WARNING: Please consider reporting this to the maintainers of class com.oracle.truffle.api.object.DynamicObject
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[1/8] Initializing...                                                                                   (5.1s @ 0.47GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ - 11 user-specific feature(s):
+   - com.oracle.svm.truffle.TruffleBaseFeature: Provides internal support for Truffle
+   - com.oracle.svm.truffle.TruffleFeature: Provides internal support for Truffle runtime compilation
+   - com.oracle.svm.truffle.nfi.TruffleNFIFeature
+   - com.oracle.svm.truffle.nfi.posix.PosixTruffleNFIFeature
+   - com.oracle.truffle.api.impl.TruffleAPIFeature: Provides basic support for Truffle
+   - com.oracle.truffle.api.object.DynamicObjectFeature: Provides support for DynamicObject
+   - com.oracle.truffle.api.test.polyglot.RegisterTestClassesForReflectionFeature
+   - com.oracle.truffle.api.test.polyglot.isolate.PolyglotIsolateTestFeature
+   - com.oracle.truffle.polyglot.isolate.PolyglotIsolateHostFeature: Provides polyglot host isolate embedding support
+   - com.oracle.truffle.tck.tests.TruffleTCKFeature
+   - org.graalvm.home.HomeFinderFeature: Finds GraalVM paths and its version number
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 3 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///build/caches/graal-value-ci-42676648896/baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 30.00GiB of memory (24.2% of system memory, capped at 30GiB)
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [**********]                                                             (32.0s @ 2.20GiB)
+   18,323 types,  22,670 fields, and  86,428 methods found reachable
+    1,208 types,     695 fields, and   4,454 methods registered for reflection
+       83 types,      60 fields, and     191 methods registered for JNI access
+      793 resource accesses registered with 3.12MiB total size
+        5 native libraries: dl, m, pthread, rt, z
+    5,142 runtime compiled methods (5.9% of all reachable methods)
+[3/8] Building universe...                                                                              (6.7s @ 2.43GiB)
+[4/8] Parsing methods...      [**]                                                                      (3.4s @ 2.66GiB)
+[5/8] Inlining methods...     [****]                                                                    (2.6s @ 2.85GiB)
+[6/8] Compiling methods...    [******]                                                                 (43.9s @ 2.62GiB)
+[7/8] Laying out methods...   [***]                                                                     (9.0s @ 3.41GiB)
+[8/8] Creating image...       [***]                                                                     (5.8s @ 2.41GiB)
+  31.29MiB (38.75%) for code area:    64,785 compilation units
+  43.13MiB (53.41%) for image heap:  517,936 objects and 734 resources
+   6.33MiB ( 7.84%) for other data
+  80.75MiB in total image size, 75.13MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.83MiB o.g.truffle/com.oracle.truffle.polyglot            10.00MiB byte[] for code metadata
+   1.28MiB org.graalvm.sl/com.oracle.truffle.sl.bytecode       6.60MiB byte[] for string data
+   1.15MiB o.g.truffle/com.oracle.truffle.host                 3.13MiB byte[] for embedded resources
+   1.06MiB o.g.truffle/com.oracle.truffle.api.interop          3.11MiB java.base/java.lang.Class
+   1.01MiB java.base/java.util                                 2.84MiB java.base/java.lang.String
+ 895.89KiB com.oracle.truffle.api.test.polyglot                2.83MiB byte[] for graph encodings
+ 746.01KiB j.g.compiler/jdk.graal.compiler.lir.amd64           2.10MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+ 697.91KiB o.g.truffle/com.oracle.truffle.polyglot.isolate     1.62MiB byte[] for general heap data
+ 666.33KiB o.g.n.runtime/com.oracle.svm.core.code              1.14MiB byte[] for reflection metadata
+ 593.17KiB java.base/java.lang                               748.12KiB java.base/java.lang.Object[]
+  21.45MiB for 477 more packages                               9.01MiB for 5074 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                      10.0s (8.9% of total time) in 1770 GCs | Peak RSS: 5.20GiB | CPU load: 6.78
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /build/caches/graal-value-ci-42676648896/baseline/substratevm/svmbuild/linux-amd64/junit/resources (language_internal_resources, 48B)
+ /build/caches/graal-value-ci-42676648896/baseline/substratevm/svmbuild/linux-amd64/junit/svmjunit (executable, 75.13MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 1m 51s.
+
+The build process encountered 3 warnings.
+
+Running: /build/caches/graal-value-ci-42676648896/baseline/substratevm/svmbuild/linux-amd64/junit/svmjunit -Dnative.test.path=../nfi-test-native -Dnfi.test.reportCallOverhead=true -Dpolyglot.engine.AllowExperimentalOptions=true -Dpolyglot.engine.BackgroundCompilation=false --very-verbose --enable-timing
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.truffle.nfi.test.ArrayNFITest started (1 of 33)
+  testSumArrayDirect[UINT8, boolean]: Passed 26 ms
+  testSumArrayWrapped[UINT8, boolean]: Passed 23 ms
+  testSumArrayDirect[SINT8, boolean]: Passed 20 ms
+  testSumArrayWrapped[SINT8, boolean]: Passed 24 ms
+  testSumArrayDirect[UINT8, byte]: Passed 18 ms
+  testSumArrayWrapped[UINT8, byte]: Passed 24 ms
+  testSumArrayDirect[SINT8, byte]: Passed 18 ms
+  testSumArrayWrapped[SINT8, byte]: Passed 25 ms
+  testSumArrayDirect[UINT16, short]: Passed 16 ms
+  testSumArrayWrapped[UINT16, short]: Passed 20 ms
+  testSumArrayDirect[UINT16, char]: Passed 18 ms
+  testSumArrayWrapped[UINT16, char]: Passed 25 ms
+  testSumArrayDirect[SINT16, short]: Passed 17 ms
+  testSumArrayWrapped[SINT16, short]: Passed 21 ms
+  testSumArrayDirect[SINT16, char]: Passed 18 ms
+  testSumArrayWrapped[SINT16, char]: Passed 25 ms
+  testSumArrayDirect[UINT32, int]: Passed 18 ms
+  testSumArrayWrapped[UINT32, int]: Passed 19 ms
+  testSumArrayDirect[SINT32, int]: Passed 15 ms
+  testSumArrayWrapped[SINT32, int]: Passed 20 ms
+  testSumArrayDirect[UINT64, long]: Passed 16 ms
+  testSumArrayWrapped[UINT64, long]: Passed 20 ms
+  testSumArrayDirect[SINT64, long]: Passed 15 ms
+  testSumArrayWrapped[SINT64, long]: Passed 21 ms
+  testSumArrayDirect[FLOAT, float]: Passed 17 ms
+  testSumArrayWrapped[FLOAT, float]: Passed 21 ms
+  testSumArrayDirect[DOUBLE, double]: Passed 17 ms
+  testSumArrayWrapped[DOUBLE, double]: Passed 21 ms
+com.oracle.truffle.nfi.test.ArrayNFITest finished 572.0 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.DeoptTest started (2 of 33)
+  test: Passed 2 ms
+com.oracle.truffle.nfi.test.DeoptTest finished 3.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ErrnoNFITest started (3 of 33)
+  testErrnoCallback: Passed 8 ms
+  testVirtualErrno: Passed 9 ms
+com.oracle.truffle.nfi.test.ErrnoNFITest finished 19.6 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ExceptionNFITest started (4 of 33)
+  testExceptionOverride: Passed 0 ms
+  testExceptionPropagation: Passed 0 ms
+  testCheckNoException: (got: <false>, expected: is <true>) Passed 0 ms
+  testCheckException: (got: <false>, expected: is <true>) Passed 0 ms
+com.oracle.truffle.nfi.test.ExceptionNFITest finished 1.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.FloatingNFITest started (5 of 33)
+  testFloatParameter[double:3.0]: Passed 6 ms
+  testIntParameter[double:3.0]: Passed 6 ms
+  testDoubleParameter[double:3.0]: Passed 6 ms
+  testFloatParameter[float:3.0]: Passed 6 ms
+  testIntParameter[float:3.0]: Passed 7 ms
+  testDoubleParameter[float:3.0]: Passed 6 ms
+  testFloatParameter[double:0.5]: Passed 4 ms
+  testIntParameter[double:0.5]: Passed 6 ms
+  testDoubleParameter[double:0.5]: Passed 5 ms
+  testFloatParameter[float:0.5]: Passed 4 ms
+  testIntParameter[float:0.5]: Passed 6 ms
+  testDoubleParameter[float:0.5]: Passed 4 ms
+  testFloatParameter[double:0.1]: Passed 5 ms
+  testIntParameter[double:0.1]: Passed 5 ms
+  testDoubleParameter[double:0.1]: Passed 4 ms
+  testFloatParameter[float:0.1]: Passed 4 ms
+  testIntParameter[float:0.1]: Passed 6 ms
+  testDoubleParameter[float:0.1]: Passed 4 ms
+com.oracle.truffle.nfi.test.FloatingNFITest finished 104.0 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ForbiddenNFITest started (6 of 33)
+  loadTestLib: Passed 1 ms
+  loadDefault: Passed 0 ms
+com.oracle.truffle.nfi.test.ForbiddenNFITest finished 2.8 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.GlobalNFITest started (7 of 33)
+  test[sqrt]: Passed 10 ms
+  test[timesTwo]: Passed 9 ms
+  test[half]: Passed 10 ms
+com.oracle.truffle.nfi.test.GlobalNFITest finished 31.2 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ImplicitConvertNFITest started (8 of 33)
+  testConvert[UINT8, (class java.lang.Boolean) false]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[UINT8, (class java.lang.Byte) 42]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Short) 42]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Integer) 42]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Long) 42]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Float) 42]: Passed 8 ms
+  testConvert[UINT8, (class java.lang.Double) 42]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Boolean) false]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[SINT8, (class java.lang.Byte) 42]: Passed 7 ms
+  testConvert[SINT8, (class java.lang.Short) 42]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Integer) 42]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Long) 42]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Float) 42]: Passed 8 ms
+  testConvert[SINT8, (class java.lang.Double) 42]: Passed 8 ms
+  testConvert[UINT16, (class java.lang.Boolean) false]: Passed 6 ms
+  testConvert[UINT16, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[UINT16, (class java.lang.Byte) 42]: Passed 6 ms
+  testConvert[UINT16, (class java.lang.Short) 42]: Passed 7 ms
+  testConvert[UINT16, (class java.lang.Integer) 42]: Passed 6 ms
+  testConvert[UINT16, (class java.lang.Long) 42]: Passed 6 ms
+  testConvert[UINT16, (class java.lang.Float) 42]: Passed 7 ms
+  testConvert[UINT16, (class java.lang.Double) 42]: Passed 6 ms
+  testConvert[SINT16, (class java.lang.Boolean) false]: Passed 6 ms
+  testConvert[SINT16, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[SINT16, (class java.lang.Byte) 42]: Passed 7 ms
+  testConvert[SINT16, (class java.lang.Short) 42]: Passed 6 ms
+  testConvert[SINT16, (class java.lang.Integer) 42]: Passed 7 ms
+  testConvert[SINT16, (class java.lang.Long) 42]: Passed 7 ms
+  testConvert[SINT16, (class java.lang.Float) 42]: Passed 8 ms
+  testConvert[SINT16, (class java.lang.Double) 42]: Passed 7 ms
+  testConvert[UINT32, (class java.lang.Boolean) false]: Passed 8 ms
+  testConvert[UINT32, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[UINT32, (class java.lang.Byte) 42]: Passed 8 ms
+  testConvert[UINT32, (class java.lang.Short) 42]: Passed 8 ms
+  testConvert[UINT32, (class java.lang.Integer) 42]: Passed 8 ms
+  testConvert[UINT32, (class java.lang.Long) 42]: Passed 8 ms
+  testConvert[UINT32, (class java.lang.Float) 42]: Passed 9 ms
+  testConvert[UINT32, (class java.lang.Double) 42]: Passed 9 ms
+  testConvert[SINT32, (class java.lang.Boolean) false]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Byte) 42]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Short) 42]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Integer) 42]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Long) 42]: Passed 6 ms
+  testConvert[SINT32, (class java.lang.Float) 42]: Passed 7 ms
+  testConvert[SINT32, (class java.lang.Double) 42]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Boolean) false]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Byte) 42]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Short) 42]: Passed 7 ms
+  testConvert[UINT64, (class java.lang.Integer) 42]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Long) 42]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Float) 42]: Passed 6 ms
+  testConvert[UINT64, (class java.lang.Double) 42]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Boolean) false]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Boolean) true]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Byte) 42]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Short) 42]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Integer) 42]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Long) 42]: Passed 6 ms
+  testConvert[SINT64, (class java.lang.Float) 42]: Passed 7 ms
+  testConvert[SINT64, (class java.lang.Double) 42]: Passed 7 ms
+  testConvert[FLOAT, (class java.lang.Boolean) false]: Passed 7 ms
+  testConvert[FLOAT, (class java.lang.Boolean) true]: Passed 7 ms
+  testConvert[FLOAT, (class java.lang.Byte) 42]: Passed 6 ms
+  testConvert[FLOAT, (class java.lang.Short) 42]: Passed 6 ms
+  testConvert[FLOAT, (class java.lang.Integer) 42]: Passed 7 ms
+  testConvert[FLOAT, (class java.lang.Long) 42]: Passed 7 ms
+  testConvert[FLOAT, (class java.lang.Float) 42]: Passed 6 ms
+  testConvert[FLOAT, (class java.lang.Double) 42]: Passed 6 ms
+  testConvert[DOUBLE, (class java.lang.Boolean) false]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Boolean) true]: Passed 7 ms
+  testConvert[DOUBLE, (class java.lang.Byte) 42]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Short) 42]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Integer) 42]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Long) 42]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Float) 42]: Passed 8 ms
+  testConvert[DOUBLE, (class java.lang.Double) 42]: Passed 8 ms
+com.oracle.truffle.nfi.test.ImplicitConvertNFITest finished 594.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.IntegerLimitsNFITest started (9 of 33)
+  testIncMaxUnsigned[SINT8]: Passed 7 ms
+  testDecMaxSigned[SINT8]: Passed 5 ms
+  testLowerBoundClosureRet[SINT8]: Passed 9 ms
+  testDecMaxUnsigned[SINT8]: Passed 5 ms
+  testDecMinSigned[SINT8]: Passed 5 ms
+  testLowerBound[SINT8]: Passed 7 ms
+  testClosureArgMinSigned[SINT8]: Passed 8 ms
+  testIncMaxSigned[SINT8]: Passed 5 ms
+  testDecZero[SINT8]: Passed 6 ms
+  testIncMinSigned[SINT8]: Passed 5 ms
+  testIncZero[SINT8]: Passed 5 ms
+  testClosureArgMaxUnsigned[SINT8]: Passed 10 ms
+  testUpperBoundClosureRet[SINT8]: Passed 9 ms
+  testUpperBound[SINT8]: Passed 6 ms
+  testIncMaxUnsigned[SINT16]: Passed 6 ms
+  testDecMaxSigned[SINT16]: Passed 6 ms
+  testLowerBoundClosureRet[SINT16]: Passed 9 ms
+  testDecMaxUnsigned[SINT16]: Passed 6 ms
+  testDecMinSigned[SINT16]: Passed 5 ms
+  testLowerBound[SINT16]: Passed 6 ms
+  testClosureArgMinSigned[SINT16]: Passed 8 ms
+  testIncMaxSigned[SINT16]: Passed 5 ms
+  testDecZero[SINT16]: Passed 5 ms
+  testIncMinSigned[SINT16]: Passed 5 ms
+  testIncZero[SINT16]: Passed 5 ms
+  testClosureArgMaxUnsigned[SINT16]: Passed 12 ms
+  testUpperBoundClosureRet[SINT16]: Passed 10 ms
+  testUpperBound[SINT16]: Passed 6 ms
+  testIncMaxUnsigned[SINT32]: Passed 7 ms
+  testDecMaxSigned[SINT32]: Passed 5 ms
+  testLowerBoundClosureRet[SINT32]: Passed 9 ms
+  testDecMaxUnsigned[SINT32]: Passed 5 ms
+  testDecMinSigned[SINT32]: Passed 5 ms
+  testLowerBound[SINT32]: Passed 6 ms
+  testClosureArgMinSigned[SINT32]: Passed 7 ms
+  testIncMaxSigned[SINT32]: Passed 5 ms
+  testDecZero[SINT32]: Passed 5 ms
+  testIncMinSigned[SINT32]: Passed 5 ms
+  testIncZero[SINT32]: Passed 4 ms
+  testClosureArgMaxUnsigned[SINT32]: Passed 10 ms
+  testUpperBoundClosureRet[SINT32]: Passed 9 ms
+  testUpperBound[SINT32]: Passed 6 ms
+  testIncMaxUnsigned[UINT8]: Passed 5 ms
+  testDecMaxSigned[UINT8]: Passed 4 ms
+  testLowerBoundClosureRet[UINT8]: Passed 10 ms
+  testDecMaxUnsigned[UINT8]: Passed 5 ms
+  testDecMinSigned[UINT8]: Passed 5 ms
+  testLowerBound[UINT8]: Passed 6 ms
+  testClosureArgMinSigned[UINT8]: Passed 8 ms
+  testIncMaxSigned[UINT8]: Passed 5 ms
+  testDecZero[UINT8]: Passed 5 ms
+  testIncMinSigned[UINT8]: Passed 5 ms
+  testIncZero[UINT8]: Passed 5 ms
+  testClosureArgMaxUnsigned[UINT8]: Passed 10 ms
+  testUpperBoundClosureRet[UINT8]: Passed 10 ms
+  testUpperBound[UINT8]: Passed 6 ms
+  testIncMaxUnsigned[UINT16]: Passed 5 ms
+  testDecMaxSigned[UINT16]: Passed 5 ms
+  testLowerBoundClosureRet[UINT16]: Passed 10 ms
+  testDecMaxUnsigned[UINT16]: Passed 5 ms
+  testDecMinSigned[UINT16]: Passed 5 ms
+  testLowerBound[UINT16]: Passed 6 ms
+  testClosureArgMinSigned[UINT16]: Passed 8 ms
+  testIncMaxSigned[UINT16]: Passed 5 ms
+  testDecZero[UINT16]: Passed 5 ms
+  testIncMinSigned[UINT16]: Passed 5 ms
+  testIncZero[UINT16]: Passed 5 ms
+  testClosureArgMaxUnsigned[UINT16]: Passed 10 ms
+  testUpperBoundClosureRet[UINT16]: Passed 10 ms
+  testUpperBound[UINT16]: Passed 6 ms
+  testIncMaxUnsigned[UINT32]: Passed 7 ms
+  testDecMaxSigned[UINT32]: Passed 5 ms
+  testLowerBoundClosureRet[UINT32]: Passed 9 ms
+  testDecMaxUnsigned[UINT32]: Passed 5 ms
+  testDecMinSigned[UINT32]: Passed 5 ms
+  testLowerBound[UINT32]: Passed 6 ms
+  testClosureArgMinSigned[UINT32]: Passed 7 ms
+  testIncMaxSigned[UINT32]: Passed 5 ms
+  testDecZero[UINT32]: Passed 7 ms
+  testIncMinSigned[UINT32]: Passed 5 ms
+  testIncZero[UINT32]: Passed 4 ms
+  testClosureArgMaxUnsigned[UINT32]: Passed 10 ms
+  testUpperBoundClosureRet[UINT32]: Passed 9 ms
+  testUpperBound[UINT32]: Passed 6 ms
+com.oracle.truffle.nfi.test.IntegerLimitsNFITest finished 581.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.IsolatedNamespaceTest started (10 of 33)
+  testIsolatedNamespace: Passed 0 ms
+com.oracle.truffle.nfi.test.IsolatedNamespaceTest finished 1.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.KeyInfoNFITest started (11 of 33)
+  testKeyInfo[testLibrary[increment_SINT32]]: Passed 7 ms
+  testKeyInfo[testLibrary[__NOT_EXISTING__]]: Passed 5 ms
+  testKeyInfo[symbol[__NOT_EXISTING__]]: Passed 5 ms
+  testKeyInfo[boundSymbol[__NOT_EXISTING__]]: Passed 5 ms
+  testKeyInfo[signature[bind]]: Passed 12 ms
+  testKeyInfo[signature[createClosure]]: Passed 11 ms
+  testKeyInfo[signature[__NOT_EXISTING__]]: Passed 11 ms
+com.oracle.truffle.nfi.test.KeyInfoNFITest finished 61.5 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.LoadNFILibraryTest started (12 of 33)
+  loadTestLib: Passed 0 ms
+  loadGlobal: Passed 0 ms
+  loadUnknownFlag: Passed 0 ms
+  loadGlobalLazy: Passed 0 ms
+  fileNotFound: Passed 0 ms
+  loadNow: Passed 0 ms
+  loadLocal: Passed 0 ms
+  loadLazy: Passed 0 ms
+com.oracle.truffle.nfi.test.LoadNFILibraryTest finished 0.8 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ManyArgumentsNFITest started (13 of 33)
+  testSixteenArguments: Passed 0 ms
+  testThirtyTwoArguments: Passed 0 ms
+  testThirtyThreeArguments: Passed 0 ms
+  testSeventeenArguments: Passed 0 ms
+com.oracle.truffle.nfi.test.ManyArgumentsNFITest finished 0.9 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.NFICallOverheadTest started (14 of 33)
+  testArrayCall: NFI call sample: array round=0 95.81 ns/call
+NFI call sample: array round=1 100.62 ns/call
+NFI call sample: array round=2 95.21 ns/call
+NFI call sample: array round=3 92.31 ns/call
+NFI call sample: array round=4 94.64 ns/call
+NFI call overhead: array       92.31 ns/call
+Passed 561 ms
+  testDoubleCall: NFI call sample: double round=0 60.83 ns/call
+NFI call sample: double round=1 60.73 ns/call
+NFI call sample: double round=2 60.62 ns/call
+NFI call sample: double round=3 62.50 ns/call
+NFI call sample: double round=4 61.62 ns/call
+NFI call overhead: double      60.62 ns/call
+Passed 348 ms
+  testIntCall: NFI call sample: sint32 round=0 58.42 ns/call
+NFI call sample: sint32 round=1 56.04 ns/call
+NFI call sample: sint32 round=2 58.00 ns/call
+NFI call sample: sint32 round=3 55.76 ns/call
+NFI call sample: sint32 round=4 57.64 ns/call
+NFI call overhead: sint32      55.76 ns/call
+Passed 322 ms
+  testStringCall: NFI call sample: string round=0 233.80 ns/call
+NFI call sample: string round=1 252.58 ns/call
+NFI call sample: string round=2 243.86 ns/call
+NFI call sample: string round=3 242.46 ns/call
+NFI call sample: string round=4 245.50 ns/call
+NFI call overhead: string     233.80 ns/call
+Passed 1298 ms
+com.oracle.truffle.nfi.test.NFICallOverheadTest finished 2532.0 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.NullArrayNFITest started (15 of 33)
+  testHostNullArray[UINT8]: Passed 10 ms
+  testNullArray[UINT8]: Passed 10 ms
+  testHostNullArray[SINT8]: Passed 9 ms
+  testNullArray[SINT8]: Passed 9 ms
+  testHostNullArray[UINT16]: Passed 9 ms
+  testNullArray[UINT16]: Passed 9 ms
+  testHostNullArray[SINT16]: Passed 9 ms
+  testNullArray[SINT16]: Passed 9 ms
+  testHostNullArray[UINT32]: Passed 9 ms
+  testNullArray[UINT32]: Passed 9 ms
+  testHostNullArray[SINT32]: Passed 9 ms
+  testNullArray[SINT32]: Passed 9 ms
+  testHostNullArray[UINT64]: Passed 8 ms
+  testNullArray[UINT64]: Passed 9 ms
+  testHostNullArray[SINT64]: Passed 9 ms
+  testNullArray[SINT64]: Passed 9 ms
+  testHostNullArray[FLOAT]: Passed 8 ms
+  testNullArray[FLOAT]: Passed 9 ms
+  testHostNullArray[DOUBLE]: Passed 8 ms
+  testNullArray[DOUBLE]: Passed 8 ms
+com.oracle.truffle.nfi.test.NullArrayNFITest finished 186.3 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.NullNFITest started (16 of 33)
+  testNullArg[pointer]: Passed 6 ms
+  testNullRet[pointer]: Passed 6 ms
+  testNullCallbackArg[pointer]: Passed 6 ms
+  testNullCallbackRet[pointer]: Passed 7 ms
+  testNullArg[string]: Passed 6 ms
+  testNullRet[string]: Passed 5 ms
+  testNullCallbackArg[string]: Passed 6 ms
+  testNullCallbackRet[string]: Passed 6 ms
+  testNullArg[object]: Passed 6 ms
+  testNullRet[object]: Passed 4 ms
+  testNullCallbackArg[object]: Passed 6 ms
+  testNullCallbackRet[object]: Passed 6 ms
+  testNullArg[():void]: (can't pass NULL to native) Passed 0 ms
+  testNullRet[():void]: Passed 5 ms
+  testNullCallbackArg[():void]: Passed 6 ms
+  testNullCallbackRet[():void]: (can't pass NULL to native) Passed 0 ms
+com.oracle.truffle.nfi.test.NullNFITest finished 89.9 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.NullableNFITest started (17 of 33)
+  testNullableCallbackRetNull: Passed 7 ms
+  testNullableCallbackRetClosure: Passed 6 ms
+  testNullableArgString: Passed 6 ms
+  testNullableCallbackRetString: Passed 6 ms
+  testNullableArgClosure: Passed 6 ms
+  testNullableArgNull: Passed 6 ms
+com.oracle.truffle.nfi.test.NullableNFITest finished 42.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.NumericNFITest started (18 of 33)
+  testBoxed[UINT8]: Passed 7 ms
+  testIncrementFromZero[UINT8]: Passed 5 ms
+  testIncrement[UINT8]: Passed 4 ms
+  testIncrementToZero[UINT8]: Passed 6 ms
+  testIncrementBigInteger[UINT8]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[UINT8]: Passed 7 ms
+  testIncrementNeg[UINT8]: Passed 5 ms
+  testCallback[UINT8]: Passed 6 ms
+  testCallbackNeg[UINT8]: Passed 7 ms
+  testCallbackRet[UINT8]: Passed 10 ms
+  testBoxed[SINT8]: Passed 5 ms
+  testIncrementFromZero[SINT8]: Passed 5 ms
+  testIncrement[SINT8]: Passed 5 ms
+  testIncrementToZero[SINT8]: Passed 5 ms
+  testIncrementBigInteger[SINT8]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[SINT8]: Passed 7 ms
+  testIncrementNeg[SINT8]: Passed 5 ms
+  testCallback[SINT8]: Passed 6 ms
+  testCallbackNeg[SINT8]: Passed 6 ms
+  testCallbackRet[SINT8]: Passed 9 ms
+  testBoxed[UINT16]: Passed 5 ms
+  testIncrementFromZero[UINT16]: Passed 5 ms
+  testIncrement[UINT16]: Passed 5 ms
+  testIncrementToZero[UINT16]: Passed 5 ms
+  testIncrementBigInteger[UINT16]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[UINT16]: Passed 7 ms
+  testIncrementNeg[UINT16]: Passed 6 ms
+  testCallback[UINT16]: Passed 6 ms
+  testCallbackNeg[UINT16]: Passed 7 ms
+  testCallbackRet[UINT16]: Passed 9 ms
+  testBoxed[SINT16]: Passed 6 ms
+  testIncrementFromZero[SINT16]: Passed 5 ms
+  testIncrement[SINT16]: Passed 5 ms
+  testIncrementToZero[SINT16]: Passed 5 ms
+  testIncrementBigInteger[SINT16]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[SINT16]: Passed 7 ms
+  testIncrementNeg[SINT16]: Passed 5 ms
+  testCallback[SINT16]: Passed 7 ms
+  testCallbackNeg[SINT16]: Passed 7 ms
+  testCallbackRet[SINT16]: Passed 9 ms
+  testBoxed[UINT32]: Passed 7 ms
+  testIncrementFromZero[UINT32]: Passed 4 ms
+  testIncrement[UINT32]: Passed 4 ms
+  testIncrementToZero[UINT32]: Passed 5 ms
+  testIncrementBigInteger[UINT32]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[UINT32]: Passed 6 ms
+  testIncrementNeg[UINT32]: Passed 5 ms
+  testCallback[UINT32]: Passed 7 ms
+  testCallbackNeg[UINT32]: Passed 7 ms
+  testCallbackRet[UINT32]: Passed 10 ms
+  testBoxed[SINT32]: Passed 5 ms
+  testIncrementFromZero[SINT32]: Passed 4 ms
+  testIncrement[SINT32]: Passed 4 ms
+  testIncrementToZero[SINT32]: Passed 4 ms
+  testIncrementBigInteger[SINT32]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[SINT32]: Passed 6 ms
+  testIncrementNeg[SINT32]: Passed 4 ms
+  testCallback[SINT32]: Passed 6 ms
+  testCallbackNeg[SINT32]: Passed 6 ms
+  testCallbackRet[SINT32]: Passed 9 ms
+  testBoxed[UINT64]: Passed 5 ms
+  testIncrementFromZero[UINT64]: Passed 4 ms
+  testIncrement[UINT64]: Passed 4 ms
+  testIncrementToZero[UINT64]: Passed 4 ms
+  testIncrementBigInteger[UINT64]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[UINT64]: Passed 6 ms
+  testIncrementNeg[UINT64]: Passed 4 ms
+  testCallback[UINT64]: Passed 6 ms
+  testCallbackNeg[UINT64]: Passed 6 ms
+  testCallbackRet[UINT64]: Passed 9 ms
+  testBoxed[SINT64]: Passed 6 ms
+  testIncrementFromZero[SINT64]: Passed 4 ms
+  testIncrement[SINT64]: Passed 4 ms
+  testIncrementToZero[SINT64]: Passed 4 ms
+  testIncrementBigInteger[SINT64]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[SINT64]: Passed 6 ms
+  testIncrementNeg[SINT64]: Passed 4 ms
+  testCallback[SINT64]: Passed 6 ms
+  testCallbackNeg[SINT64]: Passed 6 ms
+  testCallbackRet[SINT64]: Passed 9 ms
+  testBoxed[FLOAT]: Passed 6 ms
+  testIncrementFromZero[FLOAT]: Passed 5 ms
+  testIncrement[FLOAT]: Passed 6 ms
+  testIncrementToZero[FLOAT]: Passed 5 ms
+  testIncrementBigInteger[FLOAT]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[FLOAT]: Passed 7 ms
+  testIncrementNeg[FLOAT]: Passed 5 ms
+  testCallback[FLOAT]: Passed 7 ms
+  testCallbackNeg[FLOAT]: Passed 7 ms
+  testCallbackRet[FLOAT]: Passed 9 ms
+  testBoxed[DOUBLE]: Passed 6 ms
+  testIncrementFromZero[DOUBLE]: Passed 6 ms
+  testIncrement[DOUBLE]: Passed 4 ms
+  testIncrementToZero[DOUBLE]: Passed 7 ms
+  testIncrementBigInteger[DOUBLE]: (got: <false>, expected: is <true>) Passed 0 ms
+  testPingPong[DOUBLE]: Passed 6 ms
+  testIncrementNeg[DOUBLE]: Passed 5 ms
+  testCallback[DOUBLE]: Passed 6 ms
+  testCallbackNeg[DOUBLE]: Passed 6 ms
+  testCallbackRet[DOUBLE]: Passed 10 ms
+  testBoxed[FP80]: Passed 12 ms
+  testIncrementFromZero[FP80]: Passed 15 ms
+  testIncrement[FP80]: Passed 14 ms
+  testIncrementToZero[FP80]: Passed 17 ms
+  testIncrementBigInteger[FP80]: Passed 18 ms
+  testPingPong[FP80]: Passed 13 ms
+  testIncrementNeg[FP80]: Passed 17 ms
+  testCallback[FP80]: Passed 13 ms
+  testCallbackNeg[FP80]: Passed 17 ms
+  testCallbackRet[FP80]: Passed 14 ms
+com.oracle.truffle.nfi.test.NumericNFITest finished 740.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ObjectNFITest started (19 of 33)
+  testCopyAndIncrement: Passed 6 ms
+  testCompareExistingObject: Passed 15 ms
+  testKeepNewObject: Passed 12 ms
+  testKeepObject: Passed 29 ms
+com.oracle.truffle.nfi.test.ObjectNFITest finished 64.5 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.PointerNFITest started (20 of 33)
+  testIncByNumber[1 NATIVE]: Passed 8 ms
+  testFold[1 NATIVE]: Passed 6 ms
+  testIncByNativeVector[1 NATIVE]: Passed 9 ms
+  testSlowPath[1 NATIVE]: Passed 28 ms
+  testIncByManagedVector[1 NATIVE]: Passed 8 ms
+  testIncByNumber[5 NATIVE]: Passed 7 ms
+  testFold[5 NATIVE]: Passed 6 ms
+  testIncByNativeVector[5 NATIVE]: Passed 8 ms
+  testSlowPath[5 NATIVE]: Passed 27 ms
+  testIncByManagedVector[5 NATIVE]: Passed 8 ms
+  testIncByNumber[1 MANAGED]: Passed 9 ms
+  testFold[1 MANAGED]: Passed 7 ms
+  testIncByNativeVector[1 MANAGED]: Passed 9 ms
+  testSlowPath[1 MANAGED]: Passed 27 ms
+  testIncByManagedVector[1 MANAGED]: Passed 10 ms
+  testIncByNumber[5 MANAGED]: Passed 8 ms
+  testFold[5 MANAGED]: Passed 7 ms
+  testIncByNativeVector[5 MANAGED]: Passed 9 ms
+  testSlowPath[5 MANAGED]: Passed 28 ms
+  testIncByManagedVector[5 MANAGED]: Passed 10 ms
+com.oracle.truffle.nfi.test.PointerNFITest finished 251.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.RegisterPackageNFITest started (21 of 33)
+  testPythagoras: Passed 26 ms
+com.oracle.truffle.nfi.test.RegisterPackageNFITest finished 27.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.SignatureExecuteNFITest started (22 of 33)
+  testDirectExecute: Passed 8 ms
+com.oracle.truffle.nfi.test.SignatureExecuteNFITest finished 9.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.StringAsInterfaceNFITest started (23 of 33)
+  canViewDefaultLibraryAsAnotherInterface: (disable test on AOT) Passed 0 ms
+  testAllocAndRelease: (disable test on AOT) Passed 0 ms
+  testDuplicateAString: (disable test on AOT) Passed 0 ms
+  testAllocAndReleaseWithInvoke: (disable test on AOT) Passed 0 ms
+com.oracle.truffle.nfi.test.StringAsInterfaceNFITest finished 0.7 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.StringNFITest started (24 of 33)
+  testUTF8StringCallback: Passed 6 ms
+  testJavaStringArg: Passed 5 ms
+  testTwoStringArgs: Passed 6 ms
+  testBoxedStringArg: Passed 6 ms
+  testNativeStringArg: Passed 15 ms
+  testShortStringArg: Passed 12 ms
+  testBoxedStringCallback: Passed 6 ms
+  testStringArgAtStackBoundary: Passed 11 ms
+  testNativeStringCallback: Passed 10 ms
+  testLongStringArg: Passed 11 ms
+  testStringRetDynamic: Passed 11 ms
+  testUnpairedSurrogateStringArg: Passed 11 ms
+  testStringRetConst: Passed 5 ms
+  testStringCallback: Passed 6 ms
+com.oracle.truffle.nfi.test.StringNFITest finished 129.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ThreadErrnoNFITest started (25 of 33)
+  testMultiThreadErrno: Passed 0 ms
+com.oracle.truffle.nfi.test.ThreadErrnoNFITest finished 1.5 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.ThreadNFITest started (26 of 33)
+  testNativeThread: Passed 16 ms
+com.oracle.truffle.nfi.test.ThreadNFITest finished 16.8 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.VarargsNFITest started (27 of 33)
+  testVariableArgCountFormat: Passed 68 ms
+  testPromoteArgType: Passed 506 ms
+  testMultiSignatureFormat: Passed 64 ms
+  testMultiTypesFormat: Passed 62 ms
+  testSimpleFormat: Passed 11 ms
+com.oracle.truffle.nfi.test.VarargsNFITest finished 714.0 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.WrappedPrimitiveNFITest started (28 of 33)
+  passObjectTest[Boolean]: Passed 9 ms
+  passObjectTest[Byte]: Passed 9 ms
+  passObjectTest[Short]: Passed 11 ms
+  passObjectTest[Character]: Passed 9 ms
+  passObjectTest[Integer]: Passed 10 ms
+  passObjectTest[Long]: Passed 10 ms
+  passObjectTest[Float]: Passed 9 ms
+  passObjectTest[Double]: Passed 9 ms
+  passObjectTest[Integer]: Passed 8 ms
+  passObjectTest[Integer]: Passed 10 ms
+  passObjectTest[Integer]: Passed 8 ms
+  passObjectTest[String]: Passed 8 ms
+  passObjectTest[TestObject]: Passed 7 ms
+  passObjectTest[NullObject]: Passed 7 ms
+com.oracle.truffle.nfi.test.WrappedPrimitiveNFITest finished 133.1 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.parser.ClosureParseSignatureTest started (29 of 33)
+  testClosureNoArgs: Passed 0 ms
+  testClosureOneArg: Passed 0 ms
+  testClosureVarargs: Passed 0 ms
+com.oracle.truffle.nfi.test.parser.ClosureParseSignatureTest finished 0.7 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.parser.ErrorParseSignatureTest started (30 of 33)
+  parseMissingRetType: Passed 0 ms
+  parseEmpty: Passed 0 ms
+  parseUnknownToken: Passed 0 ms
+  parseMissingColon: Passed 0 ms
+  parseMissingComma: Passed 0 ms
+  parseMissingParen: Passed 0 ms
+  parseMissingVararg: Passed 0 ms
+  parseMissingVararg2: Passed 0 ms
+com.oracle.truffle.nfi.test.parser.ErrorParseSignatureTest finished 0.5 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.parser.ParseLibraryDescriptorTest started (31 of 33)
+  parseEmptyFlags: Passed 0 ms
+  parseStringError: Passed 0 ms
+  parseWithOneFlag: Passed 0 ms
+  parseEmpty: Passed 0 ms
+  parseFileStringDouble: Passed 0 ms
+  parseDefault: Passed 0 ms
+  parseUnknownCommand: Passed 0 ms
+  parseFileStringSingle: Passed 0 ms
+  parseFileIdent: Passed 0 ms
+  parseUnknownToken: Passed 0 ms
+  parseFlagsError: Passed 0 ms
+  parseWithTwoFlags: Passed 0 ms
+com.oracle.truffle.nfi.test.parser.ParseLibraryDescriptorTest finished 0.8 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.parser.SimpleParseSignatureTest started (32 of 33)
+  testTwoArgs[VOID]: Passed 9 ms
+  testArrayArg[VOID]: Passed 8 ms
+  testArrayRet[VOID]: Passed 6 ms
+  testNoArgs[VOID]: Passed 6 ms
+  testOneArg[VOID]: Passed 10 ms
+  testTwoArgs[UINT8]: Passed 10 ms
+  testArrayArg[UINT8]: Passed 8 ms
+  testArrayRet[UINT8]: Passed 6 ms
+  testNoArgs[UINT8]: Passed 6 ms
+  testOneArg[UINT8]: Passed 8 ms
+  testTwoArgs[SINT8]: Passed 9 ms
+  testArrayArg[SINT8]: Passed 8 ms
+  testArrayRet[SINT8]: Passed 9 ms
+  testNoArgs[SINT8]: Passed 6 ms
+  testOneArg[SINT8]: Passed 8 ms
+  testTwoArgs[UINT16]: Passed 9 ms
+  testArrayArg[UINT16]: Passed 8 ms
+  testArrayRet[UINT16]: Passed 6 ms
+  testNoArgs[UINT16]: Passed 6 ms
+  testOneArg[UINT16]: Passed 8 ms
+  testTwoArgs[SINT16]: Passed 9 ms
+  testArrayArg[SINT16]: Passed 10 ms
+  testArrayRet[SINT16]: Passed 6 ms
+  testNoArgs[SINT16]: Passed 6 ms
+  testOneArg[SINT16]: Passed 8 ms
+  testTwoArgs[UINT32]: Passed 9 ms
+  testArrayArg[UINT32]: Passed 8 ms
+  testArrayRet[UINT32]: Passed 7 ms
+  testNoArgs[UINT32]: Passed 6 ms
+  testOneArg[UINT32]: Passed 8 ms
+  testTwoArgs[SINT32]: Passed 12 ms
+  testArrayArg[SINT32]: Passed 8 ms
+  testArrayRet[SINT32]: Passed 7 ms
+  testNoArgs[SINT32]: Passed 6 ms
+  testOneArg[SINT32]: Passed 8 ms
+  testTwoArgs[UINT64]: Passed 9 ms
+  testArrayArg[UINT64]: Passed 8 ms
+  testArrayRet[UINT64]: Passed 7 ms
+  testNoArgs[UINT64]: Passed 7 ms
+  testOneArg[UINT64]: Passed 8 ms
+  testTwoArgs[SINT64]: Passed 9 ms
+  testArrayArg[SINT64]: Passed 8 ms
+  testArrayRet[SINT64]: Passed 6 ms
+  testNoArgs[SINT64]: Passed 6 ms
+  testOneArg[SINT64]: Passed 8 ms
+  testTwoArgs[FLOAT]: Passed 9 ms
+  testArrayArg[FLOAT]: Passed 9 ms
+  testArrayRet[FLOAT]: Passed 7 ms
+  testNoArgs[FLOAT]: Passed 6 ms
+  testOneArg[FLOAT]: Passed 8 ms
+  testTwoArgs[DOUBLE]: Passed 10 ms
+  testArrayArg[DOUBLE]: Passed 8 ms
+  testArrayRet[DOUBLE]: Passed 6 ms
+  testNoArgs[DOUBLE]: Passed 6 ms
+  testOneArg[DOUBLE]: Passed 8 ms
+  testTwoArgs[FP80]: Passed 10 ms
+  testArrayArg[FP80]: Passed 8 ms
+  testArrayRet[FP80]: Passed 6 ms
+  testNoArgs[FP80]: Passed 6 ms
+  testOneArg[FP80]: Passed 8 ms
+  testTwoArgs[FP128]: Passed 9 ms
+  testArrayArg[FP128]: Passed 8 ms
+  testArrayRet[FP128]: Passed 6 ms
+  testNoArgs[FP128]: Passed 6 ms
+  testOneArg[FP128]: Passed 8 ms
+  testTwoArgs[POINTER]: Passed 9 ms
+  testArrayArg[POINTER]: Passed 8 ms
+  testArrayRet[POINTER]: Passed 6 ms
+  testNoArgs[POINTER]: Passed 6 ms
+  testOneArg[POINTER]: Passed 8 ms
+  testTwoArgs[STRING]: Passed 9 ms
+  testArrayArg[STRING]: Passed 8 ms
+  testArrayRet[STRING]: Passed 7 ms
+  testNoArgs[STRING]: Passed 6 ms
+  testOneArg[STRING]: Passed 8 ms
+  testTwoArgs[OBJECT]: Passed 9 ms
+  testArrayArg[OBJECT]: Passed 8 ms
+  testArrayRet[OBJECT]: Passed 6 ms
+  testNoArgs[OBJECT]: Passed 6 ms
+  testOneArg[OBJECT]: Passed 8 ms
+  testTwoArgs[NULLABLE]: Passed 9 ms
+  testArrayArg[NULLABLE]: Passed 9 ms
+  testArrayRet[NULLABLE]: Passed 6 ms
+  testNoArgs[NULLABLE]: Passed 6 ms
+  testOneArg[NULLABLE]: Passed 8 ms
+com.oracle.truffle.nfi.test.parser.SimpleParseSignatureTest finished 710.4 ms, [disk (free/total): 129.1GB/289.9GB]
+com.oracle.truffle.nfi.test.parser.VarargsParseSignatureTest started (33 of 33)
+  testTwoFixedArgs: Passed 13 ms
+  testOneVararg: Passed 10 ms
+  testTwoVarargs: Passed 11 ms
+  testFixedArgs: Passed 10 ms
+  testNoFixedArgs: Passed 10 ms
+com.oracle.truffle.nfi.test.parser.VarargsParseSignatureTest finished 56.7 ms, [disk (free/total): 129.1GB/289.9GB]
+Time: 7.686
+
+OK (576 tests)
+
+Test run PASSED. Exiting with status 0.
+
+10 longest running test classes after running 33 of 33 classes:
+      2,532 ms    com.oracle.truffle.nfi.test.NFICallOverheadTest
+        740 ms    com.oracle.truffle.nfi.test.NumericNFITest
+        714 ms    com.oracle.truffle.nfi.test.VarargsNFITest
+        710 ms    com.oracle.truffle.nfi.test.parser.SimpleParseSignatureTest
+        594 ms    com.oracle.truffle.nfi.test.ImplicitConvertNFITest
+        581 ms    com.oracle.truffle.nfi.test.IntegerLimitsNFITest
+        572 ms    com.oracle.truffle.nfi.test.ArrayNFITest
+        251 ms    com.oracle.truffle.nfi.test.PointerNFITest
+        186 ms    com.oracle.truffle.nfi.test.NullArrayNFITest
+        133 ms    com.oracle.truffle.nfi.test.WrappedPrimitiveNFITest
+10 longest running tests:
+      1,298 ms    testStringCall(com.oracle.truffle.nfi.test.NFICallOverheadTest)
+        561 ms    testArrayCall(com.oracle.truffle.nfi.test.NFICallOverheadTest)
+        506 ms    testPromoteArgType(com.oracle.truffle.nfi.test.VarargsNFITest)
+        348 ms    testDoubleCall(com.oracle.truffle.nfi.test.NFICallOverheadTest)
+        322 ms    testIntCall(com.oracle.truffle.nfi.test.NFICallOverheadTest)
+         68 ms    testVariableArgCountFormat(com.oracle.truffle.nfi.test.VarargsNFITest)
+         64 ms    testMultiSignatureFormat(com.oracle.truffle.nfi.test.VarargsNFITest)
+         62 ms    testMultiTypesFormat(com.oracle.truffle.nfi.test.VarargsNFITest)
+         29 ms    testKeepObject(com.oracle.truffle.nfi.test.ObjectNFITest)
+         28 ms    testSlowPath[5 MANAGED](com.oracle.truffle.nfi.test.PointerNFITest)

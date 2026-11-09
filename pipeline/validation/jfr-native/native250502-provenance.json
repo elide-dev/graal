@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/graalvm/labs-openjdk.git",
+  "branch": "chaeubl/GR-77360",
+  "commit": "cafc6cf519b36ca5337ceba858190e0e647073ce",
+  "source_clean": true,
+  "openjdk_base": "2c38e16b2e2fc149d18c0541c4d0f98ff218c852",
+  "native_interface_version": 250502,
+  "build_script": "build-native-250502.sh",
+  "build_log": "build-native-250502.log",
+  "mx_build_log": "/build/caches/mx/value-jfr-native-250502/substratevm-gcs/buildlog-20261109-102548.html",
+  "cxx": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "archives_built": [
+    "glibc compressed product",
+    "musl compressed product (suite always_build_targets despite glibc selection)"
+  ],
+  "archive_used": "/build/caches/mx/value-jfr-native-250502/substratevm-gcs/linux-amd64/src/hotspot/linux-amd64/glibc/libg1gc-cr.a",
+  "provenance_limit": "Fresh source build from exact public commit; no Oracle EE Java or native binary was used. Test-only provider exposes upstream G1 GC option."
+}

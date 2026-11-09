@@ -1,0 +1,15 @@
++ ulimit -c 0
++ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ variant=candidate
++ shift
++ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-candidate -Xmx256m -Xms32m
+NATIVE_G1_JFR=true
+EXACT_CANDIDATE_TEST=PASS
+RESTART_EXACT_TEST=PASS
+CONTROLLED_WEIGHT=PASS count=32 weight=67109376 expected_payload=67108864
+FAILED_ARRAY_AND_NEGATIVE_LENGTH=PASS
+DISABLED_EVENT=PASS
+DISABLED_STACK=PASS events=35
+THROTTLED_OBSERVATION events=1 (not a rate bound assertion)
+VIRTUAL_ALLOCATION_SAMPLES=PASS events=32 thread=70

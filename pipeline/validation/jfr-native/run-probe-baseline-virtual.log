@@ -1,0 +1,15 @@
++ ulimit -c 0
++ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ variant=baseline
++ shift
++ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-baseline -Xmx256m -Xms32m virtual
+NATIVE_G1_JFR=true
+Exception in thread "main" java.lang.AssertionError: virtual thread exact test
+	at review.JfrNativeReviewMain.virtualExactTest(JfrNativeReviewMain.java:59)
+	at review.JfrNativeReviewMain.main(JfrNativeReviewMain.java:24)
+Caused by: java.lang.IllegalArgumentException: Self-suppression not permitted
+	at com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent.instanceAndArraySamplesHaveTypesWeightsAndStacks(TestNativeGCAllocationSampleEvent.java:60)
+	at review.JfrNativeReviewMain.lambda$virtualExactTest$0(JfrNativeReviewMain.java:57)
+	at java.base@25.0.5.1/java.lang.VirtualThread.run(VirtualThread.java:460)
+Caused by: java.lang.IllegalThreadStateException: StackValue must not be used in a virtual thread unless the method is annotated @Uninterruptible. [no exception stack trace available because exception is thrown from code that must be allocation free]

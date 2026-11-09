@@ -1,0 +1,30 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/elide-dev/graal/b83a4de78880c063a06ed82a1ceab8eda184463e/pipeline/reproducers/archives/ffm.zip",
+    "status": 200,
+    "sha256": "fab2d419fcffbde25553329045312022aec6161f5b78da1861480ff3f4d675bc",
+    "bytes": 31453,
+    "authentication": "none"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/elide-dev/graal/b83a4de78880c063a06ed82a1ceab8eda184463e/pipeline/reproducers/archives/jfr.zip",
+    "status": 200,
+    "sha256": "ab511bd5f5c6a8596906b533f21fa6dea295238115a01d48b1f1890edfcc8191",
+    "bytes": 15109,
+    "authentication": "none"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/elide-dev/graal/b83a4de78880c063a06ed82a1ceab8eda184463e/pipeline/reproducers/archives/nfi.zip",
+    "status": 200,
+    "sha256": "c7760b755efe2a3b2598965aff3f90bd22ba01aa41ce0ee3c3d21e65a635d749",
+    "bytes": 25690,
+    "authentication": "none"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/elide-dev/graal/b83a4de78880c063a06ed82a1ceab8eda184463e/pipeline/reproducers/archives/ristretto.zip",
+    "status": 200,
+    "sha256": "5cede6b267f72a2cdc281f400e11cc9e767d0ad7a3e670d2c524ef482c4de28e",
+    "bytes": 27224,
+    "authentication": "none"
+  }
+]

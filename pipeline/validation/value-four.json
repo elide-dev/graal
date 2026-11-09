@@ -1,0 +1,96 @@
+{
+  "scope": "Manual fork-first preparation; separate from automatic qualification",
+  "authorizedReviewInvocations": 12,
+  "authorizedCIJobs": 8,
+  "actualReviewInvocations": 10,
+  "actualCIJobs": 6,
+  "newInfrastructure": false,
+  "actualDollarCost": "Unavailable; not inferred",
+  "publicEvidence": "https://github.com/elide-dev/graal/tree/b83a4de78880c063a06ed82a1ceab8eda184463e",
+  "candidates": [
+    {
+      "candidate": "nfi",
+      "contributionId": "contribution-value-nfi",
+      "title": "Reduce allocation and pinning overhead in native NFI calls",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+      "cleanHead": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+      "stagingHead": "c19e68dc95129424460a3ad987e7e8d3a8daa2f1",
+      "forkPR": "https://github.com/elide-dev/graal/pull/232",
+      "validationFile": "value-four.json",
+      "reviewFiles": [
+        "nfi-first.json",
+        "nfi-second.json",
+        "nfi-final-tests.json"
+      ],
+      "artifactsInspected": true,
+      "replacementRun": {
+        "id": 42676648896,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42676648896",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "validationSummary": "Identical bytes pass576tests on both revisions; final-source equivalence, style and all12 timing logs inspected."
+    },
+    {
+      "candidate": "ffm",
+      "contributionId": "contribution-value-ffm",
+      "title": "Specialize foreign downcalls during partial evaluation",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+      "cleanHead": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+      "stagingHead": "583cd09c3d75441f0ca0c1ec5c345232f66247aa",
+      "forkPR": "https://github.com/elide-dev/graal/pull/238",
+      "validationFile": "value-four.json",
+      "reviewFiles": [
+        "ffm-first.json",
+        "ffm-second.json",
+        "ffm-isolate-confirmation.json"
+      ],
+      "artifactsInspected": false
+    },
+    {
+      "candidate": "jfr",
+      "contributionId": "contribution-value-jfr",
+      "title": "Emit allocation samples for native G1 allocations",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+      "cleanHead": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "stagingHead": "ec1688e8be42730e04582d129682563ec995d079",
+      "forkPR": "https://github.com/elide-dev/graal/pull/237",
+      "validationFile": "value-four.json",
+      "reviewFiles": [
+        "jfr-first.json",
+        "jfr-second.json"
+      ],
+      "artifactsInspected": false
+    },
+    {
+      "candidate": "ristretto",
+      "contributionId": "contribution-value-ristretto",
+      "title": "Use callable AOT entries for Ristretto invokes under exception handlers",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+      "cleanHead": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+      "stagingHead": "a904d29feb63193d7a6927574ad0a9c92b3c9a8e",
+      "forkPR": "https://github.com/elide-dev/graal/pull/236",
+      "validationFile": "value-four.json",
+      "reviewFiles": [
+        "ristretto-first.json",
+        "ristretto-second.json"
+      ],
+      "artifactsInspected": true,
+      "replacementRun": {
+        "id": 42678280743,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42678280743",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    }
+  ],
+  "remainingGates": [
+    "Inspect green exact-source fork CI before upstream filing.",
+    "NFI and FFM: verify Elide product shipment and repeatable product measurements.",
+    "Exact-fork regression validation remains pending on corrective PRs233\u2013235."
+  ]
+}

@@ -1,0 +1,13 @@
++ ulimit -c 0
++ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts
++ variant=baseline
++ shift
++ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-baseline -Xmx256m -Xms32m
+NATIVE_G1_JFR=true
+Exception in thread "main" java.lang.AssertionError: missing instance allocation samples
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent.validateEvents(TestNativeGCAllocationSampleEvent.java:93)
+	at com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent.instanceAndArraySamplesHaveTypesWeightsAndStacks(TestNativeGCAllocationSampleEvent.java:68)
+	at review.JfrNativeReviewMain.main(JfrNativeReviewMain.java:26)

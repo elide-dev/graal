@@ -1,0 +1,189 @@
+Warning: 449 classes in /build/caches/graal-value-ci-42678280743/baseline/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42678280743/baseline/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/graal-value-ci-42678280743/baseline/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/graal-value-ci-42678280743/baseline/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42678280743/baseline/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42678280743/baseline/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/graal-value-ci-42678280743/baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/graal-value-ci-42678280743/baseline/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.svm.test.RistrettoExceptionFallbackTest
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+WARNING: package com.oracle.svm.core.properties not in org.graalvm.nativeimage.builder
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A restricted method in java.lang.foreign.AddressLayout has been called
+WARNING: java.lang.foreign.AddressLayout::withTargetLayout has been called by com.oracle.svm.test.foreign.ForeignTests in an unnamed module (file:/build/caches/graal-value-ci-42678280743/baseline/substratevm/dists/svm-tests.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[1/8] Initializing...                                                                                   (3.5s @ 0.51GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ - 13 user-specific feature(s):
+   - com.oracle.svm.test.BootstrapMethodTest$TestFeature
+   - com.oracle.svm.test.ImageInfoTest$TestFeature
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.ReflectionRegistrationTest$TestFeature
+   - com.oracle.svm.test.RistrettoExceptionFallbackTest$ProbeFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.foreign.ForeignTests$TestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.SecurityServiceTest$TestFeature
+   - com.oracle.svm.test.services.ServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 7 experimental option(s) unlocked:
+ - '-H:AdditionalSecurityServiceTypes' (origin(s): command line)
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///build/caches/graal-value-ci-42678280743/baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+ - '-H:AdditionalSecurityProviders' (origin(s): command line)
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+ - '-H:+GraalJITCompileAtRuntime' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 30.00GiB of memory (24.2% of system memory, capped at 30GiB)
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (39.1s @ 2.23GiB)
+   14,968 types,  20,893 fields, and  77,436 methods found reachable
+      713 types,   1,046 fields, and   3,466 methods registered for reflection
+       65 types,      69 fields, and      56 methods registered for JNI access
+        2 downcalls and 1 upcalls registered for foreign access
+      205 resource accesses registered with 422.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+        0 runtime compiled methods (0.0% of all reachable methods)
+[3/8] Building universe...                                                                              (5.3s @ 2.26GiB)
+[4/8] Parsing methods...      [**]                                                                      (4.1s @ 2.53GiB)
+[5/8] Inlining methods...     [***]                                                                     (2.7s @ 2.79GiB)
+[6/8] Compiling methods...    [*******]                                                                (50.0s @ 2.65GiB)
+[7/8] Laying out methods...   [***]                                                                     (9.5s @ 3.08GiB)
+[8/8] Creating image...       [***]                                                                     (9.7s @ 3.98GiB)
+  35.45MiB (32.33%) for code area:    57,297 compilation units
+  68.56MiB (62.53%) for image heap:1,267,769 objects and 145 resources
+   5.64MiB ( 5.15%) for other data
+ 109.65MiB in total image size, 104.88MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.44MiB java.base/java.util                                10.86MiB o.g.n.runtime/c.o.s.i.m.Interpreter~edJavaMethod
+   1.21MiB java.base/sun.security.ssl                          9.61MiB byte[] for code metadata
+ 994.47KiB java.base/java.lang.invoke                          7.97MiB byte[] for string data
+ 982.81KiB j.g.compiler/jdk.graal.compiler.lir.amd64           6.43MiB byte[] for general heap data
+ 941.00KiB o.g.n.runtime/com.oracle.svm.interpreter            3.43MiB java.base/java.lang.String
+ 765.08KiB java.base/com.sun.crypto.provider                   2.86MiB java.base/java.lang.Class
+ 720.64KiB o.g.n.runtime/com.oracle.svm.core.code              2.51MiB o.g.n.runtime/c.o.s.i.metadata.ReferenceConstant
+ 713.98KiB java.base/jdk.internal.classfile.impl               2.44MiB o.g.n.runtime/c.o.s.i.m.Interpreter~vedJavaField
+ 622.36KiB java.base/java.lang                                 2.31MiB o.g.e.s.svm/c.o.s.e.classfile.descriptors.Symbol
+ 574.32KiB j.g.compiler/jdk.graal.compiler.nodes               1.94MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+  26.63MiB for 519 more packages                              18.20MiB for 4015 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                      10.1s (7.9% of total time) in 1791 GCs | Peak RSS: 5.57GiB | CPU load: 6.55
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /build/caches/graal-value-ci-42678280743/baseline/substratevm/svmbuild/linux-amd64/junit/svmjunit (executable, 104.88MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 2m 7s.
+
+The build process encountered 2 warnings.
+
+Running: /build/caches/graal-value-ci-42678280743/baseline/substratevm/svmbuild/linux-amd64/junit/svmjunit --very-verbose --enable-timing
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.RistrettoExceptionFallbackTest started (1 of 1)
+  testRuntimeCloneUnderCatch: FAILED 1 ms
+  testUncompiledEntryIsRejected: (upstream baseline has no fallback guard: got: <java.lang.NoSuchMethodException: com.oracle.svm.interpreter.ristretto.compile.RistrettoParser.hasCompiledEntry(jdk.vm.ci.meta.ResolvedJavaMethod). This exception was synthesized during native image building from a call to java.lang.Class.getDeclaredMethod(String, Class[]) with constant arguments.>, expected: null) Passed 0 ms
+com.oracle.svm.test.RistrettoExceptionFallbackTest finished 2.1 ms, [disk (free/total): 105.3GB/289.9GB]
+Time: 0.003
+There was 1 failure:
+1) com.oracle.svm.test.RistrettoExceptionFallbackTest#testRuntimeCloneUnderCatch
+jdk.graal.compiler.core.common.PermanentBailoutException: Ristretto cannot apply non-disableable invocation plugin for java.lang.Object.clone() at bci 7 because the invoke is covered by a local exception handler.
+	at org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto.compile.RistrettoParser.tryInvocationPlugin(RistrettoParser.java:95)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.appendInvoke(BytecodeParser.java:2173)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.genInvokeSpecial(BytecodeParser.java:2028)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.genInvokeSpecial(BytecodeParser.java:2020)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.processBytecode(BytecodeParser.java:5959)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.iterateBytecodesForBlock(BytecodeParser.java:3893)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.handleBytecodeBlock(BytecodeParser.java:3853)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.processBlock(BytecodeParser.java:3700)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.build(BytecodeParser.java:1217)
+	at jdk.graal.compiler/jdk.graal.compiler.java.BytecodeParser.buildRootMethod(BytecodeParser.java:1100)
+	at jdk.graal.compiler/jdk.graal.compiler.java.GraphBuilderPhase$Instance.run(GraphBuilderPhase.java:103)
+	at jdk.graal.compiler/jdk.graal.compiler.java.GraphBuilderPhase.run(GraphBuilderPhase.java:68)
+	at jdk.graal.compiler/jdk.graal.compiler.java.GraphBuilderPhase.run(GraphBuilderPhase.java:43)
+	at jdk.graal.compiler/jdk.graal.compiler.phases.BasePhase.apply(BasePhase.java:511)
+	at jdk.graal.compiler/jdk.graal.compiler.phases.BasePhase.apply(BasePhase.java:359)
+	at jdk.graal.compiler/jdk.graal.compiler.phases.PhaseSuite.run(PhaseSuite.java:423)
+	at jdk.graal.compiler/jdk.graal.compiler.phases.BasePhase.apply(BasePhase.java:511)
+	at jdk.graal.compiler/jdk.graal.compiler.phases.BasePhase.apply(BasePhase.java:359)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto.RistrettoUtils.parseFromBytecode(RistrettoUtils.java:946)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.ristretto.RistrettoUtils.parseOnly(RistrettoUtils.java:353)
+	at com.oracle.svm.test.RistrettoExceptionFallbackTest.testRuntimeCloneUnderCatch(RistrettoExceptionFallbackTest.java:122)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.reflect.SubstrateMethodAccessor.invoke(SubstrateMethodAccessor.java:118)
+	at java.base@25.0.5.1/java.lang.reflect.Method.invoke(Method.java:565)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runners.Suite.runChild(Suite.java:128)
+	at org.junit.runners.Suite.runChild(Suite.java:27)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at com.oracle.mxtool.junit.MxJUnitWrapper.runRequest(MxJUnitWrapper.java:405)
+	at org.graalvm.nativeimage.junitsupport/com.oracle.svm.junit.SVMJUnitRunner.run(SVMJUnitRunner.java:190)
+	at org.graalvm.nativeimage.junitsupport/com.oracle.svm.junit.SVMJUnitRunner.main(SVMJUnitRunner.java:210)
+
+FAILURES!!!
+Tests run: 2,  Failures: 1
+
+Test run FAILED!Exiting with status 1.
+
+10 longest running test classes after running 1 of 1 classes:
+          2 ms    com.oracle.svm.test.RistrettoExceptionFallbackTest
+10 longest running tests:
+          1 ms    testRuntimeCloneUnderCatch(com.oracle.svm.test.RistrettoExceptionFallbackTest)
+          0 ms    testUncompiledEntryIsRejected(com.oracle.svm.test.RistrettoExceptionFallbackTest)
+Some test runs failed:
+> Test run of the following classes failed with exit code 1: com.oracle.svm.test.RistrettoExceptionFallbackTest
+

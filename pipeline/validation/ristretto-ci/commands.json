@@ -1,0 +1,84 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 88.8660798072815
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "com.oracle.svm.test.RistrettoExceptionFallbackTest",
+      "--build-args",
+      "--parallelism=8",
+      "--run-args",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 1,
+    "seconds": 133.93500018119812
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+    "exit": 0,
+    "seconds": 87.16913771629333
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "com.oracle.svm.test.RistrettoExceptionFallbackTest",
+      "--build-args",
+      "--parallelism=8",
+      "--run-args",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+    "exit": 0,
+    "seconds": 129.56568551063538
+  },
+  {
+    "label": "substratevm-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+    "exit": 0,
+    "seconds": 36.541638135910034
+  }
+]

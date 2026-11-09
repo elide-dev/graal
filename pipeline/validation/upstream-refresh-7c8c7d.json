@@ -1,0 +1,51 @@
+{
+  "observedAt": "2026-11-09T19:04:03.547568+00:00",
+  "testedBase": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "currentUpstream": "7c8c7d34adbdebfdb8d90e927b5841a389fd0c23",
+  "incomingPaths": [
+    "compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/AbstractSplittingStrategyTest.java",
+    "compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/HostInliningTest.java",
+    "compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/NodeSplittingStrategyTest.java",
+    "truffle/CHANGELOG.md",
+    "truffle/docs/splitting/Splitting.md",
+    "truffle/src/com.oracle.truffle.api.bytecode/snapshot.sigtest",
+    "truffle/src/com.oracle.truffle.api/snapshot.sigtest",
+    "truffle/src/com.oracle.truffle.api/src/com/oracle/truffle/api/impl/Accessor.java",
+    "truffle/src/com.oracle.truffle.api/src/com/oracle/truffle/api/nodes/NodeAccessor.java",
+    "truffle/src/com.oracle.truffle.api/src/com/oracle/truffle/api/nodes/RootNode.java",
+    "truffle/src/com.oracle.truffle.dsl.processor/src/com/oracle/truffle/dsl/processor/bytecode/generator/BytecodeRootNodeElement.java",
+    "truffle/src/com.oracle.truffle.runtime/src/com/oracle/truffle/runtime/OptimizedCallTarget.java",
+    "truffle/src/com.oracle.truffle.runtime/src/com/oracle/truffle/runtime/OptimizedDirectCallNode.java",
+    "truffle/src/com.oracle.truffle.runtime/src/com/oracle/truffle/runtime/TruffleSplittingStrategy.java"
+  ],
+  "candidates": {
+    "nfi": {
+      "head": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+      "mergeTreeExit": 0,
+      "mergeTree": "13c9339507f37e06d46ca2988ac1d39743135a80",
+      "overlap": [],
+      "limit": "Truffle splitting changed since the tested base; optimization candidates remain held and their prior timings are not asserted for this new head."
+    },
+    "ffm": {
+      "head": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+      "mergeTreeExit": 0,
+      "mergeTree": "4a47edca0ac25328f4f1ec125a619067bc708c5b",
+      "overlap": [],
+      "limit": "Truffle splitting changed since the tested base; optimization candidates remain held and their prior timings are not asserted for this new head."
+    },
+    "jfr": {
+      "head": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "mergeTreeExit": 0,
+      "mergeTree": "09a6dae3ec0cac980ee50647a7891667a00989de",
+      "overlap": [],
+      "limit": "Incoming change is confined to Truffle splitting; candidate paths and native G1/Ristretto behavior do not overlap. Existing exact-base evidence remains explicitly pinned."
+    },
+    "ristretto": {
+      "head": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+      "mergeTreeExit": 0,
+      "mergeTree": "e482332730bbcb00ac35631e98bcdf3a21e20c3e",
+      "overlap": [],
+      "limit": "Incoming change is confined to Truffle splitting; candidate paths and native G1/Ristretto behavior do not overlap. Existing exact-base evidence remains explicitly pinned."
+    }
+  }
+}

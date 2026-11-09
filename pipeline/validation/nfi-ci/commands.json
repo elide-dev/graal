@@ -1,0 +1,116 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 82.59949779510498
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "com.oracle.truffle.nfi.test",
+      "--build-args",
+      "--parallelism=8",
+      "--macro:truffle",
+      "--language:nfi",
+      "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:MaxRuntimeCompileMethods=2000",
+      "--run-args",
+      "-Dnative.test.path=../nfi-test-native",
+      "-Dnfi.test.reportCallOverhead=true",
+      "-Dpolyglot.engine.AllowExperimentalOptions=true",
+      "-Dpolyglot.engine.BackgroundCompilation=false",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 125.28031897544861
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+    "exit": 0,
+    "seconds": 82.24960255622864
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "--preserve-image",
+      "com.oracle.truffle.nfi.test",
+      "--build-args",
+      "--parallelism=8",
+      "--macro:truffle",
+      "--language:nfi",
+      "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:MaxRuntimeCompileMethods=2000",
+      "--run-args",
+      "-Dnative.test.path=../nfi-test-native",
+      "-Dnfi.test.reportCallOverhead=true",
+      "-Dpolyglot.engine.AllowExperimentalOptions=true",
+      "-Dpolyglot.engine.BackgroundCompilation=false",
+      "--very-verbose",
+      "--enable-timing"
+    ],
+    "cwd": "substratevm",
+    "revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+    "exit": 0,
+    "seconds": 124.34276676177979
+  },
+  {
+    "label": "substratevm-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+    "exit": 0,
+    "seconds": 35.587212324142456
+  },
+  {
+    "label": "truffle-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "truffle",
+    "revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+    "exit": 0,
+    "seconds": 25.464618682861328
+  }
+]

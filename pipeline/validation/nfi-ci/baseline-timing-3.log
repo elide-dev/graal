@@ -1,0 +1,37 @@
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.truffle.nfi.test.NFICallOverheadTest started (1 of 1)
+  testArrayCall: NFI call sample: array round=0 107.86 ns/call
+NFI call sample: array round=1 98.17 ns/call
+NFI call sample: array round=2 97.09 ns/call
+NFI call sample: array round=3 93.89 ns/call
+NFI call sample: array round=4 96.91 ns/call
+NFI call overhead: array       93.89 ns/call
+Passed
+  testDoubleCall: NFI call sample: double round=0 60.66 ns/call
+NFI call sample: double round=1 62.90 ns/call
+NFI call sample: double round=2 60.56 ns/call
+NFI call sample: double round=3 62.27 ns/call
+NFI call sample: double round=4 61.76 ns/call
+NFI call overhead: double      60.56 ns/call
+Passed
+  testIntCall: NFI call sample: sint32 round=0 59.33 ns/call
+NFI call sample: sint32 round=1 56.42 ns/call
+NFI call sample: sint32 round=2 58.33 ns/call
+NFI call sample: sint32 round=3 58.31 ns/call
+NFI call sample: sint32 round=4 56.26 ns/call
+NFI call overhead: sint32      56.26 ns/call
+Passed
+  testStringCall: NFI call sample: string round=0 263.46 ns/call
+NFI call sample: string round=1 242.61 ns/call
+NFI call sample: string round=2 255.71 ns/call
+NFI call sample: string round=3 244.81 ns/call
+NFI call sample: string round=4 258.93 ns/call
+NFI call overhead: string     242.61 ns/call
+Passed
+com.oracle.truffle.nfi.test.NFICallOverheadTest finished
+Time: 2.602
+
+OK (4 tests)
+
+Test run PASSED. Exiting with status 0.
