@@ -1,0 +1,163 @@
+{
+  "baseline": {
+    "reported": 576,
+    "executed": 558,
+    "assumptionSkipped": 18,
+    "assumptions": [
+      {
+        "test": "testCheckNoException",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testCheckException",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testNullArg[():void]",
+        "reason": "can't pass NULL to native"
+      },
+      {
+        "test": "testNullCallbackRet[():void]",
+        "reason": "can't pass NULL to native"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT8]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT8]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT16]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT16]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT32]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT32]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT64]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT64]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[FLOAT]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[DOUBLE]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "canViewDefaultLibraryAsAnotherInterface",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testAllocAndRelease",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testDuplicateAString",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testAllocAndReleaseWithInvoke",
+        "reason": "disable test on AOT"
+      }
+    ],
+    "logSHA256": "dad69d231c6ae06312707f7683fd1a3c252a7099ca8a60b747a1b89a84385765"
+  },
+  "candidate": {
+    "reported": 576,
+    "executed": 558,
+    "assumptionSkipped": 18,
+    "assumptions": [
+      {
+        "test": "testCheckNoException",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testCheckException",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testNullArg[():void]",
+        "reason": "can't pass NULL to native"
+      },
+      {
+        "test": "testNullCallbackRet[():void]",
+        "reason": "can't pass NULL to native"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT8]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT8]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT16]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT16]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT32]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT32]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[UINT64]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[SINT64]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[FLOAT]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "testIncrementBigInteger[DOUBLE]",
+        "reason": "got: <false>, expected: is <true>"
+      },
+      {
+        "test": "canViewDefaultLibraryAsAnotherInterface",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testAllocAndRelease",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testDuplicateAString",
+        "reason": "disable test on AOT"
+      },
+      {
+        "test": "testAllocAndReleaseWithInvoke",
+        "reason": "disable test on AOT"
+      }
+    ],
+    "logSHA256": "de110c36205ea1d20245812115b0d9f27065651c88ae3f67eab24ae8a8cc76c4"
+  },
+  "scope": "NFI suite counts reconciled from retained verbose output. New buffer/string boundary tests and four timing cases execute; identical inherited assumption skips occur on both revisions. JUnit OK total alone is not executed coverage."
+}

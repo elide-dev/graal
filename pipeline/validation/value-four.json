@@ -30,7 +30,12 @@
         "status": "completed",
         "conclusion": "success"
       },
-      "validationSummary": "Identical bytes pass 576 tests on both revisions; final-source equivalence, style and all 12 timing logs inspected."
+      "validationSummary": "Identical bytes: 558 executed and 18 assumption-skipped tests on each revision (576 reported). New boundaries and timing cases execute; exact-source equivalence, style and 12 timing logs inspected.",
+      "suiteCounts": {
+        "reported": 576,
+        "executed": 558,
+        "assumptionSkipped": 18
+      }
     },
     {
       "candidate": "ffm",
