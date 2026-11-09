@@ -3,13 +3,41 @@ set -euo pipefail
 
 mx="${GITHUB_WORKSPACE}/mx/mx"
 source_root="$(pwd)"
+job_scratch="$(mktemp -d "${RUNNER_TEMP}/upstream-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-XXXXXX")"
 results="${RUNNER_TEMP}/candidate-results"
-build_root="${RUNNER_TEMP}/candidate-builds"
-mkdir -p "${results}" "${build_root}" "${RUNNER_TEMP}/candidate-baseline"
-baseline="${RUNNER_TEMP}/candidate-baseline/source"
+build_root="${job_scratch}/builds"
+baseline="${job_scratch}/baseline/source"
+# A self-hosted runner executes one job at a time, but its temporary directory may survive jobs.
+# Retain old artifacts outside the upload path so this report cannot include stale evidence.
+if [[ -L "${results}" ]]; then
+    echo 'Unexpected results symlink; retain it for investigation' >&2
+    exit 1
+fi
+if [[ -e "${results}" ]]; then
+    mv "${results}" "${job_scratch}/previous-results"
+fi
+mkdir -p "${results}" "${build_root}" "${job_scratch}/baseline"
+baseline_added=false
+cleanup() {
+    local status=$?
+    if [[ "${baseline_added}" == true ]]; then
+        if ! git worktree remove "${baseline}"; then
+            echo "Retained baseline requiring inspection: ${baseline}" >&2
+        fi
+    fi
+    rm -rf "${build_root}"
+    # Previous artifacts and any unexpectedly dirty source remain available for investigation.
+    if [[ ! -e "${job_scratch}/previous-results" && ! -e "${baseline}" ]]; then
+        rm -f "${job_scratch}/baseline/graal"
+        rmdir "${job_scratch}/baseline" "${job_scratch}"
+    fi
+    return "${status}"
+}
+trap cleanup EXIT
 git merge-base --is-ancestor "${BASE_SHA}" "${HEAD_SHA}"
 test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
 git worktree add --detach "${baseline}" "${BASE_SHA}"
+baseline_added=true
 {
     echo "base=${BASE_SHA}"
     echo "head=${HEAD_SHA}"
@@ -73,7 +101,7 @@ case "${CANDIDATE_BRANCH}" in
         ;;
     staging/using-return-completion)
         test "$(git -C "${GITHUB_WORKSPACE}/graal" rev-parse HEAD)" = 29054f702c3cd8420cdc927409b7d0f55acddec2
-        ln -s "${GITHUB_WORKSPACE}/graal" "${RUNNER_TEMP}/candidate-baseline/graal"
+        ln -s "${GITHUB_WORKSPACE}/graal" "${job_scratch}/baseline/graal"
         run_mx "${baseline}" baseline graal-js build --build-logs=silent --dependencies TRUFFLE_JS_TESTS,GRAALJS_LAUNCHER,truffle:TRUFFLE_RUNTIME > "${results}/baseline-build.log" 2>&1
         expect_failure baseline-sync 'Expected 42; got undefined' run_mx "${baseline}" baseline graal-js js --experimental-options --js.explicit-resource-management=true --js.unhandled-rejections=throw "${source_root}/ci/upstream-reproducers/using-return/reproduce.js"
         expect_failure baseline-async 'Async using lost its completion' run_mx "${baseline}" baseline graal-js js --experimental-options --js.explicit-resource-management=true --js.unhandled-rejections=throw "${source_root}/ci/upstream-reproducers/using-return/reproduce-async.js"
