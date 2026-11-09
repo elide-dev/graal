@@ -12,7 +12,7 @@ import time
 source = Path.cwd()
 subject = json.loads((source / 'ci/value-subject.json').read_text())
 run_id = os.environ['GITHUB_RUN_ID']
-results = Path(os.environ['RUNNER_TEMP']) / 'candidate-results'
+results = Path(os.environ['RUNNER_TEMP']) / ('candidate-results-' + run_id + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
 results.mkdir(exist_ok=False)
 baseline = Path('/build/worktrees/graal') / ('value-ci-' + run_id)
 cache = Path('/build/caches') / ('graal-value-ci-' + run_id)
