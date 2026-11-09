@@ -167,6 +167,10 @@ Error messages follow RE2, for example `invalid escape sequence: \1` or `invalid
 TRegex reports match positions in units of the input encoding.
 Use `Encoding=UTF-8` to retrieve byte offsets like RE2, or `Encoding=UTF-16` (the default) to retrieve offsets into Java strings.
 Like Go's `regexp` package, `\B` only considers positions between code points, while RE2 also considers positions inside multi-byte UTF-8 sequences.
+With `Encoding=UTF-16`, the RE2 flavor never reports a match that starts before `fromIndex`.
+If `fromIndex` points to the low surrogate of a valid surrogate pair, the search starts at the next code point boundary, after the pair.
+For example, searching `😀x` (`"\uD83D\uDE00x"`) for `.` from index 1 matches `x` at `[2,3)`, and the empty regex matches at `[2,2)`.
+Other flavors, for example `ECMAScript` with the `u` flag, start the search at the pair's high surrogate instead.
 
 The search tests of RE2 (`re2-search.txt`, taken from the Go project) are part of the TRegex test suite, see _RE2ConformanceTest.java_.
 All leftmost-first cases pass.

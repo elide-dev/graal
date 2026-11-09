@@ -63,6 +63,7 @@ public abstract class RegexFlavor {
     protected static final int EMPTY_CHECKS_ON_MANDATORY_LOOP_ITERATIONS = 1 << 9;
     protected static final int BACKREFERENCE_IGNORE_CASE_MULTI_CHAR_EXPANSION = 1 << 10;
     protected static final int LOOKBEHINDS_REQUIRE_FIXED_WIDTH_PATTERN = 1 << 11;
+    protected static final int FROM_INDEX_INSIDE_SURROGATE_PAIR_MOVES_FORWARD = 1 << 12;
     protected static final int RE2_EMPTY_CHECKS = 1 << 13;
 
     private final int traits;
@@ -180,5 +181,15 @@ public abstract class RegexFlavor {
      */
     public boolean backreferenceIgnoreCaseMultiCharExpansion() {
         return hasTrait(BACKREFERENCE_IGNORE_CASE_MULTI_CHAR_EXPANSION);
+    }
+
+    /**
+     * Regex flavors with this feature never report a match starting before {@code fromIndex}: in
+     * UTF-16 mode, a {@code fromIndex} pointing to the low surrogate of a valid surrogate pair is
+     * moved forward past the pair, to the next code point boundary. Without this feature, such a
+     * {@code fromIndex} is moved back to the pair's high surrogate, as required by ECMAScript.
+     */
+    public boolean fromIndexInsideSurrogatePairMovesForward() {
+        return hasTrait(FROM_INDEX_INSIDE_SURROGATE_PAIR_MOVES_FORWARD);
     }
 }

@@ -4,6 +4,7 @@ This changelog summarizes major changes between TRegex versions relevant to lang
 
 ## Version 25.5.5-elide.28
 * `RE2` flavor: loop iterations that match the empty string now follow RE2. An empty first iteration of an unbounded loop ends the loop, and iterations of bounded loops are not subject to empty checks. For example, `(|a)*` now matches the empty string at the start of `aaa`, as in RE2, instead of `aaa`.
+* `RE2` flavor: with `Encoding=UTF-16`, a `fromIndex` that points to the low surrogate of a valid surrogate pair now starts the search after the pair, so a match never starts before `fromIndex`. Previously, the search started at the pair's high surrogate.
 
 ## Version 25.5.5-elide.27
 * Added the `RE2` regex flavor (`Flavor=RE2`), which implements the syntax and leftmost-first semantics of [RE2](https://github.com/google/re2/wiki/Syntax). The flavor always implies `ForceLinearExecution`. `\C` and RE2's leftmost-longest matching mode are not supported. See [docs/README.md](docs/README.md#re2-flavor) for details.
