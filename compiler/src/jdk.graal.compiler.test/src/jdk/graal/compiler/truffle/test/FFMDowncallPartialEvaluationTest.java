@@ -30,8 +30,10 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.WrongMethodTypeException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -89,6 +91,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         static final FunctionDescriptor ABS = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
         static final FunctionDescriptor LLABS = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
         static final FunctionDescriptor STRLEN = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
+        static final FunctionDescriptor STRTOLL = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
         static final Linker.Option CRITICAL = Linker.Option.critical(false);
         static final Linker.Option CAPTURE_ERRNO = Linker.Option.captureCallState("errno");
 
@@ -97,6 +100,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         static final MethodHandle LLABS_HANDLE = Linker.nativeLinker().downcallHandle(LLABS);
         static final MethodHandle STRLEN_HANDLE = Linker.nativeLinker().downcallHandle(STRLEN);
         static final MethodHandle ABS_CRITICAL_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CRITICAL);
+        static final MethodHandle STRTOLL_ERRNO_HANDLE = Linker.nativeLinker().downcallHandle(STRTOLL, CAPTURE_ERRNO);
         static final MethodHandle ABS_ERRNO_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CAPTURE_ERRNO);
     }
 
@@ -112,6 +116,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
             foreign.registerForDowncall(always, Descriptors.STRLEN);
             foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CRITICAL);
             foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CAPTURE_ERRNO);
+            foreign.registerForDowncall(always, Descriptors.STRTOLL, Descriptors.CAPTURE_ERRNO);
         }
     }
 
@@ -295,6 +300,27 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
             int x = (int) frame.getArguments()[1];
             try {
                 return (int) handle.invokeExact(symbol, captureState, x);
+            } catch (Throwable t) {
+                throw CompilerDirectives.shouldNotReachHere(t);
+            }
+        }
+    }
+
+    /** Capture errno from an overflowing conversion, rather than merely accepting a buffer. */
+    static final class StrtollRoot extends RootNode {
+        private final MethodHandle handle = Descriptors.STRTOLL_ERRNO_HANDLE;
+        private final MemorySegment symbol = symbol("strtoll");
+
+        StrtollRoot() {
+            super(null);
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            MemorySegment state = (MemorySegment) frame.getArguments()[0];
+            MemorySegment string = (MemorySegment) frame.getArguments()[1];
+            try {
+                return (long) handle.invokeExact(symbol, state, string, MemorySegment.NULL, 10);
             } catch (Throwable t) {
                 throw CompilerDirectives.shouldNotReachHere(t);
             }
@@ -543,6 +569,49 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
             Assert.assertEquals(7, target.call(captureState, -7));
             report("Truffle PE, abs captureCallState(errno), build-time handle", timeCalls(target, new Object[]{captureState, -12345}, 12345));
         }
+    }
+
+    @Test
+    public void testCapturedErrnoValue() {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
+            MemorySegment overflow = arena.allocateFrom("99999999999999999999999999999999999999999999");
+            long errnoOffset = Linker.Option.captureStateLayout().byteOffset(MemoryLayout.PathElement.groupElement("errno"));
+            StrtollRoot root = new StrtollRoot();
+            assertDirectDowncall("strtoll errno", "JJJJI_J_c", root, state, overflow);
+            OptimizedCallTarget target = compile(root, state, overflow);
+            state.fill((byte) 0);
+            Assert.assertEquals(Long.MAX_VALUE, target.call(state, overflow));
+            assertTrue("overflow must capture a nonzero errno", state.get(ValueLayout.JAVA_INT, errnoOffset) != 0);
+        }
+    }
+
+    @Test
+    public void testClosedSegment() {
+        Arena arena = Arena.ofConfined();
+        MemorySegment string = arena.allocateFrom("live");
+        StrlenRoot root = new StrlenRoot(Descriptors.STRLEN_HANDLE, symbol("strlen"));
+        OptimizedCallTarget target;
+        try {
+            target = compile(root, string);
+            Assert.assertEquals(4L, target.call(string));
+        } finally {
+            arena.close();
+        }
+        Throwable failure = Assert.assertThrows(Throwable.class, () -> target.call(string));
+        while (failure.getCause() != null) {
+            failure = failure.getCause();
+        }
+        assertTrue("closed arena must be rejected: " + failure, failure instanceof IllegalStateException);
+    }
+
+    @Test
+    public void testExactTypeMismatch() {
+        MethodHandle handle = Linker.nativeLinker().downcallHandle(symbol("abs"), Descriptors.ABS);
+        Assert.assertThrows(WrongMethodTypeException.class, () -> {
+            long ignored = (long) handle.invokeExact(-7L);
+            Assert.fail("incorrect exact type returned " + ignored);
+        });
     }
 
     @Test
