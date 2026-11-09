@@ -109,6 +109,10 @@ finally:
     # Logs/identities remain in artifact output; delete only owned disposable builds.
     if baseline.exists():
         for path in subject['tests']:
-            (baseline / path).unlink(missing_ok=True)
+            tracked = subprocess.run(['git', 'ls-files', '--error-unmatch', '--', path], cwd=baseline, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+            if tracked:
+                subprocess.run(['git', 'restore', '--source=' + subject['upstreamBase'], '--worktree', '--', path], cwd=baseline, check=True)
+            else:
+                (baseline / path).unlink(missing_ok=True)
         subprocess.run(['git', 'worktree', 'remove', str(baseline)], check=True)
     shutil.rmtree(scratch, ignore_errors=True)
