@@ -1,0 +1,31 @@
+{
+  "kind": "ffm",
+  "upstreamBase": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "cleanHead": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+  "tests": [
+    "compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/FFMDowncallPartialEvaluationTest.java"
+  ],
+  "styleSuites": [
+    "substratevm",
+    "compiler"
+  ],
+  "regression": [
+    "native-unittest",
+    "--preserve-image",
+    "jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest",
+    "--build-args",
+    "--parallelism=8",
+    "--macro:truffle",
+    "--language:nfi",
+    "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:-SupportCompileInIsolates",
+    "-H:MaxRuntimeCompileMethods=5000",
+    "--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature",
+    "--run-args",
+    "--very-verbose",
+    "--enable-timing"
+  ],
+  "diagnostic": "Blocklisted method",
+  "qualificationLimit": "Baseline image analysis failure does not establish comparable runtime performance; upstream publication held for product shipment and repeatable product measurements."
+}
