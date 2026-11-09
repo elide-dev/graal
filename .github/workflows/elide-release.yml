@@ -271,7 +271,18 @@ jobs:
         working-directory: graal
         run: |
           mkdir -p "${RUNNER_TEMP}/jdks"
-          "${WS}/mx/mx" --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${JAVA_HOME}"
+          # GitHub sometimes answers release-asset downloads with 504 for minutes at a time; retry.
+          for attempt in 1 2 3 4 5; do
+            if "${WS}/mx/mx" --java-home= fetch-jdk --jdk-id labsjdk-ce-latest --to "${RUNNER_TEMP}/jdks" --alias "${JAVA_HOME}"; then
+              break
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "::error::fetch-jdk failed 5 times"
+              exit 1
+            fi
+            echo "fetch-jdk failed (attempt ${attempt}); retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
           # On macOS, the JDK is a bundle whose home is Contents/Home.
           if [ -d "${JAVA_HOME}/Contents/Home" ]; then
             JAVA_HOME="${JAVA_HOME}/Contents/Home"
