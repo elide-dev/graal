@@ -9,7 +9,7 @@ The first cohort is filed on the Elide forks before any upstream PR:
 | JavaScript using completion | [GraalJS #14](https://github.com/elide-dev/graaljs/pull/14) | `639ec40d68f4242166b56b2f30d89e767ac197f6` | Sync/async samples fail baseline and pass fix; 487 regression tests and checkstyle pass |
 
 All six authorized Astra review calls have completed; [findings, resolutions and limitations](../reviews/README.md) are recorded separately from test results.
-LCOV is filed as [oracle/graal #14947](https://github.com/oracle/graal/pull/14947). The other two candidates remain pending inspected green fork CI.
+LCOV is filed as [oracle/graal #14947](https://github.com/oracle/graal/pull/14947). All three fork jobs are green, and their baseline failures, candidate passes, regression results and style logs have been inspected.
 
 ## Small Reproducer Packages
 
@@ -54,7 +54,7 @@ All three baseline build logs report `mx: error: unrecognized arguments: --cpu-c
 This was an operator error in the shared CI harness, not an observed test failure in a proposed fix.
 The corrected option is `--max-cpus=8`, verified locally using the exact pinned mx revision `ef054fc6eca1d516820bd040efa3c0a0f6ef1899` (7.88.0).
 The user authorized three replacement runs after the failure was diagnosed and the corrected command was verified locally.
-LCOV replacement run 42560305112 is green. The two runtime replacements stopped before compilation on a stale temporary baseline path; their logs are retained. A unique mktemp workspace correction passed repeated-launch checks locally. The user approved two further runs, resource URL 42561385244 and JavaScript 42561388254. The JavaScript job is green; the resource URL job is still running at this snapshot. An accidental duplicate JavaScript run 42560305467 was canceled during setup before comparison. No additional runs or infrastructure are authorized.
+LCOV replacement run 42560305112 is green. The two runtime replacements stopped before compilation on a stale temporary baseline path; their logs are retained. A unique mktemp workspace correction passed repeated-launch checks locally. The user approved two further runs, resource URL 42561385244 and JavaScript 42561388254. Both jobs are green; retained artifacts confirm exact sample bytes, expected baseline failures, candidate success, regression results and style success. An accidental duplicate JavaScript run 42560305467 was canceled during setup before comparison. No additional runs or infrastructure are authorized.
 The clean reviewed source trees are unchanged by this harness correction.
 No automatic retry or weaker test requirement is used to bypass the failure.
 

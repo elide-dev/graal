@@ -1,0 +1,94 @@
+{
+  "scope": "fork-first manual validation; no automatic readiness receipt",
+  "authorizedInitialReviews": 3,
+  "authorizedAdditionalReviews": 3,
+  "actualReviewCalls": 6,
+  "authorizedInitialCIJobs": 3,
+  "authorizedReplacementCIJobs": 3,
+  "newInfrastructure": false,
+  "actualDollarCost": "not available; not inferred",
+  "candidates": [
+    {
+      "candidate": "lcov",
+      "forkPR": "https://github.com/elide-dev/graal/pull/225",
+      "stagingHead": "37ec31cb23d01de316b898a242f4c7adca0e7d95",
+      "initialRun": {
+        "id": 42559696812,
+        "result": "failed before compilation",
+        "diagnostic": "mx: error: unrecognized arguments: --cpu-count=8"
+      },
+      "replacementRun": {
+        "id": 42560305112,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42560305112",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "upstreamPR": "https://github.com/oracle/graal/pull/14947",
+      "title": "LCOV source identity",
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613"
+    },
+    {
+      "candidate": "resource-url",
+      "forkPR": "https://github.com/elide-dev/graal/pull/226",
+      "stagingHead": "7aab08f4dd0e2e5a6eddbd99cb37536b1a646cfa",
+      "initialRun": {
+        "id": 42559701040,
+        "result": "failed before compilation",
+        "diagnostic": "mx: error: unrecognized arguments: --cpu-count=8"
+      },
+      "replacementRun": {
+        "id": 42560302361,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42560302361",
+        "status": "completed",
+        "conclusion": "failure",
+        "diagnostic": "stale fixed temporary baseline path; stopped before compilation"
+      },
+      "upstreamPR": null,
+      "title": "Resource URL host identity",
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "scratchIsolationRun": {
+        "id": 42561385244,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42561385244",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "candidate": "using-return",
+      "forkPR": "https://github.com/elide-dev/graaljs/pull/14",
+      "stagingHead": "bb912eb1086736a404248930f161a7940e8a8041",
+      "initialRun": {
+        "id": 42559705944,
+        "result": "failed before compilation",
+        "diagnostic": "mx: error: unrecognized arguments: --cpu-count=8"
+      },
+      "replacementRun": {
+        "id": 42560304562,
+        "url": "https://github.com/elide-dev/graaljs/actions/runs/42560304562",
+        "status": "completed",
+        "conclusion": "failure",
+        "diagnostic": "stale fixed temporary baseline path; stopped before compilation"
+      },
+      "upstreamPR": null,
+      "title": "JavaScript using completion",
+      "baseSHA": "934cb7cb826453f687220493bcf08fa386c659aa",
+      "scratchIsolationRun": {
+        "id": 42561388254,
+        "url": "https://github.com/elide-dev/graaljs/actions/runs/42561388254",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    }
+  ],
+  "duplicateExecution": {
+    "id": 42560305467,
+    "repository": "elide-dev/graaljs",
+    "subject": "same JavaScript staging head as retained run",
+    "action": "Confirmed completed/cancelled during setup; comparison step never ran. Setup execution is retained in spend history.",
+    "note": "Unintended duplicate delivery/execution, retained in the chain rather than hidden."
+  },
+  "authorizedScratchIsolationCIJobs": 2,
+  "authorizedDescriptionAuthoringCalls": 1,
+  "publicEvidence": "https://github.com/elide-dev/graal/tree/4f51d166510b765bf71b836b60125d2a8ce4d1c0",
+  "localBaselineCacheCorrection": "A later optional LCOV 9-test baseline check reused candidate output after an operator cwd mistake. That result is rejected; targeted production distributions were actually forced rebuilt with mx build -f. Rerun exits 253 with 9 tests/3 expected failures. Fresh remote baseline/fix evidence is independently green."
+}
