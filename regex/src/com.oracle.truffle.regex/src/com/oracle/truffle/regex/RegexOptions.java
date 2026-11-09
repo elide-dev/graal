@@ -1013,8 +1013,10 @@ public final class RegexOptions {
                 // Counted repetitions that are not unrolled can only be executed by the
                 // backtracking engine (except in boolean match mode). RE2 limits counted
                 // repetitions to RE2RegexParser.MAX_REPEAT, and RE2 itself expands them, so we
-                // allow unrolling up to that limit. The overall AST and automaton size limits
-                // still apply.
+                // allow unrolling up to that limit. Whether a quantifier within that limit is
+                // unrolled only depends on the size of the unrolled parser tree, see
+                // RegexFlavor#unrollsLargeCountedRepetitions. The limit also bounds the nesting
+                // depth of the unrolled optional iterations, which are processed recursively.
                 unrollLimitSingleCC = (short) Math.max(unrollLimitSingleCC, RE2RegexParser.MAX_REPEAT);
                 unrollLimitGroup = (short) Math.max(unrollLimitGroup, RE2RegexParser.MAX_REPEAT);
             }

@@ -136,8 +136,12 @@ Source source = Source.newBuilder("regex", "Flavor=RE2,Encoding=UTF-16/(?i)^(?P<
 RE2 guarantees that matching runs in time linear in the size of the input.
 The `RE2` flavor therefore always implies `ForceLinearExecution`: TRegex never uses its backtracking engine for RE2 regexes.
 If TRegex cannot execute a regex with its automaton-based engines, parsing returns a null value instead of a compiled regex.
-This happens when a regex exceeds the automaton size limits, typically because of large counted repetitions with many optional iterations, such as `.{0,1000}`.
-Counted repetitions of moderate size, for example `\w{1,255}` or `.{0,500}`, are supported.
+
+To match counted repetitions without backtracking, TRegex unrolls them, like RE2 does, so the size of the automaton grows with the repetition count.
+Counted repetitions up to RE2's limit of 1000 are supported, for example `.{0,1000}x`, `[a-z]{1,1000}`, or `(abc){300}`.
+Parsing returns a null value if the unrolled regex exceeds the automaton size limits.
+This can happen with many large repetitions in one regex, or with a large repetition of an expression that can match the empty string, such as `(a?){1000}`.
+As in RE2, the time to match each input character is bounded by the size of the unrolled regex.
 
 The flags part of the source string may contain the RE2 flag letters `i`, `m`, `s`, and `U`.
 They have the same effect as a leading `(?flags)` group in the pattern.

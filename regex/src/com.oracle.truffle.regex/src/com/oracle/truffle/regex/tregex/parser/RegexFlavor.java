@@ -64,6 +64,7 @@ public abstract class RegexFlavor {
     protected static final int BACKREFERENCE_IGNORE_CASE_MULTI_CHAR_EXPANSION = 1 << 10;
     protected static final int LOOKBEHINDS_REQUIRE_FIXED_WIDTH_PATTERN = 1 << 11;
     protected static final int RE2_EMPTY_CHECKS = 1 << 13;
+    protected static final int UNROLLS_LARGE_COUNTED_REPETITIONS = 1 << 14;
 
     private final int traits;
 
@@ -170,6 +171,22 @@ public abstract class RegexFlavor {
      */
     public boolean usesRE2EmptyChecks() {
         return hasTrait(RE2_EMPTY_CHECKS);
+    }
+
+    /**
+     * Regex flavors with this feature unroll bounded quantifiers as long as the resulting parser
+     * tree stays within
+     * {@link com.oracle.truffle.regex.tregex.TRegexOptions#TRegexMaxParseTreeSizeForDFALargeCountedRepetitions},
+     * and use that limit and
+     * {@link com.oracle.truffle.regex.tregex.TRegexOptions#TRegexMaxNFASizeLargeCountedRepetitions}
+     * in place of the default parser tree and NFA size limits for automaton-based matchers. Except
+     * in boolean match mode, quantified groups are unrolled regardless of their size. This is meant
+     * for flavors that force linear execution and allow large counted repetitions, like RE2: except
+     * in boolean match mode, a regex with a bounded quantifier that is not unrolled has no matcher
+     * at all.
+     */
+    public boolean unrollsLargeCountedRepetitions() {
+        return hasTrait(UNROLLS_LARGE_COUNTED_REPETITIONS);
     }
 
     /**

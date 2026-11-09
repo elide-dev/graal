@@ -720,9 +720,17 @@ public final class RegexAST implements StateIndex<RegexASTNode>, JsonConvertible
         return new InnerLiteral(literal, hasMask ? mask : null, maxPrefixSize);
     }
 
+    /**
+     * Returns the maximum parser tree size for automaton-based matchers, see
+     * {@link RegexFlavor#unrollsLargeCountedRepetitions()}.
+     */
+    public int getMaxParseTreeSizeForDFA() {
+        return getFlavor().unrollsLargeCountedRepetitions() ? TRegexOptions.TRegexMaxParseTreeSizeForDFALargeCountedRepetitions : TRegexOptions.TRegexMaxParseTreeSizeForDFA;
+    }
+
     public boolean canTransformToDFA() {
         boolean couldCalculateLastGroup = !getOptions().getFlavor().usesLastGroupResultField() || !getProperties().hasCaptureGroupsInLookAroundAssertions();
-        return getNumberOfNodes() <= TRegexOptions.TRegexMaxParseTreeSizeForDFA &&
+        return getNumberOfNodes() <= getMaxParseTreeSizeForDFA() &&
                         getNumberOfCaptureGroups() <= TRegexOptions.TRegexMaxNumberOfCaptureGroupsForDFA &&
                         !(getProperties().hasBackReferences() ||
                                         (getRoot().hasQuantifiers() && (!getOptions().isBooleanMatch() || getRoot().hasLookBehinds())) ||
@@ -742,8 +750,8 @@ public final class RegexAST implements StateIndex<RegexASTNode>, JsonConvertible
         if (getOptions().getFlavor().usesLastGroupResultField() && getProperties().hasCaptureGroupsInLookAroundAssertions()) {
             sb.add("regex has capture groups in look-around assertions while needing to calculate last group matched");
         }
-        if (getNumberOfNodes() > TRegexOptions.TRegexMaxParseTreeSizeForDFA) {
-            sb.add(String.format("Parser tree has too many nodes: %d (threshold: %d)", getNumberOfNodes(), TRegexOptions.TRegexMaxParseTreeSizeForDFA));
+        if (getNumberOfNodes() > getMaxParseTreeSizeForDFA()) {
+            sb.add(String.format("Parser tree has too many nodes: %d (threshold: %d)", getNumberOfNodes(), getMaxParseTreeSizeForDFA()));
         }
         if (getNumberOfCaptureGroups() > TRegexOptions.TRegexMaxNumberOfCaptureGroupsForDFA) {
             sb.add(String.format("regex has too many capture groups: %d (threshold: %d)", getNumberOfCaptureGroups(), TRegexOptions.TRegexMaxNumberOfCaptureGroupsForDFA));
@@ -753,7 +761,7 @@ public final class RegexAST implements StateIndex<RegexASTNode>, JsonConvertible
         }
         if (getProperties().hasLargeBoundedQuantifiers()) {
             sb.add(String.format("regex has large counted repetitions (threshold: %d for single CC, %d for groups)",
-                            TRegexOptions.TRegexQuantifierUnrollLimitSingleCC, TRegexOptions.TRegexQuantifierUnrollLimitGroup));
+                            getOptions().quantifierUnrollLimitSingleCC, getOptions().quantifierUnrollLimitGroup));
         }
         if (getProperties().hasNegativeLookAheadAssertions()) {
             sb.add("regex has negative look-ahead assertions");

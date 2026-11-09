@@ -74,7 +74,7 @@ import com.oracle.truffle.regex.util.TBitSet;
 public final class NFAGenerator {
 
     private final RegexAST ast;
-    private final Counter.ThresholdCounter stateID = new Counter.ThresholdCounter(TRegexOptions.TRegexMaxNFASize, "NFA explosion");
+    private final Counter.ThresholdCounter stateID;
     private final Counter.ThresholdCounter transitionID = new Counter.ThresholdCounter(Short.MAX_VALUE, "NFA transition explosion");
     private final NFAState dummyInitialState;
     private final NFAState[] anchoredInitialStates;
@@ -106,6 +106,8 @@ public final class NFAGenerator {
 
     private NFAGenerator(RegexAST ast, CompilationBuffer compilationBuffer) {
         this.ast = ast;
+        this.stateID = new Counter.ThresholdCounter(ast.getFlavor().unrollsLargeCountedRepetitions() ? TRegexOptions.TRegexMaxNFASizeLargeCountedRepetitions : TRegexOptions.TRegexMaxNFASize,
+                        "NFA explosion");
         this.astStepVisitor = new ASTStepVisitor(ast);
         this.transitionGBUpdateIndices = new TBitSet(ast.getNumberOfCaptureGroups() * 2);
         this.transitionGBClearIndices = new TBitSet(ast.getNumberOfCaptureGroups() * 2);
