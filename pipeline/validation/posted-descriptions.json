@@ -1,0 +1,62 @@
+[
+  {
+    "candidate": "lcov",
+    "kind": "upstream",
+    "url": "https://github.com/oracle/graal/pull/14947",
+    "head": "3c92f7b36f8968bbb805448b422bde7f769ef080",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "bodySHA256": "0d5fbf5449bde7c9e39d0555c86abc7e697cd410cf9b58aba67ea19484cdaa25",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-lcov",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  },
+  {
+    "candidate": "lcov",
+    "kind": "fork",
+    "url": "https://github.com/elide-dev/graal/pull/225",
+    "head": "37ec31cb23d01de316b898a242f4c7adca0e7d95",
+    "base": "37b2bebaf44c7b07abc852754bb0bb98f006a6a7",
+    "bodySHA256": "061b2a87b8196df2f7aa3e867a9bd26734239038f927d0cd64947ec32b18894d",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-lcov",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  },
+  {
+    "candidate": "resource-url",
+    "kind": "upstream",
+    "url": "https://github.com/oracle/graal/pull/14948",
+    "head": "f62ead1c846d842b3abe64afae338cd4971e8315",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "bodySHA256": "e2a404b0d65fd7b78b12688920f96155c2e419704ded5bca473afedff6c08a33",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-resource-url",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  },
+  {
+    "candidate": "resource-url",
+    "kind": "fork",
+    "url": "https://github.com/elide-dev/graal/pull/226",
+    "head": "7aab08f4dd0e2e5a6eddbd99cb37536b1a646cfa",
+    "base": "37b2bebaf44c7b07abc852754bb0bb98f006a6a7",
+    "bodySHA256": "8a5e7457254c4beb866209f6268c40d0f4b44f4c7e9b5a712eaef4cdfd8f26c9",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-resource-url",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  },
+  {
+    "candidate": "using-return",
+    "kind": "upstream",
+    "url": "https://github.com/oracle/graaljs/pull/1151",
+    "head": "639ec40d68f4242166b56b2f30d89e767ac197f6",
+    "base": "934cb7cb826453f687220493bcf08fa386c659aa",
+    "bodySHA256": "c2a42086a87f5425f865e6dd7c69a4b393d181a4d012951befc007ac6a80715c",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-using-return",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  },
+  {
+    "candidate": "using-return",
+    "kind": "fork",
+    "url": "https://github.com/elide-dev/graaljs/pull/14",
+    "head": "bb912eb1086736a404248930f161a7940e8a8041",
+    "base": "289de7d62cc6f4e1b09da9041ba7e7a2ca6232d2",
+    "bodySHA256": "104cc94fb079d2d6f20900b970343e5ef937efa1ade6d8200ad7a50c37128350",
+    "ownDashboardLink": "https://graalvm.elide.dev/contributions/contribution-first-using-return",
+    "verified": "Posted body matches reviewed copy; headings/table/Mermaid/green checks and direct PR view present"
+  }
+]
