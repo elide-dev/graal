@@ -217,14 +217,6 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
     /** Entry methods of downcall handles that are not yet registered for runtime compilation. */
     private final Deque<AnalysisMethod> pendingRuntimeCompilationEntries = new ConcurrentLinkedDeque<>();
     private volatile FeatureImpl.BeforeAnalysisAccessImpl analysisAccess;
-    /**
-     * Whether the entry methods of downcall handles are registered for runtime compilation: null
-     * until the first {@link #duringAnalysis}, when all features have configured runtime
-     * compilation in {@link #beforeAnalysis}. False if runtime compilation was not configured for
-     * the analysis, as in an image whose only runtime compiler is Ristretto, which does not use
-     * the {@link DowncallHandleLinker} (elide-dev/graal#198).
-     */
-    private volatile Boolean entriesForRuntimeCompilation;
     private volatile Lookup implLookup;
 
     private final Deque<Object> nativeEntryPointsInImageHeap = new ConcurrentLinkedDeque<>();
@@ -1028,12 +1020,19 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
      * Creates the method handle of a registered downcall at image build time, so that the JDK
      * specializes its bindings to bytecode, and registers it for {@code Linker.downcallHandle}
      * calls at image run time (see {@link ForeignFunctionsRuntime#getSpecializedDowncallHandle}).
-     * If the image has runtime compilation, also generates the entry method of the handle and
-     * registers it for runtime compilation, so that runtime-compiled code invokes the handle
-     * directly (see {@link DowncallHandleLinker}).
+     * Also generates the entry method of the handle and registers it for runtime compilation, so
+     * that runtime-compiled code invokes the handle directly (see {@link DowncallHandleLinker}).
+     * <p>
+     * Does nothing if runtime compilation is not configured for the analysis, as in an image whose
+     * only runtime compiler is Ristretto: Ristretto does not use the {@link DowncallHandleLinker},
+     * and the entry methods cannot be parsed for runtime compilation (elide-dev/graal#198). This
+     * runs in a conditional task, which the analysis executes only after all features have run
+     * {@link #beforeAnalysis}, where runtime compilation is configured (for Truffle, by
+     * {@code TruffleFeature}).
      */
     private synchronized void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
-        if (Boolean.FALSE.equals(entriesForRuntimeCompilation)) {
+        VMError.guarantee(BuildPhaseProvider.isAnalysisStarted(), "Downcall handles must be specialized during the analysis");
+        if (!RuntimeCompilationFeature.singleton().isConfiguredForAnalysis()) {
             /* No runtime-compiled code can invoke the handle directly: nothing to gain. */
             return;
         }
@@ -1067,16 +1066,12 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
     }
 
     /**
-     * Registers the generated entry methods for runtime compilation once all features have run
-     * {@link #beforeAnalysis}, which is when runtime compilation is configured for the analysis
-     * (for Truffle, by {@code TruffleFeature}). Entry methods are created by conditional tasks,
-     * which may run before the analysis starts and while it runs. Returns whether an entry method
-     * was registered.
+     * Registers the generated entry methods for runtime compilation. Entry methods are created by
+     * conditional tasks while the analysis runs. Returns whether an entry method was registered.
      */
     private boolean registerPendingEntriesForRuntimeCompilation() {
         FeatureImpl.BeforeAnalysisAccessImpl access = analysisAccess;
-        Boolean register = entriesForRuntimeCompilation;
-        if (access == null || downcallHandleLinker == null || register == null) {
+        if (access == null || downcallHandleLinker == null) {
             return false;
         }
         RuntimeCompilationFeature runtimeCompilation = RuntimeCompilationFeature.singleton();
@@ -1084,10 +1079,8 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         synchronized (pendingRuntimeCompilationEntries) {
             AnalysisMethod entry;
             while ((entry = pendingRuntimeCompilationEntries.poll()) != null) {
-                if (register) {
-                    runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
-                    registered = true;
-                }
+                runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
+                registered = true;
             }
         }
         return registered;
@@ -1095,12 +1088,6 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
 
     @Override
     public void duringAnalysis(DuringAnalysisAccess access) {
-        if (downcallHandleLinker == null) {
-            return;
-        }
-        if (entriesForRuntimeCompilation == null) {
-            entriesForRuntimeCompilation = RuntimeCompilationFeature.singleton().isConfiguredForAnalysis();
-        }
         if (registerPendingEntriesForRuntimeCompilation()) {
             access.requireAnalysisIteration();
         }
