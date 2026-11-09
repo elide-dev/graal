@@ -82,7 +82,7 @@ env:
   # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
   # finds it. Windows has no Shenandoah support and builds without it.
   LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
-  LABS_OPENJDK_REF: 861b5b674187eb1aecda79118b222b9a138bf829  # Shenandoah metaspace and runtime-code parity (interface 250502)
+  LABS_OPENJDK_REF: 2aa99d3a422f52a41584d0cb42609ed6f450b368  # Shenandoah safepoint fix for elide.28 (elide-dev/labs-openjdk#6), on the metaspace and runtime-code parity line (interface 250502)
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
 
