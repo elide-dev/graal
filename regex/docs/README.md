@@ -169,7 +169,14 @@ Use `Encoding=UTF-8` to retrieve byte offsets like RE2, or `Encoding=UTF-16` (th
 Like Go's `regexp` package, `\B` only considers positions between code points, while RE2 also considers positions inside multi-byte UTF-8 sequences.
 
 The search tests of RE2 (`re2-search.txt`, taken from the Go project) are part of the TRegex test suite, see _RE2ConformanceTest.java_.
-All leftmost-first cases pass except those in which the body of a `*` or `+` loop prefers to match the empty string, such as `(|a)*`.
-RE2 stops such a loop after an empty first iteration, while TRegex continues with the next alternative of the loop body.
-For example, `(|a)*` matches the empty string at the start of `aaa` in RE2, and the whole string `aaa` in TRegex.
-This difference only affects match boundaries and capture group positions; whether a regex matches at all is not affected.
+All leftmost-first cases pass.
+
+Like RE2, the `RE2` flavor handles loop iterations that match the empty string differently from the other flavors:
+
+* If the first iteration of `x*` or `x+`, or iteration `n` of `x{n,}`, matches the empty string, the loop ends there.
+  For example, `(|a)*` matches the empty string at the start of `aaa`, not the whole string.
+* Later iterations of such a loop must not match the empty string.
+* Iterations of bounded quantifiers such as `x?` and `x{n,m}` may always match the empty string.
+
+TRegex unrolls most bounded quantifiers.
+If a bounded quantifier is too large to unroll and its body can match the empty string, TRegex ends the loop after the first empty iteration instead, which matches RE2 unless the remaining iterations would have matched differently at the same position.

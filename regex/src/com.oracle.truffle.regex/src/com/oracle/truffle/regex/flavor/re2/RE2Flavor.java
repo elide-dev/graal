@@ -72,7 +72,7 @@ public final class RE2Flavor extends RegexFlavor {
     public static final UnicodeProperties UNICODE = new UnicodeProperties(UnicodePropertyDataVersion.UNICODE_17_0_0, 0, UnicodeProperties.NameMatchingMode.exact);
 
     private RE2Flavor() {
-        super(NESTED_CAPTURE_GROUPS_KEPT_ON_LOOP_REENTRY);
+        super(NESTED_CAPTURE_GROUPS_KEPT_ON_LOOP_REENTRY | RE2_EMPTY_CHECKS);
     }
 
     @Override
