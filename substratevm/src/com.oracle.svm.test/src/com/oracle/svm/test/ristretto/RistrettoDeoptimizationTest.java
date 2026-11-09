@@ -100,10 +100,8 @@ public class RistrettoDeoptimizationTest {
     /** Registers the class files of the run-time classes as resources. */
     public static final class TestFeature implements Feature {
         public TestFeature() {
-            /* RistrettoCallerClassTest registers analysis roots through the hosted feature access. */
-            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted");
-            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.base", "com.oracle.svm.common.meta");
             /* RistrettoHubExtensionTest checks the hosted field of the hub extension. */
+            ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted");
             ModuleSupport.accessPackagesToClass(ModuleSupport.Access.EXPORT, TestFeature.class, false, "org.graalvm.nativeimage.builder", "com.oracle.svm.hosted.meta");
         }
 
@@ -123,7 +121,7 @@ public class RistrettoDeoptimizationTest {
             RistrettoVarHandleTest.beforeAnalysis();
             RistrettoMethodHandleTest.beforeAnalysis();
             RistrettoDispatchTest.beforeAnalysis();
-            RistrettoCallerClassTest.beforeAnalysis(access);
+            RistrettoCallerClassTest.beforeAnalysis();
             /*
              * Links the VarHandle call sites of the AOT methods that AtomicUser calls in the
              * builder JVM, where JVMCI then resolves them to their invokehandle adapters
