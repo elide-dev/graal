@@ -27,6 +27,7 @@
     "--run-args",
     "-Dnative.test.path=../nfi-test-native",
     "-Dnfi.test.reportCallOverhead=true",
+    "-Dpolyglot.engine.AllowExperimentalOptions=true",
     "-Dpolyglot.engine.BackgroundCompilation=false",
     "--very-verbose",
     "--enable-timing"

@@ -87,7 +87,7 @@ try:
         for round_index in range(6):
             order = ['baseline', 'candidate'] if round_index % 2 == 0 else ['candidate', 'baseline']
             for variant in order:
-                command = ['./svmjunit', '-Dnative.test.path=..', '-Dnfi.test.reportCallOverhead=true', '-Dpolyglot.engine.BackgroundCompilation=false',
+                command = ['./svmjunit', '-Dnative.test.path=..', '-Dnfi.test.reportCallOverhead=true', '-Dpolyglot.engine.AllowExperimentalOptions=true', '-Dpolyglot.engine.BackgroundCompilation=false',
                            '--run-explicit', 'com.oracle.truffle.nfi.test.NFICallOverheadTest', '--very-verbose']
                 with (results / f'{variant}-timing-{round_index}.log').open('wb') as output:
                     subprocess.run(command, cwd=results / variant, stdout=output, stderr=subprocess.STDOUT, timeout=180, check=True)
