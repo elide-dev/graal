@@ -2,7 +2,7 @@
 
 **PR-specific dashboard views: [LCOV](https://graalvm.elide.dev/contributions/contribution-first-lcov) · [Resource URL](https://graalvm.elide.dev/contributions/contribution-first-resource-url) · [JavaScript](https://graalvm.elide.dev/contributions/contribution-first-using-return)** · [Source reproducers and instructions](pipeline/reproducers/README.md) · [Adversarial review findings and resolutions](pipeline/reviews/README.md)
 
-This scoped public evidence accompanies three fixes extracted onto exact Oracle upstream revisions and tested on Elide fork PRs before upstream submission. It includes small source ZIPs with checksums, copyable commands, regression patches where needed, actual Astra review summaries, and reviewer counterexamples. No private conversations or private repository history are included.
+This scoped public evidence accompanies three fixes extracted onto exact Oracle upstream revisions and tested on Elide fork PRs before upstream submission. It includes small source ZIPs with checksums, copyable commands, regression patches where needed, adversarial review summaries from high-power models, and reviewer counterexamples. No private conversations or private repository history are included.
 
 | Fix | Upstream base | Fork PR | CI | Upstream PR |
 | --- | --- | --- | --- | --- |
@@ -12,4 +12,5 @@ This scoped public evidence accompanies three fixes extracted onto exact Oracle 
 
 The evidence distinguishes local and CI execution, session review and automatic pipeline qualification, conditional native test coverage, earlier harness failures, and the LCOV finding that was corrected before submission. Exact source identities and review scope are recorded in the linked documents. A green fork job is evidence for its tested tree and environment, not a guarantee across all supported platforms.
 
-[Reusable upstream PR description template](templates/upstream-pr.md), authored by Astra for this cohort.
+[Reusable upstream PR description template](templates/upstream-pr.md) and [generated-body template](templates/generated-upstream-pr.md), maintained together in the dashboard repository.
+The saved descriptions match the posted PRs; raw review provenance remains unchanged.
