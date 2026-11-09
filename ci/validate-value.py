@@ -43,6 +43,9 @@ def run(label, tree, args, suite='substratevm', expected=None, timeout=3600):
             raise RuntimeError('Expected baseline defect absent: ' + label)
     elif completed.returncode:
         raise RuntimeError('Failed: ' + label)
+    if subject['kind'] == 'ffm' and label == 'candidate-reproducer':
+        if 'cannot get whitebox interface' in log or 'ffm-downcall-graph:' not in log or 'ffm-downcall-bench:' not in log:
+            raise RuntimeError('FFM coverage missing or assumption-skipped')
     if not expected and label.endswith('reproducer') and 'OK (' not in log:
         raise RuntimeError('No completed native JUnit tests: ' + label)
 
