@@ -1,0 +1,651 @@
+diff --git a/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/NativeSignature.java b/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/NativeSignature.java
+index 7c947ce4b0a..694804d8e50 100644
+--- a/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/NativeSignature.java
++++ b/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/NativeSignature.java
+@@ -27,6 +27,8 @@ package com.oracle.svm.truffle.nfi;
+ import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getOffset;
+ import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getTag;
+ 
++import java.nio.charset.StandardCharsets;
++
+ import org.graalvm.nativeimage.UnmanagedMemory;
+ import org.graalvm.nativeimage.c.CContext;
+ import org.graalvm.nativeimage.c.struct.CFieldAddress;
+@@ -41,7 +43,9 @@ import org.graalvm.word.WordBase;
+ 
+ import com.oracle.svm.shared.NeverInline;
+ import com.oracle.svm.shared.Uninterruptible;
++import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
+ import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
++import com.oracle.svm.shared.config.ObjectLayout;
+ import com.oracle.svm.core.handles.PrimitiveArrayView;
+ import com.oracle.svm.core.headers.LibC;
+ import com.oracle.svm.core.nodes.CFunctionEpilogueNode;
+@@ -92,6 +96,15 @@ final class NativeSignature {
+ 
+     static class ExecuteHelper {
+ 
++        /** Calls with at most this many arguments keep their argument pointers on the stack. */
++        private static final int MAX_STACK_ARGS = 16;
++
++        /** Primitive argument buffers up to this size are copied to the stack instead of pinned. */
++        private static final int MAX_STACK_PRIM_BYTES = 256;
++
++        /** String arguments up to this total size, terminators included, are copied to the stack. */
++        private static final int MAX_STACK_STRING_BYTES = 256;
++
+         static int alignUp(int index, int alignment) {
+             int mask = alignment - 1;
+             assert (alignment & mask) == 0 : "not a power of 2";
+@@ -102,14 +115,39 @@ final class NativeSignature {
+         static void execute(NativeTruffleContext ctx, ffi_cif cif, PointerBase ret, long functionPointer, byte[] primArgs, int patchCount, int[] patchOffsets, Object[] objArgs,
+                         LocalNativeScope scope) {
+             int nargs = cif.nargs();
+-            WordPointer argPtrs = UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
+-            // TODO WordPointer argPtrs = StackValue.get(nargs, SizeOf.get(WordPointer.class));
++            /*
++             * Stack allocations need a constant size, so calls with up to MAX_STACK_ARGS arguments
++             * (almost all of them) use a fixed stack buffer and only longer ones allocate. Like the
++             * environment below, the buffer only lives for this native call.
++             */
++            WordPointer stackArgPtrs = UnsafeStackValue.get(MAX_STACK_ARGS, WordPointer.class);
++            boolean argPtrsOnStack = nargs <= MAX_STACK_ARGS;
++            WordPointer argPtrs = argPtrsOnStack ? stackArgPtrs : UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
+ 
+             NativeTruffleEnv env = UnsafeStackValue.get(NativeTruffleEnv.class);
+             NFIInitialization.initializeEnv(env, ctx);
+ 
+-            try (PrimitiveArrayView primBuffer = PrimitiveArrayView.createForReading(primArgs)) {
+-                Pointer prim = primBuffer.addressOfArrayElement(0);
++            /*
++             * Native code only reads the primitive argument buffer, so a small one is copied to the
++             * stack rather than pinned: every pin allocates a PinnedObject and links it into a
++             * global list that only a GC cleans up, which made pinning the largest cost of a call.
++             */
++            Pointer stackPrim = UnsafeStackValue.get(MAX_STACK_PRIM_BYTES);
++            PrimitiveArrayView primView = null;
++            Pointer prim;
++            if (primArgs.length <= MAX_STACK_PRIM_BYTES) {
++                copyToNative(primArgs, stackPrim, primArgs.length);
++                prim = stackPrim;
++            } else {
++                primView = PrimitiveArrayView.createForReading(primArgs);
++                prim = primView.addressOfArrayElement(0);
++            }
++
++            /* Strings up to MAX_STACK_STRING_BYTES in all are copied to the stack, too. */
++            Pointer stackStrings = UnsafeStackValue.get(MAX_STACK_STRING_BYTES);
++            int stackStringsUsed = 0;
++
++            try {
+ 
+                 int primIdx = 0;
+                 for (int i = 0; i < nargs; i++) {
+@@ -128,8 +166,18 @@ final class NativeSignature {
+                         WordBase handle = scope.createLocalHandle(obj);
+                         prim.writeWord(offset, handle);
+                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.STRING) {
+-                        PointerBase strPtr = scope.refString((String) obj);
+-                        prim.writeWord(offset, strPtr);
++                        String str = (String) obj;
++                        byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
++                        if (utf8.length < MAX_STACK_STRING_BYTES - stackStringsUsed) {
++                            // Like a pinned copy, the string is only valid during the call.
++                            Pointer copy = stackStrings.add(stackStringsUsed);
++                            copyToNative(utf8, copy, utf8.length);
++                            copy.writeByte(utf8.length, (byte) 0);
++                            stackStringsUsed += utf8.length + 1;
++                            prim.writeWord(offset, copy);
++                        } else {
++                            prim.writeWord(offset, scope.refString(str));
++                        }
+                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.KEEPALIVE) {
+                         // nothing to do
+                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.ENV) {
+@@ -143,10 +191,26 @@ final class NativeSignature {
+ 
+                 ffiCall(cif, Word.pointer(functionPointer), ret, argPtrs, ErrnoMirror.errnoMirror.getAddress());
+             } finally {
+-                UnmanagedMemory.free(argPtrs);
++                if (primView != null) {
++                    primView.close();
++                }
++                if (!argPtrsOnStack) {
++                    UnmanagedMemory.free(argPtrs);
++                }
+             }
+         }
+ 
++        private static void copyToNative(byte[] array, Pointer destination, int length) {
++            copyToNative(array, ObjectLayout.singleton().getArrayBaseOffset(Byte.BYTES), destination, length);
++        }
++
++        @Uninterruptible(reason = "Reads the array through its address, so the GC must not move it.")
++        private static void copyToNative(byte[] array, int baseOffset, Pointer destination, int length) {
++            Pointer source = Word.objectToUntrackedPointer(array).add(baseOffset);
++            // A heap array and a stack buffer never overlap, so no direction check is needed.
++            UnmanagedMemoryUtil.copyForward(source, destination, Word.unsigned(length));
++        }
++
+         /**
+          * Invokes {@link LibFFI.NoTransitions#ffi_call}, preserving and returning its errno before
+          * it is possibly altered at a safepoint.
+diff --git a/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/TruffleNFISupport.java b/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/TruffleNFISupport.java
+index f756011e78c..82927fe9904 100644
+--- a/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/TruffleNFISupport.java
++++ b/substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/TruffleNFISupport.java
+@@ -25,8 +25,9 @@
+ package com.oracle.svm.truffle.nfi;
+ 
+ import java.nio.ByteBuffer;
+-import java.nio.CharBuffer;
+ import java.nio.charset.Charset;
++import java.nio.charset.StandardCharsets;
++import java.util.Arrays;
+ 
+ import org.graalvm.nativeimage.ImageSingletons;
+ import org.graalvm.nativeimage.ObjectHandle;
+@@ -135,46 +136,14 @@ public abstract class TruffleNFISupport {
+         }
+     }
+ 
+-    private static final class ZeroTerminatedCharSequence implements CharSequence {
+-
+-        private CharSequence seq;
+-
+-        ZeroTerminatedCharSequence(CharSequence seq) {
+-            this.seq = seq;
+-        }
+-
+-        @Override
+-        public int length() {
+-            return seq.length() + 1;
+-        }
+-
+-        @Override
+-        public char charAt(int index) {
+-            if (index == seq.length()) {
+-                return '\0';
+-            } else {
+-                return seq.charAt(index);
+-            }
+-        }
+-
+-        @Override
+-        public CharSequence subSequence(int start, int end) {
+-            if (end == length()) {
+-                return new ZeroTerminatedCharSequence(seq.subSequence(start, end - 1));
+-            } else {
+-                return seq.subSequence(start, end);
+-            }
+-        }
+-    }
+-
+-    @TruffleBoundary
++    /**
++     * Encodes {@code str} as zero-terminated UTF-8. Like {@link Charset#encode}, which this used
++     * before, {@link String#getBytes} replaces unpaired surrogates with {@code '?'}, and it avoids
++     * the encoder and buffer objects.
++     */
+     public static byte[] javaStringToUtf8(String str) {
+-        CharBuffer input = CharBuffer.wrap(new ZeroTerminatedCharSequence(str));
+-        /*
+-         * No need to trim the result array. The string is zero terminated, and the array is only
+-         * accessed from native code, which ignores the array length anyway.
+-         */
+-        return UTF8.encode(input).array();
++        byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
++        return Arrays.copyOf(utf8, utf8.length + 1);
+     }
+ 
+     protected abstract CCharPointer strdupImpl(CCharPointer src);
+diff --git a/truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c b/truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c
+index e4cdb11371f..7f9dead4a0a 100644
+--- a/truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c
++++ b/truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c
+@@ -96,4 +96,39 @@ GEN_NUMERIC_TEST(FP80, long double)
+ 
+ #if defined(__aarch64__) && !defined(__MACH__) && !defined(__APPLE__)
+ GEN_NUMERIC_TEST(FP128, long double)
+-#endif
+\ No newline at end of file
++#endif
++
++/* Argument counts on both sides of the SVM backend's stack buffer for argument pointers (16). */
++EXPORT int64_t sum_16_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6, int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11,
++                             int64_t a12, int64_t a13, int64_t a14, int64_t a15, int64_t a16) {
++    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 + a16;
++}
++
++EXPORT int64_t sum_17_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6, int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11,
++                             int64_t a12, int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17) {
++    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 + a16 + a17;
++}
++
++EXPORT int64_t sum_32_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6,
++                int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11, int64_t a12,
++                int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17, int64_t a18,
++                int64_t a19, int64_t a20, int64_t a21, int64_t a22, int64_t a23, int64_t a24,
++                int64_t a25, int64_t a26, int64_t a27, int64_t a28, int64_t a29, int64_t a30,
++                int64_t a31, int64_t a32) {
++    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 +
++           a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 +
++           a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30 +
++           a31 + a32;
++}
++
++EXPORT int64_t sum_33_SINT64(int64_t a1, int64_t a2, int64_t a3, int64_t a4, int64_t a5, int64_t a6,
++                int64_t a7, int64_t a8, int64_t a9, int64_t a10, int64_t a11, int64_t a12,
++                int64_t a13, int64_t a14, int64_t a15, int64_t a16, int64_t a17, int64_t a18,
++                int64_t a19, int64_t a20, int64_t a21, int64_t a22, int64_t a23, int64_t a24,
++                int64_t a25, int64_t a26, int64_t a27, int64_t a28, int64_t a29, int64_t a30,
++                int64_t a31, int64_t a32, int64_t a33) {
++    return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 +
++           a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 +
++           a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30 +
++           a31 + a32 + a33;
++}
+diff --git a/truffle/src/com.oracle.truffle.nfi.test.native/src/string.c b/truffle/src/com.oracle.truffle.nfi.test.native/src/string.c
+index be915ea0595..0f5c09850c5 100644
+--- a/truffle/src/com.oracle.truffle.nfi.test.native/src/string.c
++++ b/truffle/src/com.oracle.truffle.nfi.test.native/src/string.c
+@@ -110,6 +110,10 @@ EXPORT char *reexport_strdup(const char *str) {
+     return strdup(str);
+ }
+ 
++EXPORT int reexport_strcmp(const char *first, const char *second) {
++    return strcmp(first, second);
++}
++
+ EXPORT void reexport_free(char *str) {
+     free(str);
+ }
+diff --git a/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java
+new file mode 100644
+index 00000000000..527f1d4fa2c
+--- /dev/null
++++ b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java
+@@ -0,0 +1,90 @@
++/*
++ * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * The Universal Permissive License (UPL), Version 1.0
++ *
++ * Subject to the condition set forth below, permission is hereby granted to any
++ * person obtaining a copy of this software, associated documentation and/or
++ * data (collectively the "Software"), free of charge and under any and all
++ * copyright rights in the Software, and any and all patent rights owned or
++ * freely licensable by each licensor hereunder covering either (i) the
++ * unmodified Software as contributed to or provided by such licensor, or (ii)
++ * the Larger Works (as defined below), to deal in both
++ *
++ * (a) the Software, and
++ *
++ * (b) any piece of software and/or hardware listed in the lrgrwrks.txt file if
++ * one is included with the Software each a "Larger Work" to which the Software
++ * is contributed by such licensors),
++ *
++ * without restriction, including without limitation the rights to copy, create
++ * derivative works of, display, perform, and distribute the Software and make,
++ * use, sell, offer for sale, import, export, have made, and have sold the
++ * Software and the Larger Work(s), and to sublicense the foregoing rights on
++ * either these or other terms.
++ *
++ * This license is subject to the following condition:
++ *
++ * The above copyright notice and either this complete permission notice or at a
++ * minimum a reference to the UPL must be included in all copies or substantial
++ * portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++package com.oracle.truffle.nfi.test;
++
++import org.junit.Assert;
++import org.junit.Test;
++
++import com.oracle.truffle.api.interop.InteropException;
++
++/**
++ * Calls with many arguments. The Native Image backend keeps the argument pointers of calls with up
++ * to 16 arguments in a stack buffer and allocates them for longer calls, so both sides of that
++ * limit are checked. Calls with 32 and 33 long arguments also cross the primitive buffer limit.
++ */
++public class ManyArgumentsNFITest extends NFITest {
++
++    private static void testSum(int count) throws InteropException {
++        StringBuilder signature = new StringBuilder("(");
++        Object[] args = new Object[count];
++        long expected = 0;
++        for (int i = 0; i < count; i++) {
++            signature.append(i == 0 ? "sint64" : ", sint64");
++            // A distinct bit per argument, so a dropped or garbled argument changes the sum.
++            args[i] = 1L << i;
++            expected += 1L << i;
++        }
++        signature.append("):sint64");
++        Object function = lookupAndBind("sum_" + count + "_SINT64", signature.toString());
++        Object result = UNCACHED_INTEROP.execute(function, args);
++        Assert.assertEquals(expected, UNCACHED_INTEROP.asLong(result));
++    }
++
++    @Test
++    public void testSixteenArguments() throws InteropException {
++        testSum(16);
++    }
++
++    @Test
++    public void testSeventeenArguments() throws InteropException {
++        testSum(17);
++    }
++
++    @Test
++    public void testThirtyTwoArguments() throws InteropException {
++        testSum(32);
++    }
++
++    @Test
++    public void testThirtyThreeArguments() throws InteropException {
++        testSum(33);
++    }
++}
+diff --git a/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java
+new file mode 100644
+index 00000000000..3609f78e641
+--- /dev/null
++++ b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java
+@@ -0,0 +1,196 @@
++/*
++ * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * The Universal Permissive License (UPL), Version 1.0
++ *
++ * Subject to the condition set forth below, permission is hereby granted to any
++ * person obtaining a copy of this software, associated documentation and/or
++ * data (collectively the "Software"), free of charge and under any and all
++ * copyright rights in the Software, and any and all patent rights owned or
++ * freely licensable by each licensor hereunder covering either (i) the
++ * unmodified Software as contributed to or provided by such licensor, or (ii)
++ * the Larger Works (as defined below), to deal in both
++ *
++ * (a) the Software, and
++ *
++ * (b) any piece of software and/or hardware listed in the lrgrwrks.txt file if
++ * one is included with the Software each a "Larger Work" to which the Software
++ * is contributed by such licensors),
++ *
++ * without restriction, including without limitation the rights to copy, create
++ * derivative works of, display, perform, and distribute the Software and make,
++ * use, sell, offer for sale, import, export, have made, and have sold the
++ * Software and the Larger Work(s), and to sublicense the foregoing rights on
++ * either these or other terms.
++ *
++ * This license is subject to the following condition:
++ *
++ * The above copyright notice and either this complete permission notice or at a
++ * minimum a reference to the UPL must be included in all copies or substantial
++ * portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++package com.oracle.truffle.nfi.test;
++
++import org.junit.Assert;
++import org.junit.Assume;
++import org.junit.Test;
++
++import com.oracle.truffle.api.CallTarget;
++import com.oracle.truffle.api.CompilerDirectives;
++import com.oracle.truffle.api.frame.VirtualFrame;
++import com.oracle.truffle.api.interop.InteropException;
++import com.oracle.truffle.api.interop.InteropLibrary;
++
++/**
++ * Calls native functions in a loop from a compiled root node, the way a guest language calls them
++ * from hot code. Checks the results, and reports the time per call when the system property
++ * {@code nfi.test.reportCallOverhead} is set. The timing is informational; it never fails the test.
++ */
++public class NFICallOverheadTest extends NFITest {
++
++    private static final int WARMUP_CALLS = 2000;
++    private static final int WARMUP_ITERATIONS = 100;
++    private static final int MEASURED_ITERATIONS = 1_000_000;
++    private static final int MEASURED_ROUNDS = 5;
++
++    /** Calls {@code function} once per iteration with an argument derived from the iteration. */
++    private abstract static class CallLoopNode extends NFITestRootNode {
++
++        final Object function;
++        volatile boolean compiled;
++        @Child InteropLibrary interop;
++        @Child InteropLibrary results;
++
++        CallLoopNode(Object function) {
++            this.function = function;
++            this.interop = getInterop(function);
++            this.results = getInterop();
++        }
++
++        @Override
++        public final Object executeTest(VirtualFrame frame) throws InteropException {
++            boolean startedCompiled = CompilerDirectives.inCompiledCode();
++            int iterations = (Integer) frame.getArguments()[0];
++            long accumulated = 0;
++            for (int i = 0; i < iterations; i++) {
++                accumulated += call(i);
++            }
++            compiled = startedCompiled && CompilerDirectives.inCompiledCode();
++            return accumulated;
++        }
++
++        abstract long call(int i) throws InteropException;
++    }
++
++    private static final class IntCallNode extends CallLoopNode {
++
++        IntCallNode() {
++            super(lookupAndBind("increment_SINT32", "(sint32):sint32"));
++        }
++
++        @Override
++        long call(int i) throws InteropException {
++            return results.asInt(interop.execute(function, i));
++        }
++    }
++
++    private static final class DoubleCallNode extends CallLoopNode {
++
++        DoubleCallNode() {
++            super(lookupAndBind("increment_DOUBLE", "(double):double"));
++        }
++
++        @Override
++        long call(int i) throws InteropException {
++            return (long) results.asDouble(interop.execute(function, (double) i));
++        }
++    }
++
++    private static final class ArrayCallNode extends CallLoopNode {
++
++        private static final int LENGTH = 8;
++        private final Object array = runWithPolyglot.getTruffleTestEnv().asGuestValue(new int[]{1, 2, 3, 4, 5, 6, 7, 8});
++
++        ArrayCallNode() {
++            super(lookupAndBind("sum_SINT32", "([sint32], uint32):sint32"));
++        }
++
++        @Override
++        long call(int i) throws InteropException {
++            return results.asInt(interop.execute(function, array, LENGTH));
++        }
++    }
++
++    private static final class StringCallNode extends CallLoopNode {
++
++        StringCallNode() {
++            super(lookupAndBind("string_arg", "(string):sint32"));
++        }
++
++        @Override
++        long call(int i) throws InteropException {
++            return results.asInt(interop.execute(function, "42"));
++        }
++    }
++
++    private static void run(String name, CallLoopNode node, long expectedPerIteration, long expectedOffset) {
++        CallTarget target = node.getCallTarget();
++        for (int i = 0; i < WARMUP_CALLS; i++) {
++            target.call(WARMUP_ITERATIONS);
++        }
++        long n = MEASURED_ITERATIONS;
++        long expected = expectedPerIteration == 0 ? expectedOffset * n : n * (n - 1) / 2 + expectedOffset * n;
++        // The fastest round is the least disturbed by other load on the machine.
++        long best = Long.MAX_VALUE;
++        for (int round = 0; round < MEASURED_ROUNDS; round++) {
++            long start = System.nanoTime();
++            long result = (Long) target.call(MEASURED_ITERATIONS);
++            long elapsed = System.nanoTime() - start;
++            best = Math.min(best, elapsed);
++            if (Boolean.getBoolean("nfi.test.reportCallOverhead")) {
++                Assert.assertTrue("measured call must execute compiled code", node.compiled);
++                // Checkstyle: stop
++                System.out.printf("NFI call sample: %s round=%d %.2f ns/call%n", name, round, (double) elapsed / n);
++                // Checkstyle: resume
++            }
++            Assert.assertEquals(name, expected, result);
++        }
++        // Read at run time: a static final field would be folded when the image is built.
++        if (Boolean.getBoolean("nfi.test.reportCallOverhead")) {
++            // Checkstyle: stop
++            System.out.printf("NFI call overhead: %-8s %8.2f ns/call%n", name, (double) best / n);
++            // Checkstyle: resume
++        }
++    }
++
++    @Test
++    public void testIntCall() {
++        run("sint32", new IntCallNode(), 1, 1);
++    }
++
++    @Test
++    public void testDoubleCall() {
++        run("double", new DoubleCallNode(), 1, 1);
++    }
++
++    @Test
++    public void testArrayCall() {
++        // Like ArrayNFITest: the Panama backend does not support wrapped arrays.
++        Assume.assumeFalse("panama".equals(TEST_BACKEND));
++        run("array", new ArrayCallNode(), 0, 36);
++    }
++
++    @Test
++    public void testStringCall() {
++        run("string", new StringCallNode(), 0, 42);
++    }
++}
+diff --git a/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java
+index b5435322515..ea089ee2e0a 100644
+--- a/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java
++++ b/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java
+@@ -109,6 +109,86 @@ public class StringNFITest extends NFITest {
+         Assert.assertEquals("return value", 8472, (int) (Integer) retObj);
+     }
+ 
++    public static class StrdupNode extends NFITestRootNode {
++
++        final Object strdup = lookupAndBindDefault("strdup", "(string):string");
++        final Object free = lookupAndBindDefault("free", "(pointer):void");
++
++        @Child InteropLibrary strdupInterop = getInterop(strdup);
++        @Child InteropLibrary freeInterop = getInterop(free);
++        @Child InteropLibrary resultInterop = getInterop();
++
++        @Override
++        public Object executeTest(VirtualFrame frame) throws InteropException {
++            Object copy = strdupInterop.execute(strdup, frame.getArguments()[0]);
++            String result = resultInterop.asString(copy);
++            freeInterop.execute(free, copy);
++            return result;
++        }
++    }
++
++    private static void assertStrdup(CallTarget callTarget, String argument, String expected) {
++        Assert.assertEquals("strdup copy", expected, callTarget.call(argument));
++    }
++
++    @Test
++    public void testShortStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
++        assertStrdup(callTarget, "", "");
++        assertStrdup(callTarget, "Hello", "Hello");
++        assertStrdup(callTarget, "UTF-8 \u00e4\u00e9\u00e7 \u20ac \ud83d\ude00", "UTF-8 \u00e4\u00e9\u00e7 \u20ac \ud83d\ude00");
++    }
++
++    @Test
++    public void testLongStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
++        // Longer than the stack area the Native Image backend uses for string arguments.
++        String longString = "0123456789\u00e4".repeat(30);
++        assertStrdup(callTarget, longString, longString);
++    }
++
++    @Test
++    public void testStringArgAtStackBoundary(@Inject(StrdupNode.class) CallTarget callTarget) {
++        for (int length : new int[]{254, 255, 256, 257}) {
++            String argument = "x".repeat(length);
++            assertStrdup(callTarget, argument, argument);
++        }
++        // Encoded bytes, rather than UTF-16 code units, determine the buffer size.
++        for (int length : new int[]{127, 128, 129}) {
++            String argument = "\u00e4".repeat(length);
++            assertStrdup(callTarget, argument, argument);
++        }
++    }
++
++    @Test
++    public void testUnpairedSurrogateStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
++        // Backends replace an unpaired surrogate differently, but must keep the rest of the string.
++        String copy = (String) callTarget.call("a\ud800b");
++        Assert.assertEquals(copy, 3, copy.length());
++        Assert.assertEquals(copy, 'a', copy.charAt(0));
++        Assert.assertEquals(copy, 'b', copy.charAt(2));
++    }
++
++    public static class StrcmpNode extends SendExecuteNode {
++
++        public StrcmpNode() {
++            super(lookupAndBindDefault("strcmp", "(string, string):sint32"));
++        }
++    }
++
++    @Test
++    public void testTwoStringArgs(@Inject(StrcmpNode.class) CallTarget callTarget) {
++        Assert.assertEquals(0, (int) (Integer) callTarget.call("same", "same"));
++        Assert.assertTrue((Integer) callTarget.call("abc", "abd") < 0);
++        // The first string fills most of the stack area, so the second one is pinned instead.
++        String first = "x".repeat(250);
++        String second = "y".repeat(100);
++        Assert.assertTrue((Integer) callTarget.call(first, second) < 0);
++        Assert.assertEquals(0, (int) (Integer) callTarget.call(second, "y".repeat(100)));
++        for (int length : new int[]{126, 127, 128, 255, 256}) {
++            String argument = "x".repeat(length);
++            Assert.assertEquals(0, (int) (Integer) callTarget.call(argument, argument));
++        }
++    }
++
+     public static class StringRetConstNode extends SendExecuteNode {
+ 
+         public StringRetConstNode() {

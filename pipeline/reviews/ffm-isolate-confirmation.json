@@ -1,0 +1,42 @@
+{
+  "review": "ffm-isolate-confirmation",
+  "review_slot": "9/12",
+  "model_identity": {
+    "family": "GPT-6 / Codex",
+    "runtime_model_identifier": "not exposed to this reviewer",
+    "selection": "inherited parent model; no override or subagents"
+  },
+  "reviewed_revision": "37404a1596d52777adf1e63e1d250b57cdd14abc",
+  "baseline_revision": "699b66cd5bd26212d130300be3e4ca56178bd3ab",
+  "scope": "Only the eight-line FFMDowncallPartialEvaluationTest.onlyWhiteBox override and whether graph-disabled isolated execution remains meaningful.",
+  "worktree": "/build/worktrees/graal/value-ffm-downcalls",
+  "disposition": "approve: no findings within reviewed scope",
+  "findings": [],
+  "summary": "The override correctly retains superclass whitebox setup for graph checks and bypasses it only for execution-only testing. Independent native execution passed all 14 tests without assumptions; controlled failures prove both compilation requirements and actual isolated compiler selection.",
+  "verified": [
+    "Read root, compiler, and Truffle AGENTS.md and relevant test, superclass, call-target, and isolate compiler sources. Exact HEAD and parent verified; git diff --check passed; worktree remains clean.",
+    "The superclass onlyWhiteBox requires TruffleCompilerImpl, while SupportCompileInIsolates wraps the compiler with IsolateAwareTruffleCompiler. Its assumption therefore prevented every prior test body from running, even though JUnit printed Passed and OK (14 tests). The prior log explicitly records 14 whitebox assumption messages.",
+    "checkGraphs defaults to true; the override delegates unchanged in that mode. In false mode both partial-evaluation graph helpers return before accessing the superclass compiler field. Setup and cleanup still create, enter, and close the Context. No execution path needs that whitebox field.",
+    "Twelve tests call the shared compile helper, which requires target.compile(true) and target.isValid(). BackgroundCompilation is false; OptimizedCallTarget.compile returns success only for existing valid code or successful synchronous compilation. Ten timed tests additionally validate every timed result and require installed code to remain valid afterwards. Captured-errno and closed-segment tests retain their behavioral assertions.",
+    "Positive independent rerun: exit 0, 14 tests pass, zero whitebox assumptions, expected benchmark bodies executed.",
+    "Graph-enabled control with default property: all 14 whitebox assumptions remain, confirming the graph guard is retained. Its OK banner is not counted as executed coverage.",
+    "Isolate negative probe: same graph-disabled command plus CompilationIsolateOptions containing an unmatched quote exits 1 with 12 failures. Each failure reaches IsolatedGraalUtils.createCompilationIsolate via IsolateAwareTruffleCompiler.beforeCompilation/doCompile; the two AOT tests pass. This independently establishes isolate compiler selection.",
+    "Nonisolated control: identical malformed CompilationIsolateOptions but -XX:-CompileInIsolates passes all 14. The negative probe therefore specifically tests the isolate creation branch rather than global argument parsing.",
+    "Compilation-disabled control: -Dpolyglot.engine.Compilation=false exits 1 with exactly 12 failures at the compile assertion; the two AOT tests pass. The execution-only mode cannot silently succeed through interpreted execution alone."
+  ],
+  "commands_file": "/build/caches/graal-pipeline/value-four/reviews/ffm-isolate-confirmation-artifacts/commands.json",
+  "binary_fingerprint_file": "/build/caches/graal-pipeline/value-four/reviews/ffm-isolate-confirmation-artifacts/binary-sha256.json",
+  "source_commands": [
+    "git show HEAD; git rev-parse HEAD HEAD^; git diff --check HEAD^ HEAD; git status --short",
+    "Read FFMDowncallPartialEvaluationTest.java, TruffleCompilerImplTest.java, PartialEvaluationTest.java, GraalCompilerTest.java, OptimizedCallTarget.java, TruffleSupport.java, SubstrateOptions.java, IsolateAwareTruffleCompiler.java, and IsolatedGraalUtils.java with rg/sed.",
+    "Read ffm-first.json, ffm-second.json, ffm-isolates-tested.log, and ffm-isolates-runtime-corrected.log."
+  ],
+  "limits": [
+    "Existing parent-built binary rerun, fingerprint recorded; reviewer did not rebuild the native image or invoke mx.",
+    "Fourteen tests executed means twelve compiled Truffle tests plus AOT baseline and exact-type mismatch tests; it does not mean fourteen compiled Truffle tests.",
+    "Graph-disabled mode validates executable behavior and installed compilation, not direct-stub graph shape, allocation elimination, or performance. Those require the separate graph-enabled suite with SupportCompileInIsolates disabled.",
+    "Native execution was Linux AMD64 only. Production changes and broader FFM semantics were outside this narrow review.",
+    "nm reported the binary has no symbols; source trace and controlled runtime failure replaced debugger inspection. An early log read raced pending probe completion; all final logs and command exit statuses were subsequently inspected.",
+    "No source edits, mx builds, publication, security changes, or agents spawned."
+  ]
+}

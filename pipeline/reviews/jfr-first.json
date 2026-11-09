@@ -1,0 +1,109 @@
+{
+  "review_id": "jfr-first",
+  "review_number": 2,
+  "authorized_batch_total": 12,
+  "model": "gpt-6-astra",
+  "model_provenance": "Model identified by parent review assignment; no independent runtime model introspection tool is available.",
+  "candidate": "native-collector JFR allocation sampling",
+  "revision": "5602c77d3efd2c5a46a3fb83ba685645c5c6ee39",
+  "base_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "candidate_worktree": "/build/worktrees/graal/value-jfr-native-allocation",
+  "review_worktree": "/build/worktrees/graal/value-jfr-review-one",
+  "disposition": "hold_for_native_g1_validation",
+  "summary": "No confirmed production-code defect found in this pass. Control flow preserves allocation-success checks, uninterruptibility, upstream shouldEmit gating, the NeverInline writer, and foldable JFR-off checks. The new test is insufficient by itself to prove the native collector path or weighted accounting. Fresh exact-base/head native G1 execution remains required.",
+  "findings": [
+    {
+      "id": "JFR-TEST-1",
+      "severity": "P2",
+      "kind": "test_coverage",
+      "file": "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java",
+      "lines": [
+        50,
+        60
+      ],
+      "title": "The test can pass without exercising the changed native collector path",
+      "detail": "checkForJFR explicitly accepts HotSpot, accepts Serial Native Image when JFR exists, and skips Native Image when JFR is absent. No custom G1/JFR image arguments or G1 runtime assertion are attached to this test. Fresh runs of the unchanged source on HotSpot G1 and HotSpot Serial both report OK (1 test); neither can execute NativeGCAllocationSupport. Thus a generic green test result or native run with skipped JFR is not evidence for this patch.",
+      "recommendation": "Require a dedicated Native Image G1 image with monitoring=jfr and assert/report that the test executed under G1 with no assumption skip; demonstrate baseline failure and candidate success on identical native components. Generic Serial coverage can remain separately.",
+      "evidence": "jfr-first-hotspot-counterexample.json"
+    },
+    {
+      "id": "JFR-TEST-2",
+      "severity": "P2",
+      "kind": "test_coverage",
+      "file": "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java",
+      "lines": [
+        60,
+        84
+      ],
+      "title": "Positive weights with throttle off do not validate native accounting or gating",
+      "detail": "The only weight assertion is >0 and throttle is disabled for the entire recording. Arbitrarily wrong positive weights would pass. The added test does not cover disabled event, excluded thread, active throttle, restart/reset, failed instance/array allocation, or virtual-thread carrier accounting. These matter because the new caller extends the existing writer to the native collector counter implementation.",
+      "recommendation": "Add controlled native G1 accounting checks with known large allocations and aggregate weight tolerances, negative/configuration cases, and failed-allocation type exclusion; test JFR-omitted and enabled-but-idle images separately for semantic/performance regressions."
+    }
+  ],
+  "production_review": {
+    "successful_allocations": "All four added hooks follow checkForOOME; negative array-length validation precedes the allocator. Allocation denial precedes the allocator. No new sample hook runs on null/failed allocation.",
+    "heap_safety": "Callers and helper are Uninterruptible; reused writer is Uninterruptible and NeverInline. Newly allocated result stays live across the call. The call chain uses StackValue and native buffers, not a newly introduced Java allocation. G1 getThreadAllocatedMemory is a NO_TRANSITION C call. No newly introduced safepoint or Java allocation found by inspection; image analysis was not run.",
+    "configuration": "shouldEmit checks recording, event enabled, throttle, and thread exclusion. Using it in the caller matches upstream guard placement and avoids timestamps/counter sampling when disabled. Uninterruptible extent protects against safepoint start/stop/reset operations. Any upstream non-safepoint configuration races or excluded-thread throttle-budget consumption are inherited, not introduced by this diff.",
+    "weights": "Existing writer uses native per-thread total minus last sampled total and updates only when emitting. Native G1 implementation is delegated to svm_g1gc_get_thread_allocated_memory and not present in this public tree. Exact C implementation/ABI and monotonic inclusive accounting remain unverified.",
+    "stack_identity": "NeverInline event writer retained. New helper introduces the same logical wrapper depth as existing emit; five skipped frames lead to allocation slow path. No static evidence of lost allocating method; only exact native execution can prove serialized stacks after compilation.",
+    "jfr_off": "HasJfrSupport.get is @Fold and emitSample is @AlwaysInline, so a no-JFR image should eliminate the helper body. With JFR compiled in but recording disabled, one shouldEmit check remains. No native assembly or comparative throughput result was obtained.",
+    "documentation": "Changed event availability footnote is consistent with intended scope; its G1 claim requires native validation before publication."
+  },
+  "g1_baseline_feasibility": {
+    "public_java_components_present": [
+      "com.oracle.svm.core.g1.graal.G1AllocationSupport",
+      "com.oracle.svm.core.g1.G1Heap",
+      "com.oracle.svm.core.g1.G1Support"
+    ],
+    "missing_exact_components": [
+      "ProjectHeaderFile target substratevm-enterprise-gcs/include/g1GCStructs.h",
+      "Matching native g1gc archive: default Linux glibc compressed references libg1gc-cr.a, or libg1gc-ur.a; optional -debug/-fastdebug and -musl variants",
+      "G1 APIOption registration/distribution integration: public GCOptionValue discovers options and public SubstrateOptions only supplies serial/epsilon APIOption entries"
+    ],
+    "link_dependencies": "G1LibraryDependencies adds dl, m, pthread and G1Support stdc++ on Linux; native headers and archive must match this upstream ABI.",
+    "available_but_not_comparable": "Oracle distribution native G1 archives exist under /usr/lib/jvm/gvm.jdk25 and /home/sam/workspace/graalvm/dist. Their older/other revision provenance does not establish exact upstream native ABI. Did not mix these into candidate or baseline builds.",
+    "required_experiment": "Build exact base and exact candidate against the same matching enterprise-gcs revision and toolchain, --gc=G1 --enable-monitoring=jfr, run identical sample harness and compare allocation types/stack identity/accounting and disabled/failed-allocation behavior. Use matching no-monitoring and idle-monitoring images for performance checks.",
+    "status": "No exact G1 native baseline/head build or run performed."
+  },
+  "commands_and_results": [
+    {
+      "command": "git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD; git rev-parse HEAD; git status --short",
+      "result": "Reviewed four changed files; exact candidate head resolved; candidate clean."
+    },
+    {
+      "command": "git worktree add --detach /build/worktrees/graal/value-jfr-review-one 5602c77d3efd2c5a46a3fb83ba685645c5c6ee39",
+      "result": "Created independent exact-head review worktree; no candidate edits."
+    },
+    {
+      "command": "mx -p substratevm help native-unittest (default JAVA_HOME=/usr/lib/jvm/gvm.jdk25)",
+      "result": "Failed immediately: cannot build GraalVM using a GraalVM base JDK. Corrected toolchain for subsequent mx command."
+    },
+    {
+      "command": "JAVA_HOME=/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64 MX_ALT_OUTPUT_ROOT=/build/caches/mx/value-jfr-review-one mx -p substratevm help native-unittest",
+      "result": "PASS; suitable locally available Labs JDK recognized."
+    },
+    {
+      "command": "JAVA_HOME=/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64 MX_ALT_OUTPUT_ROOT=/build/caches/mx/value-jfr-review-one mx -p substratevm checkstyle --filelist /build/caches/graal-pipeline/value-four/reviews/jfr-first-checkstyle-files.txt",
+      "result": "PASS, return code 0, all three changed Java files covered. Full command/environment/stdout recorded in jfr-first-checkstyle.json."
+    },
+    {
+      "command": "javac --add-modules org.graalvm.nativeimage -cp <installed svm + svm-shared + cached JUnit/Hamcrest jars> -d <unique /tmp dir> <exact new test source>; java --add-modules org.graalvm.nativeimage -XX:+UseG1GC/-XX:+UseSerialGC -Xmx256m -cp ... org.junit.runner.JUnitCore com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent",
+      "result": "Both HotSpot runs PASS, OK (1 test), ~0.27 seconds each. This is a false-positive counterexample for test-path attribution, NOT validation of candidate runtime. Initial compile used nonexistent old cache jar paths and failed; retry with actual .mx/cache jars passed. Complete commands and both attempts preserved in jfr-first-hotspot-counterexample.json. Scratch removed."
+    },
+    {
+      "command": "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD; git status --short",
+      "result": "PASS; isolated review worktree remains clean."
+    }
+  ],
+  "limits": [
+    "No full mx build, native-image analysis, native G1 JFR run, performance comparison, or failed-allocation/configuration-race experiment completed.",
+    "Historical fork/distribution tests were not counted as fresh exact-revision evidence.",
+    "No remote CI, external paid action, subagent delegation, candidate edit, or publication performed."
+  ],
+  "artifacts": [
+    "jfr-first-checkstyle.json",
+    "jfr-first-checkstyle-files.txt",
+    "jfr-first-hotspot-counterexample.json"
+  ],
+  "created_at": "2026-11-09T17:42:13.468857+00:00"
+}

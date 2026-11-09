@@ -1,0 +1,37 @@
+SVMJUnitCore
+JUnit version 4.13.2
+jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest started (1 of 1)
+  testExactTypeMismatch: (cannot get whitebox interface to Truffle compiler) Passed 2 ms
+  testAbsBehindBoundary: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsCriticalBuildTimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testCapturedErrnoValue: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsCaptureErrnoBuildTimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAOTBaseline: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testLlabsBuildTimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsRuntimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testStrlenBuildTimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsNonConstantHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testClosedSegment: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsRuntimeHandleBoundToSymbol: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsGenericInvoke: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+  testAbsBuildTimeHandle: (cannot get whitebox interface to Truffle compiler) Passed 0 ms
+jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest finished 2.9 ms, [disk (free/total): 101.0GB/1.2TB]
+Time: 0.003
+
+OK (14 tests)
+
+Test run PASSED. Exiting with status 0.
+
+10 longest running test classes after running 1 of 1 classes:
+          2 ms    jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest
+10 longest running tests:
+          2 ms    testExactTypeMismatch(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsGenericInvoke(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsCriticalBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsNonConstantHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testLlabsBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testStrlenBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsRuntimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testAbsRuntimeHandleBoundToSymbol(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+          0 ms    testClosedSegment(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)

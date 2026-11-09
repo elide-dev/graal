@@ -1,0 +1,64 @@
+[
+  {
+    "command": [
+      "/usr/lib/jvm/gvm.jdk25/bin/javac",
+      "--add-modules",
+      "org.graalvm.nativeimage",
+      "-cp",
+      "/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm.jar:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm-shared.jar:/build/caches/mx/graal-next-baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/junit.jar:/build/caches/mx/graal-next-baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/hamcrest.jar",
+      "-d",
+      "/tmp/jfr-review-one-5bllsl1l",
+      "/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java"
+    ],
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:27: error: package org.junit does not exist\nimport static org.junit.Assert.assertNotNull;\n                       ^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:27: error: static import only from classes and interfaces\nimport static org.junit.Assert.assertNotNull;\n^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:28: error: package org.junit does not exist\nimport static org.junit.Assert.assertTrue;\n                       ^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:28: error: static import only from classes and interfaces\nimport static org.junit.Assert.assertTrue;\n^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:29: error: package org.junit does not exist\nimport static org.junit.Assume.assumeTrue;\n                       ^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:29: error: static import only from classes and interfaces\nimport static org.junit.Assume.assumeTrue;\n^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:36: error: package org.junit does not exist\nimport org.junit.BeforeClass;\n                ^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:37: error: package org.junit does not exist\nimport org.junit.Test;\n                ^\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:50: error: cannot find symbol\n    @BeforeClass\n     ^\n  symbol:   class BeforeClass\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:55: error: cannot find symbol\n    @Test\n     ^\n  symbol:   class Test\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:52: error: cannot find symbol\n        assumeTrue(\"skipping JFR tests\", !ImageInfo.inImageCode() || HasJfrSupport.get());\n        ^\n  symbol:   method assumeTrue(String,boolean)\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:84: error: cannot find symbol\n                assertTrue(\"sample weight must be positive\", event.getLong(\"weight\") > 0);\n                ^\n  symbol:   method assertTrue(String,boolean)\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:85: error: cannot find symbol\n                assertNotNull(\"allocation stack must be recorded\", event.getStackTrace());\n                ^\n  symbol:   method assertNotNull(String,RecordedStackTrace)\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:87: error: cannot find symbol\n                assertTrue(\"allocation stack must identify the allocating method\", event.getStackTrace().getFrames().stream().anyMatch(frame -> frame.getMethod().getName().equals(allocator)));\n                ^\n  symbol:   method assertTrue(String,boolean)\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:92: error: cannot find symbol\n        assertTrue(\"missing instance allocation samples\", foundPayload);\n        ^\n  symbol:   method assertTrue(String,boolean)\n  location: class TestNativeGCAllocationSampleEvent\n/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java:93: error: cannot find symbol\n        assertTrue(\"missing array allocation samples\", foundArray);\n        ^\n  symbol:   method assertTrue(String,boolean)\n  location: class TestNativeGCAllocationSampleEvent\n16 errors\n"
+  },
+  {
+    "command": [
+      "/usr/lib/jvm/gvm.jdk25/bin/javac",
+      "--add-modules",
+      "org.graalvm.nativeimage",
+      "-cp",
+      "/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm.jar:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm-shared.jar:/home/sam/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar:/home/sam/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar",
+      "-d",
+      "/tmp/jfr-review-one-a2hvmfr2",
+      "/build/worktrees/graal/value-jfr-review-one/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java"
+    ],
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/usr/lib/jvm/gvm.jdk25/bin/java",
+      "--add-modules",
+      "org.graalvm.nativeimage",
+      "-XX:+UseG1GC",
+      "-Xmx256m",
+      "-cp",
+      "/tmp/jfr-review-one-a2hvmfr2:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm.jar:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm-shared.jar:/home/sam/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar:/home/sam/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar",
+      "org.junit.runner.JUnitCore",
+      "com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent"
+    ],
+    "returncode": 0,
+    "stdout": "JUnit version 4.13.2\n.\nTime: 0.273\n\nOK (1 test)\n\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/usr/lib/jvm/gvm.jdk25/bin/java",
+      "--add-modules",
+      "org.graalvm.nativeimage",
+      "-XX:+UseSerialGC",
+      "-Xmx256m",
+      "-cp",
+      "/tmp/jfr-review-one-a2hvmfr2:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm.jar:/usr/lib/jvm/gvm.jdk25/lib/svm/builder/svm-shared.jar:/home/sam/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar:/home/sam/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar",
+      "org.junit.runner.JUnitCore",
+      "com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent"
+    ],
+    "returncode": 0,
+    "stdout": "JUnit version 4.13.2\n.\nTime: 0.27\n\nOK (1 test)\n\n",
+    "stderr": ""
+  }
+]

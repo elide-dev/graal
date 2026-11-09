@@ -1,0 +1,124 @@
+{
+  "review": "nfi-second",
+  "review_invocation": 5,
+  "agent": "/root/value_nfi_review_two",
+  "model": "gpt-6-astra",
+  "model_identity_source": "Invocation 5 recorded by parent in /build/caches/graal-pipeline/value-four/budget.json; model runtime metadata is not separately exposed to this agent.",
+  "completed_at_utc": "2026-11-09T18:02:24.496052+00:00",
+  "reviewed_revision": "72b8188daf419639200cd387acddb9a1decd87ae",
+  "baseline_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree": "/build/worktrees/graal/value-nfi-overhead",
+  "disposition": "approve_code_review_pending_validation",
+  "summary": "No new blocking defect found at this exact head. Both first-review findings are substantively fixed and independently verified with bounded executable probes. This is a code-review disposition, not a declaration that outstanding native-image, style, platform or performance gates passed.",
+  "findings": [],
+  "resolved_prior_findings": [
+    {
+      "id": "NFI-R1-1",
+      "status": "verified_fixed",
+      "evidence": "The exact head expression utf8.length < MAX_STACK_STRING_BYTES - stackStringsUsed was extracted into a Java probe and matched long arithmetic for 1,526,850 cases. All used values 0..256 were tested with lengths 0..1024 and MAX_VALUE-1024..MAX_VALUE, plus one million seeded random pairs. Prior (used=16,length=2147483639) case is rejected. Accepted transitions keep used in 0..256; this invariant makes the subtraction and subsequent increment safe. No giant arrays were allocated."
+    },
+    {
+      "id": "NFI-R1-2",
+      "status": "verified_fixed",
+      "evidence": "NFITest.lookupAndBindDefault maps strcmp to reexport_strcmp on Windows. Exact candidate string.c compiled as a Windows PE x86-64 object using MinGW with -Wall -Wextra -Werror, and the real .drectve section contains the reexport_strcmp export. Signature and strcmp forwarding match the test. Windows execution was not performed."
+    }
+  ],
+  "verified": [
+    "Read canonical root, substratevm and truffle AGENTS.md plus suite READMEs; inspected the complete seven-file base-to-head diff before reading prior-review rationale. No nested instructions exist in the changed modules.",
+    "Exact baseline/head javaStringToUtf8 methods and the baseline ZeroTerminatedCharSequence class were extracted via git show. 77,763 bounded cases matched logical terminated output, including every UTF-16 code unit, 2,197 adversarial triples, 10,000 seeded random strings and ASCII/multibyte/surrogate-pair boundaries. Replacement bytes are therefore preserved on this host JDK; baseline excess buffer capacity was deliberately not treated as semantic output.",
+    "The fixed string boundary tests now include 254/255/256/257 ASCII bytes and multibyte boundaries. Two equal 127-byte arguments exactly fill the 256-byte arena including terminators; 128/255/256-byte pairs cover mixed/fallback behavior.",
+    "UnsafeStackValue allocations lower with SubstrateTarget.stackAlignment through StackValueNode, so byte-sized allocation does not imply byte-only address alignment. Primitive type offsets retain existing alignUp logic. Raw heap pointer creation and copyForward execute inside the uninterruptible method, with layout computation done before converting the object address.",
+    "Inspected current ObjectLayout signature: getArrayBaseOffset takes element size, so Byte.BYTES correctly adapts the API. The imported UnmanagedMemoryUtil and UnsafeStackValue exist at the current guest.staging locations.",
+    "NFI docs guarantee string argument pointers only during the native call. Stack argument storage lives across ffiCall including callbacks, and native string return allocations still use the separate javaStringToUtf8/strdup path. Array patches still call refArray and preserve read/write semantics instead of copying guest array contents into the primitive stack buffer.",
+    "Patch processing and ffiCall remain inside cleanup, so exceptions there close primitive fallback views and free heap argument-pointer tables. Outer LocalNativeScope still closes pinned argument arrays/strings and local handles. Fallible view construction before cleanup and malloc multiplication concerns already exist at the baseline and are not new changes.",
+    "The exact new C sum fixtures compiled with -Wall -Wextra -Werror and returned 65535 and 131071 for the distinct-bit 16/17-argument cases through host ctypes/libffi.",
+    "git diff --check baseline..exact-head passed; candidate HEAD and clean worktree rechecked when writing this report."
+  ],
+  "test_gaps": [
+    "The new 16/17-argument tests use 128/136 primitive bytes and do not directly cover the 256-byte primitive-copy boundary or >256-byte primitive-view fallback. A 32/33-sint64 fixture or equivalent would close this gap.",
+    "No new test forces GC inside a callback while multiple stack strings and primitive pointers are live. Source lifetime review found no defect, but focused stress would improve coverage.",
+    "The malformed-surrogate JUnit test checks only length and surrounding characters to allow backend differences; it does not itself enforce the SVM question-mark replacement. The independent extracted-method probe does test that behavior.",
+    "NFICallOverheadTest warms call targets but does not assert compilation. Its informational minimum timing is not proof of compiled execution or performance improvement, and fallback strings are not benchmarked."
+  ],
+  "observations": [
+    "Large-string fallback encodes once for stack selection and then re-encodes/copies in scope.refString. This is an allocation/performance tradeoff requiring measurement for long strings and exhausted arenas; no fresh performance claim is made.",
+    "No public API or documented lifetime contract changes were found; the patch is scoped to native-image NFI marshaling plus relevant test fixtures."
+  ],
+  "commands": [
+    {
+      "argv": [
+        "java",
+        "-Xmx128m",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/SecondProbe.java"
+      ],
+      "exit_code": 0,
+      "log": "arithmetic-encoding.log"
+    },
+    {
+      "argv": [
+        "x86_64-w64-mingw32-gcc",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-c",
+        "truffle/src/com.oracle.truffle.nfi.test.native/src/string.c",
+        "-o",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/string-win64.o"
+      ],
+      "exit_code": 0,
+      "log": "windows-compile.log"
+    },
+    {
+      "argv": [
+        "x86_64-w64-mingw32-objdump",
+        "-s",
+        "-j",
+        ".drectve",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/string-win64.o"
+      ],
+      "exit_code": 0,
+      "log": "windows-export-directives.log"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check",
+        "66f3cd8b560c12131eb948b56edb45da7960dc25",
+        "72b8188daf419639200cd387acddb9a1decd87ae"
+      ],
+      "exit_code": 0,
+      "log": "diff-check.log"
+    },
+    {
+      "argv": [
+        "cc",
+        "-shared",
+        "-fPIC",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-I",
+        "truffle/src/com.oracle.truffle.nfi.native/include",
+        "truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c",
+        "-o",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/numeric.so"
+      ],
+      "exit_code": 0,
+      "log": "numeric-compile.log"
+    }
+  ],
+  "probe_entrypoints": [
+    "python3 /build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/run_probes.py",
+    "python3 /build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/check_fixtures.py"
+  ],
+  "unsuccessful_attempts_log": "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts/unsuccessful-source-lookups.txt",
+  "limits": [
+    "No candidate source edits, mx commands, native-image builds, CI runs, publications, subagents or paid tools performed by this review.",
+    "Java probes used Oracle GraalVM Java 25.0.4.1+1-LTS-jvmci-25.3-b22 with -Xmx128m. Extracted Java logic and host C fixture tests are not exact-head SVM execution.",
+    "MinGW checks Windows exports and compilation only; no Windows JUnit/native-image execution, AArch64/FP128 execution or cross-platform alignment stress was performed.",
+    "Parent native-image suite was still building at last inspection (see timestamped report and captured log tail); no suite outcome is claimed. Parent must evaluate completed native results, checkstyle and performance evidence separately.",
+    "All review artifacts are confined to the requested reviews directory; no huge allocations or memory-corruption probes were executed."
+  ],
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/nfi-second-artifacts"
+}

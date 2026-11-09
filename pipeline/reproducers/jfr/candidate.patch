@@ -1,0 +1,237 @@
+diff --git a/docs/reference-manual/native-image/JFR.md b/docs/reference-manual/native-image/JFR.md
+index 4052ab2dfc3..3b94ea00377 100644
+--- a/docs/reference-manual/native-image/JFR.md
++++ b/docs/reference-manual/native-image/JFR.md
+@@ -175,7 +175,7 @@ Some of the events are available with [Serial GC](MemoryManagement.md) only, the
+ | `jdk.NativeMemoryUsageTotal` <a href="#footnote-3">3)</a>     |
+ | `jdk.NativeMemoryUsagePeak` <a href="#footnote-3">3)</a>      |
+ | `jdk.NativeMemoryUsageTotalPeak` <a href="#footnote-3">3)</a> |
+-| `jdk.ObjectAllocationSample` <a href="#footnote-1">1)</a>     |
++| `jdk.ObjectAllocationSample` <a href="#footnote-4">4)</a>     |
+ | `jdk.ObjectAllocationInNewTLAB` <a href="#footnote-1">1)</a>  |
+ | `jdk.OldObjectSample` <a href="#footnote-1">2)</a>            |
+ | `jdk.OSInformation`                                           |
+@@ -198,6 +198,7 @@ Some of the events are available with [Serial GC](MemoryManagement.md) only, the
+ <p id="footnote-1" style="margin-bottom: 0;"><i>1) Available if Serial GC is used.</i></p>
+ <p id="footnote-2" style="margin-bottom: 0;"><i>2) Partially available if Serial GC is used.</i></p>
+ <p id="footnote-3" style="margin-bottom: 0;"><i>3) Available if Native Memory Tracking is used.</i></p>
++<p id="footnote-4" style="margin-bottom: 0;"><i>4) Available if Serial GC or G1 GC is used.</i></p>
+ 
+ ### Further Reading
+ 
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/gc/shared/graal/NativeGCAllocationSupport.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/gc/shared/graal/NativeGCAllocationSupport.java
+index 8ce6d7be954..62154791870 100644
+--- a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/gc/shared/graal/NativeGCAllocationSupport.java
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/gc/shared/graal/NativeGCAllocationSupport.java
+@@ -40,6 +40,7 @@ import com.oracle.svm.core.heap.NoAllocationVerifier;
+ import com.oracle.svm.core.heap.OutOfMemoryUtil;
+ import com.oracle.svm.core.heap.Pod;
+ import com.oracle.svm.core.hub.DynamicHub;
++import com.oracle.svm.core.jfr.events.JfrAllocationEvents;
+ import com.oracle.svm.core.snippets.SnippetRuntime;
+ import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
+ import com.oracle.svm.guest.staging.snippets.SubstrateForeignCallTarget;
+@@ -120,7 +121,9 @@ public abstract class NativeGCAllocationSupport implements GCAllocationSupport {
+             guaranteeAllocationAllowed("allocateInstance", hub);
+ 
+             Object result = NativeGCAllocationSupport.singleton().allocateInstance0(hub);
+-            return checkForOOME(result);
++            checkForOOME(result);
++            JfrAllocationEvents.emitSample(hub);
++            return result;
+         } finally {
+             StackOverflowCheck.singleton().protectYellowZone();
+         }
+@@ -136,7 +139,9 @@ public abstract class NativeGCAllocationSupport implements GCAllocationSupport {
+             checkArrayLength(length);
+ 
+             Object result = NativeGCAllocationSupport.singleton().allocateArray0(length, hub);
+-            return checkForOOME(result);
++            checkForOOME(result);
++            JfrAllocationEvents.emitSample(hub);
++            return result;
+         } finally {
+             StackOverflowCheck.singleton().protectYellowZone();
+         }
+@@ -152,7 +157,9 @@ public abstract class NativeGCAllocationSupport implements GCAllocationSupport {
+             checkArrayLength(length);
+ 
+             Object result = NativeGCAllocationSupport.singleton().allocateStoredContinuation0(length, hub);
+-            return checkForOOME(result);
++            checkForOOME(result);
++            JfrAllocationEvents.emitSample(hub);
++            return result;
+         } finally {
+             StackOverflowCheck.singleton().protectYellowZone();
+         }
+@@ -171,7 +178,9 @@ public abstract class NativeGCAllocationSupport implements GCAllocationSupport {
+             podReferenceMapTL.set(referenceMap);
+             Object result = NativeGCAllocationSupport.singleton().allocatePod0(length, hub);
+             podReferenceMapTL.set(null);
+-            return checkForOOME(result);
++            checkForOOME(result);
++            JfrAllocationEvents.emitSample(hub);
++            return result;
+         } finally {
+             StackOverflowCheck.singleton().protectYellowZone();
+         }
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jfr/events/JfrAllocationEvents.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jfr/events/JfrAllocationEvents.java
+index 9f5b56539d1..f28a0399d3c 100644
+--- a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jfr/events/JfrAllocationEvents.java
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jfr/events/JfrAllocationEvents.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
++ * Copyright (c) 2023, 2026, Oracle and/or its affiliates. All rights reserved.
+  * Copyright (c) 2023, 2023, Red Hat Inc. All rights reserved.
+  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+  *
+@@ -36,6 +36,7 @@ import com.oracle.svm.core.jfr.JfrEvent;
+ import com.oracle.svm.core.jfr.JfrNativeEventWriter;
+ import com.oracle.svm.core.jfr.JfrNativeEventWriterData;
+ import com.oracle.svm.core.jfr.JfrNativeEventWriterDataAccess;
++import com.oracle.svm.core.jfr.JfrTicks;
+ import com.oracle.svm.core.jfr.SubstrateJVM;
+ import com.oracle.svm.core.thread.PlatformThreads;
+ import com.oracle.svm.core.thread.VMThreads;
+@@ -73,6 +74,16 @@ public class JfrAllocationEvents {
+         }
+     }
+ 
++    /** Emits a weighted sample after a native collector's allocation slow path. */
++    @AlwaysInline("Keep allocation event checks inline in allocation slow paths.")
++    @Uninterruptible(reason = "Emits a JFR event from the uninterruptible allocation slowpath.", callerMustBe = true)
++    public static void emitSample(DynamicHub hub) {
++        if (HasJfrSupport.get() && JfrEvent.ObjectAllocationSample.shouldEmit()) {
++            /* Native collectors do not expose the TLAB size or the allocation kind here. */
++            emitObjectAllocationSample(JfrTicks.elapsedTicks(), hub);
++        }
++    }
++
+     @NeverInline("Keep event writing out of allocation slow paths.")
+     @Uninterruptible(reason = "Accesses a JFR buffer.")
+     private static void emitObjectAllocationInNewTLAB(long startTicks, DynamicHub hub, UnsignedWord allocationSize, UnsignedWord tlabSize) {
+diff --git a/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java b/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java
+new file mode 100644
+index 00000000000..fbbf747a168
+--- /dev/null
++++ b/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java
+@@ -0,0 +1,118 @@
++/*
++ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package com.oracle.svm.test.jfr;
++
++import static org.junit.Assert.assertNotNull;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assume.assumeTrue;
++
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.List;
++
++import org.graalvm.nativeimage.ImageInfo;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++import com.oracle.svm.core.jfr.HasJfrSupport;
++import com.oracle.svm.core.SubstrateOptions;
++import com.oracle.svm.shared.NeverInline;
++
++import jdk.jfr.Recording;
++import jdk.jfr.consumer.RecordedEvent;
++import jdk.jfr.consumer.RecordingFile;
++
++/** Allocation sample coverage that does not depend on serial-collector TLAB internals. */
++public class TestNativeGCAllocationSampleEvent {
++    private static volatile Object allocated;
++
++    @BeforeClass
++    public static void checkForJFR() {
++        assumeTrue("requires a native G1 image with JFR", ImageInfo.inImageRuntimeCode() && HasJfrSupport.get() && SubstrateOptions.useG1GC());
++    }
++
++    @Test
++    public void instanceAndArraySamplesHaveTypesWeightsAndStacks() throws Exception {
++        Path path = Files.createTempFile("allocation-samples", ".jfr");
++        try {
++            try (Recording recording = new Recording()) {
++                recording.enable("jdk.ObjectAllocationSample").with("throttle", "off").withStackTrace();
++                recording.start();
++                allocatePayloads();
++                allocateArrays();
++                recording.stop();
++                recording.dump(path);
++            }
++            validateEvents(RecordingFile.readAllEvents(path));
++        } finally {
++            allocated = null;
++            Files.deleteIfExists(path);
++        }
++    }
++
++    private static void validateEvents(List<RecordedEvent> events) {
++        boolean foundPayload = false;
++        boolean foundArray = false;
++        for (RecordedEvent event : events) {
++            if (!event.getEventType().getName().equals("jdk.ObjectAllocationSample") ||
++                            event.getThread().getJavaThreadId() != Thread.currentThread().threadId()) {
++                continue;
++            }
++            String type = event.getClass("objectClass").getName();
++            if (type.equals(Payload.class.getName()) || type.equals(byte[].class.getName())) {
++                assertTrue("sample weight must be positive", event.getLong("weight") > 0);
++                assertNotNull("allocation stack must be recorded", event.getStackTrace());
++                String allocator = type.equals(Payload.class.getName()) ? "allocatePayloads" : "allocateArrays";
++                assertTrue("allocation stack must identify the allocating method", event.getStackTrace().getFrames().stream().anyMatch(frame -> frame.getMethod().getName().equals(allocator)));
++                foundPayload |= type.equals(Payload.class.getName());
++                foundArray |= type.equals(byte[].class.getName());
++            }
++        }
++        assertTrue("missing instance allocation samples", foundPayload);
++        assertTrue("missing array allocation samples", foundArray);
++    }
++
++    @NeverInline("Keep the allocating method in the recorded stack.")
++    private static void allocatePayloads() {
++        for (int i = 0; i < 1_000_000; i++) {
++            allocated = new Payload(i);
++        }
++    }
++
++    @NeverInline("Keep the allocating method in the recorded stack.")
++    private static void allocateArrays() {
++        for (int i = 0; i < 64; i++) {
++            allocated = new byte[1024 * 1024];
++        }
++    }
++
++    private static final class Payload {
++        final int value;
++
++        Payload(int value) {
++            this.value = value;
++        }
++    }
++}

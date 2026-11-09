@@ -1,0 +1,155 @@
+Building junit image for matching: jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+WARNING: package com.oracle.truffle.object.basic not in org.graalvm.truffle
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.oracle.truffle.api.object.DynamicObject (file:/build/caches/mx/graal-value-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/truffle-api.jar)
+WARNING: Please consider reporting this to the maintainers of class com.oracle.truffle.api.object.DynamicObject
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[1/8] Initializing...                                                                                  (20.5s @ 0.57GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: enabled, system assertions: enabled
+ - 12 user-specific feature(s):
+   - com.oracle.svm.truffle.TruffleBaseFeature: Provides internal support for Truffle
+   - com.oracle.svm.truffle.TruffleFeature: Provides internal support for Truffle runtime compilation
+   - com.oracle.svm.truffle.nfi.TruffleNFIFeature
+   - com.oracle.svm.truffle.nfi.posix.PosixTruffleNFIFeature
+   - com.oracle.truffle.api.impl.TruffleAPIFeature: Provides basic support for Truffle
+   - com.oracle.truffle.api.object.DynamicObjectFeature: Provides support for DynamicObject
+   - com.oracle.truffle.api.test.polyglot.RegisterTestClassesForReflectionFeature
+   - com.oracle.truffle.api.test.polyglot.isolate.PolyglotIsolateTestFeature
+   - com.oracle.truffle.polyglot.isolate.PolyglotIsolateHostFeature: Provides polyglot host isolate embedding support
+   - com.oracle.truffle.tck.tests.TruffleTCKFeature
+   - jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature
+   - org.graalvm.home.HomeFinderFeature: Finds GraalVM paths and its version number
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 4 experimental option(s) unlocked:
+ - '-H:-SupportCompileInIsolates' (origin(s): command line)
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///build/caches/mx/graal-value-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 30.00GiB of memory (32.6% of system memory, capped at 30GiB)
+ - 8 thread(s) (25.0% of 32 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [**********]                                                             (80.6s @ 2.45GiB)
+   18,474 types,  22,637 fields, and  86,758 methods found reachable
+    1,201 types,     697 fields, and   4,734 methods registered for reflection
+       83 types,      60 fields, and     191 methods registered for JNI access
+        5 downcalls and 0 upcalls registered for foreign access
+      792 resource accesses registered with 3.13MiB total size
+        5 native libraries: dl, m, pthread, rt, z
+    5,038 runtime compiled methods (5.8% of all reachable methods)
+[3/8] Building universe...                                                                             (24.7s @ 2.78GiB)
+[4/8] Parsing methods...      [***]                                                                     (6.6s @ 3.08GiB)
+[5/8] Inlining methods...     [****]                                                                    (4.9s @ 3.61GiB)
+[6/8] Compiling methods...    [******]                                                                 (42.2s @ 2.74GiB)
+[7/8] Laying out methods...   [****]                                                                   (16.4s @ 2.99GiB)
+[8/8] Creating image...       [***]                                                                     (9.0s @ 3.52GiB)
+  31.23MiB (39.19%) for code area:    64,770 compilation units
+  42.13MiB (52.86%) for image heap:  497,610 objects and 733 resources
+   6.33MiB ( 7.94%) for other data
+  79.69MiB in total image size, 74.06MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.83MiB o.g.truffle/com.oracle.truffle.polyglot             9.96MiB byte[] for code metadata
+   1.28MiB org.graalvm.sl/com.oracle.truffle.sl.bytecode       6.58MiB byte[] for string data
+   1.15MiB o.g.truffle/com.oracle.truffle.host                 3.14MiB byte[] for embedded resources
+   1.06MiB o.g.truffle/com.oracle.truffle.api.interop          3.13MiB java.base/java.lang.Class
+   1.01MiB java.base/java.util                                 2.82MiB java.base/java.lang.String
+ 896.02KiB com.oracle.truffle.api.test.polyglot                2.82MiB byte[] for graph encodings
+ 746.01KiB j.g.compiler/jdk.graal.compiler.lir.amd64           2.11MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+ 696.07KiB o.g.truffle/com.oracle.truffle.polyglot.isolate     1.61MiB byte[] for general heap data
+ 593.36KiB java.base/java.lang                                 1.17MiB byte[] for reflection metadata
+ 583.54KiB com.oracle.truffle.api.instrumentation.test       735.82KiB o.g.t.r.svm/c.o.s.t.api.SubstrateTruffleMethod
+  21.47MiB for 482 more packages                               8.06MiB for 5156 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       18.9s (8.8% of total time) in 734 GCs | Peak RSS: 5.56GiB | CPU load: 5.31
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /build/caches/mx/graal-value-ffm/substratevm/svmbuild/linux-amd64/junit/resources (language_internal_resources, 48B)
+ /build/caches/mx/graal-value-ffm/substratevm/svmbuild/linux-amd64/junit/svmjunit (executable, 74.06MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 3m 35s.
+
+The build process encountered 3 warnings.
+
+Running: /build/caches/mx/graal-value-ffm/substratevm/svmbuild/linux-amd64/junit/svmjunit --very-verbose --enable-timing
+SVMJUnitCore
+JUnit version 4.13.2
+jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest started (1 of 1)
+  testExactTypeMismatch: Passed 4 ms
+  testAbsBehindBoundary: ffm-downcall-bench: Truffle PE, abs, run-time handle behind TruffleBoundary    819.62 ns/call
+Passed 1851 ms
+  testAbsCriticalBuildTimeHandle: ffm-downcall-graph: abs critical (build-time handle): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JI_I_t_1Lm8pJLBQl9kLq1iXhb5E3(long, int, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, abs critical(false), build-time handle          14.76 ns/call
+Passed 37 ms
+  testCapturedErrnoValue: ffm-downcall-graph: strtoll errno: 182 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JJJJI_J_c_dQbBlS5HERFtjbW8Bz1IHE(long, long, long, long, int, NativeEntryPoint), jdk.internal.foreign.NativeMemorySegmentImpl.dup(long, long, boolean, MemorySessionImpl), jdk.internal.foreign.MemorySessionImpl.acquire0(), jdk.internal.foreign.MemorySessionImpl.acquire0(), jdk.internal.foreign.MemorySessionImpl.release0(), jdk.internal.foreign.MemorySessionImpl.release0(), jdk.internal.foreign.MemorySessionImpl.release0(), jdk.internal.foreign.MemorySessionImpl.release0()]
+Passed 17 ms
+  testAbsCaptureErrnoBuildTimeHandle: ffm-downcall-graph: abs errno (build-time handle): 113 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JJI_I_c_T0g4yK02bm3XTgukjpdsfJ(long, long, int, NativeEntryPoint), jdk.internal.foreign.NativeMemorySegmentImpl.dup(long, long, boolean, MemorySessionImpl), jdk.internal.foreign.MemorySessionImpl.acquire0(), jdk.internal.foreign.MemorySessionImpl.release0(), jdk.internal.foreign.MemorySessionImpl.release0()]
+ffm-downcall-bench: Truffle PE, abs captureCallState(errno), build-time handle    16.07 ns/call
+Passed 45 ms
+  testAOTBaseline: ffm-downcall-bench: AOT Java, abs, build-time constant handle                    6.41 ns/call
+ffm-downcall-bench: AOT Java, abs, build-time handle, not constant             770.18 ns/call
+ffm-downcall-bench: AOT Java, abs, run-time handle, not constant               767.23 ns/call
+Passed 3416 ms
+  testLlabsBuildTimeHandle: ffm-downcall-graph: llabs (build-time handle): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JJ_J_1Lm8pJLBQl9kLq1iXhb5E3(long, long, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, llabs, build-time handle                        13.48 ns/call
+Passed 36 ms
+  testAbsRuntimeHandle: ffm-downcall-graph: abs (run-time handle): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JI_I_1Lm8pJLBQl9kLq1iXhb5E3(long, int, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, abs, run-time handle                            12.18 ns/call
+Passed 31 ms
+  testStrlenBuildTimeHandle: ffm-downcall-graph: strlen (build-time handle): 75 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JJ_J_1Lm8pJLBQl9kLq1iXhb5E3(long, long, NativeEntryPoint), jdk.internal.foreign.MemorySessionImpl.acquire0(), jdk.internal.foreign.MemorySessionImpl.release0(), jdk.internal.foreign.MemorySessionImpl.release0()]
+ffm-downcall-bench: Truffle PE, strlen, build-time handle                       14.69 ns/call
+Passed 41 ms
+  testAbsNonConstantHandle: ffm-downcall-graph: abs (handle not constant): 56 nodes, 0 allocations, invokes=[java.lang.invoke.MethodHandle.invokeBasic(Object, int), java.lang.invoke.Invokers.newWrongMethodTypeException(MethodType, MethodType)]
+ffm-downcall-bench: Truffle PE, abs, handle not constant                       773.46 ns/call
+Passed 1723 ms
+  testClosedSegment: Passed 8 ms
+  testAbsRuntimeHandleBoundToSymbol: ffm-downcall-graph: abs (run-time handle bound to the symbol): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JI_I_1Lm8pJLBQl9kLq1iXhb5E3(long, int, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, abs, run-time handle bound to the symbol        12.67 ns/call
+Passed 33 ms
+  testAbsGenericInvoke: ffm-downcall-graph: abs (MethodHandle.invoke): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JI_I_1Lm8pJLBQl9kLq1iXhb5E3(long, int, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, abs, run-time handle, MethodHandle.invoke       13.49 ns/call
+Passed 34 ms
+  testAbsBuildTimeHandle: ffm-downcall-graph: abs (build-time handle): 41 nodes, 0 allocations, invokes=[com.oracle.svm.core.foreign.DowncallStubsHolder.downcall_JI_I_1Lm8pJLBQl9kLq1iXhb5E3(long, int, NativeEntryPoint)]
+ffm-downcall-bench: Truffle PE, abs, build-time handle                          15.07 ns/call
+Passed 38 ms
+jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest finished 7322.1 ms, [disk (free/total): 2.1GB/97.9GB]
+Time: 7.323
+
+OK (14 tests)
+
+Test run PASSED. Exiting with status 0.
+
+10 longest running test classes after running 1 of 1 classes:
+      7,322 ms    jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest
+10 longest running tests:
+      3,416 ms    testAOTBaseline(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+      1,851 ms    testAbsBehindBoundary(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+      1,723 ms    testAbsNonConstantHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         45 ms    testAbsCaptureErrnoBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         41 ms    testStrlenBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         38 ms    testAbsBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         37 ms    testAbsCriticalBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         36 ms    testLlabsBuildTimeHandle(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         34 ms    testAbsGenericInvoke(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)
+         33 ms    testAbsRuntimeHandleBoundToSymbol(jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest)

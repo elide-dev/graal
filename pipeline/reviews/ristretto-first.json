@@ -1,0 +1,99 @@
+{
+  "review": "review3/12 ristretto-first",
+  "model": "gpt-6-astra",
+  "exact_revision": "4dc26d0d233ec516842c55e916512160ef40b303",
+  "base_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree_reviewed_read_only": "/build/worktrees/graal/value-ristretto-exception-fallback",
+  "disposition": "request_changes",
+  "findings": [
+    {
+      "id": "R1",
+      "priority": "P1",
+      "confidence": "high (source-level proof; no runtime reproduction)",
+      "title": "Reject the not-compiled sentinel before bypassing a required plugin",
+      "file": "substratevm/src/com.oracle.svm.interpreter.ristretto/src/com/oracle/svm/interpreter/ristretto/compile/RistrettoParser.java",
+      "lines": [
+        112,
+        116
+      ],
+      "description": "hasCompiledEntry does not establish a callable AOT entry. wasAOTCompiled ultimately checks only that the nativeEntryPoint holder exists. Crema creates holders for nonabstract methods even when analysis has not compiled them. Image writing rewrites such holders to InvalidMethodPointerHandler.methodPointerNotCompiledHandler. For a required-plugin invocation in a protected range whose metadata carries that sentinel, the candidate now returns false instead of permanently bailing out. Normal direct-call lowering consumes that address without rejecting the sentinel and can emit a fatal invalid-method call. This violates the stated unavailable-target bailout requirement.",
+      "evidence": [
+        "RistrettoUtils.java:200-214: wasAOTCompiled unwraps interpreter metadata and returns hasNativeEntryPoint().",
+        "InterpreterResolvedJavaMethod.java:913-921: hasNativeEntryPoint means holder != null, distinct from the actual resolved pointer.",
+        "CremaSupportImpl.java:267-275: addSupportedElements assigns MethodRef holders for nonabstract methods and an AME stub for abstract methods.",
+        "NativeImage.java:766-774: isInjectedNotCompiled and getMethodRefTargetMethod replace uncompiled targets with METHOD_POINTER_NOT_COMPILED_HANDLER_METHOD.",
+        "InterpreterKnownCompiledEntryPoints.java:121-129: explicitly identifies the sentinel as not callable.",
+        "InterpreterToVM.java:1102-1104: existing runtime check requires holder presence, nonnull resolved pointer, and inequality to the not-compiled sentinel.",
+        "RistrettoMethod.java:247-248,1152-1156 and NonSnippetLowerings.java:470-500: image-offset classification uses the same weak predicate, and ordinary lowering embeds the returned nonzero pointer."
+      ],
+      "requested_change": "Explicitly unwrap known interpreter metadata and require the resolved pointer to be nonnull and unequal to InterpreterKnownCompiledEntryPoints.getMethodNotCompiledHandler(), following InterpreterToVM. Preserve the permanent bailout otherwise. Add a sentinel-negative regression, not just a successful Object.clone regression."
+    }
+  ],
+  "nonblocking_observations": [
+    "The broad catch of GraalError converts all compiler invariant failures to an apparent unsupported metadata case. Explicit instanceof unwrapping is clearer and preserves unexpected invariant failures. No separately demonstrated miscompile results from this catch today.",
+    "The existing GraalDirectives and RistrettoDirectives exclusions precede the new fallback and remain effective. Required-plugin registration alone does not establish fallback semantic equivalence; MethodHandles.lookup is caller-sensitive and deserves a protected-range regression, but a concrete semantic failure for its valid AOT body was not demonstrated.",
+    "Normal invoke construction retains the exception successor in the present runtime profile configuration: RistrettoProfilingInfo.getExceptionSeen returns UNKNOWN; BytecodeParser includes-and-handles the edge. No new local-edge defect was found.",
+    "The method documentation still claims every non-disableable ordinary plugin permanently bails out; it should describe the new callable-entry exception."
+  ],
+  "suggested_regression": {
+    "runtime_case": "Runtime-load a small generated subclass whose method invokespecial Object.clone inside try/catch CloneNotSupportedException. Test a non-Cloneable receiver for the caught sentinel and a Cloneable variant for a distinct correctly copied object. Include RistrettoDirectives.inRuntimeCompiledCode inside the protected range and require true.",
+    "current_apis": [
+      "CremaMethodAccess.toJVMCI(reflectedMethod)",
+      "RistrettoMethod.getOrCreate(interpreterMethod)",
+      "RistrettoUtils.parseOnly(rMethod)",
+      "RistrettoUtils.compileAndInstallInCrema(rMethod)"
+    ],
+    "assertions": [
+      "The clone target has a resolved callable AOT entry.",
+      "The parsed graph contains the clone InvokeWithExceptionNode and local handler successor.",
+      "Installation succeeds and compiled execution produces the expected clone/catch result.",
+      "A present holder resolving to getMethodNotCompiledHandler is rejected with PermanentBailoutException.",
+      "A directive in the same protected range remains intrinsified."
+    ],
+    "ownership": "Suggestions sent to parent; parent is implementing tests separately."
+  },
+  "commands": [
+    {
+      "command": "git rev-parse HEAD; git status --short; cat AGENTS.md",
+      "result": "Resolved exact revision; candidate clean."
+    },
+    {
+      "command": "git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD",
+      "result": "18 inserted lines in RistrettoParser only."
+    },
+    {
+      "command": "cat substratevm/AGENTS.md substratevm/README.md substratevm/src/com.oracle.svm.interpreter/README.md",
+      "result": "Read suite guidance."
+    },
+    {
+      "command": "rg/sed/nl inspection of RistrettoParser, RistrettoUtils, RistrettoGraphBuilderPlugins, InterpreterResolvedJavaMethod, CremaSupportImpl, InterpreterKnownCompiledEntryPoints, InterpreterToVM, NativeImage, MethodRefHolder, MethodRefUtils, NonSnippetLowerings, BytecodeParser, InvocationPlugin, StandardGraphBuilderPlugins, RistrettoMethod, RistrettoProfilingInfo, and runtime-loading test examples",
+      "result": "Established fallback, entrypoint, plugin registration, and invoke-edge source paths; some exploratory guessed paths did not exist and were corrected with rg --files."
+    },
+    {
+      "command": "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 4dc26d0d233ec516842c55e916512160ef40b303",
+      "result": "Passed."
+    },
+    {
+      "command": "javac driver using canonical jdk25 bin directories with labsjdk-ce-latest-jvmci-25.6-b27_amd64",
+      "result": "Passed after default JVMCI25.3 failed on missing Annotated; exact invocation and logs in javac-results.json."
+    },
+    {
+      "command": "javac payload; java -cp payload-classes:<canonical ristretto bin> PayloadSmoke.java",
+      "result": "Passed payload JVM success/catch baseline; not native candidate validation."
+    },
+    {
+      "command": "javap -c -p -classpath payload-classes probe.RuntimeCloneCases",
+      "result": "Saved payload-bytecode.log; directive and clone are within protected range."
+    }
+  ],
+  "limits": [
+    "Read-only source review; no candidate edits and no additional worktree required for this review.",
+    "No native build, checkstyle, native test, candidate executable counterexample, remote CI, paid tool, or subagent was run; full builds require coordination and disk headroom.",
+    "The not-compiled sentinel source path is verified, but no particular required-plugin method with that sentinel was demonstrated in a running image.",
+    "Historical elide-dev/graal#101 performance and bailout claims were not reproduced or used as evidence.",
+    "Upstream #13865 merge status was not used to infer redundancy. Present source already contains handler-preservation behavior; the reviewed delta changes only required-plugin fallback eligibility.",
+    "No public publication or remote repository action performed.",
+    "Standalone executable probe source and payload were prepared at parent request; native driver compiled against existing canonical output (not rebuilt candidate), and only its payload JVM smoke ran."
+  ],
+  "probe_artifacts": "/build/caches/graal-pipeline/value-four/reviews/ristretto-first-artifacts"
+}

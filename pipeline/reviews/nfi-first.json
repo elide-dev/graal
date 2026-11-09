@@ -1,0 +1,69 @@
+{
+  "review": "nfi-first",
+  "model": "gpt-6-astra",
+  "reviewed_revision": "31ac4b601bae3b8822c2f6b670fe8f9650ef69cd",
+  "baseline_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree": "/build/worktrees/graal/value-nfi-overhead",
+  "disposition": "request_changes",
+  "summary": "Two actionable defects: overflowing string stack-capacity arithmetic and a missing Windows test-library export. Exact extracted UTF8 encoder routines agree on bounded adversarial probes; full fresh SVM/native-image validation remains outstanding.",
+  "findings": [
+    {
+      "id": "NFI-R1-1",
+      "priority": "P1",
+      "title": "Use overflow-safe arithmetic for the string stack capacity check",
+      "path": "substratevm/src/com.oracle.svm.truffle.nfi/src/com/oracle/svm/truffle/nfi/NativeSignature.java",
+      "line_start": 171,
+      "line_end": 175,
+      "detail": "After an earlier string uses 16 stack bytes, a subsequent UTF8 byte array of length 2147483639 makes stackStringsUsed + utf8.length + 1 equal -2147483640. This satisfies <= 256 and invokes copyToNative with nearly 2 GiB into the remaining 240 bytes. Arrays of this size are below the conventional Integer.MAX_VALUE - 8 bound; no malicious native function is required. The previous implementation pins the encoded array instead of copying to this fixed stack buffer.",
+      "evidence": "nfi-first-artifacts/probe.log: executable signed-int expression counterexample, checked against a long-arithmetic reference. No giant allocation or memory corruption executed.",
+      "fix": "Compare utf8.length < MAX_STACK_STRING_BYTES - stackStringsUsed (used is bounded 0..256), or use long arithmetic before selecting the stack path. Add an arithmetic boundary regression test without allocating a giant array.",
+      "validation_limit": "Reachability and overwrite consequence established by source plus exact Java arithmetic; not an end-to-end native-image crash reproduction."
+    },
+    {
+      "id": "NFI-R1-2",
+      "priority": "P2",
+      "title": "Provide the Windows reexport used by the new strcmp test",
+      "path": "truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java",
+      "line_start": 160,
+      "line_end": 160,
+      "detail": "StrcmpNode calls lookupAndBindDefault(\"strcmp\", ...). NFITest.lookupAndBindDefault maps this to testLibrary.reexport_strcmp on Windows. No reexport_strcmp exists in the native test sources; string.c only adds reexport_strdup and reexport_free under _WIN32. Consequently the newly added testTwoStringArgs fails Windows symbol lookup before executing its assertions.",
+      "evidence": "Source trace NFITest.java:216-221 and string.c Windows export section; MinGW-compiled PE x86-64 object export directives in nfi-first-artifacts/windows-export-directives.log confirm missing symbol.",
+      "fix": "Export a Windows reexport_strcmp wrapper in string.c, or use an explicitly exported portable test fixture for the comparison.",
+      "validation_limit": "Cross-compiled Windows object and inspected real export directives; Windows JUnit/native-image test execution not available in this review."
+    }
+  ],
+  "verified": [
+    "Read root AGENTS.md, substratevm/AGENTS.md, substratevm/README.md, truffle/AGENTS.md and truffle/README.md; reviewed complete six-file diff before running evidence probes.",
+    "UTF8 routines extracted from exact Git revisions matched on 88,926 strings: every single UTF16 code unit, adversarial three-unit combinations including NUL and surrogates, 20,000 seeded random strings, and size boundaries. Compared logical terminated output rather than baseline excess buffer capacity.",
+    "Native array patches still use LocalNativeScope.refArray(obj), which selects PrimitiveArrayView.createForReadingAndWriting; primitive argument-byte copying does not copy guest array contents. No write-through regression found by source inspection.",
+    "The raw heap-address copy is enclosed in an @Uninterruptible method; no safepoint-capable operation occurs between computing the untracked pointer and copyForward. No additional GC defect found by source inspection.",
+    "UnsafeStackValue lowers with SubstrateTarget.stackAlignment in StackValueNode.create; no unsupported byte-only alignment assumption found.",
+    "String pointers remain scoped to the native call, consistent with truffle/docs/NFI.md; retaining them beyond the call was not a supported baseline contract.",
+    "git diff --check exact baseline..candidate passed."
+  ],
+  "test_gaps": [
+    "New 16/17 sint64 tests cover 128/136 primitive bytes, so they do not exercise the >256-byte primitive-buffer fallback. Add 32/33 sint64 or equivalent coverage.",
+    "New string cases do not test exactly 255/256 encoded bytes including terminators, multiple argument packing exactly at the limit, or callback/GC stress while stack string pointers remain live.",
+    "Fresh exact-revision native-image build, Linux SVM NFI suite, callback/thread/array mutation tests, checkstyle, FP80/FP128 platforms, and performance measurements are not established by these probes."
+  ],
+  "observations": [
+    "The string fallback encodes once to decide stack eligibility, then scope.refString re-encodes and copies again through javaStringToUtf8. Large strings and many small strings after stack capacity is exhausted pay extra encoding/allocation. Consider passing already encoded bytes into the fallback; fresh benchmarks should include the fallback regime."
+  ],
+  "commands": [
+    "git rev-parse HEAD",
+    "git diff --stat 66f3cd8b560c12131eb948b56edb45da7960dc25 31ac4b601bae3b8822c2f6b670fe8f9650ef69cd",
+    "git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 31ac4b601bae3b8822c2f6b670fe8f9650ef69cd -- substratevm truffle/src/com.oracle.truffle.nfi.test*",
+    "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 31ac4b601bae3b8822c2f6b670fe8f9650ef69cd",
+    "java /build/caches/graal-pipeline/value-four/reviews/nfi-first-artifacts/NfiEncodingProbe.java",
+    "x86_64-w64-mingw32-gcc -c truffle/src/com.oracle.truffle.nfi.test.native/src/string.c -o /build/caches/graal-pipeline/value-four/reviews/nfi-first-artifacts/string-win64.o",
+    "x86_64-w64-mingw32-objdump -s -j .drectve /build/caches/graal-pipeline/value-four/reviews/nfi-first-artifacts/string-win64.o",
+    "Source reads/searches across NativeSignature, TruffleNFISupport, LocalNativeScope, LibFFIContext substitution, PrimitiveArrayView, UnmanagedMemoryUtil, UnsafeStackValue, StackValueNode, native test fixture sources, and NFI lifetime documentation."
+  ],
+  "limits": [
+    "No candidate edits; no mx commands, full builds, remote CI, paid tools, subagents, or published comments.",
+    "Parent asked to defer full builds because /build is nearly full; this review used only tiny bounded artifacts.",
+    "Public PR historical Linux test counts and timing results were not treated as fresh verification.",
+    "Host probe JDK: Oracle GraalVM Java 25.0.4.1 / 25.3.4.1+1.1. Encoder probe runs extracted standard-JDK logic, not an exact-head SVM image."
+  ],
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/nfi-first-artifacts"
+}

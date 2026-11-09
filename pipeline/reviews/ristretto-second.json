@@ -1,0 +1,85 @@
+{
+  "review": "review10/12 ristretto-second",
+  "model_identity": {
+    "reported": "GPT-6-based Codex",
+    "exact_runtime_model_identifier": "not exposed to this agent; inherited parent model"
+  },
+  "exact_revision": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+  "base_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree_reviewed_read_only": "/build/worktrees/graal/value-ristretto-exception-fallback",
+  "disposition": "approve",
+  "findings": [],
+  "prior_findings": [
+    {
+      "id": "ristretto-first/R1",
+      "status": "resolved",
+      "evidence": "hasCompiledEntry explicitly unwraps RistrettoMethod or InterpreterResolvedJavaMethod and requires a holder, nonnull resolved pointer, and inequality to InterpreterKnownCompiledEntryPoints.getMethodNotCompiledHandler(). This is the same callability predicate used by InterpreterToVM.shouldCallAOTEntryPoint. Both raw and wrapped actual sentinel metadata are rejected by the new native test."
+    }
+  ],
+  "analysis": [
+    "Unknown ResolvedJavaMethod implementations now fail closed without catching broad compiler invariant exceptions. A missing holder short-circuits safely; a null or sentinel pointer does not enable fallback. No change to the existing permanent bailout after a failed guard.",
+    "The GraalDirectives and RistrettoDirectives exclusions precede the fallback. The new payload executes inRuntimeCompiledCode inside the protected range and requires compiled success/catch results, validating the preserved semantic-marker behavior.",
+    "Returning false from tryInvocationPlugin feeds the existing ordinary invoke/inline path. BytecodeParser builds INCLUDE_AND_HANDLE edges for CheckAll and ExplicitOnly modes; its default Profile mode also retains the edge because RistrettoProfilingInfo.getExceptionSeen returns UNKNOWN. Only direct invocations reach tryInvocationPlugin, after target resolution, so eligibility is checked on the actual direct target.",
+    "The normal native target lowerings continue consuming the same interpreter entry point now checked by the guard. Actual Object.clone success and CloneNotSupportedException behavior are tested from runtime-loaded bytecode with graph, installation, and runtime-execution assertions.",
+    "Reviewed required runtime plugin registrations (Object.clone/hashCode, System.identityHashCode/getSecurityManager, Unsafe.allocateInstance, Class.desiredAssertionStatus, MethodHandles.lookup) and ordinary plugin semantics. Required registration is not by itself proof of a safe body, but no concrete invalid callable AOT body was found in the registered production set. Directive bodies remain excluded.",
+    "Caller-sensitive MethodHandles.lookup was challenged separately: the fallback body uses Reflection.getCallerClass; its substitution performs a source stackwalk, and JavaStackFrameVisitor documents and implements translation through InterpreterSupport for Ristretto frame metadata. RuntimeCodeInstaller source-ID gaps therefore do not themselves imply a wrong caller. The existing lookup plugin can also decline handling ignored security-stackwalk callers. No concrete caller-sensitive regression was established.",
+    "Test payload classes are loaded from registered bytes through a fresh loader; loader identity is asserted. Warmup checks interpreter execution, then parseOnly checks the ordinary clone exception node, compileAndInstallInCrema checks live installed code and publication, and post-install execution checks distinct clone/class/field values plus the compiled catch marker. These assertions are materially stronger than an unobserved JIT warmup smoke.",
+    "The sentinel fixture is registered as queried only and uses a property-derived runtime method name, preventing the lookup itself from making the target invocable at image build time. It asserts the actual not-compiled pointer before testing both metadata forms."
+  ],
+  "nonblocking_observations": [
+    {
+      "topic": "Negative parser coverage",
+      "description": "The sentinel test exercises the private eligibility helper, not an actual required-plugin invocation producing PermanentBailoutException. It strongly detects the original unsafe-holder predicate, while preservation of the bailout is source-reviewed. An end-to-end negative parser fixture would strengthen future regression coverage."
+    },
+    {
+      "topic": "Caller-sensitive coverage",
+      "description": "A runtime-loaded MethodHandles.lookup() protected-range test checking lookupClass and private access would broaden coverage of the generic fallback beyond clone. This review found no demonstrated defect requiring it as a blocker."
+    }
+  ],
+  "commands": [
+    {
+      "command": "pwd; git status --short; git rev-parse HEAD; git diff --stat 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD; git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD",
+      "result": "Exact requested revision, clean worktree, four-file candidate diff inspected."
+    },
+    {
+      "command": "cat AGENTS.md substratevm/AGENTS.md substratevm/README.md substratevm/src/com.oracle.svm.interpreter/README.md",
+      "result": "Read applicable repository, suite and interpreter guidance."
+    },
+    {
+      "command": "rg/sed inspection of RistrettoParser, RistrettoUtils, RistrettoMethod, RistrettoGraphBuilderPlugins, SubstrateSharedGraphBuilderPlugins, BytecodeParser, InvocationPlugin, RistrettoProfilingInfo, InterpreterResolvedJavaMethod, InterpreterKnownCompiledEntryPoints, InterpreterToVM, Target_jdk_internal_reflect_Reflection, StackTraceUtils, JavaStackFrameVisitor, RuntimeCodeInstaller, FrameInfoEncoder, FrameInfoQueryResult",
+      "result": "Independent source audit of guard, call construction, local exception edges, required-plugin semantics, and caller-sensitive stackwalk support."
+    },
+    {
+      "command": "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD",
+      "result": "Passed."
+    },
+    {
+      "command": "/build/caches/mx/graal-value-ristretto/substratevm/svmbuild/linux-amd64/junit/svmjunit --very-verbose --enable-timing",
+      "result": "Exit 0: testRuntimeCloneUnderCatch Passed 38 ms; testUncompiledEntryIsRejected Passed 0 ms; OK (2 tests). Existing pre-final diagnostic binary only; parent was concurrently preparing the final image, and execution completed before request to wait was received. No claim of exact-final-head artifact provenance."
+    },
+    {
+      "command": "tail -65 /build/caches/graal-pipeline/value-four/ristretto-native-dynamic-query.log; cat /build/caches/graal-pipeline/value-four/ristretto-final-test-hashes.json",
+      "result": "Inspected supplied native build/run evidence and test hashes; prior log records both native tests passing."
+    },
+    {
+      "command": "git log -2 --format=%H; git status --short",
+      "result": "Confirmed final reviewed head and preceding implementation head; no source changes."
+    }
+  ],
+  "unsuccessful_attempts": [
+    {
+      "command": "Exploratory rg using guessed paths for Target_java_lang_invoke_MethodHandles.java, hosted/snippets/SubstrateSharedGraphBuilderPlugins.java, ristretto/meta/RistrettoProfilingInfo.java, and interpreter/InterpreterSupport.java",
+      "result": "Some guessed paths did not exist (exit 2). Corrected relevant paths with rg --files; no build/test failure and no evidence discarded."
+    },
+    {
+      "command": "Broad required-plugin/caller-sensitive search",
+      "result": "Output was truncated; repeated searches scoped to the exact relevant files before drawing conclusions."
+    }
+  ],
+  "limits": [
+    "No source edits, new worktree, mx build, mx checkstyle, remote CI, external publication, or subagents were performed by this reviewer.",
+    "Parent owns final candidate and baseline build/run coordination. Final exact-head native validation remains pending at report creation; prior diagnostic binary smoke is supporting evidence only.",
+    "No independently executed caller-sensitive lookup probe or end-to-end sentinel parser bailout fixture was built.",
+    "No historical fork issue performance claim or speedup was reproduced; this review addresses correctness and regression quality."
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "review": "ffm-second",
+  "review_slot": "6/12",
+  "actual_identity": {
+    "agent": "/root/value_ffm_review_two",
+    "system_identity": "Codex, GPT-6-based agent",
+    "model_id": "Not exposed in this agent context; inherited parent model, no override requested or made",
+    "subagents_spawned": 0
+  },
+  "reviewed_revision": "699b66cd5bd26212d130300be3e4ca56178bd3ab",
+  "initial_review_and_probe_revision": "4ced24671e16b6ebc8ff1b26336b31938cb3f088",
+  "baseline_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree": "/build/worktrees/graal/value-ffm-downcalls",
+  "disposition": "no_proven_new_defect; final-head native validation pending parent",
+  "findings": [],
+  "summary": "Independent source and executable review found no new supported-input semantic regression. Confirmed llabs LLP64 correction. Independently reran 14 native tests on4ced. Final699b66 follow-up prevents specialization when Ristretto alone has no analysis compiler; sequencing is correct by source trace. Compile-isolate and non-Linux execution are unverified. Empty captureCallState produces a host crash in candidate specialization, but actual upstream baseline also fails building the same metadata, so it is recorded as an existing unsupported edge case, not a new blocker.",
+  "verified": [
+    "Root, compiler and substratevm AGENTS read. Reviewed production diff and new tests independently before reading ffm-first.json; first-review rationale read only after independent inspection/probes.",
+    "Installed JDK25 MethodHandle.bindTo checks leadingReferenceParameter.cast then bindArgumentL(0,value); replacement preserves that ordering and adds link metadata only after successful binding.",
+    "AbstractLinker.downcallHandle0 replacement preserves null/layout/options/variadic validation, descriptor normalization, original cache behavior, maybeCheckCaptureSegment and maybeInsertAllocator fallback. Specialized entry invokes the original JDK handle via invokeExact.",
+    "Linker requires constant nonnull handles and link metadata, checks argument arity, stack kinds and assignable reference types. Unsupported or derived handle calls retain invokeBasic fallback. No raw pointer call bypass of memory-session acquisition/release found.",
+    "Native executable rerun exited0:14 tests passed; graph output includes direct DowncallStubsHolder invocation, zero allocations, runtime-handle, bound-handle, nonconstant fallback, critical(false), pointer arguments and real captured errno. Closed-segment rejection and AOT invokeExact mismatch also pass.",
+    "Independent C cross-compilation static_assert sizeof(long long)==8 succeeded on Linux AMD64 and Windows x64; both llabs(-(1LL<<40)) functions compile to return1099511627776. This verifies correction of earlier C long/LLP64 mismatch without claiming Windows native-image execution.",
+    "Final699b66 removes tri-state entriesForRuntimeCompilation, checks isConfiguredForAnalysis before createDowncallHandle and requires analysis start. ConditionalConfigurationRegistry posts tasks into CompletionExecutor BEFORE_START queue; NativeImageGenerator executes every beforeAnalysis callback, marks analysis started, then runs analysis. Ristretto-only path therefore skips handle creation; Truffle configuration is visible before tasks execute.",
+    "Final699b66 git diff --check passed and candidate worktree status clean during inspection. No candidate edits or mx commands performed by reviewer."
+  ],
+  "excluded_or_nonblocking_observations": [
+    {
+      "id": "FFM-R2-EMPTY-CAPTURE",
+      "classification": "existing unsupported legal-API edge case; candidate changes failure mode; no successful baseline established",
+      "input": "CaptureImageProbe.Register registers FunctionDescriptor.of(JAVA_INT,JAVA_INT) with no options and with Linker.Option.captureCallState() (empty list).",
+      "candidate4ced": "With specialization enabled, image build exits134; host VM ArgumentShuffle::pd_generate ShouldNotReachHere, stack includes ForeignFunctionsFeature.createSpecializedDowncall. Exact source/bytecode/command/log retained.",
+      "candidate_disabled": "Same candidate with -H:-SpecializeForeignDowncalls exits1 in existing AbiUtils.Adapter.adaptToNative guarantee.",
+      "actual_upstream_baseline": "Baseline distribution from exact66f3cd8b560c12131eb948b56edb45da7960dc25 exits1 at same AbiUtils.Adapter.adaptToNative guarantee. AbiUtils source is unchanged base..candidate.",
+      "host_controls": "Standalone EmptyCaptureProbe also crashes host JVM on default Oracle JDK25.3-b22 and builder LabsJDK25.6-b27, establishing pre-existing host bug.",
+      "secondary_source_observation": "hasCapturedCallState differs for empty capture versus none although capturedCallStateMask is0 for both, so new naming digest would collide if host support is fixed. This path is currently blocked on baseline too; not reported as a newly failing supported path.",
+      "privacy": "Crash reports retained locally only; not uploaded or published."
+    }
+  ],
+  "commands_file": "/build/caches/graal-pipeline/value-four/reviews/ffm-second-artifacts/commands.json",
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/ffm-second-artifacts",
+  "artifact_hashes": "/build/caches/graal-pipeline/value-four/reviews/ffm-second-artifacts/sha256.json",
+  "failed_attempts": [
+    "Default Java EmptyCaptureProbe: host crash134; generated hs_err_pid2770616.log moved from canonical source to artifact directory.",
+    "Builder JDK EmptyCaptureProbe: host crash134; hs_err_latest_2775729.log and empty-capture-latest.log.",
+    "capture-enabled native-image: exit134, host crash; capture-enabled.log and hs_err_pid2778751.log.",
+    "capture-disabled native-image: exit1; capture-disabled.log and svm_err_b_20261109T100755.339_pid2783814.md.",
+    "capture-baseline native-image: exit1; capture-baseline.log and svm_err_b_20261109T100900.603_pid2804192.md.",
+    "Environment discovery rg for mx.graal/env and substratevm/mx.substratevm/env exited2 because files do not exist; not a test failure."
+  ],
+  "limits": [
+    "All reviewer executable candidate evidence belongs4ced24671e1; final699b66 source follow-up is reviewed, but rebuilding/rerunning final native suite and Ristretto matrix is parent-owned and pending at report creation.",
+    "No SupportCompileInIsolates execution. Graph suite explicitly disables it. Design source inspection is not runtime evidence.",
+    "No Windows/macOS/AArch64 native-image execution; Windows llabs result is cross-compiled ABI evidence only.",
+    "No wrong-thread confined segment, concurrent shared-arena closure, callback exception/session-release stress, critical(true) heap access, aggregate/float/varargs downcalls, adapting invoke, repeated/null bindTo or non-FFM MethodHandle regression execution.",
+    "Exact-type mismatch test executes AOT code; it does not establish mismatch handling after Truffle PE.",
+    "No final Ristretto-only executable/shared-library build from this reviewer. Parent is running matrix.",
+    "No exact-base/candidate performance comparison; existing timings informational only.",
+    "No remote CI, paid tools, subagents, publication, candidate edits, or mx operations. Source registration builds capped4 threads8GiB and output isolated under artifact directory."
+  ]
+}

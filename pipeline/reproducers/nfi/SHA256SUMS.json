@@ -1,0 +1,11 @@
+{
+  "NFICallOverheadTest.java": "466b9d7fbda5a780cd6ab210c0f42865c56e51b3d85d490b70bb247769ef7c1f",
+  "README.md": "6ce6921a52f95fcee63e708af70f715850aba87d23330c27546a505addf45c05",
+  "candidate.patch": "7ee0ae8eaf8b328b498475b4bf2a780e391fce8c6bc05dcecd855c607e1fd0c2",
+  "subject.json": "33ccbdbb0b1d0726a601fe8dd53f3f3e791aa62f4059a30eea116d99969a4a41",
+  "tests/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/ManyArgumentsNFITest.java": "966d4c009987fdc004f579c1a14a582922309e7762dd503cfb5429d3aea4e371",
+  "tests/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/NFICallOverheadTest.java": "466b9d7fbda5a780cd6ab210c0f42865c56e51b3d85d490b70bb247769ef7c1f",
+  "tests/truffle/src/com.oracle.truffle.nfi.test/src/com/oracle/truffle/nfi/test/StringNFITest.java": "395d0ed188200e40b0f91155615e7f6d9c29cfb0afb856151e4e12f9ed9b9343",
+  "tests/truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c": "4a36096e0ddbe21f76c189aad75bf7506485a99c45fdd4097a6e529a476b997a",
+  "tests/truffle/src/com.oracle.truffle.nfi.test.native/src/string.c": "f2959ac4436d2ad2e4486ca1c0c1a2f89cb3564224ad9f52105a091b3dd315d0"
+}

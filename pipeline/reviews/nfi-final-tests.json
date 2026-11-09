@@ -1,0 +1,95 @@
+{
+  "review": "nfi-final-tests",
+  "review_invocation": 8,
+  "agent": "/root/value_nfi_review_two",
+  "model": "gpt-6-astra",
+  "reasoning_effort": "high",
+  "model_identity_source": "Explicit parent orchestration metadata for invocation 8",
+  "completed_at_utc": "2026-11-09T18:26:43.140913+00:00",
+  "initial_reviewed_revision": "16c62e2e3868724b22b3d8bde1f83e5f30a048bb",
+  "reviewed_revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+  "prior_production_review_revision": "72b8188daf419639200cd387acddb9a1decd87ae",
+  "baseline_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree": "/build/worktrees/graal/value-nfi-overhead",
+  "disposition": "approve_code_review_pending_final_runtime_validation",
+  "summary": "Final test changes are correct. The original entry-only compilation assertion weakness was reproduced in a real Truffle runtime and corrected before final review. Production source is unchanged from the previous approved code review; that review still applies. Final exact-head native/performance validation remains a separate gate.",
+  "findings": [],
+  "resolved_during_followup": [
+    {
+      "id": "NFI-R8-1",
+      "initial_revision": "16c62e2e3868724b22b3d8bde1f83e5f30a048bb",
+      "title": "Entry-only compilation flag can miss deoptimization during the measured loop",
+      "evidence": "CompiledEntryProbe.java ran on GraalVM CE with the built Truffle jars and BackgroundCompilation=false; after warming to compiled code, deliberate transferToInterpreterAndInvalidate inside the loop yielded entry=true exit=false sum=4950. Thus the initial flag can pass while loop completion is interpreted. See compiled-entry-probe-retry.log.",
+      "fix_revision": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+      "resolution": "The exact final source saves startedCompiled locally at entry and writes compiled = startedCompiled && CompilerDirectives.inCompiledCode() after the loop. This rejects the demonstrated deoptimization case and interpreted-entry/OSR-only cases while retaining one volatile write per root invocation."
+    }
+  ],
+  "verified": [
+    "Complete 72b8188..16c62e2 test-only diff reviewed, then complete 16c62e2..e8fbf0cc correction reviewed. HEAD and clean worktree verified at report creation.",
+    "All substratevm source is identical to the prior production-reviewed head. NativeSignature.java and TruffleNFISupport.java Git blob hashes match at all three heads; saved exact hashes also bind the fixtures/tests to their revisions.",
+    "32 and 33 sint64 values occupy 256 and 264 primitive bytes, respectively, crossing the <=256 stack-copy boundary. Both use the >16 heap argument-pointer path already covered by the 17-argument case.",
+    "Exact C numeric fixture source compiled with cc -shared -fPIC -Wall -Wextra -Werror. ctypes/libffi verified 16/17/32/33 distinct-bit sums and every argument position with signed one-hot inputs. Expected sums 4294967295 and 8589934591 fit Java long and C int64_t; 1L << i remains correct for i through 32.",
+    "Each measured round calls the target once, computes elapsed time before assertions/printing, checks the fresh volatile result when reportCallOverhead is enabled, and reports all five samples. Entry and completion checks concern the loop root itself; this goes beyond assuming compilation from warmup count.",
+    "The only added observable operation in each timed target invocation is one volatile boolean write after the loop, amortized over one million native calls. Checks, property reads and printing occur after the elapsed timestamp. Identical harness and VM settings on baseline and candidate are required; no quantitative performance result is inferred from source alone.",
+    "Parent expanded native-suite log explicitly contains Passed for both new argument-count tests, all 20 timing sample lines, and OK (576 tests). This validates the earlier test image, not the final entry/completion correction. Final comparison rerun was explicitly identified by the parent as pending.",
+    "git diff --check prior-reviewed-head..final-head passed; parent style/JDT/SpotBugs logs were inspected and snapshotted with hashes rather than re-running mx."
+  ],
+  "limits": [
+    "Both endpoint checks establish compiled entry and compiled completion, not a proof that every intervening instruction remained compiled; they cannot rule out a transient deoptimization followed by recompilation. The deliberately demonstrated entry-only false positive is fixed.",
+    "Compilation assertions are conditional on nfi.test.reportCallOverhead=true. The inspected native log runs with that property; ordinary interpreter-capable unit test configurations remain permitted.",
+    "No new exact-final-head native suite or performance comparison was executed by this reviewer. No claim that unchanged fixed volatile overhead is precisely zero, or that source inspection proves a speedup.",
+    "The native 576-test log predates the final benchmark completion check. Parent reports final CI will use the same BackgroundCompilation=false setting for baseline/candidate; CI configuration itself was outside this narrow review.",
+    "No mx commands, production/candidate edits, CI runs, publication, subagents or paid tools performed. Host fixture/probe artifacts stayed under nfi-final-tests-artifacts. Probe memory cap 256 MiB and per-process timeout 45 seconds.",
+    "Initial executable Truffle probe launch failed because org.graalvm.jniutils was absent from the module path. That failure is preserved; retry adding the built jniutils.jar succeeded. Source/module/runtime warnings remain in the logs."
+  ],
+  "commands": [
+    {
+      "argv": [
+        "/build/caches/mx/graal-value-nfi/sdk/linux-amd64/GRAALJDK_CE_1602C36D2E_JAVA25/graaljdk-ce-1602c36d2e-java25-25.6.0-dev/bin/java",
+        "-Xmx256m",
+        "--module-path",
+        "/build/caches/mx/graal-value-nfi/truffle/dists/truffle-api.jar:/build/caches/mx/graal-value-nfi/truffle/dists/truffle-runtime.jar",
+        "--add-modules",
+        "org.graalvm.truffle,org.graalvm.truffle.runtime",
+        "-Dpolyglot.engine.BackgroundCompilation=false",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts/CompiledEntryProbe.java"
+      ],
+      "exit_code": 1,
+      "log": "compiled-entry-probe.log"
+    },
+    {
+      "argv": [
+        "/build/caches/mx/graal-value-nfi/sdk/linux-amd64/GRAALJDK_CE_1602C36D2E_JAVA25/graaljdk-ce-1602c36d2e-java25-25.6.0-dev/bin/java",
+        "-Xmx256m",
+        "--module-path",
+        "/build/caches/mx/graal-value-nfi/truffle/dists/truffle-api.jar:/build/caches/mx/graal-value-nfi/truffle/dists/truffle-runtime.jar:/build/caches/mx/graal-value-nfi/sdk/dists/jniutils.jar",
+        "--add-modules",
+        "org.graalvm.truffle,org.graalvm.truffle.runtime",
+        "-Dpolyglot.engine.BackgroundCompilation=false",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts/CompiledEntryProbe.java"
+      ],
+      "exit_code": 0,
+      "log": "compiled-entry-probe-retry.log"
+    },
+    {
+      "argv": [
+        "cc",
+        "-shared",
+        "-fPIC",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-I",
+        "truffle/src/com.oracle.truffle.nfi.native/include",
+        "truffle/src/com.oracle.truffle.nfi.test.native/src/numeric.c",
+        "-o",
+        "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts/numeric.so"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "production_review_retained": "/build/caches/graal-pipeline/value-four/reviews/nfi-second.json",
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts",
+  "source_hashes": "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts/source-blob-hashes.json",
+  "parent_validation_snapshots": "/build/caches/graal-pipeline/value-four/reviews/nfi-final-tests-artifacts/parent-validation-log-snapshots.json"
+}

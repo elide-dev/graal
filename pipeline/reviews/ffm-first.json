@@ -1,0 +1,67 @@
+{
+  "review": "ffm-first",
+  "review_slot": "4/12",
+  "model": "gpt-6-astra",
+  "reviewed_revision": "f3a2eef071b3884e26472b0f76169e67d9a1dd4a",
+  "exact_subject": "Specialize foreign downcalls from runtime-compiled Truffle code",
+  "baseline_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "worktree": "/build/worktrees/graal/review-ffm-first",
+  "disposition": "request_changes",
+  "summary": "One confirmed portable test defect: labs is incorrectly assumed to use 64-bit C long on Windows x64. No production semantic defect proven by this source review. Native-image execution and several semantic requirements remain unverified.",
+  "findings": [
+    {
+      "id": "FFM-R1-1",
+      "priority": "P2",
+      "title": "Use a portable 64-bit C function in the long downcall test",
+      "path": "compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/FFMDowncallPartialEvaluationTest.java",
+      "line_start": 503,
+      "line_end": 509,
+      "detail": "The test binds labs to a (JAVA_LONG)->JAVA_LONG descriptor and requires labs(-(1L << 40)) to return 1L << 40. Windows x64 uses LLP64: C long and labs arguments/results are 32 bits. The low 32 bits of this input are zero, so the assertion cannot succeed. The new native Truffle gate registers this test without an OS exclusion, and ForeignFunctions supports Win64. This is a test ABI defect, independent of the new linker implementation.",
+      "evidence": "ffm-first-artifacts/labs-abi-probe.c, labs-win64.s and labs-linux64.s: cross-compiled static assertions verify C long widths; optimized Windows probe returns 0 while Linux returns 1099511627776.",
+      "fix": "Use llabs with JAVA_LONG for the fixed 64-bit case, or derive the C long layout from Linker.canonicalLayouts and keep a separate portable 64-bit test.",
+      "validation_limit": "Windows C ABI cross-compilation and source trace, not Windows native-image execution."
+    }
+  ],
+  "verified": [
+    "Read applicable root, substratevm, compiler and Truffle AGENTS.md. Candidate left unchanged; isolated detached review worktree created at exact head.",
+    "Reviewed new linker, MethodHandle bindTo substitution, AbstractLinker substitution, generated AOT entry, runtime compilation registration, Truffle boundary changes, tests and gate changes before any historical PR claims; no historical PR evidence used.",
+    "LabsJDK25.6-b27 source AbstractLinker.downcallHandle0 has the exact checkLayouts/stripNames/forDowncall/validateVariadicLayouts and maybeCheckCaptureSegment/maybeInsertAllocator flow retained by the candidate. JDK bindTo casts the leading reference type then bindArgumentL(0,x), preserved by the substitution.",
+    "Generated entry invokes the original specialized JDK handle exactly. BindingSpecializer source contains acquire0/release0 scope logic and checks before the native call; no manual raw-address lifetime bypass found.",
+    "IsolateAwareConstantReflectionProvider routes field reads to client isolate; linker stores an entry index rather than a client method object. This supports the design by inspection, not by isolate execution.",
+    "GraalGraphObjectReplacer converts analysis methods/fields in the linker to runtime metadata. Conservative field injection uses declared MethodHandleLinkInfo type and null; no API adaptation mismatch found by inspection.",
+    "Base already has Feature.getForeignAccess; new test does not depend on candidate-only RuntimeMethodHandleLinker or SpecializeForeignDowncalls APIs. A baseline comparison still requires porting only the test and preserving default graph-check failure expectations.",
+    "Graph assertions default on, require exactly one named downcall stub and zero AbstractNewObjectNode nodes, and reject invokeBasic/linkToNative residual calls. They are not vacuous for the selected graph; HotSpot setup explicitly skips the whole test.",
+    "git diff --check exact base..head passed. Review worktree git status was clean."
+  ],
+  "commands": [
+    "git worktree add --detach /build/worktrees/graal/review-ffm-first f3a2eef071b3884e26472b0f76169e67d9a1dd4a",
+    "git rev-parse HEAD; git diff --stat 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD; git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD (read-only candidate/review reads)",
+    "cat applicable AGENTS.md; rg/sed/cat reads across changed sources, graph helpers, constant reflection, metadata replacement and build gate",
+    "Python zipfile read LabsJDK25.6-b27 lib/src.zip AbstractLinker, MethodHandle and BindingSpecializer",
+    "x86_64-w64-mingw32-gcc -O2 -S ffm-first-artifacts/labs-abi-probe.c -o ffm-first-artifacts/labs-win64.s",
+    "gcc -O2 -S ffm-first-artifacts/labs-abi-probe.c -o ffm-first-artifacts/labs-linux64.s",
+    "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD; git status --short; git log -1 --format=%H%n%s"
+  ],
+  "command_results": {
+    "cross_compile_windows": "exit 0, sizeof(long)==4, wide labs returns zero",
+    "compile_linux": "exit 0, sizeof(long)==8, wide labs returns 1099511627776",
+    "diff_check": "exit 0",
+    "review_status": "clean"
+  },
+  "test_gaps": [
+    "Errno test only checks abs result, never reads captured errno. A no-op/wrong-offset capture implementation could pass; use a deterministic failing libc call and assert captured value.",
+    "No closed-arena, wrong-thread confined segment, concurrent shared-arena close, or native callback exception/session-release case. strlen happy path uses one live confined arena.",
+    "No negative invokeExact type mismatch, adapting invoke, repeated bindTo, null binding, non-FFM handle or combinator semantic regression case despite globally substituting bindTo and classifying invokeBasic/linkTo methods as boundaries.",
+    "Only critical(false) covered; critical(true) heap-array/pointer argument handling is absent.",
+    "Native gate explicitly disables SupportCompileInIsolates. checkGraphs=false supports a separate isolate run but no such run is established here.",
+    "New Ristretto ForeignTests invocation covers the no-analysis-provider branch only when native gate executes; it was not run by this review.",
+    "No fresh performance evidence; timing loops include Object-return boxing/call-target overhead and must be compared on exact base/candidate with matched flags."
+  ],
+  "limits": [
+    "No mx commands or native-image execution; parent native test was active and candidate builds were prohibited for this review.",
+    "No claim that source checks validate actual guest-VM/EE or compiled isolate execution.",
+    "No remote CI, paid tools, subagents, historical PR test counts, edits to candidate, or publication.",
+    "Review worktree retained clean for follow-up; artifacts persisted under /build/caches. No disposable /tmp files created."
+  ],
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/ffm-first-artifacts"
+}

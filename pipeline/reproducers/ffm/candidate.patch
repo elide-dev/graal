@@ -1,0 +1,2014 @@
+diff --git a/compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/FFMDowncallPartialEvaluationTest.java b/compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/FFMDowncallPartialEvaluationTest.java
+new file mode 100644
+index 00000000000..300cca5352b
+--- /dev/null
++++ b/compiler/src/jdk.graal.compiler.test/src/jdk/graal/compiler/truffle/test/FFMDowncallPartialEvaluationTest.java
+@@ -0,0 +1,632 @@
++/*
++ * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package jdk.graal.compiler.truffle.test;
++
++import static org.junit.Assert.assertTrue;
++
++import java.lang.foreign.Arena;
++import java.lang.foreign.FunctionDescriptor;
++import java.lang.foreign.Linker;
++import java.lang.foreign.MemorySegment;
++import java.lang.foreign.MemoryLayout;
++import java.lang.foreign.ValueLayout;
++import java.lang.invoke.MethodHandle;
++import java.lang.invoke.WrongMethodTypeException;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++import org.graalvm.nativeimage.ImageInfo;
++import org.graalvm.nativeimage.dynamicaccess.AccessCondition;
++import org.graalvm.nativeimage.dynamicaccess.ForeignAccess;
++import org.graalvm.nativeimage.hosted.Feature;
++import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
++import org.graalvm.polyglot.Context;
++import org.junit.Assert;
++import org.junit.Assume;
++import org.junit.Before;
++import org.junit.Test;
++
++import com.oracle.truffle.api.CompilerDirectives;
++import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
++import com.oracle.truffle.api.frame.VirtualFrame;
++import com.oracle.truffle.api.nodes.RootNode;
++import com.oracle.truffle.runtime.OptimizedCallTarget;
++
++import jdk.graal.compiler.nodes.Invoke;
++import jdk.graal.compiler.nodes.StructuredGraph;
++import jdk.graal.compiler.nodes.java.AbstractNewObjectNode;
++
++/**
++ * Tests that a {@code java.lang.foreign} downcall through a method handle that is a compilation
++ * constant is compiled to a direct call of the native-image downcall stub when it is partially
++ * evaluated, so the compiled code neither boxes the arguments nor runs the method handle
++ * interpreter. A downcall through a handle that is not a constant is compiled as a call of the
++ * method handle runtime.
++ * <p>
++ * The test also reports the cost of a downcall in nanoseconds per call from AOT-compiled Java and
++ * from runtime-compiled Truffle code. The timings are informational only: pass or fail depends on
++ * the results of the calls and on the shape of the partially evaluated graph.
++ * <p>
++ * In a native image, the test requires the downcall descriptors to be registered at image build
++ * time through {@link TestFeature}, for example
++ * {@code --features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature}.
++ * The graph checks need the compiler in the image's own isolate
++ * ({@code -H:-SupportCompileInIsolates}); the system property {@value #CHECK_GRAPHS_PROPERTY} set
++ * to {@code false} skips them, so that the calls can be tested with compilation in isolates.
++ */
++@SuppressWarnings("restricted")
++public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
++
++    static final String CHECK_GRAPHS_PROPERTY = "truffle.test.FFMDowncallPartialEvaluationTest.checkGraphs";
++
++    /**
++     * Downcall descriptors and the method handles that are created at image build time, which must
++     * all be known to the image builder. The class is initialized at build time in a native image.
++     */
++    static final class Descriptors {
++        static final FunctionDescriptor ABS = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
++        static final FunctionDescriptor LLABS = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
++        static final FunctionDescriptor STRLEN = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
++        static final FunctionDescriptor STRTOLL = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
++        static final Linker.Option CRITICAL = Linker.Option.critical(false);
++        static final Linker.Option CAPTURE_ERRNO = Linker.Option.captureCallState("errno");
++
++        /** Handles created at image build time, where the JDK specializes their bindings. */
++        static final MethodHandle ABS_HANDLE = Linker.nativeLinker().downcallHandle(ABS);
++        static final MethodHandle LLABS_HANDLE = Linker.nativeLinker().downcallHandle(LLABS);
++        static final MethodHandle STRLEN_HANDLE = Linker.nativeLinker().downcallHandle(STRLEN);
++        static final MethodHandle ABS_CRITICAL_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CRITICAL);
++        static final MethodHandle STRTOLL_ERRNO_HANDLE = Linker.nativeLinker().downcallHandle(STRTOLL, CAPTURE_ERRNO);
++        static final MethodHandle ABS_ERRNO_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CAPTURE_ERRNO);
++    }
++
++    /** Registers the downcalls of this test with the image builder. */
++    public static final class TestFeature implements Feature {
++        @Override
++        public void afterRegistration(AfterRegistrationAccess access) {
++            RuntimeClassInitialization.initializeAtBuildTime(Descriptors.class);
++            ForeignAccess foreign = access.getForeignAccess();
++            AccessCondition always = AccessCondition.unconditional();
++            foreign.registerForDowncall(always, Descriptors.ABS);
++            foreign.registerForDowncall(always, Descriptors.LLABS);
++            foreign.registerForDowncall(always, Descriptors.STRLEN);
++            foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CRITICAL);
++            foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CAPTURE_ERRNO);
++            foreign.registerForDowncall(always, Descriptors.STRTOLL, Descriptors.CAPTURE_ERRNO);
++        }
++    }
++
++    private static final int WARMUP_CALLS = 200_000;
++    private static final int TIMED_CALLS = 2_000_000;
++
++    private static MemorySegment symbol(String name) {
++        return Linker.nativeLinker().defaultLookup().find(name).orElseThrow();
++    }
++
++    /** {@code int abs(int)} through a handle that is a constant of the root node. */
++    static final class AbsRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        AbsRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            int x = (int) frame.getArguments()[0];
++            try {
++                return (int) handle.invokeExact(symbol, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code int abs(int)} through {@code MethodHandle.invoke} with the handle's exact type. */
++    static final class AbsGenericInvokeRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        AbsGenericInvokeRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            int x = (int) frame.getArguments()[0];
++            try {
++                return (int) handle.invoke(symbol, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code int abs(int)} through a handle with the function address bound as first argument. */
++    static final class AbsBoundRoot extends RootNode {
++        private final MethodHandle handle;
++
++        AbsBoundRoot(MethodHandle handle) {
++            super(null);
++            this.handle = handle;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            int x = (int) frame.getArguments()[0];
++            try {
++                return (int) handle.invokeExact(x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code int abs(int)} through a handle that is not a compilation constant. */
++    static final class AbsNonConstantRoot extends RootNode {
++        private MethodHandle handle;
++        private final MemorySegment symbol;
++
++        AbsNonConstantRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            int x = (int) frame.getArguments()[0];
++            try {
++                return (int) handle.invokeExact(symbol, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code int abs(int)} invoked behind a Truffle boundary, from AOT-compiled code. */
++    static final class AbsBoundaryRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        AbsBoundaryRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            return abs((int) frame.getArguments()[0]);
++        }
++
++        @TruffleBoundary
++        private int abs(int x) {
++            try {
++                return (int) handle.invokeExact(symbol, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code long long llabs(long long)} through a handle that is a constant of the root node. */
++    static final class LlabsRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        LlabsRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            long x = (long) frame.getArguments()[0];
++            try {
++                return (long) handle.invokeExact(symbol, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code size_t strlen(const char*)} with a pointer argument. */
++    static final class StrlenRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        StrlenRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            MemorySegment string = (MemorySegment) frame.getArguments()[0];
++            try {
++                return (long) handle.invokeExact(symbol, string);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** {@code int abs(int)} with {@code Linker.Option.captureCallState("errno")}. */
++    static final class AbsErrnoRoot extends RootNode {
++        private final MethodHandle handle;
++        private final MemorySegment symbol;
++
++        AbsErrnoRoot(MethodHandle handle, MemorySegment symbol) {
++            super(null);
++            this.handle = handle;
++            this.symbol = symbol;
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            MemorySegment captureState = (MemorySegment) frame.getArguments()[0];
++            int x = (int) frame.getArguments()[1];
++            try {
++                return (int) handle.invokeExact(symbol, captureState, x);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    /** Capture errno from an overflowing conversion, rather than merely accepting a buffer. */
++    static final class StrtollRoot extends RootNode {
++        private final MethodHandle handle = Descriptors.STRTOLL_ERRNO_HANDLE;
++        private final MemorySegment symbol = symbol("strtoll");
++
++        StrtollRoot() {
++            super(null);
++        }
++
++        @Override
++        public Object execute(VirtualFrame frame) {
++            MemorySegment state = (MemorySegment) frame.getArguments()[0];
++            MemorySegment string = (MemorySegment) frame.getArguments()[1];
++            try {
++                return (long) handle.invokeExact(symbol, state, string, MemorySegment.NULL, 10);
++            } catch (Throwable t) {
++                throw CompilerDirectives.shouldNotReachHere(t);
++            }
++        }
++    }
++
++    @Override
++    @Before
++    public void onlyWhiteBox() {
++        if (checkGraphs()) {
++            super.onlyWhiteBox();
++        }
++    }
++
++    @Before
++    public void setup() {
++        Assume.assumeTrue("the downcall stubs are only registered in the native image", ImageInfo.inImageRuntimeCode());
++        setupContext(Context.newBuilder().allowExperimentalOptions(true).option("engine.BackgroundCompilation", "false").option("engine.CompileImmediately", "false").build());
++    }
++
++    private static boolean checkGraphs() {
++        return Boolean.parseBoolean(System.getProperty(CHECK_GRAPHS_PROPERTY, "true"));
++    }
++
++    private static List<String> invokeTargets(StructuredGraph graph) {
++        List<String> targets = new ArrayList<>();
++        for (Invoke invoke : graph.getInvokes()) {
++            targets.add(invoke.callTarget().targetMethod().format("%H.%n(%p)"));
++        }
++        return targets;
++    }
++
++    private static int allocationCount(StructuredGraph graph) {
++        return graph.getNodes().filter(AbstractNewObjectNode.class).count();
++    }
++
++    private static void describe(String name, StructuredGraph graph) {
++        System.out.printf("ffm-downcall-graph: %s: %d nodes, %d allocations, invokes=%s%n", name, graph.getNodeCount(), allocationCount(graph), invokeTargets(graph));
++    }
++
++    /** The name of a downcall stub: {@code downcall_<arguments>_<return>[_r][_c][_t]_<digest>}. */
++    private static final Pattern STUB_NAME = Pattern.compile("com\\.oracle\\.svm\\.core\\.foreign\\.DowncallStubsHolder\\.downcall_([A-Z]*_[A-Z](?:_[rct])*)_[^_(]+\\(.*");
++
++    /**
++     * Asserts that the partially evaluated graph calls the downcall stub directly: exactly one
++     * call of a method of {@code DowncallStubsHolder}, whose name starts with
++     * {@code expectedStub} (the stub's argument and return kinds and its flags), no call into
++     * the method handle runtime and no allocation. Calls that remain are those of the handle's
++     * bindings that partial evaluation cannot inline, such as the acquisition of the sessions of
++     * memory segment arguments.
++     */
++    private void assertDirectDowncall(String name, String expectedStub, RootNode root, Object... arguments) {
++        if (!checkGraphs()) {
++            return;
++        }
++        StructuredGraph graph = partialEvalGraph(root, arguments);
++        describe(name, graph);
++        List<String> targets = invokeTargets(graph);
++        int stubCalls = 0;
++        for (String target : targets) {
++            assertTrue("method handle runtime call in " + name + ": " + targets, !target.contains(".invokeBasic(") && !target.contains(".linkToNative(") && !target.contains(".invokeExact(") &&
++                            !target.contains("_MT(") && !target.contains("DowncallLinker"));
++            Matcher stub = STUB_NAME.matcher(target);
++            if (stub.matches()) {
++                Assert.assertEquals("downcall stub in " + name + ": " + targets, expectedStub, stub.group(1));
++                stubCalls++;
++            }
++        }
++        Assert.assertEquals("direct downcall stub calls in " + name + ": " + targets, 1, stubCalls);
++        Assert.assertEquals("allocations in " + name, 0, allocationCount(graph));
++    }
++
++    /** Asserts that the partially evaluated graph calls the method handle runtime. */
++    private void assertRuntimeDowncall(String name, RootNode root, Object... arguments) {
++        if (!checkGraphs()) {
++            return;
++        }
++        StructuredGraph graph = partialEvalGraph(root, arguments);
++        describe(name, graph);
++        List<String> targets = invokeTargets(graph);
++        assertTrue("no method handle runtime call in " + name + ": " + targets, targets.stream().anyMatch(target -> target.contains(".invokeBasic(")));
++        assertTrue("direct downcall stub call in " + name + ": " + targets, targets.stream().noneMatch(target -> target.contains("DowncallStubsHolder")));
++    }
++
++    private StructuredGraph partialEvalGraph(RootNode root, Object[] arguments) {
++        return partialEval((OptimizedCallTarget) root.getCallTarget(), arguments);
++    }
++
++    private static OptimizedCallTarget compile(RootNode root, Object... args) {
++        OptimizedCallTarget target = (OptimizedCallTarget) root.getCallTarget();
++        for (int i = 0; i < 3; i++) {
++            target.call(args);
++        }
++        assertTrue("compilation of " + root, target.compile(true));
++        assertTrue("compiled code of " + root + " must be valid", target.isValid());
++        return target;
++    }
++
++    /** Returns the cost of one call in nanoseconds; the timing itself is informational only. */
++    private static double timeCalls(OptimizedCallTarget target, Object[] args, Object expected) {
++        for (int i = 0; i < WARMUP_CALLS; i++) {
++            target.call(args);
++        }
++        long start = System.nanoTime();
++        for (int i = 0; i < TIMED_CALLS; i++) {
++            Object result = target.call(args);
++            if (!expected.equals(result)) {
++                throw new AssertionError("unexpected result " + result + " from " + target);
++            }
++        }
++        long end = System.nanoTime();
++        assertTrue("compiled code of " + target + " must stay valid", target.isValid());
++        return (end - start) / (double) TIMED_CALLS;
++    }
++
++    private static void report(String name, double nsPerCall) {
++        System.out.printf("ffm-downcall-bench: %-56s %8.2f ns/call%n", name, nsPerCall);
++    }
++
++    /** A call site whose handle is a constant of the image: intrinsified when the image is built. */
++    private static int absAOTConstantHandle(MemorySegment symbol, int x) throws Throwable {
++        return (int) Descriptors.ABS_HANDLE.invokeExact(symbol, x);
++    }
++
++    /** A call site whose handle is not constant: interpreted by the method handle runtime. */
++    private static int absAOT(MethodHandle handle, MemorySegment symbol, int x) throws Throwable {
++        return (int) handle.invokeExact(symbol, x);
++    }
++
++    private static double timeAOT(MethodHandle handle, MemorySegment symbol, boolean constantHandle) throws Throwable {
++        for (int i = 0; i < WARMUP_CALLS; i++) {
++            int r = constantHandle ? absAOTConstantHandle(symbol, -i) : absAOT(handle, symbol, -i);
++            if (r != i) {
++                throw new AssertionError("abs(" + -i + ") = " + r);
++            }
++        }
++        long start = System.nanoTime();
++        for (int i = 0; i < TIMED_CALLS; i++) {
++            int r = constantHandle ? absAOTConstantHandle(symbol, -i) : absAOT(handle, symbol, -i);
++            if (r != i) {
++                throw new AssertionError("abs(" + -i + ") = " + r);
++            }
++        }
++        return (System.nanoTime() - start) / (double) TIMED_CALLS;
++    }
++
++    @Test
++    public void testAbsBuildTimeHandle() {
++        MemorySegment abs = symbol("abs");
++        AbsRoot root = new AbsRoot(Descriptors.ABS_HANDLE, abs);
++        assertDirectDowncall("abs (build-time handle)", "JI_I", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        Assert.assertEquals(42, target.call(42));
++        report("Truffle PE, abs, build-time handle", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsRuntimeHandle() {
++        MemorySegment abs = symbol("abs");
++        MethodHandle handle = Linker.nativeLinker().downcallHandle(Descriptors.ABS);
++        AbsRoot root = new AbsRoot(handle, abs);
++        assertDirectDowncall("abs (run-time handle)", "JI_I", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        Assert.assertEquals(42, target.call(42));
++        report("Truffle PE, abs, run-time handle", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsRuntimeHandleBoundToSymbol() {
++        MethodHandle handle = Linker.nativeLinker().downcallHandle(symbol("abs"), Descriptors.ABS);
++        AbsBoundRoot root = new AbsBoundRoot(handle);
++        assertDirectDowncall("abs (run-time handle bound to the symbol)", "JI_I", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        Assert.assertEquals(42, target.call(42));
++        report("Truffle PE, abs, run-time handle bound to the symbol", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsGenericInvoke() {
++        MemorySegment abs = symbol("abs");
++        AbsGenericInvokeRoot root = new AbsGenericInvokeRoot(Linker.nativeLinker().downcallHandle(Descriptors.ABS), abs);
++        assertDirectDowncall("abs (MethodHandle.invoke)", "JI_I", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        Assert.assertEquals(42, target.call(42));
++        report("Truffle PE, abs, run-time handle, MethodHandle.invoke", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsNonConstantHandle() {
++        MemorySegment abs = symbol("abs");
++        AbsNonConstantRoot root = new AbsNonConstantRoot(Linker.nativeLinker().downcallHandle(Descriptors.ABS), abs);
++        assertRuntimeDowncall("abs (handle not constant)", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        Assert.assertEquals(42, target.call(42));
++        report("Truffle PE, abs, handle not constant", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsBehindBoundary() {
++        MemorySegment abs = symbol("abs");
++        AbsBoundaryRoot root = new AbsBoundaryRoot(Linker.nativeLinker().downcallHandle(Descriptors.ABS), abs);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        report("Truffle PE, abs, run-time handle behind TruffleBoundary", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testLlabsBuildTimeHandle() {
++        MemorySegment llabs = symbol("llabs");
++        LlabsRoot root = new LlabsRoot(Descriptors.LLABS_HANDLE, llabs);
++        assertDirectDowncall("llabs (build-time handle)", "JJ_J", root, -7L);
++        OptimizedCallTarget target = compile(root, -7L);
++        Assert.assertEquals(7L, target.call(-7L));
++        Assert.assertEquals(1L << 40, target.call(-(1L << 40)));
++        report("Truffle PE, llabs, build-time handle", timeCalls(target, new Object[]{-12345L}, 12345L));
++    }
++
++    @Test
++    public void testStrlenBuildTimeHandle() {
++        MemorySegment strlen = symbol("strlen");
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment string = arena.allocateFrom("Hello, World!");
++            StrlenRoot root = new StrlenRoot(Descriptors.STRLEN_HANDLE, strlen);
++            assertDirectDowncall("strlen (build-time handle)", "JJ_J", root, string);
++            OptimizedCallTarget target = compile(root, string);
++            Assert.assertEquals(13L, target.call(string));
++            report("Truffle PE, strlen, build-time handle", timeCalls(target, new Object[]{string}, 13L));
++        }
++    }
++
++    @Test
++    public void testAbsCriticalBuildTimeHandle() {
++        MemorySegment abs = symbol("abs");
++        AbsRoot root = new AbsRoot(Descriptors.ABS_CRITICAL_HANDLE, abs);
++        assertDirectDowncall("abs critical (build-time handle)", "JI_I_t", root, -7);
++        OptimizedCallTarget target = compile(root, -7);
++        Assert.assertEquals(7, target.call(-7));
++        report("Truffle PE, abs critical(false), build-time handle", timeCalls(target, new Object[]{-12345}, 12345));
++    }
++
++    @Test
++    public void testAbsCaptureErrnoBuildTimeHandle() {
++        MemorySegment abs = symbol("abs");
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment captureState = arena.allocate(Linker.Option.captureStateLayout());
++            AbsErrnoRoot root = new AbsErrnoRoot(Descriptors.ABS_ERRNO_HANDLE, abs);
++            assertDirectDowncall("abs errno (build-time handle)", "JJI_I_c", root, captureState, -7);
++            OptimizedCallTarget target = compile(root, captureState, -7);
++            Assert.assertEquals(7, target.call(captureState, -7));
++            report("Truffle PE, abs captureCallState(errno), build-time handle", timeCalls(target, new Object[]{captureState, -12345}, 12345));
++        }
++    }
++
++    @Test
++    public void testCapturedErrnoValue() {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            MemorySegment overflow = arena.allocateFrom("99999999999999999999999999999999999999999999");
++            long errnoOffset = Linker.Option.captureStateLayout().byteOffset(MemoryLayout.PathElement.groupElement("errno"));
++            StrtollRoot root = new StrtollRoot();
++            assertDirectDowncall("strtoll errno", "JJJJI_J_c", root, state, overflow);
++            OptimizedCallTarget target = compile(root, state, overflow);
++            state.fill((byte) 0);
++            Assert.assertEquals(Long.MAX_VALUE, target.call(state, overflow));
++            assertTrue("overflow must capture a nonzero errno", state.get(ValueLayout.JAVA_INT, errnoOffset) != 0);
++        }
++    }
++
++    @Test
++    public void testClosedSegment() {
++        Arena arena = Arena.ofConfined();
++        MemorySegment string = arena.allocateFrom("live");
++        StrlenRoot root = new StrlenRoot(Descriptors.STRLEN_HANDLE, symbol("strlen"));
++        OptimizedCallTarget target;
++        try {
++            target = compile(root, string);
++            Assert.assertEquals(4L, target.call(string));
++        } finally {
++            arena.close();
++        }
++        Throwable failure = Assert.assertThrows(Throwable.class, () -> target.call(string));
++        while (failure.getCause() != null) {
++            failure = failure.getCause();
++        }
++        assertTrue("closed arena must be rejected: " + failure, failure instanceof IllegalStateException);
++    }
++
++    @Test
++    public void testExactTypeMismatch() {
++        MethodHandle handle = Linker.nativeLinker().downcallHandle(symbol("abs"), Descriptors.ABS);
++        Assert.assertThrows(WrongMethodTypeException.class, () -> {
++            long ignored = (long) handle.invokeExact(-7L);
++            Assert.fail("incorrect exact type returned " + ignored);
++        });
++    }
++
++    @Test
++    public void testAOTBaseline() throws Throwable {
++        MemorySegment abs = symbol("abs");
++        report("AOT Java, abs, build-time constant handle", timeAOT(Descriptors.ABS_HANDLE, abs, true));
++        report("AOT Java, abs, build-time handle, not constant", timeAOT(Descriptors.ABS_HANDLE, abs, false));
++        report("AOT Java, abs, run-time handle, not constant", timeAOT(Linker.nativeLinker().downcallHandle(Descriptors.ABS), abs, false));
++    }
++}
+diff --git a/docs/reference-manual/native-image/FFM-API.md b/docs/reference-manual/native-image/FFM-API.md
+index dc91e8c688d..06691c7aa04 100644
+--- a/docs/reference-manual/native-image/FFM-API.md
++++ b/docs/reference-manual/native-image/FFM-API.md
+@@ -49,6 +49,13 @@ Use this approach whenever possible.
+ 
+ You can specify the required descriptors for downcalls and upcalls by providing the appropriate configuration in the _reachability-metadata.json_ file. See [Using the Configuration File](#using-the-configuration-file).
+ 
++In a native executable with runtime compilation, for example one that runs a Graal language, the `native-image` builder also creates the downcall method handle of each registered downcall at build time, so that the JDK specializes the handle's argument and return conversions to bytecode.
++`Linker.downcallHandle` returns that handle at run time for the registered function descriptor and linker options.
++Code compiled at run time invokes such a handle directly when the handle is a compilation constant: the compiled code converts the arguments and calls the native function without boxing and without the method handle interpreter.
++This applies to `invokeExact`, and to `invoke` when the call site has the handle's type, on the handle returned by `Linker.downcallHandle`, with or without the function address bound as its first argument.
++This applies to code of Graal languages only. In an image without one, for example where the only runtime compilation is of classes loaded at run time (`-H:+GraalJITCompileAtRuntime`), downcall handles are not prepared for runtime compilation.
++The option `-H:-SpecializeForeignDowncalls` disables the build-time creation of downcall handles.
++
+ #### Downcalls
+ 
+ Assume you want to call a C function:
+diff --git a/substratevm/mx.substratevm/mx_substratevm.py b/substratevm/mx.substratevm/mx_substratevm.py
+index 6e9b7f62a76..a7e77abbbd6 100644
+--- a/substratevm/mx.substratevm/mx_substratevm.py
++++ b/substratevm/mx.substratevm/mx_substratevm.py
+@@ -477,10 +477,14 @@ def truffle_unittest_task(extra_build_args=None):
+             'jdk.graal.compiler.truffle.test.ConstantOptionKeyPartialEvaluationTest',
+             # GR-75881
+             'jdk.graal.compiler.truffle.test.GR75881Test',
++            # Downcalls through constant FFM method handles are compiled to direct calls of the
++            # downcall stub during partial evaluation. The test registers its downcalls through a feature.
++            'jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest',
+         ]
+         test_build_args = (extra_build_args +
+                            svm_experimental_options(['-H:-SupportCompileInIsolates']) +
+-                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true'])
++                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true',
++                            '--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature'])
+         native_unittest(tests + truffle_args(test_build_args))
+ 
+     with tempfile.NamedTemporaryFile(mode='w', delete=False) as logfile:
+@@ -575,6 +579,11 @@ def svm_gate_body(args, tasks):
+         if t:
+             with native_image_context(IMAGE_ASSERTION_FLAGS):
+                 native_unittests_task(args.extra_image_builder_arguments)
++                # Ristretto requires runtime compilation, which no feature configures for the
++                # analysis without Truffle. Downcalls registered at build time must then not be
++                # specialized for runtime compilation (elide-dev/graal#198).
++                native_unittest(['com.oracle.svm.test.foreign.ForeignTests', '--build-args'] + svm_experimental_options([
++                    '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime']) + args.extra_image_builder_arguments)
+ 
+     generic_field_type_tags = [GraalTags.native_unittests, GraalTags.all_native_unittests, GraalTags.generic_field_type]
+     with Task('generic field type', tasks, tags=generic_field_type_tags) as t:
+diff --git a/substratevm/mx.substratevm/suite.py b/substratevm/mx.substratevm/suite.py
+index 3fe28bfe972..a632afe75c6 100644
+--- a/substratevm/mx.substratevm/suite.py
++++ b/substratevm/mx.substratevm/suite.py
+@@ -943,6 +943,7 @@ suite = {
+             "sourceDirs": ["src"],
+             "dependencies": [
+                 "com.oracle.svm.hosted",
++                "com.oracle.svm.graal",
+                 "com.oracle.svm.configure",
+                 "com.oracle.svm.core.foreign"
+             ],
+diff --git a/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/DowncallHandleLinker.java b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/DowncallHandleLinker.java
+new file mode 100644
+index 00000000000..6aadab413d7
+--- /dev/null
++++ b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/DowncallHandleLinker.java
+@@ -0,0 +1,203 @@
++/*
++ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package com.oracle.svm.core.foreign;
++
++import java.lang.foreign.MemorySegment;
++import java.lang.invoke.MethodHandle;
++import java.util.Collections;
++import java.util.IdentityHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.function.Consumer;
++
++import org.graalvm.nativeimage.Platform;
++import org.graalvm.nativeimage.Platforms;
++
++import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
++import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
++import com.oracle.svm.guest.staging.util.ImageHeapList;
++import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
++import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
++import com.oracle.svm.shared.singletons.traits.BuiltinTraits.PartiallyLayerAware;
++import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.Duplicable;
++import com.oracle.svm.shared.singletons.traits.SingletonTraits;
++import com.oracle.svm.shared.util.ReflectionUtil;
++import com.oracle.svm.shared.util.VMError;
++
++import jdk.graal.compiler.nodes.ConstantNode;
++import jdk.graal.compiler.nodes.NodeView;
++import jdk.graal.compiler.nodes.StructuredGraph;
++import jdk.graal.compiler.nodes.ValueNode;
++import jdk.graal.compiler.nodes.spi.CoreProviders;
++import jdk.graal.compiler.nodes.type.StampTool;
++import jdk.vm.ci.meta.ConstantReflectionProvider;
++import jdk.vm.ci.meta.JavaConstant;
++import jdk.vm.ci.meta.JavaKind;
++import jdk.vm.ci.meta.MetaAccessProvider;
++import jdk.vm.ci.meta.ResolvedJavaField;
++import jdk.vm.ci.meta.ResolvedJavaMethod;
++import jdk.vm.ci.meta.ResolvedJavaType;
++import jdk.vm.ci.meta.Signature;
++
++/**
++ * Links the invocation of a constant downcall method handle in runtime-compiled code to the entry
++ * method that the image builder generated for the handle.
++ * <p>
++ * The image builder creates the method handle of every registered downcall at build time, with
++ * the bindings specialized to bytecode by the JDK, and generates for it an entry method: a static
++ * method with the handle's type whose only statement is an {@code invokeExact} of the handle as a
++ * constant. That invocation is intrinsified when the image is built, so the entry method does the
++ * handle's argument and return conversions, acquires the sessions of memory segment arguments
++ * while the native function runs, and calls the native-image downcall stub directly. Runtime
++ * compilation inlines the entry method in place of the {@code MethodHandle.invokeBasic} call of
++ * an {@code invokeExact} or {@code invoke} call site whose handle is constant, so the compiled
++ * code neither boxes arguments nor runs the lambda form interpreter.
++ * <p>
++ * Supported are the handles returned by {@code Linker.downcallHandle} for a registered function
++ * descriptor and linker options, with or without the function address bound as the first argument,
++ * invoked through {@code invokeExact} or through {@code invoke} with the handle's type. Handles
++ * derived from them through other combinators are invoked as before. A handle that application
++ * code creates at image build time is the builder's handle, and therefore linked, because the JDK
++ * linker caches the handle of a descriptor in a soft reference and the builder's strong reference
++ * keeps that reference from being cleared.
++ * <p>
++ * The entry methods are indexed per image, so layered images are not supported (see
++ * {@code ForeignFunctionsFeature}).
++ */
++@SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = Duplicable.class, other = PartiallyLayerAware.class)
++public final class DowncallHandleLinker implements RuntimeMethodHandleLinker {
++    /** The entry methods, indexed by {@link MethodHandleLinkInfo#getEntryIndex()}. */
++    private final List<ResolvedJavaMethod> entries = ImageHeapList.create(ResolvedJavaMethod.class);
++
++    private ResolvedJavaField linkInfoField;
++    private ResolvedJavaField entryIndexField;
++    private ResolvedJavaField boundValueField;
++
++    @Platforms(Platform.HOSTED_ONLY.class) //
++    private final Map<Object, MethodHandleLinkInfo> hostedInfos = Collections.synchronizedMap(new IdentityHashMap<>());
++
++    @Platforms(Platform.HOSTED_ONLY.class)
++    public DowncallHandleLinker() {
++    }
++
++    /**
++     * Resolves the fields that {@link #link} reads through constant reflection.
++     * {@code registerAsAccessed} must make the fields available at image run time.
++     */
++    @Platforms(Platform.HOSTED_ONLY.class)
++    public void initialize(MetaAccessProvider metaAccess, Consumer<ResolvedJavaField> registerAsAccessed) {
++        linkInfoField = metaAccess.lookupJavaField(RuntimeMethodHandleLinker.linkInfoField());
++        entryIndexField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(MethodHandleLinkInfo.class, "entryIndex"));
++        boundValueField = metaAccess.lookupJavaField(ReflectionUtil.lookupField(MethodHandleLinkInfo.class, "boundValue"));
++        for (ResolvedJavaField field : List.of(linkInfoField, entryIndexField, boundValueField)) {
++            registerAsAccessed.accept(field);
++        }
++    }
++
++    /**
++     * Registers {@code entry} as the entry method of the downcall handle {@code handle}, which
++     * must have been created at image build time and must have the entry method's type.
++     */
++    @Platforms(Platform.HOSTED_ONLY.class)
++    public void registerEntry(MethodHandle handle, ResolvedJavaMethod entry) {
++        VMError.guarantee(entry.isStatic() && entry.getSignature().getParameterCount(false) == handle.type().parameterCount(), "Entry method %s does not match the handle type %s", entry,
++                        handle.type());
++        int index;
++        synchronized (entries) {
++            index = entries.size();
++            entries.add(entry);
++        }
++        MethodHandleLinkInfo previous = hostedInfos.put(handle, new MethodHandleLinkInfo(index, null));
++        VMError.guarantee(previous == null, "Downcall handle registered twice: %s", handle);
++    }
++
++    @Override
++    public MethodHandleLinkInfo hostedLinkInfo(Object methodHandle) {
++        return hostedInfos.get(methodHandle);
++    }
++
++    @Override
++    public MethodHandleLinkInfo bindLinkInfo(MethodHandleLinkInfo linkInfo, Object boundValue) {
++        if (linkInfo.getBoundValue() == null && boundValue instanceof MemorySegment) {
++            return new MethodHandleLinkInfo(linkInfo.getEntryIndex(), boundValue);
++        }
++        return null;
++    }
++
++    @Override
++    public LinkedInvoke link(ResolvedJavaMethod invokeBasic, ValueNode[] arguments, CoreProviders providers, StructuredGraph graph) {
++        if (arguments.length < 1 || !RuntimeMethodHandleLinker.isInvokeBasic(invokeBasic)) {
++            return null;
++        }
++        JavaConstant handle = arguments[0].asJavaConstant();
++        if (handle == null || handle.isNull()) {
++            return null;
++        }
++        ConstantReflectionProvider constantReflection = providers.getConstantReflection();
++        MetaAccessProvider metaAccess = providers.getMetaAccess();
++        JavaConstant info = constantReflection.readFieldValue(linkInfoField, handle);
++        if (info == null || info.isNull()) {
++            return null;
++        }
++        ResolvedJavaMethod entry = entries.get(constantReflection.readFieldValue(entryIndexField, info).asInt());
++        JavaConstant boundAddress = constantReflection.readFieldValue(boundValueField, info);
++        int boundCount = boundAddress.isNull() ? 0 : 1;
++
++        /*
++         * The arguments of invokeBasic have the basic types of the handle's type, which is the
++         * entry method's type without the bound address: the call site's type was checked against
++         * the handle's type (invokeExact) or the handle was adapted to it (invoke) before. The
++         * entry method's parameter types are more precise; the call is only linked when the
++         * compiler can see that the arguments have them, which is the case when the arguments
++         * come from expressions of the call site's static types.
++         */
++        Signature signature = entry.getSignature();
++        int argumentCount = arguments.length - 1;
++        if (argumentCount + boundCount != signature.getParameterCount(false)) {
++            return null;
++        }
++        ValueNode[] linkedArguments = new ValueNode[signature.getParameterCount(false)];
++        if (boundCount == 1) {
++            linkedArguments[0] = ConstantNode.forConstant(boundAddress, metaAccess, graph);
++        }
++        for (int i = 0; i < argumentCount; i++) {
++            ValueNode argument = arguments[i + 1];
++            int parameterIndex = i + boundCount;
++            JavaKind parameterKind = signature.getParameterKind(parameterIndex);
++            if (argument.getStackKind() != parameterKind.getStackKind()) {
++                return null;
++            }
++            if (parameterKind == JavaKind.Object) {
++                ResolvedJavaType parameterType = (ResolvedJavaType) signature.getParameterType(parameterIndex, null);
++                ResolvedJavaType argumentType = StampTool.typeOrNull(argument.stamp(NodeView.DEFAULT));
++                if (argumentType == null || !parameterType.isAssignableFrom(argumentType)) {
++                    return null;
++                }
++            }
++            linkedArguments[parameterIndex] = argument;
++        }
++        return new LinkedInvoke(entry, linkedArguments);
++    }
++}
+diff --git a/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/ForeignFunctionsRuntime.java b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/ForeignFunctionsRuntime.java
+index 3d7affcee49..1657b3fcdc0 100644
+--- a/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/ForeignFunctionsRuntime.java
++++ b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/ForeignFunctionsRuntime.java
+@@ -122,6 +122,12 @@ public class ForeignFunctionsRuntime implements ForeignSupport, OptimizeSharedAr
+     private final EconomicMap<MethodType, FunctionPointerHolder> downcallStubInvokers = ImageHeapMap.create("downcallStubInvokers");
+     private final EconomicMap<DirectUpcallKey, FunctionPointerHolder> directUpcallStubs = ImageHeapMap.create("directUpcallStubs");
+     private final EconomicMap<JavaEntryPointInfo, FunctionPointerHolder> upcallStubs = ImageHeapMap.create("upcallStubs");
++    /**
++     * The downcall handles created at image build time, by the arguments of
++     * {@code AbstractLinker.downcallHandle0} after the JDK normalized them; see
++     * {@link DowncallHandleLinker}.
++     */
++    private final EconomicMap<DowncallHandleKey, MethodHandle> specializedDowncallHandles = ImageHeapMap.create("specializedDowncallHandles");
+     private final EconomicSet<ResolvedJavaType> neverAccessesSharedArenaTypes = EconomicSet.create();
+     private final EconomicSet<ResolvedJavaMethod> neverAccessesSharedArenaMethods = EconomicSet.create();
+ 
+@@ -184,6 +190,23 @@ public class ForeignFunctionsRuntime implements ForeignSupport, OptimizeSharedAr
+                         (OS.getCurrent().className + "-" + SubstrateUtil.getArchitectureName()).toLowerCase(Locale.ROOT));
+     }
+ 
++    /** The key of a downcall handle: the function descriptor without layout names and the linker options. */
++    private record DowncallHandleKey(FunctionDescriptor descriptor, LinkerOptions options) {
++    }
++
++    @Platforms(Platform.HOSTED_ONLY.class)
++    public boolean addSpecializedDowncallHandle(FunctionDescriptor descriptor, LinkerOptions options, MethodHandle handle) {
++        return specializedDowncallHandles.putIfAbsent(new DowncallHandleKey(descriptor, options), handle) == null;
++    }
++
++    /**
++     * Returns the downcall handle that was created at image build time for the function descriptor
++     * and linker options, or null if there is none. The descriptor must not have layout names.
++     */
++    public MethodHandle getSpecializedDowncallHandle(FunctionDescriptor descriptor, LinkerOptions options) {
++        return specializedDowncallHandles.get(new DowncallHandleKey(descriptor, options));
++    }
++
+     @Platforms(Platform.HOSTED_ONLY.class)
+     public boolean downcallStubExists(NativeEntryPointInfo nep) {
+         return downcallStubs.containsKey(nep);
+diff --git a/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/Target_jdk_internal_foreign_abi_AbstractLinker.java b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/Target_jdk_internal_foreign_abi_AbstractLinker.java
+index 4ca1a18e0f1..0df4d0119df 100644
+--- a/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/Target_jdk_internal_foreign_abi_AbstractLinker.java
++++ b/substratevm/src/com.oracle.svm.core.foreign/src/com/oracle/svm/core/foreign/Target_jdk_internal_foreign_abi_AbstractLinker.java
+@@ -26,19 +26,24 @@ package com.oracle.svm.core.foreign;
+ 
+ import java.lang.foreign.Arena;
+ import java.lang.foreign.FunctionDescriptor;
++import java.lang.foreign.Linker;
+ import java.lang.foreign.MemorySegment;
+ import java.lang.invoke.MethodHandle;
+ import java.lang.invoke.MethodType;
++import java.util.Objects;
++import java.util.function.Function;
+ 
+ import com.oracle.svm.core.annotate.Alias;
+ import com.oracle.svm.core.annotate.RecomputeFieldValue;
+ import com.oracle.svm.core.annotate.Substitute;
+ import com.oracle.svm.core.annotate.TargetClass;
+ import com.oracle.svm.core.foreign.ForeignFunctionsRuntime.LinkRequest;
++import com.oracle.svm.shared.util.BasedOnJDKFile;
+ 
+ import jdk.internal.foreign.abi.AbstractLinker;
+ import jdk.internal.foreign.abi.AbstractLinker.UpcallStubFactory;
+ import jdk.internal.foreign.abi.LinkerOptions;
++import jdk.internal.foreign.abi.SharedUtils;
+ import jdk.internal.foreign.abi.aarch64.linux.LinuxAArch64Linker;
+ import jdk.internal.foreign.abi.aarch64.macos.MacOsAArch64Linker;
+ import jdk.internal.foreign.abi.x64.sysv.SysVx64Linker;
+@@ -55,10 +60,69 @@ public final class Target_jdk_internal_foreign_abi_AbstractLinker {
+     @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.NewInstance, declClassName = "jdk.internal.foreign.abi.SoftReferenceCache") //
+     private Target_jdk_internal_foreign_abi_SoftReferenceCache UPCALL_CACHE;
+     // Checkstyle: resume
++
++    @Alias
++    native void checkLayouts(FunctionDescriptor descriptor);
++
++    @Alias
++    static native FunctionDescriptor stripNames(FunctionDescriptor function);
++
++    @Alias
++    native void validateVariadicLayouts(FunctionDescriptor function, LinkerOptions optionSet);
++
++    @Alias
++    native MethodHandle arrangeDowncall(MethodType inferredMethodType, FunctionDescriptor function, LinkerOptions options);
++
++    /**
++     * Same as the original, except that a downcall handle that the image builder created for the
++     * function descriptor and options is used in place of a handle linked at run time. The image
++     * builder's handle has the same type and behavior, but its bindings are specialized to
++     * bytecode by the JDK rather than interpreted, and runtime compilation can invoke it directly;
++     * see {@link DowncallHandleLinker}.
++     */
++    @Substitute
++    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+18/src/java.base/share/classes/jdk/internal/foreign/abi/AbstractLinker.java#L107-L123")
++    private MethodHandle downcallHandle0(FunctionDescriptor function, Linker.Option... options) {
++        Objects.requireNonNull(function);
++        Objects.requireNonNull(options);
++        checkLayouts(function);
++        FunctionDescriptor strippedFunction = stripNames(function);
++        LinkerOptions optionSet = LinkerOptions.forDowncall(strippedFunction, options);
++        validateVariadicLayouts(strippedFunction, optionSet);
++
++        return DOWNCALL_CACHE.get(new Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest(strippedFunction, optionSet), linkRequest -> {
++            FunctionDescriptor fd = linkRequest.descriptor();
++            MethodHandle specialized = ForeignFunctionsRuntime.singleton().getSpecializedDowncallHandle(fd, linkRequest.options());
++            if (specialized != null) {
++                return specialized;
++            }
++            MethodType type = fd.toMethodType();
++            MethodHandle handle = arrangeDowncall(type, fd, linkRequest.options());
++            handle = SharedUtils.maybeCheckCaptureSegment(handle, linkRequest.options());
++            handle = SharedUtils.maybeInsertAllocator(fd, handle);
++            return handle;
++        });
++    }
++}
++
++@TargetClass(className = "jdk.internal.foreign.abi.AbstractLinker", innerClass = "LinkRequest", onlyWith = ForeignAPIPredicates.Enabled.class)
++final class Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest {
++    @Alias
++    @SuppressWarnings("unused")
++    Target_jdk_internal_foreign_abi_AbstractLinker_LinkRequest(FunctionDescriptor descriptor, LinkerOptions options) {
++    }
++
++    @Alias
++    native FunctionDescriptor descriptor();
++
++    @Alias
++    native LinkerOptions options();
+ }
+ 
+ @TargetClass(className = "jdk.internal.foreign.abi.SoftReferenceCache", onlyWith = ForeignAPIPredicates.Enabled.class)
+ final class Target_jdk_internal_foreign_abi_SoftReferenceCache {
++    @Alias
++    native <K, V> V get(K key, Function<K, V> valueFactory);
+ }
+ 
+ /**
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/SubstrateOptions.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/SubstrateOptions.java
+index f77b8ea4604..aedfb97c756 100644
+--- a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/SubstrateOptions.java
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/SubstrateOptions.java
+@@ -1622,6 +1622,10 @@ public class SubstrateOptions {
+                 throw UserError.invalidOptionValue(optionKey, true, "Support for the Foreign Function and Memory API is not available with the LLVM backend.");
+             }
+         }
++
++        @Option(help = "Create the method handles of registered foreign downcalls at image build time, with their bindings specialized to bytecode by the JDK, " +
++                        "and invoke them directly from runtime-compiled code.", type = Expert) //
++        public static final HostedOptionKey<Boolean> SpecializeForeignDowncalls = new HostedOptionKey<>(true);
+     }
+ 
+     @Option(help = "Overwrites the available number of processors provided by the OS. Any value <= 0 means using the processor count from the OS.")//
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/MethodHandleLinkInfo.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/MethodHandleLinkInfo.java
+new file mode 100644
+index 00000000000..a03619065c6
+--- /dev/null
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/MethodHandleLinkInfo.java
+@@ -0,0 +1,62 @@
++/*
++ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package com.oracle.svm.core.methodhandles;
++
++import com.oracle.svm.guest.staging.core.heap.UnknownPrimitiveField;
++import com.oracle.svm.shared.BuildPhaseProvider.AfterAnalysis;
++
++/**
++ * The link information of a method handle that a {@link RuntimeMethodHandleLinker} can invoke
++ * directly: the index of the linker's entry method that implements the handle, and the value that
++ * {@link java.lang.invoke.MethodHandle#bindTo} bound as the handle's first argument, or null.
++ * <p>
++ * The class is concrete and final because the static analysis sees it as the type of
++ * {@link Target_java_lang_invoke_MethodHandle#linkInfo}, whose value only becomes available after
++ * the analysis. A runtime compiler reads the fields through its constant reflection, which also
++ * works when it compiles in a separate isolate, so the entry method is referenced by its index
++ * rather than directly.
++ */
++public final class MethodHandleLinkInfo {
++    /**
++     * Read by {@link java.lang.invoke.MethodHandle#bindTo}: the instances that the image builder
++     * creates are only scanned after the analysis, so the analysis must not fold the field.
++     */
++    @UnknownPrimitiveField(availability = AfterAnalysis.class) //
++    private final int entryIndex;
++    private final Object boundValue;
++
++    public MethodHandleLinkInfo(int entryIndex, Object boundValue) {
++        this.entryIndex = entryIndex;
++        this.boundValue = boundValue;
++    }
++
++    public int getEntryIndex() {
++        return entryIndex;
++    }
++
++    public Object getBoundValue() {
++        return boundValue;
++    }
++}
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/RuntimeMethodHandleLinker.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/RuntimeMethodHandleLinker.java
+new file mode 100644
+index 00000000000..cfc6073101b
+--- /dev/null
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/RuntimeMethodHandleLinker.java
+@@ -0,0 +1,105 @@
++/*
++ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package com.oracle.svm.core.methodhandles;
++
++import java.lang.reflect.Field;
++
++import org.graalvm.nativeimage.ImageSingletons;
++import org.graalvm.nativeimage.Platform;
++import org.graalvm.nativeimage.Platforms;
++
++import com.oracle.svm.shared.util.ReflectionUtil;
++
++import jdk.graal.compiler.nodes.StructuredGraph;
++import jdk.graal.compiler.nodes.ValueNode;
++import jdk.graal.compiler.nodes.spi.CoreProviders;
++import jdk.vm.ci.meta.ResolvedJavaMethod;
++
++/**
++ * Links the invocation of a compilation-constant method handle to a direct call when a graph is
++ * compiled at image run time, for example during Truffle partial evaluation.
++ * <p>
++ * A native image executes a method handle that was not intrinsified at image build time in the
++ * lambda form interpreter, and a runtime compiler has no {@code MethodHandleAccessProvider} to look
++ * through the lambda forms of a constant handle. The image builder can instead prepare a direct
++ * implementation of selected handles ahead of time and mark those handles through
++ * {@link Target_java_lang_invoke_MethodHandle#linkInfo}. A linker then replaces the call of
++ * {@code MethodHandle.invokeBasic} that remains of a {@code MethodHandle.invokeExact} or
++ * {@code MethodHandle.invoke} call site after the JDK's type check has been folded with a call
++ * to that implementation when the handle is a constant.
++ */
++public interface RuntimeMethodHandleLinker {
++
++    /** The direct target of a linked invocation and the arguments to pass to it. */
++    record LinkedInvoke(ResolvedJavaMethod target, ValueNode[] arguments) {
++    }
++
++    static boolean isAvailable() {
++        return ImageSingletons.contains(RuntimeMethodHandleLinker.class);
++    }
++
++    static RuntimeMethodHandleLinker singleton() {
++        return ImageSingletons.lookup(RuntimeMethodHandleLinker.class);
++    }
++
++    /** The field of {@code MethodHandle} that holds the link information of a handle. */
++    @Platforms(Platform.HOSTED_ONLY.class)
++    static Field linkInfoField() {
++        return ReflectionUtil.lookupField(Target_java_lang_invoke_MethodHandle.class, "linkInfo");
++    }
++
++    /**
++     * Returns whether {@code method} is {@code MethodHandle.invokeBasic}, in native images a
++     * method with the basic types of the call site that boxes its arguments and runs the lambda
++     * form interpreter. Its receiver is the handle.
++     */
++    static boolean isInvokeBasic(ResolvedJavaMethod method) {
++        /* The name is checked first because resolving the declaring class name is more expensive. */
++        return "invokeBasic".equals(method.getName()) && !method.isStatic() && "java.lang.invoke.MethodHandle".equals(method.getDeclaringClass().toJavaName(true));
++    }
++
++    /**
++     * Returns the link information of a method handle at image build time, or null if the handle
++     * cannot be linked directly. The result is stored in
++     * {@link Target_java_lang_invoke_MethodHandle#linkInfo}.
++     */
++    @Platforms(Platform.HOSTED_ONLY.class)
++    MethodHandleLinkInfo hostedLinkInfo(Object methodHandle);
++
++    /**
++     * Returns the link information of the handle that {@link java.lang.invoke.MethodHandle#bindTo}
++     * creates from a handle with the link information {@code linkInfo} and the bound value, or
++     * null if the bound handle cannot be linked directly.
++     */
++    MethodHandleLinkInfo bindLinkInfo(MethodHandleLinkInfo linkInfo, Object boundValue);
++
++    /**
++     * Links a call of {@link #isInvokeBasic MethodHandle.invokeBasic} to a direct target. The
++     * first argument is the handle, which must be a constant that carries link information for
++     * the call to be linked. Returns null if the call must remain as it is. Nodes that the linked
++     * call needs are added to {@code graph}.
++     */
++    LinkedInvoke link(ResolvedJavaMethod invokeBasic, ValueNode[] arguments, CoreProviders providers, StructuredGraph graph);
++}
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodHandle.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodHandle.java
+index e1bb8efdc62..05e8344fae8 100644
+--- a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodHandle.java
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodHandle.java
+@@ -38,14 +38,19 @@ import java.lang.reflect.Method;
+ import java.lang.reflect.Modifier;
+ import java.util.Arrays;
+ 
++import org.graalvm.nativeimage.Platform;
++import org.graalvm.nativeimage.Platforms;
++
+ import com.oracle.svm.core.ForeignSupport;
+ import com.oracle.svm.core.annotate.Alias;
+ import com.oracle.svm.core.annotate.Delete;
++import com.oracle.svm.core.annotate.Inject;
+ import com.oracle.svm.core.annotate.RecomputeFieldValue;
+ import com.oracle.svm.core.annotate.Substitute;
+ import com.oracle.svm.core.annotate.TargetClass;
+ import com.oracle.svm.core.annotate.TargetElement;
+ import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
++import com.oracle.svm.core.fieldvaluetransformer.FieldValueTransformerWithAvailability;
+ import com.oracle.svm.core.hub.RuntimeClassLoading;
+ import com.oracle.svm.core.hub.RuntimeClassLoading.NoRuntimeClassLoading;
+ import com.oracle.svm.core.hub.crema.CremaSupport;
+@@ -60,6 +65,7 @@ import com.oracle.svm.guest.staging.reflect.target.Target_java_lang_reflect_Meth
+ import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_ConstructorAccessor;
+ import com.oracle.svm.guest.staging.reflect.target.Target_jdk_internal_reflect_MethodAccessor;
+ import com.oracle.svm.guest.staging.jdk.InternalVMMethod;
++import com.oracle.svm.shared.BuildPhaseProvider;
+ import com.oracle.svm.shared.util.SubstrateUtil;
+ import com.oracle.svm.shared.util.VMError;
+ 
+@@ -80,6 +86,15 @@ final class Target_java_lang_invoke_MethodHandle {
+     @Alias @RecomputeFieldValue(isFinal = true, kind = RecomputeFieldValue.Kind.None) //
+     MethodType type;
+ 
++    /**
++     * Describes how a runtime compiler can invoke this handle directly, or null for a handle that
++     * is only invoked through its lambda forms; see {@link RuntimeMethodHandleLinker}. The image
++     * builder computes the value for the handles in the image heap and {@link #bindTo} derives it
++     * for the handles it creates from them.
++     */
++    @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Custom, declClass = LinkInfoComputer.class) //
++    MethodHandleLinkInfo linkInfo;
++
+     @Alias
+     native Target_java_lang_invoke_MemberName internalMemberName();
+ 
+@@ -92,6 +107,24 @@ final class Target_java_lang_invoke_MethodHandle {
+     @Alias
+     native Class<?> internalCallerClass();
+ 
++    @Alias
++    native Target_java_lang_invoke_BoundMethodHandle bindArgumentL(int pos, Object value);
++
++    /**
++     * Same as the original, except that the bound handle inherits the {@link #linkInfo} of this
++     * handle when a {@link RuntimeMethodHandleLinker} can link it: the JDK creates the handle of
++     * {@code Linker.downcallHandle(MemorySegment, FunctionDescriptor, Linker.Option...)} this way.
++     */
++    @Substitute
++    public MethodHandle bindTo(Object x) {
++        Object value = SubstrateUtil.cast(type, Target_java_lang_invoke_MethodType.class).leadingReferenceParameter().cast(x);
++        Target_java_lang_invoke_BoundMethodHandle bound = bindArgumentL(0, value);
++        if (linkInfo != null && RuntimeMethodHandleLinker.isAvailable()) {
++            SubstrateUtil.cast(bound, Target_java_lang_invoke_MethodHandle.class).linkInfo = RuntimeMethodHandleLinker.singleton().bindLinkInfo(linkInfo, value);
++        }
++        return SubstrateUtil.cast(bound, MethodHandle.class);
++    }
++
+     /* All MethodHandle.invoke* methods funnel through here. */
+     @Substitute(polymorphicSignature = true)
+     Object invokeBasic(Object... args) throws Throwable {
+@@ -398,3 +431,21 @@ final class Target_java_lang_invoke_MethodHandleImpl_WrappedMember {
+     @TargetElement(name = CONSTRUCTOR_NAME)
+     native void constructor(MethodHandle target, MethodType type, Target_java_lang_invoke_MemberName member, boolean isInvokeSpecial, Class<?> callerClass);
+ }
++
++/**
++ * Computes {@link Target_java_lang_invoke_MethodHandle#linkInfo} for the handles in the image heap.
++ * The value is only available after the analysis: the linker learns its handles from tasks that
++ * run during the analysis, and a handle may be scanned before the task that registers it runs.
++ */
++@Platforms(Platform.HOSTED_ONLY.class)
++final class LinkInfoComputer implements FieldValueTransformerWithAvailability {
++    @Override
++    public boolean isAvailable() {
++        return BuildPhaseProvider.isAnalysisFinished();
++    }
++
++    @Override
++    public Object transform(Object receiver, Object originalValue) {
++        return RuntimeMethodHandleLinker.isAvailable() ? RuntimeMethodHandleLinker.singleton().hostedLinkInfo(receiver) : null;
++    }
++}
+diff --git a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodType.java b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodType.java
+index faff8c5b545..de7f0b8df88 100644
+--- a/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodType.java
++++ b/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/methodhandles/Target_java_lang_invoke_MethodType.java
+@@ -50,6 +50,9 @@ final class Target_java_lang_invoke_MethodType {
+      */
+     @Alias @RecomputeFieldValue(kind = Kind.Reset) //
+     private String methodDescriptor;
++
++    @Alias
++    native Class<?> leadingReferenceParameter();
+ }
+ 
+ @TargetClass(className = "java.lang.invoke.Invokers")
+diff --git a/substratevm/src/com.oracle.svm.graal/src/com/oracle/svm/graal/hosted/runtimecompilation/RuntimeCompilationFeature.java b/substratevm/src/com.oracle.svm.graal/src/com/oracle/svm/graal/hosted/runtimecompilation/RuntimeCompilationFeature.java
+index 5829ed98093..7149c445059 100644
+--- a/substratevm/src/com.oracle.svm.graal/src/com/oracle/svm/graal/hosted/runtimecompilation/RuntimeCompilationFeature.java
++++ b/substratevm/src/com.oracle.svm.graal/src/com/oracle/svm/graal/hosted/runtimecompilation/RuntimeCompilationFeature.java
+@@ -354,6 +354,17 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
+         analysisProviders = customHostedProviders;
+     }
+ 
++    /**
++     * Whether a feature configured runtime compilation for the analysis (see
++     * {@link #initializeAnalysisProviders}), as Truffle does. Only then can methods be registered
++     * with {@link #prepareMethodForRuntimeCompilation}. Ristretto, which compiles bytecode loaded
++     * at run time, requires this feature but does not configure it. Valid once all features have
++     * run {@code beforeAnalysis}.
++     */
++    public boolean isConfiguredForAnalysis() {
++        return analysisProviders != null;
++    }
++
+     public String[] getCallTrace(CallTreeInfo callTreeInfo, AnalysisMethod method) {
+         return CallTreeInfo.getCallTrace(callTreeInfo, method, registeredRuntimeCompilations);
+     }
+diff --git a/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/DowncallHandleEntryGenerator.java b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/DowncallHandleEntryGenerator.java
+new file mode 100644
+index 00000000000..13a58d843da
+--- /dev/null
++++ b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/DowncallHandleEntryGenerator.java
+@@ -0,0 +1,166 @@
++/*
++ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.  Oracle designates this
++ * particular file as subject to the "Classpath" exception as provided
++ * by Oracle in the LICENSE file that accompanied this code.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++package com.oracle.svm.hosted.foreign;
++
++import java.lang.classfile.ClassFile;
++import java.lang.classfile.TypeKind;
++import java.lang.constant.ClassDesc;
++import java.lang.constant.ConstantDescs;
++import java.lang.constant.DynamicConstantDesc;
++import java.lang.constant.MethodTypeDesc;
++import java.lang.foreign.FunctionDescriptor;
++import java.lang.foreign.Linker;
++import java.lang.invoke.MethodHandle;
++import java.lang.invoke.MethodHandleInfo;
++import java.lang.invoke.MethodHandles;
++import java.lang.invoke.MethodHandles.Lookup;
++import java.lang.invoke.MethodType;
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++import java.lang.reflect.Modifier;
++import java.util.ArrayDeque;
++import java.util.Collections;
++import java.util.Deque;
++import java.util.IdentityHashMap;
++import java.util.Set;
++
++import com.oracle.svm.shared.util.ReflectionUtil;
++import com.oracle.svm.shared.util.VMError;
++
++import jdk.internal.foreign.abi.AbstractLinker;
++import jdk.internal.foreign.abi.SharedUtils;
++
++/**
++ * Creates downcall method handles at image build time and generates their entry methods; see
++ * {@link com.oracle.svm.core.foreign.DowncallHandleLinker}.
++ * <p>
++ * A handle is created by the JDK linker of the image builder's JVM, so its bindings are
++ * specialized to bytecode in a hidden class named {@value #SPECIALIZED_STUB_CLASS_NAME} (see
++ * {@code jdk.internal.foreign.abi.BindingSpecializer}). The entry method of a handle is the
++ * static method {@code invoke} of a generated hidden class named
++ * {@value #ENTRY_CLASS_NAME}, which has the handle's type and invokes the handle, taken from
++ * the class data of its class, with {@code invokeExact}.
++ */
++final class DowncallHandleEntryGenerator {
++    static final String SPECIALIZED_STUB_CLASS_NAME = "jdk.internal.foreign.abi.DowncallStub";
++    static final String ENTRY_CLASS_NAME = "jdk.internal.foreign.abi.DowncallHandleEntry";
++    static final String ENTRY_METHOD_NAME = "invoke";
++
++    private static final Method DOWNCALL_HANDLE0 = ReflectionUtil.lookupMethod(AbstractLinker.class, "downcallHandle0", FunctionDescriptor.class, Linker.Option[].class);
++    private static final Method STRIP_NAMES = ReflectionUtil.lookupMethod(AbstractLinker.class, "stripNames", FunctionDescriptor.class);
++
++    private DowncallHandleEntryGenerator() {
++    }
++
++    /**
++     * Creates the handle that {@code Linker.downcallHandle(FunctionDescriptor, Linker.Option...)}
++     * returns on the image builder's JVM, without the native access check of that method.
++     */
++    static MethodHandle createDowncallHandle(Linker linker, FunctionDescriptor descriptor, Linker.Option[] options) {
++        return ReflectionUtil.invokeMethod(DOWNCALL_HANDLE0, linker, descriptor, options);
++    }
++
++    /** Removes the layout names from the descriptor, as the JDK linker does before it caches a handle. */
++    static FunctionDescriptor stripNames(FunctionDescriptor descriptor) {
++        return ReflectionUtil.invokeMethod(STRIP_NAMES, null, descriptor);
++    }
++
++    /**
++     * Finds the hidden class with the specialized bindings of the downcall handle: the handle is
++     * a chain of bound method handles around the direct method handle of the class's
++     * {@code invoke} method. Returns null if the handle does not invoke such a class, for example
++     * because the JDK of the image builder interprets the bindings
++     * ({@code -Djdk.internal.foreign.DowncallLinker.USE_SPEC=false}).
++     */
++    static Class<?> findSpecializedStubClass(MethodHandle handle, Lookup lookup) {
++        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
++        Deque<MethodHandle> pending = new ArrayDeque<>();
++        pending.add(handle);
++        while (!pending.isEmpty()) {
++            MethodHandle current = pending.poll();
++            if (!visited.add(current)) {
++                continue;
++            }
++            Class<?> directTarget = directTargetClass(current, lookup);
++            if (directTarget != null && directTarget.getName().startsWith(SPECIALIZED_STUB_CLASS_NAME + "/")) {
++                return directTarget;
++            }
++            for (Class<?> c = current.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
++                for (Field field : c.getDeclaredFields()) {
++                    if (!Modifier.isStatic(field.getModifiers()) && !field.getType().isPrimitive()) {
++                        Object value = ReflectionUtil.readField(c, field.getName(), current);
++                        if (value instanceof MethodHandle nested) {
++                            pending.add(nested);
++                        }
++                    }
++                }
++            }
++        }
++        return null;
++    }
++
++    private static Class<?> directTargetClass(MethodHandle handle, Lookup lookup) {
++        try {
++            MethodHandleInfo info = lookup.revealDirect(handle);
++            return info.getDeclaringClass();
++        } catch (IllegalArgumentException e) {
++            /* Not a direct method handle. */
++            return null;
++        }
++    }
++
++    /**
++     * Generates the entry method of the downcall handle. The method is defined in a hidden class
++     * of the package of {@code jdk.internal.foreign.abi.SharedUtils}, which {@code lookup} must be
++     * able to define classes in.
++     */
++    static Method generateEntry(MethodHandle handle, Lookup lookup) {
++        MethodType type = handle.type();
++        MethodTypeDesc typeDesc = MethodTypeDesc.ofDescriptor(type.descriptorString());
++        byte[] bytes = ClassFile.of().build(ClassDesc.of(ENTRY_CLASS_NAME), clb -> {
++            clb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER | ClassFile.ACC_SYNTHETIC)
++                            .withSuperclass(ConstantDescs.CD_Object)
++                            .withVersion(ClassFile.latestMajorVersion(), 0)
++                            .withMethod(ENTRY_METHOD_NAME, typeDesc, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC, mb -> mb.withCode(cb -> {
++                                cb.loadConstant(DynamicConstantDesc.of(ConstantDescs.BSM_CLASS_DATA));
++                                cb.checkcast(ConstantDescs.CD_MethodHandle);
++                                int slot = 0;
++                                for (Class<?> parameterType : type.parameterArray()) {
++                                    TypeKind kind = TypeKind.from(parameterType);
++                                    cb.loadLocal(kind, slot);
++                                    slot += kind.slotSize();
++                                }
++                                cb.invokevirtual(ConstantDescs.CD_MethodHandle, "invokeExact", typeDesc);
++                                cb.return_(TypeKind.from(type.returnType()));
++                            }));
++        });
++        try {
++            Lookup entryLookup = MethodHandles.privateLookupIn(SharedUtils.class, lookup).defineHiddenClassWithClassData(bytes, handle, false);
++            return entryLookup.lookupClass().getDeclaredMethod(ENTRY_METHOD_NAME, type.parameterArray());
++        } catch (ReflectiveOperationException e) {
++            throw VMError.shouldNotReachHere("Cannot generate the entry method of downcall handle " + handle, e);
++        }
++    }
++}
+diff --git a/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignFunctionsFeature.java b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignFunctionsFeature.java
+index c64af2d89b3..5e8e866144d 100644
+--- a/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignFunctionsFeature.java
++++ b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignFunctionsFeature.java
+@@ -71,8 +71,10 @@ import org.graalvm.word.Pointer;
+ import org.graalvm.word.UnsignedWord;
+ 
+ import com.oracle.graal.pointsto.heap.ImageHeapConstant;
++import com.oracle.graal.pointsto.meta.AnalysisField;
+ import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
+ import com.oracle.graal.pointsto.meta.AnalysisMethod;
++import com.oracle.graal.pointsto.meta.AnalysisType;
+ import com.oracle.graal.pointsto.meta.AnalysisUniverse;
+ import com.oracle.svm.common.meta.MethodVariant;
+ import com.oracle.svm.configure.ConfigurationParser;
+@@ -87,6 +89,7 @@ import com.oracle.svm.core.code.FactoryMethodHolder;
+ import com.oracle.svm.core.code.FactoryThrowMethodHolder;
+ import com.oracle.svm.core.feature.InternalFeature;
+ import com.oracle.svm.core.foreign.AbiUtils;
++import com.oracle.svm.core.foreign.DowncallHandleLinker;
+ import com.oracle.svm.core.foreign.ForeignFunctionsRuntime;
+ import com.oracle.svm.core.foreign.JavaEntryPointInfo;
+ import com.oracle.svm.core.foreign.NativeEntryPointHelper;
+@@ -100,13 +103,17 @@ import com.oracle.svm.core.graal.RuntimeCompilation;
+ import com.oracle.svm.core.graal.code.SubstrateBackend;
+ import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
+ import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
++import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+ import com.oracle.svm.core.jdk.VectorAPIEnabled;
+ import com.oracle.svm.guest.staging.meta.MethodPointer;
+ import com.oracle.svm.core.meta.MethodRefSupport;
++import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
++import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
+ import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
+ import com.oracle.svm.core.sboutlining.OutlinedSBMethodHolder;
+ import com.oracle.svm.core.thread.JavaThreads;
+ import com.oracle.svm.core.util.UserError;
++import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
+ import com.oracle.svm.hosted.ConditionalConfigurationRegistry;
+ import com.oracle.svm.hosted.FeatureImpl;
+ import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
+@@ -199,7 +206,17 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+ 
+     private AbiUtils abiUtils;
+     private ForeignFunctionsRuntime foreignFunctionsRuntime;
+-    private UpcallStubRenamingSubstitutionProcessor upcallStubRenamingSubstitutionProcessor;
++    private ForeignStubRenamingSubstitutionProcessor stubRenamingSubstitutionProcessor;
++    /**
++     * Links the invocation of downcall handles in runtime-compiled code, or null when the image
++     * has no runtime compilation or downcalls are not specialized at build time.
++     */
++    private DowncallHandleLinker downcallHandleLinker;
++    /** The downcalls whose handle was created at build time; see {@link #createSpecializedDowncall}. */
++    private final ConcurrentMap<SharedDesc, Boolean> specializedDowncalls = new ConcurrentHashMap<>();
++    /** Entry methods of downcall handles that are not yet registered for runtime compilation. */
++    private final Deque<AnalysisMethod> pendingRuntimeCompilationEntries = new ConcurrentLinkedDeque<>();
++    private volatile FeatureImpl.BeforeAnalysisAccessImpl analysisAccess;
+     private volatile Lookup implLookup;
+ 
+     private final Deque<Object> nativeEntryPointsInImageHeap = new ConcurrentLinkedDeque<>();
+@@ -343,12 +360,16 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+             try {
+                 LinkerOptions linkerOptions = LinkerOptions.forDowncall(desc, options);
+                 SharedDesc sharedDesc = new SharedDesc(desc, linkerOptions);
++                Linker.Option[] optionsCopy = options.clone();
+                 runConditionalTask(condition, _ -> {
+                     NativeEntryPointInfo nepi = abiUtils.makeNativeEntrypoint(sharedDesc.fd, sharedDesc.options);
+                     DowncallStub stub = createStub(DowncallStubFactory.INSTANCE, nepi);
+                     if (stub != null) {
+                         createStub(DowncallStubInvokerFactory.INSTANCE, nepi.methodType());
+                     }
++                    if (specializesDowncalls() && specializedDowncalls.putIfAbsent(sharedDesc, Boolean.TRUE) == null) {
++                        createSpecializedDowncall(sharedDesc, optionsCopy);
++                    }
+                 });
+             } catch (IllegalArgumentException e) {
+                 throw UserError.abort(e, "Could not register downcall");
+@@ -525,14 +546,31 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+         ImageSingletons.add(ForeignSupport.class, foreignFunctionsRuntime);
+         ImageSingletons.add(ForeignFunctionsRuntime.class, foreignFunctionsRuntime);
+         ImageSingletons.add(ForeignHostedSupport.class, this);
++        if (specializesDowncalls()) {
++            downcallHandleLinker = new DowncallHandleLinker();
++            ImageSingletons.add(RuntimeMethodHandleLinker.class, downcallHandleLinker);
++        }
++    }
++
++    /**
++     * Whether the method handles of registered downcalls are created at image build time, with
++     * bindings specialized by the JDK, in place of handles with interpreted bindings linked at run
++     * time, and invoked directly from runtime-compiled code. Only images with runtime compilation
++     * benefit: from AOT-compiled code, a handle that is not a compilation constant is invoked by
++     * the lambda form interpreter either way. Layered images are not supported, because the
++     * entry methods of the handles are indexed per layer (see {@link DowncallHandleLinker}).
++     */
++    private static boolean specializesDowncalls() {
++        return ForeignFunctionsRuntime.areFunctionCallsSupported() && SubstrateOptions.ConcealedOptions.SpecializeForeignDowncalls.getValue() && RuntimeCompilation.isEnabled() &&
++                        !ImageLayerBuildingSupport.buildingImageLayer();
+     }
+ 
+     @Override
+     public void duringSetup(DuringSetupAccess a) {
+         var access = (FeatureImpl.DuringSetupAccessImpl) a;
+         accessSupport.duringSetup(access.getMetaAccess(), access.getUniverse());
+-        upcallStubRenamingSubstitutionProcessor = new UpcallStubRenamingSubstitutionProcessor();
+-        access.registerSubstitutionProcessor(upcallStubRenamingSubstitutionProcessor);
++        stubRenamingSubstitutionProcessor = new ForeignStubRenamingSubstitutionProcessor();
++        access.registerSubstitutionProcessor(stubRenamingSubstitutionProcessor);
+         if (SubstrateOptions.isSharedArenaSupportEnabled()) {
+             ImageSingletons.add(SharedArenaSupport.class, new SharedArenaSupportImpl());
+         }
+@@ -789,7 +827,7 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+              */
+             MethodHandle specializedBindings = lookupAndReadMethodHandleField(bindingsMaker);
+             Class<?> upcallStubClass = feature.getImplLookup().revealDirect(specializedBindings).getDeclaringClass();
+-            feature.upcallStubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
++            feature.stubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
+             return bindingsMaker;
+         }
+ 
+@@ -919,6 +957,17 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+         var access = (FeatureImpl.BeforeAnalysisAccessImpl) a;
+ 
+         accessSupport.setAnalysisAccess(a);
++        if (downcallHandleLinker != null) {
++            downcallHandleLinker.initialize(access.getMetaAccess(), field -> access.registerAsAccessed((AnalysisField) field, "Read by the downcall handle linker in runtime compilation"));
++            /*
++             * The values of MethodHandle.linkInfo are only available after the analysis, so the
++             * analysis is told that the field holds instances of its declared type or null.
++             */
++            AnalysisType linkInfoType = access.getMetaAccess().lookupJavaType(MethodHandleLinkInfo.class);
++            access.registerAsInHeap(linkInfoType, "Values of MethodHandle.linkInfo, computed after the analysis");
++            access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()).injectConservativeFieldValues(List.of(linkInfoType), true);
++        }
++        analysisAccess = access;
+ 
+         for (String simpleName : VAR_HANDLE_SEGMENT_ACCESSORS) {
+             Class<?> varHandleSegmentAsXClass = ReflectionUtil.lookupClass(JLI_PACKAGE + '.' + simpleName);
+@@ -967,6 +1016,83 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
+         }
+     }
+ 
++    /**
++     * Creates the method handle of a registered downcall at image build time, so that the JDK
++     * specializes its bindings to bytecode, and registers it for {@code Linker.downcallHandle}
++     * calls at image run time (see {@link ForeignFunctionsRuntime#getSpecializedDowncallHandle}).
++     * Also generates the entry method of the handle and registers it for runtime compilation, so
++     * that runtime-compiled code invokes the handle directly (see {@link DowncallHandleLinker}).
++     * <p>
++     * Does nothing if runtime compilation is not configured for the analysis, as in an image whose
++     * only runtime compiler is Ristretto: Ristretto does not use the {@link DowncallHandleLinker},
++     * and the entry methods cannot be parsed for runtime compilation (elide-dev/graal#198). This
++     * runs in a conditional task, which the analysis executes only after all features have run
++     * {@link #beforeAnalysis}, where runtime compilation is configured (for Truffle, by
++     * {@code TruffleFeature}).
++     */
++    private synchronized void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
++        VMError.guarantee(BuildPhaseProvider.isAnalysisStarted(), "Downcall handles must be specialized during the analysis");
++        if (!RuntimeCompilationFeature.singleton().isConfiguredForAnalysis()) {
++            /* No runtime-compiled code can invoke the handle directly: nothing to gain. */
++            return;
++        }
++        FunctionDescriptor strippedFd = DowncallHandleEntryGenerator.stripNames(desc.fd);
++        LinkerOptions linkerOptions = LinkerOptions.forDowncall(strippedFd, options);
++        if (foreignFunctionsRuntime.getSpecializedDowncallHandle(strippedFd, linkerOptions) != null) {
++            /* Registered before with a descriptor that differs only in layout names. */
++            return;
++        }
++        MethodHandle handle = DowncallHandleEntryGenerator.createDowncallHandle(LINKER, desc.fd, options);
++        Lookup lookup = getImplLookup();
++        Class<?> stubClass = DowncallHandleEntryGenerator.findSpecializedStubClass(handle, lookup);
++        if (stubClass == null) {
++            /* The JDK of the image builder interprets the bindings of the handle: nothing to gain. */
++            return;
++        }
++        String digest = Digest.digestAsHex(platform() + "|" + strippedFd + "|variadic=" + linkerOptions.isVariadicFunction() +
++                        (linkerOptions.isVariadicFunction() ? ":" + linkerOptions.firstVariadicArgIndex() : "") +
++                        "|capturedState=" + linkerOptions.capturedCallStateMask() +
++                        "|critical=" + linkerOptions.isCritical() +
++                        "|heap=" + linkerOptions.allowsHeapAccess());
++        stubRenamingSubstitutionProcessor.register(stubClass, "L" + DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
++        Method entry = DowncallHandleEntryGenerator.generateEntry(handle, lookup);
++        stubRenamingSubstitutionProcessor.register(entry.getDeclaringClass(), "L" + DowncallHandleEntryGenerator.ENTRY_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
++        AnalysisMethod entryMethod = accessSupport.analysisMetaAccess.lookupJavaMethod(entry);
++        /* The handle is registered with the linker before it becomes reachable through the map. */
++        downcallHandleLinker.registerEntry(handle, entryMethod);
++        VMError.guarantee(foreignFunctionsRuntime.addSpecializedDowncallHandle(strippedFd, linkerOptions, handle));
++        pendingRuntimeCompilationEntries.add(entryMethod);
++        registerPendingEntriesForRuntimeCompilation();
++    }
++
++    /**
++     * Registers the generated entry methods for runtime compilation. Entry methods are created by
++     * conditional tasks while the analysis runs. Returns whether an entry method was registered.
++     */
++    private boolean registerPendingEntriesForRuntimeCompilation() {
++        FeatureImpl.BeforeAnalysisAccessImpl access = analysisAccess;
++        if (access == null || downcallHandleLinker == null) {
++            return false;
++        }
++        RuntimeCompilationFeature runtimeCompilation = RuntimeCompilationFeature.singleton();
++        boolean registered = false;
++        synchronized (pendingRuntimeCompilationEntries) {
++            AnalysisMethod entry;
++            while ((entry = pendingRuntimeCompilationEntries.poll()) != null) {
++                runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
++                registered = true;
++            }
++        }
++        return registered;
++    }
++
++    @Override
++    public void duringAnalysis(DuringAnalysisAccess access) {
++        if (registerPendingEntriesForRuntimeCompilation()) {
++            access.requireAnalysisIteration();
++        }
++    }
++
+     @Override
+     public void afterAnalysis(AfterAnalysisAccess access) {
+         accessSupport.seal();
+diff --git a/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/UpcallStubRenamingSubstitutionProcessor.java b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignStubRenamingSubstitutionProcessor.java
+similarity index 51%
+rename from substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/UpcallStubRenamingSubstitutionProcessor.java
+rename to substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignStubRenamingSubstitutionProcessor.java
+index 6e8f3a29918..42360f2eaba 100644
+--- a/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/UpcallStubRenamingSubstitutionProcessor.java
++++ b/substratevm/src/com.oracle.svm.hosted.foreign/src/com/oracle/svm/hosted/foreign/ForeignStubRenamingSubstitutionProcessor.java
+@@ -37,42 +37,64 @@ import jdk.vm.ci.meta.MetaUtil;
+ import jdk.vm.ci.meta.ResolvedJavaType;
+ 
+ /**
+- * Renames the hidden classes generated by the JDK specialized FFM upcall implementation. The host
+- * VM appends a run-specific suffix to hidden class names, so they need an explicitly registered
+- * semantic name to be identifiable across image builds.
++ * Gives the hidden classes that the JDK and the image builder generate for registered foreign
++ * calls stable names, so that an image does not depend on the names of hidden classes, which
++ * change from one build to another. Renamed are the upcall stubs and the downcall stubs with
++ * specialized bindings (see {@code jdk.internal.foreign.abi.BindingSpecializer}) and the entry
++ * methods of downcall handles (see {@link DowncallHandleEntryGenerator}).
+  */
+-final class UpcallStubRenamingSubstitutionProcessor extends SubstitutionProcessor {
++final class ForeignStubRenamingSubstitutionProcessor extends SubstitutionProcessor {
+     private static final String UPCALL_STUB_CLASS_NAME_PREFIX = "jdk.internal.foreign.abi.UpcallStub/";
++    private static final String[] CLASS_NAME_PREFIXES = {
++                    UPCALL_STUB_CLASS_NAME_PREFIX,
++                    DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME + "/",
++                    DowncallHandleEntryGenerator.ENTRY_CLASS_NAME + "/",
++    };
+ 
+     private final ConcurrentMap<Class<?>, String> stableNames = new ConcurrentHashMap<>();
+-    private final ConcurrentMap<ResolvedJavaType, UpcallStubSubstitutionType> typeSubstitutions = new ConcurrentHashMap<>();
++    private final ConcurrentMap<ResolvedJavaType, ForeignStubSubstitutionType> typeSubstitutions = new ConcurrentHashMap<>();
+ 
+-    void register(Class<?> upcallStubClass, String stableName) {
+-        VMError.guarantee(stableName.endsWith(";") && MetaUtil.internalNameToJava(stableName, true, true).startsWith(UPCALL_STUB_CLASS_NAME_PREFIX),
+-                        "Invalid stable upcall stub name: %s", stableName);
+-        String previous = stableNames.putIfAbsent(upcallStubClass, stableName);
+-        VMError.guarantee(previous == null || previous.equals(stableName), "Conflicting stable names for upcall stub %s: %s and %s", upcallStubClass, previous, stableName);
++    private static String prefixOf(String className) {
++        for (String prefix : CLASS_NAME_PREFIXES) {
++            if (className.startsWith(prefix)) {
++                return prefix;
++            }
++        }
++        return null;
++    }
++
++    /**
++     * Registers the stable name of the hidden class {@code stubClass}: the internal name of a
++     * hidden class with the same name prefix, for example
++     * {@code Ljdk/internal/foreign/abi/UpcallStub.s<digest>;}.
++     */
++    void register(Class<?> stubClass, String stableName) {
++        String prefix = prefixOf(stubClass.getName());
++        VMError.guarantee(prefix != null && stubClass.isHidden(), "Not a hidden foreign stub class: %s", stubClass);
++        VMError.guarantee(stableName.endsWith(";") && MetaUtil.internalNameToJava(stableName, true, true).startsWith(prefix),
++                        "Invalid stable name for foreign stub %s: %s", stubClass, stableName);
++        String previous = stableNames.putIfAbsent(stubClass, stableName);
++        VMError.guarantee(previous == null || previous.equals(stableName), "Conflicting stable names for foreign stub %s: %s and %s", stubClass, previous, stableName);
+     }
+ 
+     @Override
+     public ResolvedJavaType lookup(ResolvedJavaType type) {
+-        if (type instanceof UpcallStubSubstitutionType || type instanceof BaseLayerType || !type.toClassName().startsWith(UPCALL_STUB_CLASS_NAME_PREFIX)) {
++        if (type instanceof ForeignStubSubstitutionType || type instanceof BaseLayerType || prefixOf(type.toClassName()) == null) {
+             return type;
+         }
+-        VMError.guarantee(type.isHidden(), "Expected a hidden upcall stub class: %s", type);
++        VMError.guarantee(type.isHidden(), "Expected a hidden foreign stub class: %s", type);
+         String stableName = stableNames.get(OriginalClassProvider.getJavaClass(type));
+         if (stableName == null) {
+             return type;
+         }
+-        return typeSubstitutions.computeIfAbsent(type, original -> new UpcallStubSubstitutionType(original, stableName));
++        return typeSubstitutions.computeIfAbsent(type, original -> new ForeignStubSubstitutionType(original, stableName));
+     }
+ }
+ 
+-/** Substitution type that exposes a caller-supplied stable name for a generated upcall stub. */
+-final class UpcallStubSubstitutionType extends CustomSubstitutionType {
++final class ForeignStubSubstitutionType extends CustomSubstitutionType {
+     private final String stableName;
+ 
+-    UpcallStubSubstitutionType(ResolvedJavaType original, String stableName) {
++    ForeignStubSubstitutionType(ResolvedJavaType original, String stableName) {
+         super(original);
+         this.stableName = stableName;
+     }
+diff --git a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/TruffleFeature.java b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/TruffleFeature.java
+index 527a3c83bde..e7c7c28dabe 100644
+--- a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/TruffleFeature.java
++++ b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/TruffleFeature.java
+@@ -127,6 +127,7 @@ import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
+ import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
+ import com.oracle.svm.guest.staging.core.heap.Heap;
+ import com.oracle.svm.core.jdk.VectorAPIEnabled;
++import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
+ import com.oracle.svm.core.jdk.resources.MissingResourceRegistrationUtils;
+ import com.oracle.svm.core.reflect.MissingReflectionRegistrationUtils;
+ import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+@@ -647,6 +648,8 @@ public class TruffleFeature implements InternalFeature {
+     private static boolean runtimeCompilationForbidden(ResolvedJavaMethod method) {
+         if (GuestAnnotationAccess.isAnnotationPresent(method, TruffleBoundary.class)) {
+             return true;
++        } else if (isRuntimeBoundary(method)) {
++            return true;
+         } else if (UninterruptibleAnnotationUtils.isUninterruptible(method)) {
+             UninterruptibleGuestValue uninterruptibleAnnotation = UninterruptibleAnnotationUtils.getAnnotation(method);
+             if (uninterruptibleAnnotation == null || !uninterruptibleAnnotation.mayBeInlined()) {
+@@ -662,6 +665,42 @@ public class TruffleFeature implements InternalFeature {
+         return false;
+     }
+ 
++    /**
++     * Methods of the native image runtime that are treated like methods annotated with
++     * {@link TruffleBoundary}: they are called from runtime-compiled code but never inlined into
++     * it.
++     * <ul>
++     * <li>{@code MethodHandle.invokeBasic} and the {@code linkTo} methods box their arguments and
++     * run the lambda form interpreter, so their code is unsuitable for partial evaluation, and the
++     * call site of a method handle that partial evaluation cannot resolve is better compiled as a
++     * call to them. A call site whose handle is a compilation constant is resolved by the method
++     * handle intrinsification at image build time (when the handle is a constant then), or by a
++     * {@link RuntimeMethodHandleLinker} during partial evaluation. The type adaptation of
++     * {@code MethodHandle.asType} that misses the handle's cache is a boundary as well, so that
++     * {@code asType} itself folds to the handle when the types are equal, as it is called by the
++     * adapter of {@code MethodHandle.invoke}.</li>
++     * <li>The downcall stubs of the Foreign Function and Memory API perform a transition to native
++     * code, which runtime-compiled code cannot contain, so the intrinsified invocation of a
++     * downcall handle calls them.</li>
++     * </ul>
++     */
++    public static boolean isRuntimeBoundary(ResolvedJavaMethod method) {
++        if (RuntimeMethodHandleLinker.isInvokeBasic(method)) {
++            return true;
++        }
++        /* The name is checked first because resolving the declaring class name is more expensive. */
++        return switch (method.getName()) {
++            case "linkToStatic", "linkToSpecial", "linkToVirtual", "linkToInterface", "linkToNative", "setAsTypeCache" -> isDeclaredBy(method, "java.lang.invoke.MethodHandle");
++            /* Called by the JDK's invokeExact and invoke adapters when their type check fails. */
++            case "newWrongMethodTypeException" -> isDeclaredBy(method, "java.lang.invoke.Invokers");
++            default -> isDeclaredBy(method, "com.oracle.svm.core.foreign.DowncallStubsHolder");
++        };
++    }
++
++    private static boolean isDeclaredBy(ResolvedJavaMethod method, String className) {
++        return className.equals(method.getDeclaringClass().toJavaName(true));
++    }
++
+     boolean isBlocklisted(ResolvedJavaMethod method) {
+         if (!((AnalysisMethod) method).allowRuntimeCompilation()) {
+             return true;
+diff --git a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstratePEGraphDecoder.java b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstratePEGraphDecoder.java
+index 04aaa834755..7b664256058 100644
+--- a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstratePEGraphDecoder.java
++++ b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstratePEGraphDecoder.java
+@@ -31,17 +31,21 @@ import java.util.concurrent.ConcurrentHashMap;
+ import org.graalvm.collections.EconomicMap;
+ 
+ import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
++import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
+ import com.oracle.svm.graal.RuntimeCompilationSupport;
+ 
+ import jdk.graal.compiler.bytecode.BytecodeProvider;
+ import jdk.graal.compiler.graph.SourceLanguagePositionProvider;
++import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
+ import jdk.graal.compiler.nodes.EncodedGraph;
+ import jdk.graal.compiler.nodes.StructuredGraph;
++import jdk.graal.compiler.nodes.ValueNode;
+ import jdk.graal.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
+ import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugins;
+ import jdk.graal.compiler.nodes.graphbuilderconf.LoopExplosionPlugin;
+ import jdk.graal.compiler.nodes.graphbuilderconf.NodePlugin;
+ import jdk.graal.compiler.nodes.graphbuilderconf.ParameterPlugin;
++import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
+ import jdk.graal.compiler.nodes.spi.CoreProviders;
+ import jdk.graal.compiler.replacements.PEGraphDecoder;
+ import jdk.vm.ci.code.Architecture;
+@@ -59,6 +63,32 @@ public class SubstratePEGraphDecoder extends PEGraphDecoder {
+                         sourceLanguagePosition, specialCallTargetCache, invocationPluginsCache, false, false);
+     }
+ 
++    /**
++     * Links the invocation of a constant method handle directly when a
++     * {@link RuntimeMethodHandleLinker} knows how to invoke the handle, by redirecting the call of
++     * {@code MethodHandle.invokeBasic} to the handle's implementation before the inlining
++     * decision, so that partial evaluation inlines the implementation like any other method.
++     */
++    @Override
++    protected MethodCallTargetNode trySimplifyCallTarget(PEMethodScope methodScope, InvokeData invokeData, MethodCallTargetNode callTarget) {
++        MethodCallTargetNode result = super.trySimplifyCallTarget(methodScope, invokeData, callTarget);
++        if (RuntimeMethodHandleLinker.isAvailable() && RuntimeMethodHandleLinker.isInvokeBasic(result.targetMethod())) {
++            ValueNode[] arguments = result.arguments().toArray(ValueNode.EMPTY_ARRAY);
++            RuntimeMethodHandleLinker.LinkedInvoke linked = RuntimeMethodHandleLinker.singleton().link(result.targetMethod(), arguments, providers, graph);
++            if (linked != null) {
++                /*
++                 * The call target is not in the graph yet and its argument list cannot be changed
++                 * before it is, so a new one takes its place, also for the invoke should the entry
++                 * method not be inlined.
++                 */
++                MethodCallTargetNode linkedTarget = new MethodCallTargetNode(InvokeKind.Static, linked.target(), linked.arguments(), result.returnStamp(), null);
++                invokeData.callTarget = linkedTarget;
++                return linkedTarget;
++            }
++        }
++        return result;
++    }
++
+     @Override
+     protected EncodedGraph lookupEncodedGraph(ResolvedJavaMethod method, BytecodeProvider intrinsicBytecodeProvider) {
+         /*
+diff --git a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstrateTruffleUniverseFactory.java b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstrateTruffleUniverseFactory.java
+index f247674d8a6..b1248a0e66d 100644
+--- a/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstrateTruffleUniverseFactory.java
++++ b/substratevm/src/com.oracle.svm.truffle/src/com/oracle/svm/truffle/api/SubstrateTruffleUniverseFactory.java
+@@ -43,6 +43,7 @@ import com.oracle.svm.graal.meta.SubstrateField;
+ import com.oracle.svm.graal.meta.SubstrateMethod;
+ import com.oracle.svm.graal.meta.SubstrateType;
+ import com.oracle.svm.graal.meta.SubstrateUniverseFactory;
++import com.oracle.svm.truffle.TruffleFeature;
+ import com.oracle.svm.core.UninterruptibleGuestValue;
+ import com.oracle.svm.util.GuestAnnotationAccess;
+ import com.oracle.svm.util.OriginalClassProvider;
+@@ -52,6 +53,7 @@ import jdk.graal.compiler.annotation.AnnotationValue;
+ import jdk.graal.compiler.truffle.ConstantFieldInfo;
+ import jdk.graal.compiler.truffle.KnownTruffleTypes;
+ import jdk.graal.compiler.truffle.PartialEvaluationMethodInfo;
++import com.oracle.truffle.compiler.TruffleCompilerRuntime.InlineKind;
+ import jdk.graal.compiler.truffle.PartialEvaluator;
+ import jdk.vm.ci.meta.ResolvedJavaMethod;
+ import jdk.vm.ci.meta.ResolvedJavaType;
+@@ -99,6 +101,14 @@ public final class SubstrateTruffleUniverseFactory extends SubstrateUniverseFact
+                     KnownTruffleTypes types) {
+         Map<ResolvedJavaType, AnnotationValue> annotations = GuestAnnotationAccess.getDeclaredAnnotationValues(method);
+         var info = PartialEvaluator.computePartialEvaluationMethodInfo(runtime, method, annotations, types, OriginalClassProvider::getOriginalType);
++        if (TruffleFeature.isRuntimeBoundary(method)) {
++            /* Called like a method annotated with TruffleBoundary; see TruffleFeature. */
++            info = new PartialEvaluationMethodInfo(info.loopExplosion(),
++                            InlineKind.DO_NOT_INLINE_WITH_EXCEPTION,
++                            InlineKind.DO_NOT_INLINE_WITH_EXCEPTION,
++                            info.isInlineable(),
++                            info.isSpecializationMethod());
++        }
+         if (UninterruptibleAnnotationUtils.isUninterruptible(method)) {
+             UninterruptibleGuestValue uninterruptibleAnnotation = UninterruptibleAnnotationUtils.getAnnotation(method);
+             if (uninterruptibleAnnotation == null || !uninterruptibleAnnotation.mayBeInlined()) {

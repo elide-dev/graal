@@ -1,0 +1,86 @@
+{
+  "note": "Tool invocation configuration is authoritative for model selection. Some reviewer self-reports say the identifier was not exposed or assume inheritance; original reports are preserved unmodified.",
+  "invocations": [
+    {
+      "number": 1,
+      "agent": "value_nfi_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead",
+      "head": "31ac4b601bae3b8822c2f6b670fe8f9650ef69cd",
+      "status": "request_changes"
+    },
+    {
+      "number": 2,
+      "agent": "value_jfr_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "jfr-native-allocation",
+      "head": "5602c77d3ef",
+      "status": "hold_for_native_g1_validation"
+    },
+    {
+      "number": 3,
+      "agent": "value_ristretto_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "ristretto-exception-fallback",
+      "head": "4dc26d0d233ec516842c55e916512160ef40b303",
+      "status": "request_changes"
+    },
+    {
+      "number": 4,
+      "agent": "value_ffm_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-downcalls",
+      "head": "f3a2eef071b3884e26472b0f76169e67d9a1dd4a",
+      "status": "request_changes"
+    },
+    {
+      "number": 5,
+      "agent": "value_nfi_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead",
+      "head": "72b8188daf4",
+      "status": "approve_code_pending_validation"
+    },
+    {
+      "number": 6,
+      "agent": "value_ffm_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-downcalls",
+      "head": "4ced24671e1",
+      "status": "approve_code_pending_final_validation"
+    },
+    {
+      "number": 7,
+      "agent": "value_jfr_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "jfr-native-allocation",
+      "head": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "status": "pass_after_repair_with_limits"
+    },
+    {
+      "number": 8,
+      "agent": "value_nfi_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead-final-tests",
+      "head": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+      "status": "approve_pending_final_native_validation"
+    },
+    {
+      "number": 9,
+      "agent": "value_ffm_isolate_confirmation",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-isolate-test",
+      "head": "37404a1596d",
+      "status": "approve"
+    },
+    {
+      "number": 10,
+      "agent": "value_ristretto_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "ristretto-exception-fallback",
+      "head": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+      "status": "running"
+    }
+  ],
+  "actualDollarCost": "Unavailable; not inferred"
+}

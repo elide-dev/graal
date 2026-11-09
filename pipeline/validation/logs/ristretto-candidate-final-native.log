@@ -1,0 +1,115 @@
+Building junit image for matching: com.oracle.svm.test.RistrettoExceptionFallbackTest
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+WARNING: package com.oracle.svm.core.properties not in org.graalvm.nativeimage.builder
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A restricted method in java.lang.foreign.AddressLayout has been called
+WARNING: java.lang.foreign.AddressLayout::withTargetLayout has been called by com.oracle.svm.test.foreign.ForeignTests in an unnamed module (file:/build/caches/mx/graal-value-ristretto/substratevm/dists/svm-tests.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[1/8] Initializing...                                                                                   (6.9s @ 0.51GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: enabled, system assertions: enabled
+ - 13 user-specific feature(s):
+   - com.oracle.svm.test.BootstrapMethodTest$TestFeature
+   - com.oracle.svm.test.ImageInfoTest$TestFeature
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.ReflectionRegistrationTest$TestFeature
+   - com.oracle.svm.test.RistrettoExceptionFallbackTest$ProbeFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.foreign.ForeignTests$TestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.SecurityServiceTest$TestFeature
+   - com.oracle.svm.test.services.ServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 7 experimental option(s) unlocked:
+ - '-H:AdditionalSecurityServiceTypes' (origin(s): command line)
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///build/caches/mx/graal-value-ristretto/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+ - '-H:AdditionalSecurityProviders' (origin(s): command line)
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+ - '-H:+GraalJITCompileAtRuntime' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 30.00GiB of memory (32.6% of system memory, capped at 30GiB)
+ - 8 thread(s) (25.0% of 32 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (45.6s @ 3.03GiB)
+   14,956 types,  20,884 fields, and  77,395 methods found reachable
+      713 types,   1,046 fields, and   3,470 methods registered for reflection
+       65 types,      69 fields, and      56 methods registered for JNI access
+        2 downcalls and 1 upcalls registered for foreign access
+      205 resource accesses registered with 422.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+        0 runtime compiled methods (0.0% of all reachable methods)
+[3/8] Building universe...                                                                             (10.6s @ 3.30GiB)
+[4/8] Parsing methods...      [***]                                                                     (7.2s @ 2.74GiB)
+[5/8] Inlining methods...     [***]                                                                     (4.7s @ 2.83GiB)
+[6/8] Compiling methods...    [*******]                                                                (46.8s @ 2.37GiB)
+[7/8] Laying out methods...   [****]                                                                   (16.2s @ 3.38GiB)
+[8/8] Creating image...       [****]                                                                   (12.9s @ 3.69GiB)
+  35.44MiB (32.32%) for code area:    57,272 compilation units
+  68.56MiB (62.53%) for image heap:1,267,388 objects and 145 resources
+   5.65MiB ( 5.15%) for other data
+ 109.65MiB in total image size, 104.88MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.44MiB java.base/java.util                                10.85MiB o.g.n.runtime/c.o.s.i.m.Interpreter~edJavaMethod
+   1.21MiB java.base/sun.security.ssl                          9.61MiB byte[] for code metadata
+ 994.47KiB java.base/java.lang.invoke                          7.97MiB byte[] for string data
+ 982.81KiB j.g.compiler/jdk.graal.compiler.lir.amd64           6.42MiB byte[] for general heap data
+ 941.00KiB o.g.n.runtime/com.oracle.svm.interpreter            3.43MiB java.base/java.lang.String
+ 765.08KiB java.base/com.sun.crypto.provider                   2.86MiB java.base/java.lang.Class
+ 720.64KiB o.g.n.runtime/com.oracle.svm.core.code              2.50MiB o.g.n.runtime/c.o.s.i.metadata.ReferenceConstant
+ 713.98KiB java.base/jdk.internal.classfile.impl               2.44MiB o.g.n.runtime/c.o.s.i.m.Interpreter~vedJavaField
+ 622.36KiB java.base/java.lang                                 2.31MiB o.g.e.s.svm/c.o.s.e.classfile.descriptors.Symbol
+ 574.32KiB j.g.compiler/jdk.graal.compiler.nodes               1.94MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+  26.63MiB for 516 more packages                              18.23MiB for 4018 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       15.0s (9.4% of total time) in 705 GCs | Peak RSS: 5.56GiB | CPU load: 6.69
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /build/caches/mx/graal-value-ristretto/substratevm/svmbuild/linux-amd64/junit/svmjunit (executable, 104.88MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 2m 38s.
+
+The build process encountered 2 warnings.
+
+Running: /build/caches/mx/graal-value-ristretto/substratevm/svmbuild/linux-amd64/junit/svmjunit --very-verbose --enable-timing
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.RistrettoExceptionFallbackTest started (1 of 1)
+  testRuntimeCloneUnderCatch: Passed 7 ms
+  testUncompiledEntryIsRejected: Passed 0 ms
+com.oracle.svm.test.RistrettoExceptionFallbackTest finished 7.6 ms, [disk (free/total): 1.8GB/97.9GB]
+Time: 0.007
+
+OK (2 tests)
+
+Test run PASSED. Exiting with status 0.
+
+10 longest running test classes after running 1 of 1 classes:
+          7 ms    com.oracle.svm.test.RistrettoExceptionFallbackTest
+10 longest running tests:
+          7 ms    testRuntimeCloneUnderCatch(com.oracle.svm.test.RistrettoExceptionFallbackTest)
+          0 ms    testUncompiledEntryIsRejected(com.oracle.svm.test.RistrettoExceptionFallbackTest)

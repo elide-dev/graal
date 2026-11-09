@@ -1,0 +1,187 @@
+{
+  "review_id": "jfr-second",
+  "invocation_number": 7,
+  "authorized_batch_total": 12,
+  "model": "gpt-6-astra",
+  "reasoning_effort": "high",
+  "review_identity_provenance": "Explicit parent invocation assignment; no independent runtime model introspection available.",
+  "initial_revision": "cd2e154d1426e33a23d54e5255e13027407b492c",
+  "revision": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+  "base_revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "status": "complete",
+  "disposition": "pass_after_repair_with_limits",
+  "findings": [
+    {
+      "id": "JFR-SECOND-1",
+      "severity": "P1",
+      "kind": "production_build_failure",
+      "file": "substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jfr/events/JfrAllocationEvents.java",
+      "line": 79,
+      "title": "New AlwaysInline sampling helper violates the uninterruptible contract and prevents native G1 image generation",
+      "detail": "Exact cd2e154 native G1 + JFR image analysis aborts with Found 1 violations of @Uninterruptible usage: @AlwaysInline requires either mayBeInlined=true or callerMustBe=true. Existing emit method has callerMustBe=true; all new callers already run uninterruptibly. Plain mx Java compilation cannot catch this image-analysis contract.",
+      "evidence": [
+        "jfr-second-artifacts/build-hello-cd2e154-failure.log",
+        "jfr-second-artifacts/svm_err_b_20261109T101510.815_pid2884681.md"
+      ],
+      "repair_revision": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "repair": "Parent added callerMustBe=true in c4cfedc. Independently verified source diff, complete native G1 image analysis/build, and strict runtime probe.",
+      "status": "fixed_and_verified"
+    }
+  ],
+  "created_at": "2026-11-09T18:19:33.375221+00:00",
+  "native_component_provenance": {
+    "repository": "https://github.com/graalvm/labs-openjdk.git",
+    "branch": "chaeubl/GR-77360",
+    "commit": "cafc6cf519b36ca5337ceba858190e0e647073ce",
+    "source_clean": true,
+    "openjdk_base": "2c38e16b2e2fc149d18c0541c4d0f98ff218c852",
+    "native_interface_version": 250502,
+    "build_script": "build-native-250502.sh",
+    "build_log": "build-native-250502.log",
+    "mx_build_log": "/build/caches/mx/value-jfr-native-250502/substratevm-gcs/buildlog-20261109-102548.html",
+    "cxx": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "archives_built": [
+      "glibc compressed product",
+      "musl compressed product (suite always_build_targets despite glibc selection)"
+    ],
+    "archive_used": "/build/caches/mx/value-jfr-native-250502/substratevm-gcs/linux-amd64/src/hotspot/linux-amd64/glibc/libg1gc-cr.a",
+    "provenance_limit": "Fresh source build from exact public commit; no Oracle EE Java or native binary was used. Test-only provider exposes upstream G1 GC option."
+  },
+  "native_attempt_history": {
+    "initial250600": "full image build passed; runtime guard correctly aborted because Java expects250502; not bypassed",
+    "local_archive_audit": "canonical fork250501 and installedOracle250301/250302/250501 are incompatible; no substitution used",
+    "fresh_source": "Refreshed only changed public upstream branch to cafc6cf519b36ca5337ceba858190e0e647073ce, built pristine G1 interface250502 source with8CPUs"
+  },
+  "summary": "The initial exact candidate had a confirmed P1 native-image analysis failure in the new sampling helper annotation. Parent repaired it in c4cfedc. Fresh native G1 validation now distinguishes the exact base from the repaired candidate: identical probe bytes fail on base with missing allocation samples and pass on candidate with correct object types, allocating stacks, exact controlled aggregate weights, disabled-event/stack behavior, failed-array exclusion, restart, and virtual-thread allocation identity.",
+  "candidate_worktree": "/build/worktrees/graal/value-jfr-native-allocation",
+  "baseline_worktree": "/build/worktrees/graal/value-baseline",
+  "review_sequence": "Read exact patch independently, then consulted jfr-first.json. No candidate source changes were made by this reviewer. The parent committed the one-line annotation repair; it was independently inspected and rebuilt.",
+  "test_scaffolding": {
+    "provider": "G1ReviewOptions.java plus generated OptionDescriptors service provider, isolated in provider.jar. Registers G1 as an allowed GC option; -H:SupportedGCs=G1 selects existing upstream G1 code.",
+    "no_production_modifications": "No production source, ImageSingletons, private EE Java, or ABI/version guards were changed to enable G1. Explicit module exports only permit the external harness to call upstream support predicates.",
+    "test_payload": "Exact TestNativeGCAllocationSampleEvent source compiled into probe.jar alongside JfrNativeReviewMain. Direct test invocation and explicit native/G1/JFR assertions preclude JUnit assumption skips. Candidate and baseline use the same final probe.jar/provider.jar bytes.",
+    "baseline_state": "Baseline HEAD is 66f3cd8b560c12131eb948b56edb45da7960dc25; preexisting other-candidate test/suite overlays were left untouched and are not used by the standalone probe. Reviewed allocation bytecode has no emitSample calls; candidate has all four. Layout svm.jar hashes match each revision build artifact.",
+    "layout_difference": "Candidate uses a small --components=ni --no-jlinking layout; baseline reuses its existing jlinked layout to avoid another disk-heavy distribution. Both use the same Labs JDK 25.6-b27 base, same compiler revision aside from the candidate patch, same native G1 artifact, and identical Java probe bytes. This is functional comparison, not a performance comparison.",
+    "builder_bounds": "--parallelism=8 and -J-Xmx8g on every image; native source build mx -c8. Runtime heap256MiB. Java image, system, and builder assertions enabled on final probes."
+  },
+  "validation": {
+    "candidate": {
+      "command": [
+        "sh",
+        "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/run-probe.sh",
+        "candidate"
+      ],
+      "cwd": "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts",
+      "returncode": 0,
+      "elapsed_seconds": 0.2649695170111954
+    },
+    "candidate_output": "+ ulimit -c 0\n+ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts\n+ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts\n+ variant=candidate\n+ shift\n+ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-candidate -Xmx256m -Xms32m\nNATIVE_G1_JFR=true\nEXACT_CANDIDATE_TEST=PASS\nRESTART_EXACT_TEST=PASS\nCONTROLLED_WEIGHT=PASS count=32 weight=67109376 expected_payload=67108864\nFAILED_ARRAY_AND_NEGATIVE_LENGTH=PASS\nDISABLED_EVENT=PASS\nDISABLED_STACK=PASS events=35\nTHROTTLED_OBSERVATION events=1 (not a rate bound assertion)\nVIRTUAL_ALLOCATION_SAMPLES=PASS events=32 thread=70\n",
+    "baseline": {
+      "command": [
+        "sh",
+        "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/run-probe.sh",
+        "baseline"
+      ],
+      "cwd": "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts",
+      "returncode": 1,
+      "elapsed_seconds": 0.05930096301017329
+    },
+    "baseline_failure": "AssertionError: missing instance allocation samples. Native/G1/JFR predicates passed before exact test ran.",
+    "weight_accounting": "Exactly32 samples totaling67109376 bytes: 32*(524288*4+16), corresponding to32 two-MiB reference-array payloads plus16-byte headers; all weights positive and all stacks identify allocateWeighted.",
+    "negative_cases": "No failed oversize-object-array or negative-length-array type was sampled. Disabled event produced zero samples; disabled stacks yielded null stacks. A1/s throttle produced1event, an observation rather than a rate-bound assertion.",
+    "virtual_allocation": "Platform-managed Recording captured32 virtual-thread allocation samples, each with the correct virtual-thread Java ID, isVirtual=true, positive weight and allocating-method stack.",
+    "checkstyle": "PASS on all three changed Java files; checkstyle.log and checkstyle-files.txt.",
+    "diff_check": "git diff --check 66f3cd8b560c12131eb948b56edb45da7960dc25 HEAD passed; candidate worktree clean.",
+    "jfr_omitted": {
+      "command": [
+        "sh",
+        "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/run-probe.sh",
+        "omitted"
+      ],
+      "cwd": "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts",
+      "returncode": 0,
+      "elapsed_seconds": 0.05016316400724463
+    },
+    "jfr_omitted_output": "+ ulimit -c 0\n+ ART=/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts\n+ cd /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts\n+ variant=omitted\n+ shift\n+ timeout 180 /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/jfr-omitted -Xmx256m -Xms32m\nNATIVE_G1_JFR_OMITTED_ALLOCATIONS=PASS\n"
+  },
+  "inherited_failures": [
+    {
+      "title": "Recording lifecycle directly on a virtual thread is unsupported on both exact base and candidate",
+      "detail": "Running the whole added test from a virtual thread fails with IllegalThreadStateException: StackValue must not be used in a virtual thread unless the method is annotated @Uninterruptible, wrapped by Self-suppression not permitted from try-with-resources. Identical virtual-only mode reproduces on both revisions. Final virtual allocation test follows the existing suite pattern: Recording is managed by the platform thread, allocation occurs on the virtual thread.",
+      "evidence": [
+        "run-probe-candidate-virtual.log",
+        "run-probe-baseline-virtual.log"
+      ],
+      "disposition": "Preexisting limitation, not attributed to this patch and not silently counted as a pass."
+    }
+  ],
+  "production_review": {
+    "success_only": "All four hooks follow checkForOOME; negative array length and allocation-disallowed checks occur before allocator calls. Failed array behavior also validated natively.",
+    "heap_safety": "New helper now has callerMustBe=true matching its AlwaysInline contract and existing emit. Callers and reused NeverInline writer are uninterruptible. Exact image analysis/compiler checks and native execution pass.",
+    "gating": "HasJfrSupport fold and existing JfrEvent.shouldEmit gate are preserved; this gate includes recording state, enablement, throttle and thread exclusion. Disabled-event and stack settings verified natively.",
+    "accounting": "Fresh public G1 source uses cooked_allocated_bytes: current TLAB used bytes plus retired/outside-TLAB allocation count. Current-thread sampling occurs after successful allocation and cannot race its own TLAB retirement while uninterruptible. Controlled native accounting exactly matches expected headers plus payload.",
+    "stacks": "Existing NeverInline writer and skip-count configuration retained. Both instance/array test callers and virtual allocation caller appear in serialized stacks.",
+    "docs": "The changed availability footnote correctly adds G1 for ObjectAllocationSample while leaving TLAB-kind events unchanged."
+  },
+  "commands_and_results": [
+    {
+      "command": "git diff 66f3cd8b560c12131eb948b56edb45da7960dc25 cd2e154d1426e33a23d54e5255e13027407b492c; read canonical/suite/docs AGENTS.md; then read jfr-first.json",
+      "result": "Independent patch and safety review; snapshot reviewed-cd2e154.diff."
+    },
+    {
+      "command": "JAVA_HOME=/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64 MX_ALT_OUTPUT_ROOT=/build/caches/mx/graal-value-jfr mx -p substratevm --components=ni --native-images=false --no-jlinking build --dependencies=GRAALVM_41C00C22E7_JAVA25 --build-logs=silent",
+      "result": "PASS; layout-build.log. Same command after parent repair PASS; layout-rebuild-c4cfedc.log."
+    },
+    {
+      "command": "sh compile-scaffold.sh; sh build-hello.sh (exact initial head; final successful scaffold wiring recorded in build-hello-cd2e154-failure.log)",
+      "result": "Native G1+JFR analysis failed with the confirmed AlwaysInline/Uninterruptible annotation violation. Earlier provider/module-path setup failures preserved separately."
+    },
+    {
+      "command": "git diff cd2e154d1426e33a23d54e5255e13027407b492c c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "result": "Exactly callerMustBe=true added by parent; repair-c4cfedc.diff."
+    },
+    {
+      "command": "sh build-probe-candidate-abi250600.sh; sh run-probe.sh candidate (before preserving binary as jfr-candidate-abi250600)",
+      "result": "Full image build PASS. Runtime aborted at native guard: Java interface250502 vs native250600. No guard bypass. Build/run logs and native binary retained."
+    },
+    {
+      "command": "git log --all -S250502 -- src/hotspot/svm; git ls-remote --heads graalvm; git fetch graalvm refs/heads/chaeubl/GR-77360:refs/remotes/graalvm/chaeubl/GR-77360",
+      "result": "Found refreshed public commit cafc6cf519b36ca5337ceba858190e0e647073ce with G1 interface250502. Previously cached refs lacked this commit."
+    },
+    {
+      "command": "git worktree add --detach /build/worktrees/labs-openjdk/value-jfr-native-250502 cafc6cf519b36ca5337ceba858190e0e647073ce; sh build-native-250502.sh",
+      "result": "PASS from pristine public source. Exact native build/toolchain/header/archive hashes recorded. Native source output stayed under/build/caches."
+    },
+    {
+      "command": "sh compile-probe.sh; python3 package-probe.py; sh build-probe-candidate.sh; python3 run-capture.py candidate",
+      "result": "PASS exit0 with final correct virtual allocation test. Full commands expanded via set-x and native-image --verbose logs."
+    },
+    {
+      "command": "sh build-probe-baseline.sh (from baseline worktree); python3 run-capture.py baseline",
+      "result": "Build PASS, runtime expected FAIL exit1: missing instance allocation samples. Same final Java and native payload bytes as candidate."
+    },
+    {
+      "command": "python3 run-capture.py candidate virtual; python3 run-capture.py baseline virtual (diagnostic harness)",
+      "result": "Both FAIL with same inherited virtual Recording-lifecycle StackValue restriction; full causes retained."
+    },
+    {
+      "command": "JAVA_HOME=/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64 MX_ALT_OUTPUT_ROOT=/build/caches/mx/graal-value-jfr mx -p substratevm checkstyle --filelist /build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts/checkstyle-files.txt",
+      "result": "PASS exit0."
+    },
+    {
+      "command": "sh compile-nojfr.sh; sh build-nojfr.sh; python3 run-capture.py omitted",
+      "result": "Native G1 image built without monitoring/JFR; one million instance allocations and32 two-MiB arrays PASS, explicit HasJfrSupport=false assertion."
+    }
+  ],
+  "limits": [
+    "Linux AMD64 glibc, compressed references, product native G1 only; no native fastdebug/ARM/uncompressed/musl executable run.",
+    "No performance benchmark or assembly-level proof of zero JFR-off overhead; image binaries are stripped.",
+    "Thread exclusion and concurrent recording-configuration races were inspected through the unchanged shouldEmit path, not separately stress-tested.",
+    "Active throttle was observed, not statistically validated; failed instance allocation and all continuation/POD-specific paths were not independently forced.",
+    "The corrected added test still needs an explicitly configured native G1/JFR job to execute in CI; this review supplied a strict reproducible local configuration.",
+    "No paid tool, CI run, subagent delegation, publication, or candidate source edit performed by this reviewer."
+  ],
+  "completed_at": "2026-11-09T18:35:31.718436+00:00",
+  "artifacts_directory": "/build/caches/graal-pipeline/value-four/reviews/jfr-second-artifacts",
+  "sha256_manifest": "jfr-second-artifacts/sha256.json"
+}
