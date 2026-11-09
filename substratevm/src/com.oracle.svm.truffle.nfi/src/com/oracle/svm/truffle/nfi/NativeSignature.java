@@ -168,7 +168,7 @@ final class NativeSignature {
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.STRING) {
                         String str = (String) obj;
                         byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
-                        if (stackStringsUsed + utf8.length + 1 <= MAX_STACK_STRING_BYTES) {
+                        if (utf8.length < MAX_STACK_STRING_BYTES - stackStringsUsed) {
                             // Like a pinned copy, the string is only valid during the call.
                             Pointer copy = stackStrings.add(stackStringsUsed);
                             copyToNative(utf8, copy, utf8.length);

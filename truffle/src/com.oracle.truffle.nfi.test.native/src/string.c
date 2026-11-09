@@ -110,6 +110,10 @@ EXPORT char *reexport_strdup(const char *str) {
     return strdup(str);
 }
 
+EXPORT int reexport_strcmp(const char *first, const char *second) {
+    return strcmp(first, second);
+}
+
 EXPORT void reexport_free(char *str) {
     free(str);
 }
