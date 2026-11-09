@@ -128,7 +128,7 @@ def test_jfr(variant, tree, prepared):
             '-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED',
             '-J--add-exports=org.graalvm.nativeimage.shared/com.oracle.svm.shared.option=ALL-UNNAMED',
             '-J--upgrade-module-path=' + modules, '-H:+UnlockExperimentalVMOptions', '-H:SupportedGCs=G1',
-            '--enable-monitoring=jfr', '-H:CLibraryPath=' + str(probe / 'include') + ',' + str(archive.parent),
+            '--enable-monitoring=jfr', '-H:CLibraryPath=' + str(probe) + ',' + str(archive.parent),
             '-cp', str(probe / 'probe.jar') + os.pathsep + junit, '-o', str(binary), 'review.JfrNativeReviewMain']
     run(variant + '-image', tree, args)
     log = external(variant + '-native-g1', [str(binary), '-Xmx256m', '-Xms32m'], results,
