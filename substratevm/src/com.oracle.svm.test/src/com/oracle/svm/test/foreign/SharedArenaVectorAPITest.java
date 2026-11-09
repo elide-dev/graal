@@ -75,6 +75,19 @@ public class SharedArenaVectorAPITest {
     private static final long MIN_ITERATIONS_BEFORE_CLOSE = 2_000;
     private static final long SEGMENT_BYTES = 64 * 1024;
 
+    /**
+     * Number of accessor threads per access kind and species in the close tests. Together, the
+     * accessor threads outnumber the available processors about two to one. A thread that the close
+     * stops at a safepoint inside a scoped access, after the session check but before the memory
+     * access (elide-dev/graal#223), crashes on the unmapped memory only if it resumes after the
+     * closing thread has unmapped the file. The closing thread continues directly after the
+     * safepoint, while the accessor threads must wait for a processor first.
+     */
+    private static final int THREADS_PER_ACCESS = Math.ceilDiv(2 * Runtime.getRuntime().availableProcessors(), AccessKind.values().length * INT_SPECIES.size());
+    private static final int ACCESSOR_THREADS = AccessKind.values().length * INT_SPECIES.size() * THREADS_PER_ACCESS;
+    private static final long ACCESSOR_REGION_BYTES = 1024;
+    private static final long CLOSE_SEGMENT_BYTES = ACCESSOR_THREADS * ACCESSOR_REGION_BYTES;
+
     @Test
     public void testSharedArenaValues() {
         try (Arena arena = Arena.ofShared()) {
@@ -149,7 +162,7 @@ public class SharedArenaVectorAPITest {
     public void testCloseAllocatedSegmentWhileAccessing() throws Exception {
         for (int round = 0; round < CLOSE_ROUNDS; round++) {
             Arena arena = Arena.ofShared();
-            MemorySegment segment = arena.allocate(SEGMENT_BYTES, 64);
+            MemorySegment segment = arena.allocate(CLOSE_SEGMENT_BYTES, 64);
             closeWhileAccessing(arena, segment);
         }
     }
@@ -158,16 +171,21 @@ public class SharedArenaVectorAPITest {
      * Closes a shared arena backing a mapped file segment while other threads load and store
      * vectors from and to it. Closing the arena unmaps the file, so any access after the close
      * crashes instead of silently reading freed memory.
+     * <p>
+     * Since heap segments reach the same Vector API accessors (see {@link #testHeapSegmentValues}),
+     * {@code unsafeGetBase} and {@code unsafeGetOffset} of the segment remain virtual calls between
+     * the session check and the access. A close at the safepoint of such a call must be detected
+     * before the access (elide-dev/graal#223).
      */
     @Test
     public void testCloseMappedSegmentWhileAccessing() throws Exception {
         Path file = Files.createTempFile("shared-arena-vector-api", ".bin");
         try {
-            Files.write(file, new byte[(int) SEGMENT_BYTES]);
+            Files.write(file, new byte[(int) CLOSE_SEGMENT_BYTES]);
             for (int round = 0; round < CLOSE_ROUNDS; round++) {
                 Arena arena = Arena.ofShared();
                 try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
-                    MemorySegment segment = channel.map(FileChannel.MapMode.READ_WRITE, 0, SEGMENT_BYTES, arena);
+                    MemorySegment segment = channel.map(FileChannel.MapMode.READ_WRITE, 0, CLOSE_SEGMENT_BYTES, arena);
                     closeWhileAccessing(arena, segment);
                 }
             }
@@ -284,17 +302,16 @@ public class SharedArenaVectorAPITest {
     }
 
     private static void closeWhileAccessing(Arena arena, MemorySegment segment) throws InterruptedException {
-        int threadCount = AccessKind.values().length * INT_SPECIES.size();
-        CountDownLatch started = new CountDownLatch(threadCount);
+        CountDownLatch started = new CountDownLatch(ACCESSOR_THREADS);
         AtomicLong iterations = new AtomicLong();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         List<Thread> threads = new ArrayList<>();
         List<AtomicReference<IllegalStateException>> closedExceptions = new ArrayList<>();
-        long regionBytes = (segment.byteSize() / threadCount) & ~63L;
         int threadIndex = 0;
         for (AccessKind kind : AccessKind.values()) {
-            for (VectorSpecies<Integer> species : INT_SPECIES) {
-                MemorySegment region = segment.asSlice(regionBytes * threadIndex, regionBytes);
+            for (int copy = 0; copy < THREADS_PER_ACCESS * INT_SPECIES.size(); copy++) {
+                VectorSpecies<Integer> species = INT_SPECIES.get(copy % INT_SPECIES.size());
+                MemorySegment region = segment.asSlice(ACCESSOR_REGION_BYTES * threadIndex, ACCESSOR_REGION_BYTES);
                 int fill = threadIndex + 1;
                 AtomicReference<IllegalStateException> closedException = new AtomicReference<>();
                 closedExceptions.add(closedException);

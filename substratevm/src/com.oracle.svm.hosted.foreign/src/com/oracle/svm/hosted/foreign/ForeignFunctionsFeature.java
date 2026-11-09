@@ -1198,7 +1198,9 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
          * If both heap and native segments reach a scoped Vector API accessor, the call cannot be
          * devirtualized and targets the abstract method. This is safe as long as the segment
          * hierarchy is sealed and contains no other implementations than the ones registered
-         * above.
+         * above. The call happens after the session check and can safepoint (in the method-end
+         * safepoint check of the callee), so the shared arena phase checks the session again
+         * before the access that uses the returned base or offset.
          */
         verifySegmentAccessorImplementations(metaAccess, AbstractMemorySegmentImpl.class);
         registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(AbstractMemorySegmentImpl.class, "unsafeGetBase"));
