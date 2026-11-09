@@ -660,6 +660,8 @@ def svm_gate_body(args, tasks):
                 # specialized for runtime compilation (elide-dev/graal#198).
                 native_unittest(['com.oracle.svm.test.foreign.ForeignTests', '--build-args'] + svm_experimental_options([
                     '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime']) + args.extra_image_builder_arguments)
+                if '--static' not in args.extra_image_builder_arguments:
+                    native_image_context_run(_foreign_ristretto_shared_library, args.extra_image_builder_arguments)
                 # Shared arenas together with the Vector API (GR-65162). The test class declares the
                 # required build arguments (--add-modules=jdk.incubator.vector, ...) with
                 # @NativeImageBuildArgs, so it is excluded from the default image group above.
@@ -1839,6 +1841,19 @@ def test_run(cmds, expected_stdout, timeout=10, env=None):
 
 mx_gate.add_gate_runner(suite, svm_gate_body)
 mx_gate.add_gate_argument('--extra-image-builder-arguments', action=mx_compiler.ShellEscapedStringAction, help='adds image builder arguments to gate tasks where applicable', default=[])
+
+
+def _foreign_ristretto_shared_library(native_image, extra_image_args):
+    """
+    Builds a shared library that registers downcalls, with Ristretto as its only runtime compiler
+    and the options of Elide's libjvmtools image (elide-dev/graal#198).
+    """
+    native_image(['--shared', '-cp', classpath(['com.oracle.svm.test']),
+                  '--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature',
+                  '-o', join(svmbuild_dir(), 'libforeignristretto')] + svm_experimental_options([
+                      '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime', '-H:+ForeignAPISupport',
+                      '-H:+ParseRuntimeOptions', '-H:+UseServiceLoaderFeature', '-H:+AllowJRTFileSystem',
+                      '-H:-VectorAPISupport', '-H:+UseCompressedReferences', '-H:+RelativeCodePointers']) + extra_image_args)
 
 
 def _cinterfacetutorial(native_image, args=None):
