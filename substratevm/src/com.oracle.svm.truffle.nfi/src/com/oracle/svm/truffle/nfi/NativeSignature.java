@@ -27,6 +27,8 @@ package com.oracle.svm.truffle.nfi;
 import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getOffset;
 import static com.oracle.svm.truffle.nfi.Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.getTag;
 
+import java.nio.charset.StandardCharsets;
+
 import org.graalvm.nativeimage.UnmanagedMemory;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.struct.CFieldAddress;
@@ -41,7 +43,9 @@ import org.graalvm.word.WordBase;
 
 import com.oracle.svm.shared.NeverInline;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.guest.staging.core.UnmanagedMemoryUtil;
 import com.oracle.svm.guest.staging.core.graal.stackvalue.UnsafeStackValue;
+import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.handles.PrimitiveArrayView;
 import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.nodes.CFunctionEpilogueNode;
@@ -92,6 +96,15 @@ final class NativeSignature {
 
     static class ExecuteHelper {
 
+        /** Calls with at most this many arguments keep their argument pointers on the stack. */
+        private static final int MAX_STACK_ARGS = 16;
+
+        /** Primitive argument buffers up to this size are copied to the stack instead of pinned. */
+        private static final int MAX_STACK_PRIM_BYTES = 256;
+
+        /** String arguments up to this total size, terminators included, are copied to the stack. */
+        private static final int MAX_STACK_STRING_BYTES = 256;
+
         static int alignUp(int index, int alignment) {
             int mask = alignment - 1;
             assert (alignment & mask) == 0 : "not a power of 2";
@@ -102,14 +115,39 @@ final class NativeSignature {
         static void execute(NativeTruffleContext ctx, ffi_cif cif, PointerBase ret, long functionPointer, byte[] primArgs, int patchCount, int[] patchOffsets, Object[] objArgs,
                         LocalNativeScope scope) {
             int nargs = cif.nargs();
-            WordPointer argPtrs = UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
-            // TODO WordPointer argPtrs = StackValue.get(nargs, SizeOf.get(WordPointer.class));
+            /*
+             * Stack allocations need a constant size, so calls with up to MAX_STACK_ARGS arguments
+             * (almost all of them) use a fixed stack buffer and only longer ones allocate. Like the
+             * environment below, the buffer only lives for this native call.
+             */
+            WordPointer stackArgPtrs = UnsafeStackValue.get(MAX_STACK_ARGS, WordPointer.class);
+            boolean argPtrsOnStack = nargs <= MAX_STACK_ARGS;
+            WordPointer argPtrs = argPtrsOnStack ? stackArgPtrs : UnmanagedMemory.malloc(nargs * SizeOf.get(WordPointer.class));
 
             NativeTruffleEnv env = UnsafeStackValue.get(NativeTruffleEnv.class);
             NFIInitialization.initializeEnv(env, ctx);
 
-            try (PrimitiveArrayView primBuffer = PrimitiveArrayView.createForReading(primArgs)) {
-                Pointer prim = primBuffer.addressOfArrayElement(0);
+            /*
+             * Native code only reads the primitive argument buffer, so a small one is copied to the
+             * stack rather than pinned: every pin allocates a PinnedObject and links it into a
+             * global list that only a GC cleans up, which made pinning the largest cost of a call.
+             */
+            Pointer stackPrim = UnsafeStackValue.get(MAX_STACK_PRIM_BYTES);
+            PrimitiveArrayView primView = null;
+            Pointer prim;
+            if (primArgs.length <= MAX_STACK_PRIM_BYTES) {
+                copyToNative(primArgs, stackPrim, primArgs.length);
+                prim = stackPrim;
+            } else {
+                primView = PrimitiveArrayView.createForReading(primArgs);
+                prim = primView.addressOfArrayElement(0);
+            }
+
+            /* Strings up to MAX_STACK_STRING_BYTES in all are copied to the stack, too. */
+            Pointer stackStrings = UnsafeStackValue.get(MAX_STACK_STRING_BYTES);
+            int stackStringsUsed = 0;
+
+            try {
 
                 int primIdx = 0;
                 for (int i = 0; i < nargs; i++) {
@@ -128,8 +166,18 @@ final class NativeSignature {
                         WordBase handle = scope.createLocalHandle(obj);
                         prim.writeWord(offset, handle);
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.STRING) {
-                        PointerBase strPtr = scope.refString((String) obj);
-                        prim.writeWord(offset, strPtr);
+                        String str = (String) obj;
+                        byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
+                        if (stackStringsUsed + utf8.length + 1 <= MAX_STACK_STRING_BYTES) {
+                            // Like a pinned copy, the string is only valid during the call.
+                            Pointer copy = stackStrings.add(stackStringsUsed);
+                            copyToNative(utf8, copy, utf8.length);
+                            copy.writeByte(utf8.length, (byte) 0);
+                            stackStringsUsed += utf8.length + 1;
+                            prim.writeWord(offset, copy);
+                        } else {
+                            prim.writeWord(offset, scope.refString(str));
+                        }
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.KEEPALIVE) {
                         // nothing to do
                     } else if (tag == Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_TypeTag.ENV) {
@@ -143,8 +191,24 @@ final class NativeSignature {
 
                 ffiCall(cif, Word.pointer(functionPointer), ret, argPtrs, ErrnoMirror.errnoMirror.getAddress());
             } finally {
-                UnmanagedMemory.free(argPtrs);
+                if (primView != null) {
+                    primView.close();
+                }
+                if (!argPtrsOnStack) {
+                    UnmanagedMemory.free(argPtrs);
+                }
             }
+        }
+
+        private static void copyToNative(byte[] array, Pointer destination, int length) {
+            copyToNative(array, ObjectLayout.singleton().getArrayBaseOffset(Byte.BYTES), destination, length);
+        }
+
+        @Uninterruptible(reason = "Reads the array through its address, so the GC must not move it.")
+        private static void copyToNative(byte[] array, int baseOffset, Pointer destination, int length) {
+            Pointer source = Word.objectToUntrackedPointer(array).add(baseOffset);
+            // A heap array and a stack buffer never overlap, so no direction check is needed.
+            UnmanagedMemoryUtil.copyForward(source, destination, Word.unsigned(length));
         }
 
         /**
