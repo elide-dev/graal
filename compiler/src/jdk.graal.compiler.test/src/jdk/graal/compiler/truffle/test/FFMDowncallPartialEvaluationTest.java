@@ -307,6 +307,14 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         setupContext(Context.newBuilder().allowExperimentalOptions(true).option("engine.BackgroundCompilation", "false").option("engine.CompileImmediately", "false").build());
     }
 
+    @Override
+    @Before
+    public void onlyWhiteBox() {
+        if (checkGraphs()) {
+            super.onlyWhiteBox();
+        }
+    }
+
     private static boolean checkGraphs() {
         return Boolean.parseBoolean(System.getProperty(CHECK_GRAPHS_PROPERTY, "true"));
     }
