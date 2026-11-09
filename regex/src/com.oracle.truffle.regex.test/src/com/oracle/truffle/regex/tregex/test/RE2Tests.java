@@ -104,6 +104,126 @@ public class RE2Tests extends RegexTestBase {
     }
 
     @Test
+    public void nullableLoops() {
+        // elide-dev/graal#206: RE2 ends an unbounded loop after an empty first iteration instead
+        // of trying the next alternative of the loop body, so these match the empty string.
+        test("(?:|a)*", "", "aaa", 0, true, 0, 0);
+        test("^(?:(?:|a)*)", "", "aaa", 0, true, 0, 0);
+        test("(?:|a)+", "", "aaa", 0, true, 0, 0);
+        test("^(?:(?:|a)+)", "", "aaa", 0, true, 0, 0);
+        for (String pattern : new String[]{"(?:|a)*", "^(?:(?:|a)*)", "(?:|a)+", "^(?:(?:|a)+)", "(|a){2,}", "(?:|a){0,40}"}) {
+            Value regex = compileRegex(pattern, "");
+            Assert.assertFalse(pattern, regex.isNull());
+            Assert.assertFalse(pattern, regex.getMember("isBacktracking").asBoolean());
+        }
+        // The same holds for later search positions, e.g. for global replacement.
+        test("(?:|a)*", "", "aaa", 1, true, 1, 1);
+        test("(?:|a)*", "", "aaa", 2, true, 2, 2);
+        test("(?:|a)*", "", "aaa", 3, true, 3, 3);
+        test("(|a)+", "", "aaa", 1, true, 1, 1, 1, 1);
+        test("(|a)+", "", "aaa", 3, true, 3, 3, 3, 3);
+        test("(?:a|(?:|b))*", "", "abab", 1, true, 1, 1);
+        test("(?:a|(?:|b))*", "", "abab", 2, true, 2, 4);
+        // Empty first iterations end the loop, empty later iterations are rejected, and bounded
+        // loops have no empty checks at all. Expected results were checked against C++ RE2.
+        test("(?:a|)*", "", "aaa", 0, true, 0, 3);
+        test("(?:a|)+", "", "aaa", 0, true, 0, 3);
+        test("(?:|a)*?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a)+?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,}", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,}?", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){0,3}", "", "aaa", 0, true, 0, 0);
+        test("(?:|a){2,3}", "", "aaa", 0, true, 0, 0);
+        test("(|a)*", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a)+", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a){2,}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(|a){0,3}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(a|)*", "", "aaa", 0, true, 0, 3, 2, 3);
+        test("((|a))*", "", "aaa", 0, true, 0, 0, 0, 0, 0, 0);
+        test("(a|()|b)*", "", "ab", 0, true, 0, 2, 1, 2, -1, -1);
+        test("(a|()|b){1,3}", "", "ab", 0, true, 0, 1, 1, 1, 1, 1);
+        test("(?:()|(a))*", "", "aa", 0, true, 0, 0, 0, 0, -1, -1);
+        test("(?:()|(a)){2,}", "", "aa", 0, true, 0, 0, 0, 0, -1, -1);
+        test("(?:a|(?:|b))*", "", "ab", 0, true, 0, 2);
+        test("(?:a|(?:|b))*", "", "b", 0, true, 0, 0);
+        test("(?:a|(?:|b))+", "", "ab", 0, true, 0, 2);
+        test("(?:a|(?:|b)){2,}", "", "ab", 0, true, 0, 1);
+        test("(?:a|(?:|b)){1,3}", "", "ab", 0, true, 0, 1);
+        test("(a*|b)*", "", "b", 0, true, 0, 0, 0, 0);
+        test("(a*|b)*", "", "ab", 0, true, 0, 2, 1, 2);
+        test("(a*|b){2,}", "", "ab", 0, true, 0, 1, 1, 1);
+        test("(?:|a)*b", "", "aaab", 0, true, 0, 4);
+        test("(?:|a)*$", "", "aaa", 0, true, 0, 3);
+        test("(?:\\b|a)*", "", "aaa", 0, true, 0, 0);
+        test("(?:\\b|a)*", "", "xaa", 0, true, 0, 0);
+        test("(?:a|\\b|b)+", "", "xy", 0, true, 0, 0);
+        test("(){0,2}\\b", "", "baa", 0, true, 0, 0, 0, 0);
+        test("(^|\\b){0,2}", "", "a", 0, true, 0, 0, 0, 0);
+        test("(a?){3,}?\\B", "", "bab", 0, true, 1, 2, 2, 2);
+        test("(a??)*", "", "aa", 0, true, 0, 0, 0, 0);
+        test("(a*?)+", "", "aa", 0, true, 0, 0, 0, 0);
+    }
+
+    @Test
+    public void nullableLoopsNotUnrolled() {
+        // Quantifiers that are too large to be unrolled.
+        String longAlternative = "b".repeat(120);
+        test("(?:|a){0,40}", "", "aaa", 0, true, 0, 0);
+        test("(|a){0,40}", "", "aaa", 0, true, 0, 0, 0, 0);
+        test("(?:a|(?:|b)){2,40}", "", "ab", 0, true, 0, 1);
+        test("(?:|a){30,}", "", "aaa", 0, true, 0, 0);
+        test("(?:a|(?:|b)){30,}", "", "ab", 0, true, 0, 1);
+        test("(?:|a|" + longAlternative + ")+", "", "aaa", 0, true, 0, 0);
+        test("(?:|a|" + longAlternative + ")*", "", "aaa", 0, true, 0, 0);
+        test("(a|()|b|" + longAlternative + ")+", "", "ab", 0, true, 0, 2, 1, 2, -1, -1);
+    }
+
+    @Test
+    public void largeCountedRepetitions() {
+        // elide-dev/graal#205: RE2 allows counted repetitions of up to 1000 iterations. TRegex
+        // has to unroll them to match without backtracking, which used to exceed the parser tree
+        // size limit for automaton-based matchers. Expected results were checked against C++ RE2.
+        String[] patterns = {".{0,500}", ".{0,1000}x", "[a-z]{1,1000}", "(abc){300}", "x{2,1000}y", "(a|b){0,1000}c", "a{0,1000}?b", "\\A[0-9a-f]{8,1000}\\z",
+                        "(?:abcdefghij){1000}", "\\b\\w{1,1000}\\b", "(x{1000}|a{1000}|b)+", ".{0,1000}x.{0,1000}y.{0,1000}z.{0,1000}", "(?i)k{1,1000}", "(?:(a)|(b)){0,600}"};
+        for (String pattern : patterns) {
+            for (Value regex : new Value[]{compileRegex(pattern, ""), compileRegexBoolean(context, pattern, "", options(), getTRegexEncoding())}) {
+                Assert.assertFalse(pattern, regex.isNull());
+                Assert.assertFalse(pattern, regex.getMember("isBacktracking").asBoolean());
+            }
+        }
+        test(".{0,1000}x", "", "abcxx", 0, true, 0, 5);
+        test(".{0,1000}x", "", "a".repeat(2000) + "x", 0, true, 1000, 2001);
+        test(".{0,1000}x", "", "y".repeat(3000), 0, false);
+        test(".{0,1000}x", "", "\naaaaax", 0, true, 1, 7);
+        test("[a-z]{1,1000}", "", "abcxx", 0, true, 0, 5);
+        test("[a-z]{1,1000}", "", "a".repeat(2000), 0, true, 0, 1000);
+        test("[a-z]{1,1000}", "", "1234", 0, false);
+        test("[a-z]{1,1000}", "", "12ab3", 0, true, 2, 4);
+        test("(abc){300}", "", "abc".repeat(300), 0, true, 0, 900, 897, 900);
+        test("(abc){300}", "", "abc".repeat(299), 0, false);
+        test("(abc){300}", "", "x" + "abc".repeat(301), 0, true, 1, 901, 898, 901);
+        test(".{0,500}", "", "y".repeat(600), 0, true, 0, 500);
+        test("x{2,1000}y", "", "x".repeat(1001) + "y", 0, true, 1, 1002);
+        test("x{2,1000}y", "", "xy", 0, false);
+        test("(a|b){0,1000}c", "", "ab".repeat(600) + "c", 0, true, 200, 1201, 1199, 1200);
+        test("a{0,1000}?b", "", "a".repeat(999) + "b", 0, true, 0, 1000);
+        test("a{0,1000}?b", "", "a".repeat(1001) + "b", 0, true, 1, 1002);
+        test("\\A[0-9a-f]{8,1000}\\z", "", "deadbeef".repeat(20), 0, true, 0, 160);
+        test("\\A[0-9a-f]{8,1000}\\z", "", "deadbeef".repeat(20) + "g", 0, false);
+        test("\\A[0-9a-f]{8,1000}\\z", "", "dead", 0, false);
+        test("(?:abcdefghij){1000}", "", "abcdefghij".repeat(1000), 0, true, 0, 10000);
+        test("(?:abcdefghij){1000}", "", "abcdefghij".repeat(999), 0, false);
+        test("\\b\\w{1,1000}\\b", "", "hello world", 0, true, 0, 5);
+        test("\\b\\w{1,1000}\\b", "", "  ", 0, false);
+        test("(x{1000}|a{1000}|b)+", "", "x".repeat(1000) + "a".repeat(1000), 0, true, 0, 2000, 1000, 2000);
+        test("(x{1000}|a{1000}|b)+", "", "x".repeat(999) + "b", 0, true, 999, 1000, 999, 1000);
+        test(".{0,1000}x.{0,1000}y.{0,1000}z.{0,1000}", "", "axbycz", 0, true, 0, 6);
+        test(".{0,1000}x.{0,1000}y.{0,1000}z.{0,1000}", "", "zyx", 0, false);
+        test("(?i)k{1,1000}", "", "xKk\u212ak", 0, true, 1, 5);
+        test("(?:(a)|(b)){0,600}", "", "ab".repeat(400), 0, true, 0, 600, 598, 599, 599, 600);
+    }
+
+    @Test
     public void anchors() {
         // Without the m flag, $ matches only at the very end of the text, not before a final
         // newline.
@@ -289,9 +409,10 @@ public class RE2Tests extends RegexTestBase {
         test("(abc){300}", "", "abc".repeat(300), 0, true, 0, 900, 897, 900);
         test("\\pL{1000}", "", "\u00e9".repeat(1000), 0, true, 0, 1000);
         // Repetitions that exceed TRegex's automaton size limits cannot be executed in linear time
-        // and are reported as unsupported, since RE2 never falls back to backtracking.
-        expectUnsupported(".{0,1000}x");
-        expectUnsupported("[a-z]{1,1000}");
+        // and are reported as unsupported, since RE2 never falls back to backtracking. Unrolling a
+        // repetition of an expression that can match the empty string creates quadratically many
+        // NFA transitions, so such repetitions get the default size limits.
+        expectUnsupported("(a?){1000}");
     }
 
     @Test

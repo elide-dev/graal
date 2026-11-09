@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -135,6 +135,7 @@ public class RegexASTPostProcessor {
 
         private final RegexAST ast;
         private final ShouldUnrollQuantifierVisitor shouldUnrollVisitor = new ShouldUnrollQuantifierVisitor();
+        private final NodeCountVisitor nodeCountVisitor = new NodeCountVisitor();
         private final QuantifierExpander quantifierExpander;
 
         private UnrollQuantifiersVisitor(RegexAST ast) {
@@ -163,7 +164,7 @@ public class RegexASTPostProcessor {
         @Override
         protected void leave(Group group) {
             if (group.hasQuantifier()) {
-                quantifierExpander.expandQuantifier(group, (shouldUnroll(group) && shouldUnrollVisitor.shouldUnroll(group)));
+                quantifierExpander.expandQuantifier(group, (shouldUnroll(group) && (unrollsLargeGroups() || shouldUnrollVisitor.shouldUnroll(group))));
             }
         }
 
@@ -173,7 +174,43 @@ public class RegexASTPostProcessor {
         }
 
         private boolean shouldUnroll(QuantifiableTerm term) {
-            return ast.getNumberOfNodes() <= TRegexOptions.TRegexMaxParseTreeSizeForDFA && (term.getQuantifier().isUnrollTrivial() || term.isUnrollingCandidate(ast.getOptions()));
+            if (!(term.getQuantifier().isUnrollTrivial() || term.isUnrollingCandidate(ast.getOptions()))) {
+                return false;
+            }
+            if (ast.getFlavor().unrollsLargeCountedRepetitions()) {
+                // Unroll as long as the parser tree stays small enough for automaton-based
+                // matchers. If the quantified term can match the empty string, every unrolled
+                // copy can be skipped, so the number of NFA transitions grows quadratically with
+                // the number of copies, and so does the time it takes to generate them. We keep
+                // the default limit for these.
+                int maxSize = term.mayMatchEmptyString() ? TRegexOptions.TRegexMaxParseTreeSizeForDFA : ast.getMaxParseTreeSizeForDFA();
+                return ast.getNumberOfNodes() + unrolledSize(term) <= maxSize;
+            }
+            return ast.getNumberOfNodes() <= TRegexOptions.TRegexMaxParseTreeSizeForDFA;
+        }
+
+        /**
+         * Returns {@code true} if quantified groups are unrolled regardless of their size, see
+         * {@link ShouldUnrollQuantifierVisitor}. In boolean match mode, we keep the size limit for
+         * groups, because the DFA can track the iterations of bounded quantifiers that are not
+         * unrolled.
+         */
+        private boolean unrollsLargeGroups() {
+            return ast.getFlavor().unrollsLargeCountedRepetitions() && !ast.getOptions().isBooleanMatch();
+        }
+
+        /**
+         * Returns the number of nodes {@link QuantifierExpander#expandQuantifier} adds to the
+         * parser tree when unrolling the quantifier of {@code term}: a wrapper group and sequence,
+         * a copy of {@code term} (wrapped in a group and sequence if it is not a group) for every
+         * mandatory iteration, and a copy plus a group and two sequences for every optional
+         * iteration.
+         */
+        private long unrolledSize(QuantifiableTerm term) {
+            Token.Quantifier quantifier = term.getQuantifier();
+            long copySize = nodeCountVisitor.count(term) + (term.isGroup() ? 0 : 2);
+            long optionalIterations = quantifier.isInfiniteLoop() ? 1 : Integer.toUnsignedLong(quantifier.getMax()) - Integer.toUnsignedLong(quantifier.getMin());
+            return 2 + Integer.toUnsignedLong(quantifier.getMin()) * copySize + optionalIterations * (copySize + 3);
         }
 
         private static final class ShouldUnrollQuantifierVisitor extends NodeCountVisitor {
@@ -267,7 +304,8 @@ public class RegexASTPostProcessor {
                 curTerm.setExpandedQuantifier(unroll);
                 curTerm.setMandatoryQuantifier(mandatory);
                 curTerm.setOptionalQuantifier(optional);
-                curTerm.setEmptyGuard(true);
+                // RE2 has no empty checks in bounded loops, see RegexFlavor#usesRE2EmptyChecks.
+                curTerm.setEmptyGuard(!(unroll && !quantifier.isInfiniteLoop() && ast.getFlavor().usesRE2EmptyChecks()));
                 if (!term.isInLookBehindAssertion()) {
                     createOptional(term, quantifier, unroll, mandatory, optional, recurse - 1);
                 }
@@ -330,6 +368,14 @@ public class RegexASTPostProcessor {
                         curTerm.asGroup().setQuantifier(quantifier);
                         curTerm.setExpandedQuantifier(true);
                         curTerm.setMandatoryQuantifier(true);
+                        if (i == quantifier.getMin() - 1 && quantifier.isInfiniteLoop() && toExpand.mayMatchEmptyString() && ast.getFlavor().usesRE2EmptyChecks() &&
+                                        !toExpand.isInLookBehindAssertion()) {
+                            // In RE2, the loop ends if the last mandatory iteration of an unbounded
+                            // quantifier matches the empty string, see
+                            // RegexFlavor#usesRE2EmptyChecks. The empty guard marks this copy for
+                            // the empty check in NFATraversalRegexASTVisitor.
+                            curTerm.setEmptyGuard(true);
+                        }
                     }
                 } else if (mandatoryOptionalSplit) {
                     createOptional(toExpand, quantifier, false, true, false, 0);

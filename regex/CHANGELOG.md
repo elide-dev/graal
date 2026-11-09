@@ -2,6 +2,10 @@
 
 This changelog summarizes major changes between TRegex versions relevant to language implementors integrating TRegex into their language. This document will focus on API changes relevant to integrators of TRegex.
 
+## Version 25.5.5-elide.28
+* `RE2` flavor: counted repetitions up to RE2's limit of 1000, such as `.{0,1000}x` or `[a-z]{1,1000}`, no longer exceed TRegex's automaton size limits, and compile to a matcher in both normal and `BooleanMatch` mode instead of returning null. RE2 regexes get larger automaton size limits. A large repetition of an expression that can match the empty string, such as `(a?){1000}`, can still exceed them.
+* `RE2` flavor: loop iterations that match the empty string now follow RE2. An empty first iteration of an unbounded loop ends the loop, and iterations of bounded loops are not subject to empty checks. For example, `(|a)*` now matches the empty string at the start of `aaa`, as in RE2, instead of `aaa`.
+
 ## Version 25.5.5-elide.27
 * Added the `RE2` regex flavor (`Flavor=RE2`), which implements the syntax and leftmost-first semantics of [RE2](https://github.com/google/re2/wiki/Syntax). The flavor always implies `ForceLinearExecution`. `\C` and RE2's leftmost-longest matching mode are not supported. See [docs/README.md](docs/README.md#re2-flavor) for details.
 

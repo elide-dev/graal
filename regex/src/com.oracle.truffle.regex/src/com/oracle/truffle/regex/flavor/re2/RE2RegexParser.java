@@ -666,12 +666,10 @@ public final class RE2RegexParser implements RegexParser, RegexValidator {
             case ATOM:
                 if (astBuilder != null) {
                     if (lastNullable && min == 0 && (max == 1 || max == -1)) {
-                        // TRegex follows ECMAScript in rejecting optional loop iterations that
-                        // match the empty string. RE2 does not have such empty checks: it compiles
-                        // x? to an alternation (x|) and x* for a nullable x to (x+)?, see
-                        // Compiler::Quest and Compiler::Star in re2/compile.cc. In x+, only the
-                        // second and later iterations are subject to an empty check, which
-                        // matches RE2 for all but the first iteration.
+                        // RE2 compiles x? to an alternation (x|) and x* for a nullable x to
+                        // (x+)?, see Compiler::Quest and Compiler::Star in re2/compile.cc. We do
+                        // the same, so that the first iteration of every unbounded loop with a
+                        // nullable body is mandatory, as RegexFlavor#usesRE2EmptyChecks requires.
                         astBuilder.wrapCurTermInOptionalGroup(max == -1 ? Token.createQuantifier(1, -1, greedy, false, !counted) : null, greedy);
                     } else {
                         astBuilder.addQuantifier(Token.createQuantifier(min, max, greedy, false, !counted));

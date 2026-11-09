@@ -464,7 +464,7 @@ public abstract class NFATraversalRegexASTVisitor {
         } else if (cur.isGroup()) {
             final Group group = (Group) cur;
             pushGroupEnter(group, 1);
-            if (group.hasEmptyGuard()) {
+            if (group.hasEmptyGuard() && !(isReverse() && isRE2LoopEntryCopy(group))) {
                 insideEmptyGuardGroup.set(group.getGroupsWithGuardsIndex());
             }
             // This path will only be hit when visiting a group for the first time. All groups
@@ -592,6 +592,7 @@ public abstract class NFATraversalRegexASTVisitor {
                 // - and capture groups are visible to the caller, or the expression contains
                 // back-references, or we crossed a caret
                 if (!getFlavor().emptyChecksOnMandatoryLoopIterations() &&
+                                !getFlavor().usesRE2EmptyChecks() &&
                                 curGroup.isMandatoryQuantifier() &&
                                 !curGroup.isExpandedQuantifier() &&
                                 (!ast.getOptions().isBooleanMatch() || ast.getProperties().hasBackReferences() || caretsOnPath() || isReverse() && dollarsOnPath())) {
@@ -609,7 +610,9 @@ public abstract class NFATraversalRegexASTVisitor {
                     curPath.add(PathElement.create(cur));
                     return true;
                 }
-                if (isBuildingDFA() && curGroup.isMandatoryQuantifier() && !lookAroundsOnPath.isEmpty()) {
+                // With RE2's empty checks, retreating from an empty mandatory iteration escapes the
+                // loop (see needsZeroWidthEscape), so the path is not lost.
+                if (isBuildingDFA() && curGroup.isMandatoryQuantifier() && !lookAroundsOnPath.isEmpty() && !getFlavor().usesRE2EmptyChecks()) {
                     for (int i = curPath.length() - 1; i >= 0; i--) {
                         long element = curPath.get(i);
                         RegexASTNode node = pathGetNode(element);
@@ -691,6 +694,11 @@ public abstract class NFATraversalRegexASTVisitor {
                     // the expansion of the quantifier even in cases when we are in the mandatory
                     // prefix (e.g. empty-check fails in the first A in (AA((A)((A)|)|))).
                     Group parentGroup = group.getParent().getParent().asGroup();
+                    if (getFlavor().usesRE2EmptyChecks() && group.isMandatoryQuantifier() && group.hasNotUnrolledQuantifier()) {
+                        // In RE2, an empty mandatory iteration ends the whole loop, so we also
+                        // escape past the optional part of the quantifier expansion.
+                        parentGroup = parentGroup.getParent().getParent().asGroup();
+                    }
                     pushGroupExit(parentGroup);
                     return advanceTerm(parentGroup);
                 } else {
@@ -1195,15 +1203,47 @@ public abstract class NFATraversalRegexASTVisitor {
 
     private boolean needsEmptyCheck(Group group) {
         assert group.hasQuantifier();
+        if (getFlavor().usesRE2EmptyChecks() && group.isExpandedQuantifier()) {
+            // Unrolled copies of bounded quantifiers and mandatory copies other than the last one
+            // of unbounded quantifiers are not subject to empty checks in RE2. The post-processor
+            // marks the remaining copies with an empty guard.
+            return group.getQuantifier().hasZeroWidthIndex() && group.hasEmptyGuard() && !(isReverse() && isRE2LoopEntryCopy(group));
+        }
         return group.getQuantifier().hasZeroWidthIndex() && (getFlavor().emptyChecksOnMandatoryLoopIterations() || !group.isMandatoryUnrolledQuantifier());
     }
 
     private boolean needsZeroWidthEscape(Group group) {
+        if (getFlavor().usesRE2EmptyChecks()) {
+            if (!group.hasQuantifier() || !group.getQuantifier().hasZeroWidthIndex()) {
+                return false;
+            }
+            if (group.isMandatoryQuantifier()) {
+                // The last mandatory iteration of a loop ends the loop if it is empty. Unrolled
+                // copies of mandatory iterations other than the last one have no empty check.
+                return group.hasNotUnrolledQuantifier() || !isReverse() && isRE2LoopEntryCopy(group);
+            }
+            // RE2 has no empty checks in bounded loops. If we cannot unroll the loop, we
+            // approximate this by ending the loop after an empty iteration, as all further
+            // iterations could match the empty string as well.
+            return group.hasNotUnrolledQuantifier() && !group.getQuantifier().isInfiniteLoop();
+        }
         if (getFlavor().failingEmptyChecksDontBacktrack()) {
             return group.hasQuantifier() && group.getQuantifier().hasZeroWidthIndex();
         } else {
             return group.hasNotUnrolledQuantifier() && group.getQuantifier().hasZeroWidthIndex() && group.getQuantifier().getMin() > 0 && group.isMandatoryQuantifier();
         }
+    }
+
+    /**
+     * Returns {@code true} if {@code group} is the unrolled copy of the last mandatory iteration of
+     * an unbounded quantifier in a flavor that {@link RegexFlavor#usesRE2EmptyChecks() uses RE2's
+     * empty checks}. If such an iteration matches the empty string, we escape past the whole
+     * quantifier expansion. Escaping only makes sense when traversing the AST forward: in a
+     * reverse traversal, the escape would skip the preceding mandatory copies, so we treat the copy
+     * like the other mandatory copies there, which over-approximates the possible paths.
+     */
+    private boolean isRE2LoopEntryCopy(Group group) {
+        return getFlavor().usesRE2EmptyChecks() && group.isMandatoryUnrolledQuantifier() && group.hasEmptyGuard();
     }
 
     private boolean clearsEnclosedGroups(Group group) {

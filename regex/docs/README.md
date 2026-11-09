@@ -136,8 +136,12 @@ Source source = Source.newBuilder("regex", "Flavor=RE2,Encoding=UTF-16/(?i)^(?P<
 RE2 guarantees that matching runs in time linear in the size of the input.
 The `RE2` flavor therefore always implies `ForceLinearExecution`: TRegex never uses its backtracking engine for RE2 regexes.
 If TRegex cannot execute a regex with its automaton-based engines, parsing returns a null value instead of a compiled regex.
-This happens when a regex exceeds the automaton size limits, typically because of large counted repetitions with many optional iterations, such as `.{0,1000}`.
-Counted repetitions of moderate size, for example `\w{1,255}` or `.{0,500}`, are supported.
+
+To match counted repetitions without backtracking, TRegex unrolls them, like RE2 does, so the size of the automaton grows with the repetition count.
+Counted repetitions up to RE2's limit of 1000 are supported, for example `.{0,1000}x`, `[a-z]{1,1000}`, or `(abc){300}`.
+Parsing returns a null value if the unrolled regex exceeds the automaton size limits.
+This can happen with many large repetitions in one regex, or with a large repetition of an expression that can match the empty string, such as `(a?){1000}`.
+As in RE2, the time to match each input character is bounded by the size of the unrolled regex.
 
 The flags part of the source string may contain the RE2 flag letters `i`, `m`, `s`, and `U`.
 They have the same effect as a leading `(?flags)` group in the pattern.
@@ -169,7 +173,14 @@ Use `Encoding=UTF-8` to retrieve byte offsets like RE2, or `Encoding=UTF-16` (th
 Like Go's `regexp` package, `\B` only considers positions between code points, while RE2 also considers positions inside multi-byte UTF-8 sequences.
 
 The search tests of RE2 (`re2-search.txt`, taken from the Go project) are part of the TRegex test suite, see _RE2ConformanceTest.java_.
-All leftmost-first cases pass except those in which the body of a `*` or `+` loop prefers to match the empty string, such as `(|a)*`.
-RE2 stops such a loop after an empty first iteration, while TRegex continues with the next alternative of the loop body.
-For example, `(|a)*` matches the empty string at the start of `aaa` in RE2, and the whole string `aaa` in TRegex.
-This difference only affects match boundaries and capture group positions; whether a regex matches at all is not affected.
+All leftmost-first cases pass.
+
+Like RE2, the `RE2` flavor handles loop iterations that match the empty string differently from the other flavors:
+
+* If the first iteration of `x*` or `x+`, or iteration `n` of `x{n,}`, matches the empty string, the loop ends there.
+  For example, `(|a)*` matches the empty string at the start of `aaa`, not the whole string.
+* Later iterations of such a loop must not match the empty string.
+* Iterations of bounded quantifiers such as `x?` and `x{n,m}` may always match the empty string.
+
+TRegex unrolls most bounded quantifiers.
+If a bounded quantifier is too large to unroll and its body can match the empty string, TRegex ends the loop after the first empty iteration instead, which matches RE2 unless the remaining iterations would have matched differently at the same position.
