@@ -87,14 +87,14 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
      */
     static final class Descriptors {
         static final FunctionDescriptor ABS = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
-        static final FunctionDescriptor LABS = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
+        static final FunctionDescriptor LLABS = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
         static final FunctionDescriptor STRLEN = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
         static final Linker.Option CRITICAL = Linker.Option.critical(false);
         static final Linker.Option CAPTURE_ERRNO = Linker.Option.captureCallState("errno");
 
         /** Handles created at image build time, where the JDK specializes their bindings. */
         static final MethodHandle ABS_HANDLE = Linker.nativeLinker().downcallHandle(ABS);
-        static final MethodHandle LABS_HANDLE = Linker.nativeLinker().downcallHandle(LABS);
+        static final MethodHandle LLABS_HANDLE = Linker.nativeLinker().downcallHandle(LLABS);
         static final MethodHandle STRLEN_HANDLE = Linker.nativeLinker().downcallHandle(STRLEN);
         static final MethodHandle ABS_CRITICAL_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CRITICAL);
         static final MethodHandle ABS_ERRNO_HANDLE = Linker.nativeLinker().downcallHandle(ABS, CAPTURE_ERRNO);
@@ -108,7 +108,7 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
             ForeignAccess foreign = access.getForeignAccess();
             AccessCondition always = AccessCondition.unconditional();
             foreign.registerForDowncall(always, Descriptors.ABS);
-            foreign.registerForDowncall(always, Descriptors.LABS);
+            foreign.registerForDowncall(always, Descriptors.LLABS);
             foreign.registerForDowncall(always, Descriptors.STRLEN);
             foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CRITICAL);
             foreign.registerForDowncall(always, Descriptors.ABS, Descriptors.CAPTURE_ERRNO);
@@ -234,12 +234,12 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
         }
     }
 
-    /** {@code long labs(long)} through a handle that is a constant of the root node. */
-    static final class LabsRoot extends RootNode {
+    /** {@code long long llabs(long long)} through a handle that is a constant of the root node. */
+    static final class LlabsRoot extends RootNode {
         private final MethodHandle handle;
         private final MemorySegment symbol;
 
-        LabsRoot(MethodHandle handle, MemorySegment symbol) {
+        LlabsRoot(MethodHandle handle, MemorySegment symbol) {
             super(null);
             this.handle = handle;
             this.symbol = symbol;
@@ -305,6 +305,14 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     public void setup() {
         Assume.assumeTrue("the downcall stubs are only registered in the native image", ImageInfo.inImageRuntimeCode());
         setupContext(Context.newBuilder().allowExperimentalOptions(true).option("engine.BackgroundCompilation", "false").option("engine.CompileImmediately", "false").build());
+    }
+
+    @Override
+    @Before
+    public void onlyWhiteBox() {
+        if (checkGraphs()) {
+            super.onlyWhiteBox();
+        }
     }
 
     private static boolean checkGraphs() {
@@ -499,14 +507,14 @@ public class FFMDowncallPartialEvaluationTest extends PartialEvaluationTest {
     }
 
     @Test
-    public void testLabsBuildTimeHandle() {
-        MemorySegment labs = symbol("labs");
-        LabsRoot root = new LabsRoot(Descriptors.LABS_HANDLE, labs);
-        assertDirectDowncall("labs (build-time handle)", "JJ_J", root, -7L);
+    public void testLlabsBuildTimeHandle() {
+        MemorySegment llabs = symbol("llabs");
+        LlabsRoot root = new LlabsRoot(Descriptors.LLABS_HANDLE, llabs);
+        assertDirectDowncall("llabs (build-time handle)", "JJ_J", root, -7L);
         OptimizedCallTarget target = compile(root, -7L);
         Assert.assertEquals(7L, target.call(-7L));
         Assert.assertEquals(1L << 40, target.call(-(1L << 40)));
-        report("Truffle PE, labs, build-time handle", timeCalls(target, new Object[]{-12345L}, 12345L));
+        report("Truffle PE, llabs, build-time handle", timeCalls(target, new Object[]{-12345L}, 12345L));
     }
 
     @Test
