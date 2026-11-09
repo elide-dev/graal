@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: elide-dev/labs-openjdk
-          ref: 861b5b674187eb1aecda79118b222b9a138bf829
+          ref: 2aa99d3a422f52a41584d0cb42609ed6f450b368
           path: labs-openjdk
       - name: Determine mx version
         run: echo "MX_VERSION=$(python3 -c "import json; print(json.load(open('graal/common.json'))['mx_version'])")" >> "${GITHUB_ENV}"
