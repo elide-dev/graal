@@ -195,6 +195,12 @@ jobs:
           repository: ${{ env.LABS_OPENJDK_REPOSITORY }}
           ref: ${{ env.LABS_OPENJDK_REF }}
           path: labs-openjdk
+      # The runners are persistent and shared with other workflows of this repository, which leave
+      # their own checkouts here (for example source/). mx resolves suites in sibling directories, so
+      # a second graal tree makes every suite import ambiguous ("Multiple suites match").
+      - name: Remove other workflows' checkouts
+        if: runner.os != 'Windows'
+        run: find . -mindepth 1 -maxdepth 1 ! -name graal ! -name graaljs ! -name graalpython ! -name labs-openjdk ! -name refcache -print -exec rm -rf {} +
       # The runners are persistent, and a previous run's clean up may not have run: its archives and
       # natives would otherwise ship with this release.
       - name: Remove previous output
