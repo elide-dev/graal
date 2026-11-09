@@ -1,0 +1,24 @@
+{
+  "kind": "ristretto",
+  "upstreamBase": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+  "cleanHead": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+  "tests": [
+    "substratevm/mx.substratevm/suite.py",
+    "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/RistrettoExceptionFallbackPayload.java",
+    "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/RistrettoExceptionFallbackTest.java"
+  ],
+  "styleSuites": [
+    "substratevm"
+  ],
+  "regression": [
+    "native-unittest",
+    "--preserve-image",
+    "com.oracle.svm.test.RistrettoExceptionFallbackTest",
+    "--build-args",
+    "--parallelism=8",
+    "--run-args",
+    "--very-verbose",
+    "--enable-timing"
+  ],
+  "diagnostic": "PermanentBailoutException"
+}
