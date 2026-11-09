@@ -1,0 +1,57 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_using_return_second",
+  "reviewedHead": "639ec40d68f4242166b56b2f30d89e767ac197f6",
+  "verdict": "approved",
+  "summary": "53 additional assertions and module ordering/export/suppression probes pass.",
+  "originalReportSha256": "3b284345b3f6edc1114f26315158c4972a158e97e5924333f5d39c492a3bde32",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [],
+  "coverage": {
+    "independence": "Read diff and surrounding translator, completion, block, and resumable-node code before writing initial.json; only then read evidence.json and its explicit test/log references. No other reviewer directories read.",
+    "source": "All three changed files; surrounding function return targets, module wrapping, block classification, completion-slot save/restore, state reset and Completion representation.",
+    "executed": [
+      {
+        "probe": "probe.js",
+        "exit": 0,
+        "result": "PASS 53 checks",
+        "areas": [
+          "terminal branch returns and default-parameter function bodies",
+          "nonterminal scopes and catch returns",
+          "eval completion, including empty using blocks",
+          "base and derived constructors",
+          "same ordinary TryFinallyNode reused across four iterations and multiple yields",
+          "finally return overriding pending return",
+          "pending throw through repeated yield",
+          "generator return/throw injected during finally",
+          "generator return through nested ordinary finally and using disposal",
+          "multiple await suspension and function returns",
+          "async generator normal return, injected return, injected throw",
+          "two rejecting disposers plus body error with exact nested SuppressedError order",
+          "ordinary finally return/throw overriding disposal or pending return",
+          "labeled break and continue with asynchronous disposal"
+        ]
+      },
+      {
+        "probe": "module-probe.mjs",
+        "exit": 0,
+        "result": "PASS module sync/async ordering, exports, and suppression",
+        "areas": [
+          "top-level sync using disposal before importer observes exports",
+          "top-level await using multiple suspended disposers in reverse registration order",
+          "export values preserved",
+          "dynamic import rejection with exact body/disposal SuppressedError precedence"
+        ]
+      }
+    ],
+    "supplied_evidence": "Read raw logs: 487-test JSSimpleTestSuite pass, checkstyle output, candidate sync/async success, and baseline sync/async undefined-return failures. Read both supplied reproducer sources.",
+    "checkout_verification": "Both review and executable source checkouts resolve to exact candidate SHA and have clean git status. Executable sibling Graal resolves to declared import SHA."
+  },
+  "limitations": [
+    "Executed using existing candidate build output; did not rebuild or independently authenticate every compiled artifact against source.",
+    "Supplied 487-test log reports aggregate pass but does not enumerate all successful test names or contain its invocation; it cannot alone prove individual-test inclusion.",
+    "Did not rerun full JUnit suite, checkstyle, Test262, compiler stress, or baseline. New probes are focused semantic checks, not exhaustive conformance coverage.",
+    "No fork-specific integration execution performed; assessment applies to supplied upstream candidate and base."
+  ]
+}

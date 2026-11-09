@@ -1,0 +1,38 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_resource_url",
+  "reviewedHead": "f62ead1c846d842b3abe64afae338cd4971e8315",
+  "verdict": "approved",
+  "summary": "No change-introduced blocker; correct native coverage wording.",
+  "originalReportSha256": "e8f696eb5a905851b00add35da2ee095c7d3bfda05c7a7552f1277744b7f1525",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [
+    {
+      "id": "coverage-1",
+      "severity": "nonblocking evidence correction",
+      "title": "Aggregate OK (24 tests) does not mean 24 fully exercised test bodies",
+      "detail": "Original evidence.json says 24 tests pass; no skips reported. Raw log explicitly prints loaderAwareModuleResourcePathToUriRoundTripKeepsModuleAndLoader: (test requires class-loader-aware lookup to be enabled) Passed. Source line 422 uses Assume.assumeTrue. runtimeClassPathResource returns immediately unless svm.test.expectRuntimeClassPathResource is true; the logged executable command supplies only --verbose. Neither loader-aware configuration nor runtime classpath content is proven by that run. Original evidence.json preserved."
+    },
+    {
+      "id": "scope-1",
+      "severity": "informational preexisting limitation",
+      "title": "Full authority identity is not established by this patch",
+      "detail": "Inherited URLStreamHandler ignores userInfo in equals/sameFile/hashCode. moduleA@app and moduleB@app with the same path compare equal in the custom handler analogue. Existing source ResourceURLConnection uses userInfo as module identity when ClassRegistries.respectClassLoader is enabled. This predates the patch, is independent of network-address equivalence, and should not block the scoped DNS/IP alias fix. A claim that all distinct textual authorities are now distinct would be inaccurate."
+    }
+  ],
+  "coverage": {
+    "new_regression": "resourceURLIdentityUsesAuthority is unconditional, is explicitly Passed in the supplied native log, and covers numeric IPv4 aliases, sameFile, set membership, repeated spelling/hash, APP/app lexical case equivalence, and root/path difference.",
+    "native_independent_reruns": "Existing candidate binary exits 0 with equal=false, sameFile=false, setSize=2. Existing baseline binary exits 1 with equal=true, sameFile=true, setSize=1 and the expected assertion.",
+    "resource_access": "Existing native suite log reports successful actual opening in classGetResourceBypassesUserURLHandlers, loaderlessResourceEnumerationKeepsDuplicates, syntheticResourceRegisteredByFeature, and moduleResourceURLAccess. Opening code is untouched. Those are supplied-log observations, not new independent reruns.",
+    "jdk_source": "Inspected local JDK URLStreamHandler: hashCode and hostsEqual dynamically dispatch getHostAddress; returning null selects lexical host fallback even if URL.hostAddress was previously populated. sameFile calls hostsEqual and equals calls sameFile."
+  },
+  "limitations": [
+    "No builds or checkstyle reruns, per review authorization.",
+    "No independently rebuilt artifacts; native provenance relies on supplied binary paths and build logs.",
+    "Native unit-test binary named in log was already removed, so resource opening could not be independently rerun.",
+    "No direct resolver-call tracing or latency proof; absence of lookup is established from source dispatch and an analogue that always returns null.",
+    "No loader-aware or runtime classpath configuration proof.",
+    "No source edits, network/remote jobs, publication, pushes, or model calls. Scratch compilation directory removed."
+  ]
+}

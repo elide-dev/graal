@@ -1,0 +1,61 @@
+{
+  "kind": "source-only reproducible ZIP packages; not nib/OCI pipeline qualification artifacts",
+  "packages": [
+    {
+      "candidate": "lcov",
+      "file": "lcov.zip",
+      "sha256": "8169d8269b8aa0d6ed3129d996e2159f1e9c05fdd922e8f215a97d61a210e6ff",
+      "bytes": 2902,
+      "contents": [
+        {
+          "file": "LCOVReproducer.java",
+          "sha256": "551b718af23ede5aed0517e6c5beab0ad26b34617793fc1515d77308812981d4"
+        },
+        {
+          "file": "README.md",
+          "sha256": "1d9e69d6006cadd6b0eb34774d63f7d5c5da4a73e951351f7e6b275132c4fc67"
+        },
+        {
+          "file": "regression.patch",
+          "sha256": "eeb04b5e4270178d3865ab768967a1e224a47d50f0d76c968607c2602cfa72e4"
+        }
+      ]
+    },
+    {
+      "candidate": "resource-url",
+      "file": "resource-url.zip",
+      "sha256": "d444421dc2ac4107db5d69fd9dfaeb78532470e8001718a43659230c2c1d31a5",
+      "bytes": 1601,
+      "contents": [
+        {
+          "file": "README.md",
+          "sha256": "57e8e95b3a269f9853a639688a64de93214b13e548115eb8a43eba8dd171d105"
+        },
+        {
+          "file": "ResourceURLReproducer.java",
+          "sha256": "41cff934f18db09027a4df98ca75b67e57b50ca72171680c7b3555e317870d01"
+        }
+      ]
+    },
+    {
+      "candidate": "using-return",
+      "file": "using-return.zip",
+      "sha256": "493f8d204259756abe9f004e58683a6a818a36f099cf88f2ac23e456d241f09d",
+      "bytes": 1855,
+      "contents": [
+        {
+          "file": "README.md",
+          "sha256": "ced7326325c4eb3b551bfdcae8afc0a19d509a13703156a6d66f5018ce3cb259"
+        },
+        {
+          "file": "reproduce-async.js",
+          "sha256": "393ff1390c768c3746b8acce5ea63e14d9cb6687385ca86e87a94819eb39032a"
+        },
+        {
+          "file": "reproduce.js",
+          "sha256": "88138403a0e750582d17fd35323dcf6021b39c390b43d3640f5e2a788b639db4"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_using_return",
+  "reviewedHead": "639ec40d68f4242166b56b2f30d89e767ac197f6",
+  "verdict": "approved",
+  "summary": "31 adversarial assertions and module completion checks pass.",
+  "originalReportSha256": "6904269b52149de1d7bfc91bfde28754fe1e2ffd94c8f1522d1e4052e86a56f1",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [],
+  "coverage": [
+    "Independently inspected complete diff, translator wrapper selection and placement, completion save/restore helpers, TryFinallyNode execution/resumption, Completion representation, suite and launcher configuration. Initial findings recorded before reading evidence.",
+    "31 additional runtime assertions passed: eval completion, nested synchronous/asynchronous disposal and return identity, labeled break/continue, synchronous/asynchronous multiple-disposer exception precedence, async generator next/return/throw, ordinary yielding finally, finally return override, rejection overriding return, derived constructor, dynamic import and nested module disposal.",
+    "Direct module eval via launcher: synchronous using preserves completion 73; awaited using resolves to undefined, matching ordinary top-level-await control."
+  ],
+  "limitations": [
+    "Used existing candidate binaries; did not rebuild or independently prove artifact-to-source identity. Source worktree is clean and HEAD matches reviewed candidate.",
+    "Did not rerun baseline, full suite, checkstyle, optimized compiler execution, instrumentation tests, or test262.",
+    "No independent fresh-remote integration check or fork CI performed within this review.",
+    "New regression file lacks durable module and nested async-scope tests, though external probes cover those behaviors."
+  ]
+}

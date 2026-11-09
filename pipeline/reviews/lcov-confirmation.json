@@ -1,0 +1,36 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_lcov confirmation turn",
+  "reviewedHead": "3c92f7b36f8968bbb805448b422bde7f769ef080",
+  "verdict": "approved",
+  "summary": "LCOV-1 independently confirmed resolved; no new blocker.",
+  "originalReportSha256": "263f4bf693dd486bf93d2f2da4d1660ae2c1db25d4e1a95c2aa62281349df5cd",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [],
+  "coverage": {
+    "delta": "Inspected complete previous-reviewed-head to current-head diff, Source copy builder implementation, source/tests/documentation changes, and docs/AGENTS.md. Worktree is clean.",
+    "implementation": "Uses existing Source default URI generation on a non-cached copy, only when path is null and explicit URI string empty. Non-empty URI and path branches remain unchanged. Literal copy builder reuses content rather than reading a file or URL.",
+    "consumer": "Reran the original Java/LCOV/genhtml probe independently against current built candidate and baseline distributions. Empty-URI summary changed from the original reviewed failure to exit 0; baseline summary remains exit 0. Default URI summary retains two records; path rendering control still succeeds.",
+    "newEdges": "Directly exercised the built LCOVPrinter via reflection for empty character content, absent content, byte content, same-name/different-content empty-URI sources, and non-empty custom URI. All passed assertions, including original source URI preservation. This direct printer test supplies no coverage roots and checks identifier handling only.",
+    "documentation": "New documentation explains path precedence, default URI fallback for an empty URI, and genhtml source-location limitations without promising universal URI uniqueness or general URI rendering.",
+    "suppliedEvidence": "Read resolution/evidence.json and referenced raw test/checkstyle logs. Test log reports OK (9 tests). Checkstyle log reports execution with no displayed violation; exit 0 remains supplied evidence rather than an independently rerun check."
+  },
+  "limitations": [
+    "Used existing builds and inspected changed-method bytecode; did not rebuild or independently establish provenance for every dependency.",
+    "No mx build/checkstyle or JUnit rerun; executable consumer and direct-printer probes were run independently.",
+    "LCOV requires --ignore-errors format for existing SN and unnamed-root fields in these probes. Those pre-existing incompatibilities remain outside this fix.",
+    "genhtml still cannot locate synthetic/file-URI source strings as files. This limitation is now documented and is not an LCOV-1 regression.",
+    "Caller-selected shared non-empty URIs can still merge records; no universal uniqueness guarantee is made.",
+    "The initial new-edge harness incorrectly passed CONTENT_NONE as the builder origin and failed before reaching the printer. Corrected to .content(CONTENT_NONE), after which all edge assertions passed. The failed harness and output are retained as initial-invalid-* files.",
+    "Unique /tmp experiment directories were removed; durable code, commands, trace files and logs remain. No project source changes, PRs, infrastructure actions, further delegation or model calls were performed."
+  ],
+  "findingDisposition": {
+    "id": "LCOV-1",
+    "status": "resolved",
+    "reason": "Explicit empty URI now maps to a non-empty default content-and-name URI. The original executable counterexample now retains one covered source record in LCOV 2.0-1 summary, with existing unrelated format issues ignored. Same-name/different-content empty-URI sources produce distinct SF identifiers.",
+    "blocksForkValidationPR": false,
+    "blocksUpstreamSubmission": false
+  },
+  "newFindings": []
+}

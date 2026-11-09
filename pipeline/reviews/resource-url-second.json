@@ -1,0 +1,48 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_resource_url_second",
+  "reviewedHead": "f62ead1c846d842b3abe64afae338cd4971e8315",
+  "verdict": "approved",
+  "summary": "Independent second review found no new blocker; conditional coverage and preexisting identity limits remain.",
+  "originalReportSha256": "9e116934af6d3bea3a662262d5189286d0fd2fea62e286873d0841801c4ba34f",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [],
+  "coverage": [
+    {
+      "kind": "executed native candidate",
+      "result": "exit 0; equal=false, sameFile=false, setSize=2"
+    },
+    {
+      "kind": "executed native baseline",
+      "result": "expected exit 1; equal=true, sameFile=true, setSize=1; assertion failure"
+    },
+    {
+      "kind": "executed JVM analogues, not native production handler",
+      "result": "exit 0; IPv4 abbreviated/integer and IPv6 expanded/mapped spellings distinct with null override and address-equal without it; ASCII and IPv6 letter case retained; Turkish locale ASCII hash consistency retained; repeated hash stable; seeded equal hostAddress values ignored by override; root and fragment distinctions retained."
+    },
+    {
+      "kind": "source inspection",
+      "result": "Inherited URLStreamHandler hashCode and hostsEqual dispatch to getHostAddress; unconditional null bypasses address lookup and cached host addresses. ResourceURLConnection and parseURL unchanged. Test has no platform/runtime skip. Both runtime-class-loading variants obtain this resource handler."
+    },
+    {
+      "kind": "supplied resource suite log",
+      "result": "New regression ran; resource opening, special characters, unicode paths, module access and rooted directory traversal passed. Runner says OK (24 tests), but loader-aware test had a failed assumption and runtime-classpath test was unconfigured and returned early."
+    },
+    {
+      "kind": "attempted native suite rerun",
+      "result": "Saved svmjunit binary no longer exists; no independent resource-suite rerun performed."
+    },
+    {
+      "kind": "supplied checkstyle log",
+      "result": "Consistent with supplied successful checkstyle report; no independent checkstyle/build run."
+    }
+  ],
+  "limitations": [
+    "No new image build, mx build, mx checkstyle, remote CI, push, PR or deployment.",
+    "Existing native binaries have fixed IPv4 reproducers, so broader counterexamples use explicitly labeled JVM handler analogues.",
+    "Candidate binary provenance relies on supplied evidence and build artifacts; the review verifies source HEAD but does not independently attest binary-to-commit identity.",
+    "Loader-aware, runtime-classpath, alternate ResourceProtocol and runtime-loaded-class configurations not independently executed.",
+    "The supplied unit-test image path is absent; resource-access regressions are assessed from supplied log and unchanged connection source."
+  ]
+}

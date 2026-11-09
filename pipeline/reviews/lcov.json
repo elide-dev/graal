@@ -1,0 +1,51 @@
+{
+  "kind": "curated summary of actual independent session review; not a configured pipeline-adapter receipt",
+  "model": "gpt-6-astra",
+  "invocation": "/root/astra_lcov",
+  "reviewedHead": "bafce83ab1988342606ef0017dbbea764a41bf31",
+  "verdict": "changes_requested",
+  "summary": "One P2 empty-URI finding blocks upstream; fork validation allowed.",
+  "originalReportSha256": "8f42a9257647629f41790bed4073b2342a496d58b09c74effe6e547b75a29cab",
+  "billingAndPreciseBackendVersion": "not exposed by the session tool; no values inferred",
+  "findings": [
+    {
+      "id": "LCOV-1",
+      "severity": "P2",
+      "title": "Empty explicit source URI now emits an invalid empty SF record",
+      "location": {
+        "file": "tools/src/com.oracle.truffle.tools.coverage/src/com/oracle/truffle/tools/coverage/impl/LCOVPrinter.java",
+        "line": 191
+      },
+      "trigger": "Source.newBuilder(language, \"ROOT(STATEMENT)\", \"same-name\").uri(URI.create(\"\")).buildLiteral() is accepted and has null path.",
+      "impact": "Candidate emits SF: with no identifier. LCOV 2.0-1 skips the record and exits 1 with no valid records, even when existing unrelated format warnings are ignored. Baseline emits SF:null and summary succeeds with one source and one covered line. This regresses usable summary data to discarded data for a supported source input.",
+      "requestedChange": "Refine the specification to require a non-empty SF identifier, choose a deterministic non-empty fallback for an empty URI, and add a regression test. The existing non-null URI contract does not guarantee a non-empty URI string.",
+      "evidence": [
+        "ReviewProbe.java",
+        "empty.info",
+        "empty-summary-ignore-format.log",
+        "baseline-empty.info",
+        "baseline-empty-summary-ignore-format.log"
+      ],
+      "blocksForkValidationPR": false,
+      "blocksUpstreamSubmission": true
+    }
+  ],
+  "coverage": {
+    "independence": "initial.json was written after source/diff inspection and before evidence.json or raw logs were read.",
+    "specification": "Normal path and non-empty URI cases satisfy the requested rule; blanket URI fallback needs an empty-URI exception. Distinct default-URI contents retain distinct identifiers in an actual LCOV summary.",
+    "correctness": "Source.getURI guarantees non-null. Candidate bytecode confirms the null-path fallback. File-backed source with an explicit conflicting URI still emits the path.",
+    "negativeCases": "Executed empty URI, shared explicit URI, pathless file URI pointing to existing file, path with explicit override URI, and same-name different-content default literals.",
+    "regressions": "Confirmed empty-URI record loss versus built baseline using identical probe; file-path behavior remains intact.",
+    "consumerCompatibility": "LCOV 2.0-1 summary retains two default URI sources with --ignore-errors format. genhtml cannot resolve synthetic or file-scheme URI strings as source paths; file-path control renders successfully with the same format-warning option.",
+    "dependencies": "No new library dependency or exported API. Uses existing Source API and Java URI. No source changes or builds performed.",
+    "tests": "Supplied 8-test candidate success and baseline 2 failures agree with logs. Tests assert SF strings, not consumer behavior; empty URI is absent."
+  },
+  "limitations": [
+    "Used existing built candidate and baseline distributions; verified changed method bytecode but did not rebuild or independently establish provenance for every dependency.",
+    "Did not rerun mx JUnit/checkstyle; no concurrent mx builds or source modifications.",
+    "Consumer checks cover Linux LCOV/genhtml 2.0-1 only, not editor extensions or Windows.",
+    "No exhaustive hash-collision or encoding analysis of pre-existing default URI algorithm.",
+    "Temporary source files and generated HTML were removed after execution; durable probe, trace files, commands, and logs are retained.",
+    "No PR, push, deployment, external-provider request, delegated reviewer, billing metadata, or pipeline-adapter receipt created."
+  ]
+}
