@@ -151,20 +151,49 @@ public class RuntimeCodeInfoMemory {
 
     @Uninterruptible(reason = "Manipulate the counters atomically with regard to GC.")
     private void subtractToSizeCounters(CodeInfo codeInfo) {
-        // This is done when the code info is removed the table
-        // code and data might actually have been released earlier in
-        // RuntimeCodeInfoAccess.freePartially
+        // must be done under this.lock (or by the GC)
         UnsignedWord code = CodeInfoAccess.getCodeSize(codeInfo);
         UnsignedWord codeAndDataMemory = CodeInfoAccess.getCodeAndDataMemorySize(codeInfo);
         UnsignedWord nativeMetadata = CodeInfoAccess.getNativeMetadataSize(codeInfo);
+        assert code.belowOrEqual(codeSize) : "code size was not counted";
+        assert codeAndDataMemory.belowOrEqual(codeAndDataMemorySize) : "code and data memory size was not counted";
+        assert nativeMetadata.belowOrEqual(nativeMetadataSize) : "native metadata size was not counted";
         codeSize = codeSize.subtract(code);
         codeAndDataMemorySize = codeAndDataMemorySize.subtract(codeAndDataMemory);
         nativeMetadataSize = nativeMetadataSize.subtract(nativeMetadata);
         totalSize = totalSize.subtract(codeAndDataMemory).subtract(nativeMetadata);
-        assert codeSize.aboveOrEqual(0);
-        assert codeAndDataMemorySize.aboveOrEqual(0);
-        assert nativeMetadataSize.aboveOrEqual(0);
-        assert totalSize.aboveOrEqual(0);
+    }
+
+    /**
+     * The size counters reflect the sizes of each registered {@link CodeInfo} at the time when it
+     * was counted, and the same sizes are subtracted again when it is {@linkplain #remove removed}.
+     * A {@link CodeInfo} is registered right after its allocation (see
+     * {@link RuntimeCodeInfoAccess#allocateMethodInfo}), before its code and metadata are attached.
+     * So, code that attaches them (or otherwise changes the sizes of a registered {@link CodeInfo})
+     * must call this method before and {@link #afterSizeChange} after doing so. Otherwise, the code
+     * and metadata are only subtracted, and the counters underflow.
+     */
+    public void beforeSizeChange(CodeInfo info) {
+        assert info.isNonNull();
+        lock.lock();
+        try {
+            assert contains0(info) : "not registered";
+            subtractToSizeCounters(info);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** @see #beforeSizeChange */
+    public void afterSizeChange(CodeInfo info) {
+        assert info.isNonNull();
+        lock.lock();
+        try {
+            assert contains0(info) : "not registered";
+            addToSizeCounters(info);
+        } finally {
+            lock.unlock();
+        }
     }
 
     public SizeCounters getSizeCounters() {

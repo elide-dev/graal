@@ -42,6 +42,7 @@ import com.oracle.svm.core.code.CodeInfoAccess;
 import com.oracle.svm.core.code.InstalledCodeObserver;
 import com.oracle.svm.core.code.InstalledCodeObserverSupport;
 import com.oracle.svm.core.code.RuntimeCodeInfoAccess;
+import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.core.code.UntetheredCodeInfoAccess;
 import com.oracle.svm.guest.staging.option.RuntimeOptionValues;
 
@@ -125,18 +126,13 @@ final class PersistedRuntimeCodeInstaller extends AbstractRuntimeCodeInstaller {
             CodeInfo info = RuntimeCodeInfoAccess.allocateMethodInfo(fromImageHeap(persisted.preparedObjectData));
             Object tether = UntetheredCodeInfoAccess.getTetherUnsafe(info); // already tethered
             try {
-                RuntimeCodeInfoAccess.initialize(info, codeAndData, persisted.entryPointOffset, codeSize, dataOffset, dataSize, codeAndDataMemorySize, persisted.tier, observerHandles, true);
-                RuntimeCodeInfoAccess.setCodeObjectConstantsInfo(info, fromImageHeap(persisted.codeConstantsReferenceMapEncoding), persisted.codeConstantsReferenceMapIndex);
-                CodeInfoAccess.setState(info, CodeInfo.STATE_CODE_CONSTANTS_LIVE);
-                CodeInfoAccess.setEncodings(info, fromImageHeap(persisted.objectConstants), fromImageHeap(persisted.classes),
-                                fromImageHeap(persisted.memberNames), fromImageHeap(persisted.otherStrings), fromImageHeap(persisted.methodTable), persisted.methodTableFirstId,
-                                persisted.methodTableEntryCount);
-                CodeInfoAccess.setFrameInfo(info, fromImageHeap(persisted.frameInfoEncodings));
-                CodeInfoAccess.setCodeInfo(info, fromImageHeap(persisted.codeInfoIndex), fromImageHeap(persisted.codeInfoEncodings), persisted.codeInfoIndexEntriesPerBlock,
-                                fromImageHeap(persisted.codeInfoDefaultFrameInfoIndexes),
-                                fromImageHeap(persisted.stackReferenceMapEncoding));
-                RuntimeCodeInfoAccess.setDeoptimizationMetadata(info, fromImageHeap(persisted.deoptimizationStartOffsets),
-                                fromImageHeap(persisted.deoptimizationEncodings), fromImageHeap(persisted.deoptimizationObjectConstants));
+                /* The code and metadata attached below change the sizes accounted for info. */
+                RuntimeCodeInfoMemory.singleton().beforeSizeChange(info);
+                try {
+                    attachCodeAndMetadata(info, codeSize, dataOffset, dataSize, codeAndDataMemorySize, observerHandles);
+                } finally {
+                    RuntimeCodeInfoMemory.singleton().afterSizeChange(info);
+                }
 
                 doInstallPreparedAndTethered(persisted.method, info, persisted.installedCode);
 
@@ -147,6 +143,22 @@ final class PersistedRuntimeCodeInstaller extends AbstractRuntimeCodeInstaller {
                 CodeInfoAccess.releaseTether(info, tether);
             }
         }
+    }
+
+    private void attachCodeAndMetadata(CodeInfo info, int codeSize, int dataOffset, int dataSize, int codeAndDataMemorySize,
+                    NonmovableArray<InstalledCodeObserver.InstalledCodeObserverHandle> observerHandles) {
+        RuntimeCodeInfoAccess.initialize(info, codeAndData, persisted.entryPointOffset, codeSize, dataOffset, dataSize, codeAndDataMemorySize, persisted.tier, observerHandles, true);
+        RuntimeCodeInfoAccess.setCodeObjectConstantsInfo(info, fromImageHeap(persisted.codeConstantsReferenceMapEncoding), persisted.codeConstantsReferenceMapIndex);
+        CodeInfoAccess.setState(info, CodeInfo.STATE_CODE_CONSTANTS_LIVE);
+        CodeInfoAccess.setEncodings(info, fromImageHeap(persisted.objectConstants), fromImageHeap(persisted.classes),
+                        fromImageHeap(persisted.memberNames), fromImageHeap(persisted.otherStrings), fromImageHeap(persisted.methodTable), persisted.methodTableFirstId,
+                        persisted.methodTableEntryCount);
+        CodeInfoAccess.setFrameInfo(info, fromImageHeap(persisted.frameInfoEncodings));
+        CodeInfoAccess.setCodeInfo(info, fromImageHeap(persisted.codeInfoIndex), fromImageHeap(persisted.codeInfoEncodings), persisted.codeInfoIndexEntriesPerBlock,
+                        fromImageHeap(persisted.codeInfoDefaultFrameInfoIndexes),
+                        fromImageHeap(persisted.stackReferenceMapEncoding));
+        RuntimeCodeInfoAccess.setDeoptimizationMetadata(info, fromImageHeap(persisted.deoptimizationStartOffsets),
+                        fromImageHeap(persisted.deoptimizationEncodings), fromImageHeap(persisted.deoptimizationObjectConstants));
     }
 
     @Fold

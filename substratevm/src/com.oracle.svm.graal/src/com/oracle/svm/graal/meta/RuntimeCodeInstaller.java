@@ -51,6 +51,7 @@ import com.oracle.svm.core.code.InstantReferenceAdjuster;
 import com.oracle.svm.core.code.ReferenceAdjuster;
 import com.oracle.svm.core.code.RuntimeCodeCache;
 import com.oracle.svm.core.code.RuntimeCodeInfoAccess;
+import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.core.graal.code.NativeImagePatcher;
@@ -184,6 +185,16 @@ public class RuntimeCodeInstaller extends AbstractRuntimeCodeInstaller {
     }
 
     protected void doPrepareInstall(ReferenceAdjuster adjuster, CodeInfo codeInfo) {
+        /* The code and metadata attached below change the sizes accounted for codeInfo. */
+        RuntimeCodeInfoMemory.singleton().beforeSizeChange(codeInfo);
+        try {
+            attachCodeAndMetadata(adjuster, codeInfo);
+        } finally {
+            RuntimeCodeInfoMemory.singleton().afterSizeChange(codeInfo);
+        }
+    }
+
+    private void attachCodeAndMetadata(ReferenceAdjuster adjuster, CodeInfo codeInfo) {
         for (Infopoint infopoint : compilation.getInfopoints()) {
             VMError.guarantee(!(infopoint instanceof Call) || !((Call) infopoint).direct,
                             "No direct calls permitted: patching of runtime-compiled code intentionally not supported");
