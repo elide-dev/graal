@@ -25,7 +25,14 @@
       },
       "upstreamPR": "https://github.com/oracle/graal/pull/14947",
       "title": "LCOV source identity",
-      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613"
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "dashboardPR": "https://graalvm.elide.dev/contributions/contribution-first-lcov",
+      "testSummary": "9 CoverageTest tests; checkstyle passed.",
+      "reproducerSummary": "Java baseline exit 1 (two SF:null records); fix exit 0 (distinct URIs).",
+      "reviewFiles": [
+        "lcov.json",
+        "lcov-confirmation.json"
+      ]
     },
     {
       "candidate": "resource-url",
@@ -43,7 +50,7 @@
         "conclusion": "failure",
         "diagnostic": "stale fixed temporary baseline path; stopped before compilation"
       },
-      "upstreamPR": null,
+      "upstreamPR": "https://github.com/oracle/graal/pull/14948",
       "title": "Resource URL host identity",
       "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
       "scratchIsolationRun": {
@@ -51,7 +58,14 @@
         "url": "https://github.com/elide-dev/graal/actions/runs/42561385244",
         "status": "completed",
         "conclusion": "success"
-      }
+      },
+      "dashboardPR": "https://graalvm.elide.dev/contributions/contribution-first-resource-url",
+      "testSummary": "NativeImageResourceTest: 24 reported tests; identity regression ran; conditional configurations remain untested; checkstyle passed.",
+      "reproducerSummary": "Native baseline exit 1 (equal, sameFile, set size 1); fix exit 0 (distinct, set size 2).",
+      "reviewFiles": [
+        "resource-url.json",
+        "resource-url-second.json"
+      ]
     },
     {
       "candidate": "using-return",
@@ -69,7 +83,7 @@
         "conclusion": "failure",
         "diagnostic": "stale fixed temporary baseline path; stopped before compilation"
       },
-      "upstreamPR": null,
+      "upstreamPR": "https://github.com/oracle/graaljs/pull/1151",
       "title": "JavaScript using completion",
       "baseSHA": "934cb7cb826453f687220493bcf08fa386c659aa",
       "scratchIsolationRun": {
@@ -77,7 +91,14 @@
         "url": "https://github.com/elide-dev/graaljs/actions/runs/42561388254",
         "status": "completed",
         "conclusion": "success"
-      }
+      },
+      "dashboardPR": "https://graalvm.elide.dev/contributions/contribution-first-using-return",
+      "testSummary": "487 JSSimpleTestSuite tests; one ignored; checkstyle passed.",
+      "reproducerSummary": "Identical sync/async samples: baseline exits 7/7; fix exits 0/0.",
+      "reviewFiles": [
+        "using-return.json",
+        "using-return-second.json"
+      ]
     }
   ],
   "duplicateExecution": {
@@ -88,7 +109,23 @@
     "note": "Unintended duplicate delivery/execution, retained in the chain rather than hidden."
   },
   "authorizedScratchIsolationCIJobs": 2,
-  "authorizedDescriptionAuthoringCalls": 1,
-  "publicEvidence": "https://github.com/elide-dev/graal/tree/4f51d166510b765bf71b836b60125d2a8ce4d1c0",
-  "localBaselineCacheCorrection": "A later optional LCOV 9-test baseline check reused candidate output after an operator cwd mistake. That result is rejected; targeted production distributions were actually forced rebuilt with mx build -f. Rerun exits 253 with 9 tests/3 expected failures. Fresh remote baseline/fix evidence is independently green."
+  "authorizedDescriptionAuthoringCalls": 3,
+  "publicEvidence": "https://github.com/elide-dev/graal/tree/b4fe11971b7cc5a5edc5fd0e7c75aa24dd600388",
+  "localBaselineCacheCorrection": "A later optional LCOV 9-test baseline check reused candidate output after an operator cwd mistake. That result is rejected; targeted production distributions were actually forced rebuilt with mx build -f. Rerun exits 253 with 9 tests/3 expected failures. Fresh remote baseline/fix evidence is independently green.",
+  "descriptionAuthoring": {
+    "model": "gpt-6-astra",
+    "invocation": "/root/astra_lcov authoring turn",
+    "purpose": "three PR descriptions and reusable upstream PR template, explicitly requested by user; not an extra adversarial review",
+    "template": "docs/templates/upstream-pr.md",
+    "finalModel": "gpt-6-astra",
+    "finalReasoningEffort": "ultra",
+    "finalInvocation": "/root/astra_pr_copy_ultra"
+  },
+  "dashboardLocalValidation": {
+    "check": "passed; 2020 records, typecheck, Buf lint, ESLint",
+    "unitTests": "133 passed",
+    "browserTests": "2 passed: Chromium and mobile WebKit, all three exact PR views including scripts-disabled SSR",
+    "earlierBrowserSetupFailure": "Initial invocation pointed to parent browser cache; no browser launched. Correct existing project cache path used for passing runs."
+  },
+  "dashboardDeploymentAuthorization": "User granted standing approval to deploy freely to the existing graal dashboard; check before one-off infrastructure or significant charges."
 }

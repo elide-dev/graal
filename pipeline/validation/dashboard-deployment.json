@@ -1,0 +1,8 @@
+{
+  "kind": "manual deployment observation; not pipeline qualification",
+  "sourceRevision": "80aa8672535b818e950c7925d6a2217317eb7dd4",
+  "workflow": "https://github.com/elide-dev/graal-dashboard/actions/runs/42562786225",
+  "status": "in_progress",
+  "templateAuthoredBy": "gpt-6-astra, ultra",
+  "mermaidValidation": "All three graphs rendered in Chromium with Mermaid; three expected nodes each"
+}
