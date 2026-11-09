@@ -30,12 +30,14 @@ Run from the workspace that holds the graal checkout. Needs ORACLE_EE_REPOSITORY
 (the early-access release to build on). Prints home=<EE home> and archive=<archive>.
 """
 import hashlib
+import http.client
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import zipfile
 
@@ -80,10 +82,32 @@ def run(*args, cwd=None):
     return subprocess.run(args, cwd=cwd, check=True, stdout=subprocess.PIPE, text=True).stdout
 
 
+def retrying(what, action, attempts=6):
+    """Runs action, retrying network failures: GitHub sometimes answers release downloads with 504."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return action()
+        except (OSError, http.client.HTTPException) as error:  # URLError, HTTPError and dropped connections
+            if attempt == attempts:
+                raise
+            delay = 30 * attempt
+            print(f"{what}: {error}; retrying in {delay}s", flush=True)
+            time.sleep(delay)
+
+
 def download(url, path):
-    print(f"downloading {url}")
-    with urllib.request.urlopen(url) as response, open(path, "wb") as out:
-        shutil.copyfileobj(response, out, 1 << 20)
+    def attempt():
+        print(f"downloading {url}", flush=True)
+        with urllib.request.urlopen(url, timeout=300) as response, open(path, "wb") as out:
+            shutil.copyfileobj(response, out, 1 << 20)
+    retrying(url, attempt)
+
+
+def read_url(url):
+    def attempt():
+        with urllib.request.urlopen(url, timeout=300) as response:
+            return response.read()
+    return retrying(url, attempt)
 
 
 def sha256(path):
@@ -435,8 +459,7 @@ def main():
     work = tempfile.mkdtemp(prefix="graalvm-ee-", dir=os.environ.get("RUNNER_TEMP"))
     archive = os.path.join(work, asset)
     download(f"{base}/{asset}", archive)
-    with urllib.request.urlopen(f"{base}/{asset}.sha256") as response:
-        expected = response.read().decode().split()[0]
+    expected = read_url(f"{base}/{asset}.sha256").decode().split()[0]
     if sha256(archive) != expected:
         fail(f"{asset}: checksum mismatch")
     extracted = os.path.join(work, "extracted")
