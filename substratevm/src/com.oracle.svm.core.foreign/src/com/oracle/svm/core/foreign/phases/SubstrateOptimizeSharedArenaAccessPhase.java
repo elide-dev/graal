@@ -77,7 +77,9 @@ import jdk.graal.compiler.nodes.ValuePhiNode;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph.RecursiveVisitor;
 import jdk.graal.compiler.nodes.cfg.HIRBlock;
+import jdk.graal.compiler.nodes.memory.FloatingReadNode;
 import jdk.graal.compiler.nodes.memory.MemoryAccess;
+import jdk.graal.compiler.nodes.memory.MemoryAnchorNode;
 import jdk.graal.compiler.nodes.memory.MemoryKill;
 import jdk.graal.compiler.nodes.memory.MemoryPhiNode;
 import jdk.graal.compiler.nodes.memory.SingleMemoryKill;
@@ -350,6 +352,10 @@ public class SubstrateOptimizeSharedArenaAccessPhase extends BasePhase<MidTierCo
          * shared arena AND exits with an exception. The second case normally covers methods that
          * are part of the path that checks the 'checkValidStateRaw' and throws an exception
          * otherwise.
+         * <p>
+         * A remaining call is treated as a safepoint regardless: memory accesses of the scoped
+         * region that follow the call check the session again. A safe callee therefore only needs
+         * to not access the native memory of a shared arena itself.
          */
         boolean isSafeCallee(ResolvedJavaMethod method);
     }
@@ -985,10 +991,18 @@ public class SubstrateOptimizeSharedArenaAccessPhase extends BasePhase<MidTierCo
                         return;
                     }
                 }
-                if (f instanceof SafepointNode safepoint) {
+                /*
+                 * A call that remains in the scoped region is a safepoint as well: the callee (or
+                 * one of its callees) can safepoint, for example in its method-end safepoint check.
+                 * The calls to safe callees that remain after the session check, e.g., the virtual
+                 * calls to AbstractMemorySegmentImpl.unsafeGetBase/unsafeGetOffset that compute
+                 * the address of a Vector API access, can therefore observe a concurrent close, and
+                 * every access after them must check the session again.
+                 */
+                if (f instanceof SafepointNode || f instanceof Invoke) {
                     for (ReachingDefScope existingDef : defs) {
                         for (Node scopeAssociatedVal : existingDef.defNode.inputs()) {
-                            EconomicSet<CFGLoop<HIRBlock>> allLoopsToCheck = visitEveryLoopHeaderInBetween(existingDef, safepoint);
+                            EconomicSet<CFGLoop<HIRBlock>> allLoopsToCheck = visitEveryLoopHeaderInBetween(existingDef, f);
                             if (allLoopsToCheck != null) {
                                 for (CFGLoop<HIRBlock> loop : allLoopsToCheck) {
                                     // Mark the loop header as well as safepointing
@@ -1176,6 +1190,7 @@ public class SubstrateOptimizeSharedArenaAccessPhase extends BasePhase<MidTierCo
         FixedNode duplicateClusterEntry = (FixedNode) duplicates.get(cluster.firstClusterNode);
         insertPoint.setNext(duplicateClusterEntry);
         graph.getDebug().dump(DebugContext.VERY_DETAILED_LEVEL, graph, "After hanging check into regular CF %s", insertPoint);
+        killLocationsReadByDuplicatedCheck(graph, cluster, duplicates, insertPoint);
         Node nonExceptionEndDuplicate = duplicates.get(cluster.clusterNonExceptionEnd);
         ((FixedWithNextNode) nonExceptionEndDuplicate).setNext(insertPointNext);
         graph.getDebug().dump(DebugContext.VERY_DETAILED_LEVEL, graph, "After going back into after check for regular cf %s", insertPointNext);
@@ -1209,6 +1224,36 @@ public class SubstrateOptimizeSharedArenaAccessPhase extends BasePhase<MidTierCo
             }
         }
         graph.getDebug().dump(DebugContext.VERY_DETAILED_LEVEL, graph, "After deleting leftover clusters");
+    }
+
+    /**
+     * The duplicated check must read the state of the session at its insertion point, i.e., after
+     * the safepoint or call that may have closed the session. Its floating reads still depend on
+     * the memory state of the original check: they would be value-numbered with the reads of the
+     * original check, and the duplicated check would fold away. Therefore, kill the mutable
+     * locations read by the duplicated check (e.g., {@code MemorySessionImpl.state}) directly
+     * before it with a {@link MemoryAnchorNode}, which does not emit any code, and make the
+     * duplicated reads depend on it.
+     */
+    private static void killLocationsReadByDuplicatedCheck(StructuredGraph graph, SessionStateRawGraphCluster cluster, EconomicMap<Node, Node> duplicates, FixedWithNextNode insertPoint) {
+        List<FloatingReadNode> reads = new ArrayList<>();
+        EconomicSet<LocationIdentity> locations = EconomicSet.create(Equivalence.DEFAULT);
+        for (Node clusterNode : cluster.clusterNodes) {
+            if (clusterNode instanceof FloatingReadNode read && read.getLocationIdentity().isMutable() &&
+                            (read.getLastLocationAccess() == null || !cluster.clusterNodes.isMarkedAndGrow(read.getLastLocationAccess().asNode()))) {
+                reads.add(read);
+                locations.add(read.getLocationIdentity());
+            }
+        }
+        if (reads.isEmpty()) {
+            return;
+        }
+        MemoryAnchorNode kill = graph.add(new MemoryAnchorNode(locations.toArray(new LocationIdentity[locations.size()])));
+        graph.addAfterFixed(insertPoint, kill);
+        for (FloatingReadNode read : reads) {
+            ((FloatingReadNode) duplicates.get(read)).setLastLocationAccess(kill);
+        }
+        graph.getDebug().dump(DebugContext.VERY_DETAILED_LEVEL, graph, "After killing locations %s read by the check duplicated at %s", locations, insertPoint);
     }
 
     private static PhiNode useOrCreatePhi(StructuredGraph graph, Node input, Position p, EconomicMap<PhiKey, PhiNode> createdPhis, NodeBitMap clusterNodes, MergeNode merge, PhiKey key, Node usage,
