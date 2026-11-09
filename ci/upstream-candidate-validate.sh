@@ -25,7 +25,7 @@ find "${results}/reproducers" -type f -print0 | sort -z | xargs -0 sha256sum > "
 run_mx() {
     local tree="$1" label="$2" suite="$3"
     shift 3
-    (cd "${tree}/${suite}"; export MX_ALT_OUTPUT_ROOT="${build_root}/${label}"; "${mx}" --cpu-count=8 "$@")
+    (cd "${tree}/${suite}"; export MX_ALT_OUTPUT_ROOT="${build_root}/${label}"; "${mx}" --max-cpus=8 "$@")
 }
 expect_failure() {
     local label="$1" diagnostic="$2" status
