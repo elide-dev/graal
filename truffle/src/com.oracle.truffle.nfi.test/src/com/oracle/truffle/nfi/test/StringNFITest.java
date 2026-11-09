@@ -146,6 +146,19 @@ public class StringNFITest extends NFITest {
     }
 
     @Test
+    public void testStringArgAtStackBoundary(@Inject(StrdupNode.class) CallTarget callTarget) {
+        for (int length : new int[]{254, 255, 256, 257}) {
+            String argument = "x".repeat(length);
+            assertStrdup(callTarget, argument, argument);
+        }
+        // Encoded bytes, rather than UTF-16 code units, determine the buffer size.
+        for (int length : new int[]{127, 128, 129}) {
+            String argument = "\u00e4".repeat(length);
+            assertStrdup(callTarget, argument, argument);
+        }
+    }
+
+    @Test
     public void testUnpairedSurrogateStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
         // Backends replace an unpaired surrogate differently, but must keep the rest of the string.
         String copy = (String) callTarget.call("a\ud800b");
@@ -170,6 +183,10 @@ public class StringNFITest extends NFITest {
         String second = "y".repeat(100);
         Assert.assertTrue((Integer) callTarget.call(first, second) < 0);
         Assert.assertEquals(0, (int) (Integer) callTarget.call(second, "y".repeat(100)));
+        for (int length : new int[]{126, 127, 128, 255, 256}) {
+            String argument = "x".repeat(length);
+            Assert.assertEquals(0, (int) (Integer) callTarget.call(argument, argument));
+        }
     }
 
     public static class StringRetConstNode extends SendExecuteNode {
