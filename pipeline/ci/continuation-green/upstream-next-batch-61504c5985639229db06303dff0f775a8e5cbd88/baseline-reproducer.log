@@ -1,0 +1,418 @@
+Warning: 449 classes in /tmp/upstream-next-buxhol00/build-baseline/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-baseline/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-buxhol00/build-baseline/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-buxhol00/build-baseline/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-baseline/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-baseline/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-baseline/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.svm.test.continuations.ContinuationStackWalkerTest
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.6s @ 0.25GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ - 6 user-specific feature(s):
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 3 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///tmp/upstream-next-buxhol00/build-baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (12.9% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (23.4s @ 1.08GiB)
+    8,649 types,  11,607 fields, and  43,182 methods found reachable
+      686 types,     502 fields, and   3,222 methods registered for reflection
+       64 types,      67 fields, and      56 methods registered for JNI access
+      198 resource accesses registered with 420.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (3.4s @ 1.21GiB)
+[4/8] Parsing methods...      [**]                                                                      (2.8s @ 1.29GiB)
+[5/8] Inlining methods...     [***]                                                                     (1.8s @ 1.36GiB)
+[6/8] Compiling methods...    [*****]                                                                  (30.0s @ 1.20GiB)
+[7/8] Laying out methods...   [**]                                                                      (4.8s @ 1.42GiB)
+[8/8] Creating image...       [**]                                                                      (3.0s @ 0.81GiB)
+  15.03MiB (40.73%) for code area:    28,846 compilation units
+  18.88MiB (51.16%) for image heap:  289,781 objects and 139 resources
+   2.99MiB ( 8.10%) for other data
+  36.89MiB in total image size, 34.50MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.04MiB java.base/java.util                                 4.36MiB byte[] for string data
+   1.01MiB java.base/sun.security.ssl                          3.94MiB byte[] for code metadata
+ 646.61KiB java.base/com.sun.crypto.provider                   2.02MiB java.base/java.lang.String
+ 515.67KiB java.base/java.lang.invoke                          1.36MiB byte[] for general heap data
+ 512.31KiB o.g.n.runtime/com.oracle.svm.core.code              1.13MiB java.base/java.lang.Class
+ 509.36KiB java.base/java.lang                                 0.99MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+ 391.39KiB jdk.jfr/jdk.jfr.internal                          598.57KiB byte[] for reflection metadata
+ 378.46KiB java.base/java.util.concurrent                    446.71KiB java.base/java.lang.Object[]
+ 372.93KiB java.base/sun.security.provider                   357.73KiB heap alignment
+ 343.82KiB java.base/java.io                                 291.73KiB java.base/java.lang.String[]
+   9.39MiB for 323 more packages                               3.42MiB for 2394 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       6.0s (8.1% of total time) in 1607 GCs | Peak RSS: 2.52GiB | CPU load: 6.82
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/upstream-next-buxhol00/build-baseline/substratevm/svmbuild/linux-amd64/junit/tmpjw21gla6/svmjunit (executable, 34.50MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 1m 14s.
+
+The build process encountered 1 warning.
+
+Running: /tmp/upstream-next-buxhol00/build-baseline/substratevm/svmbuild/linux-amd64/junit/tmpjw21gla6/svmjunit --verbose
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.continuations.ContinuationStackWalkerTest started (1 of 1)
+  walkContinuesOnItsSnapshotWhenTheContinuationYieldsAgain: Fatal error: Access is outside of the stack of the stored continuation
+
+Printing instructions (ip=0x0000557565c790f7):
+  0x0000557565c78ff7: 0xc0 0xdb 0x2a 0x00 0xc7 0x41 0x04 0x00 0x00 0x00 0x00 0x48 0xc7 0x41 0x08 0x00
+  0x0000557565c79007: 0x00 0x00 0x00 0x48 0xc7 0x41 0x10 0x00 0x00 0x00 0x00 0x48 0x8b 0xc7 0x48 0x8b
+  0x0000557565c79017: 0xf9 0x8b 0xde 0x48 0x8b 0xf0 0x8b 0xc2 0x8b 0xd3 0x48 0x89 0x4c 0x24 0x08 0x8b
+  0x0000557565c79027: 0xc8 0xe8 0x53 0xee 0xff 0xff 0x48 0x8b 0x44 0x24 0x08 0x48 0x83 0xc4 0x18 0x41
+  0x0000557565c79037: 0x83 0x6f 0x10 0x01 0x0f 0x8e 0xff 0x2b 0xfc 0xff 0xc3 0x49 0x8b 0xc6 0x48 0x83
+  0x0000557565c79047: 0xc4 0x18 0x41 0x83 0x6f 0x10 0x01 0x0f 0x8e 0xec 0x2b 0xfc 0xff 0xc3 0x48 0x8b
+  0x0000557565c79057: 0xc7 0xe8 0x03 0xfe 0xff 0xff 0x48 0x83 0xc4 0x18 0x41 0x83 0x6f 0x10 0x01 0x0f
+  0x0000557565c79067: 0x8e 0xd4 0x2b 0xfc 0xff 0xc3 0x8b 0xc6 0xbe 0x00 0x00 0x00 0x00 0xba 0x00 0x00
+  0x0000557565c79077: 0x00 0x00 0xe9 0x59 0xff 0xff 0xff 0x89 0x74 0x24 0x14 0x89 0x54 0x24 0x10 0x48
+  0x0000557565c79087: 0x89 0x7c 0x24 0x08 0xb8 0xc0 0xdb 0x2a 0x00 0x8b 0xc0 0x48 0x8b 0xf8 0xe8 0x66
+  0x0000557565c79097: 0x54 0xed 0xff 0x48 0x8b 0xc8 0x8b 0x74 0x24 0x14 0x8b 0x54 0x24 0x10 0x48 0x8b
+  0x0000557565c790a7: 0x44 0x24 0x08 0xe9 0x66 0xff 0xff 0xff 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc
+  0x0000557565c790b7: 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0x48 0x83 0xec 0x08 0x48 0x8b 0xf7
+  0x0000557565c790c7: 0x48 0x8b 0x7c 0x24 0x08 0x41 0xc7 0x87 0x18 0x01 0x00 0x00 0x01 0x00 0x00 0x00
+  0x0000557565c790d7: 0xf0 0x83 0x04 0x24 0x00 0x49 0xc7 0x47 0x08 0x01 0x00 0x00 0x00 0x41 0xc7 0x87
+  0x0000557565c790e7: 0x14 0x01 0x00 0x00 0xfe 0xfe 0xfe 0x7e 0x49 0x8b 0xd6 0xe8 0x69 0xad 0xef 0xff
+> 0x0000557565c790f7: 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0x48 0x83 0xec 0x08 0x48 0x8b 0xd7
+  0x0000557565c79107: 0x48 0x8b 0xc6 0x48 0x8b 0x7c 0x24 0x08 0x41 0xc7 0x87 0x18 0x01 0x00 0x00 0x01
+  0x0000557565c79117: 0x00 0x00 0x00 0xf0 0x83 0x04 0x24 0x00 0x49 0xc7 0x47 0x08 0x01 0x00 0x00 0x00
+  0x0000557565c79127: 0x41 0xc7 0x87 0x14 0x01 0x00 0x00 0xfe 0xfe 0xfe 0x7e 0x48 0x8b 0xf2 0x48 0x8b
+  0x0000557565c79137: 0xd0 0xe8 0x23 0xad 0xef 0xff 0xcc 0xcc 0xcc 0x48 0x83 0xec 0x08 0x48 0x8b 0xd7
+  0x0000557565c79147: 0x48 0x8b 0x7c 0x24 0x08 0x41 0xc7 0x87 0x18 0x01 0x00 0x00 0x01 0x00 0x00 0x00
+  0x0000557565c79157: 0xf0 0x83 0x04 0x24 0x00 0x49 0xc7 0x47 0x08 0x01 0x00 0x00 0x00 0x41 0xc7 0x87
+  0x0000557565c79167: 0x14 0x01 0x00 0x00 0xfe 0xfe 0xfe 0x7e 0x49 0x8b 0xf6 0xe8 0xe9 0xac 0xef 0xff
+  0x0000557565c79177: 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0xcc 0x48 0x83 0xec 0x08 0x48 0x8b 0x7c
+  0x0000557565c79187: 0x24 0x08 0x41 0xc7 0x87 0x18 0x01 0x00 0x00 0x01 0x00 0x00 0x00 0xf0 0x83 0x04
+  0x0000557565c79197: 0x24 0x00 0x49 0xc7 0x47 0x08 0x01 0x00 0x00 0x00 0x41 0xc7 0x87 0x14 0x01 0x00
+  0x0000557565c791a7: 0x00 0xfe 0xfe 0xfe 0x7e 0x49 0x8d 0xb6 0xc0 0x89 0x7f 0x00 0x49 0x8b 0xd6 0xe8
+  0x0000557565c791b7: 0xa5 0xac 0xef 0xff 0xcc 0xcc 0xcc 0xcc 0xcc 0x48 0x83 0xec 0x08 0x48 0x8b 0x7c
+  0x0000557565c791c7: 0x24 0x08 0x41 0xc7 0x87 0x18 0x01 0x00 0x00 0x01 0x00 0x00 0x00 0xf0 0x83 0x04
+  0x0000557565c791d7: 0x24 0x00 0x49 0xc7 0x47 0x08 0x01 0x00 0x00 0x00 0x41 0xc7 0x87 0x14 0x01 0x00
+  0x0000557565c791e7: 0x00 0xfe 0xfe 0xfe 0x7e 0x49 0x8d 0xb6 0x90 0x8a 0x7f 0x00 0x49 0x8b 0xd6 0xe8
+
+Top of stack (sp=0x00007fffaf155950):
+  0x00007fffaf155930: 0x00007f00b95708f8 0x0000557565a8b53f 0x0000000000042ace 0x0000557565c790f7
+> 0x00007fffaf155950: 0x00007f00b95708f8 0x0000557565a73794 0xffffffffffffffff 0x00007f00b9e2b020
+  0x00007fffaf155970: 0x00007f00b9e2b1f8 0x0000557565c31390 0x00007f00b8c21298 0x00007f00b95708f8
+  0x00007fffaf155990: 0x00007f00b9e2b200 0x0000557565c30c54 0x0000000400000006 0x00007fffaf155b48
+  0x00007fffaf1559b0: 0x00007f00b9e2b200 0x0000557565c30a51 0x000000000000000a 0x0000557565b718f0
+  0x00007fffaf1559d0: 0x000000060000006e 0x00007f00b9e299d0 0x00007f00b9e2a518 0x00007f00b95708f8
+  0x00007fffaf1559f0: 0x00000000af155b48 0x0000557565b716f0 0x00007f08b8bac6e0 0x00007f00b9e2a518
+  0x00007fffaf155a10: 0x00007f00b9e299d0 0x0000557565b713cb 0x0000000000000000 0x0000557591823c28
+  0x00007fffaf155a30: 0x00007f00b9e299d0 0x00007f00b9e2a518 0x0000557565b71680 0x00007f00b9e299a0
+  0x00007fffaf155a50: 0x00007f00b9e2a518 0x00018cc7b8bb2acd 0x0000000000000072 0x0000000000000001
+  0x00007fffaf155a70: 0x0000000000000001 0x0000557566155a78 0x0000557591822ac0 0x00007f00b9e299d0
+  0x00007fffaf155a90: 0x00007f00b9e299a0 0x0000557566267d24 0x00007fff00018cc7 0x000055756627a531
+  0x00007fffaf155ab0: 0x00007f00b9e299a0 0x0000557565b70e50 0x00007fff00000000 0x0000557565e6d110
+  0x00007fffaf155ad0: 0x0000000000000008 0x00007f08b8bfe62d 0x00007f00b9e299d0 0x00007f00b9e299b0
+  0x00007fffaf155af0: 0x00000001b93a1618 0x00007fffaf155b00 0x00000000001d58e8 0x000000001597f306
+  0x00007fffaf155b10: 0x00000000b9987ec0 0x0000557565b71aa0 0x00007f00b9e2b400 0x0000000000000000
+  0x00007fffaf155b30: 0x0000557565c35217 0x00007f00b9e2b020 0x00000000000f4201 0x0000000000000011
+
+VM thread locals for the failing thread 0x0000557591822ac0:
+  0: JNIThreadLocalEnvironment.jniFunctions = (bytes) 0x00007f00b9453a98
+  8: StackOverflowCheckImpl.stackBoundaryTL = (Word) 0x0000000000000001 (1)
+  16: SafepointCheckCounter.value = (int) 0x3fff9cc8 (1073716424)
+  20: StatusSupport.status = (int) 0x00000001 (1)
+  24: JavaFrameAnchors.lastAnchor = (Word) 0x0000000000000000 (0)
+  32: JavaThreads.currentVThreadId = (long) 0x0000000000000003 (3)
+  40: PlatformThreads.currentThread = (Object) 0x00007f00b95724b8
+    is an object of type java.lang.Thread
+  44: ImplicitExceptions.implicitExceptionsAreFatal = (int) 0x00000000 (0)
+  48: ThreadLocalAllocation.regularTLAB = (bytes) 
+    0x0000557591822af0: 0x00007f00b9e28ab8 0x00007f00b9e2aad8
+    0x0000557591822b00: 0x00007f00b9e2a568 0x0000000000000000
+  80: JfrAllocationEvents.lastThreadAllocatedBytes = (long) 0x0000000000000000 (0)
+  88: JfrThreadLocal.dataLost = (Word) 0x0000000000000000 (0)
+  96: JfrThreadLocal.javaBuffer = (Word) 0x0000000000000000 (0)
+  104: JfrThreadLocal.missedSamples = (long) 0x0000000000000000 (0)
+  112: JfrThreadLocal.nativeBuffer = (Word) 0x0000000000000000 (0)
+  120: JfrThreadLocal.samplerBuffer = (Word) 0x0000000000000000 (0)
+  128: JfrThreadLocal.unparseableStacks = (long) 0x0000000000000000 (0)
+  136: ThreadCPULoadEvent.cpuTimeTL = (long) 0x0000000000000000 (0)
+  144: ThreadCPULoadEvent.userTimeTL = (long) 0x0000000000000000 (0)
+  152: ThreadCPULoadEvent.wallclockTimeTL = (long) 0x0000000000000000 (0)
+  160: ThreadLocalAllocation.allocatedAlignedBytes = (Word) 0x0000000000006058 (24664)
+  168: ThreadLocalAllocation.allocatedUnalignedBytes = (Word) 0x0000000000000000 (0)
+  176: TlabSupport.desiredSize = (Word) 0x0000000000002000 (8192)
+  184: TlabSupport.refillWasteLimit = (Word) 0x0000000000000080 (128)
+  192: TlabSupport.tlabAllocatedAlignedBytesBeforeLastGC = (Word) 0x0000000000000000 (0)
+  200: VMThreads.CodeBaseTL = (Word) 0x0000557565a60000 (93962704912384)
+  208: VMThreads.IsolateTL = (Word) 0x00007f00b8a80000 (139641074745344)
+  216: VMThreads.OSThreadHandleTL = (Word) 0x00007f08b8b17b80 (139675435105152)
+  224: VMThreads.OSThreadIdTL = (Word) 0x0000000000003812 (14354)
+  232: VMThreads.StackBase = (Word) 0x00007fffaf157000 (140736130805760)
+  240: VMThreads.StackEnd = (Word) 0x00007fffae958000 (140736122421248)
+  248: VMThreads.nextTL = (Word) 0x0000000000000000 (0)
+  256: VMThreads.unalignedIsolateThreadMemoryTL = (Word) 0x0000557591822a90 (93963440761488)
+  264: JfrSampler.isDisabledForCurrentThread = (int) 0x00000000 (0)
+  268: JfrSampler.samplerState = (int) 0x00000000 (0)
+  272: RecurringCallbackSupport.suspended = (int) 0x00000000 (0)
+  276: StackOverflowCheckImpl.yellowZoneStateTL = (int) 0x7efefefe (2130640638)
+  280: StatusSupport.safepointBehaviorTL = (int) 0x00000001 (1)
+  284: ThreadLocalHandshake.handshakeState = (int) 0x00000000 (0)
+  288: ThreadSuspendSupport.suspended = (int) 0x00000000 (0)
+  292: ThreadsLock.access = (int) 0x00000000 (0)
+  296: TlabSupport.gcWaste = (int) 0x00000000 (0)
+  300: TlabSupport.numberOfRefills = (int) 0x00000004 (4)
+  304: TlabSupport.refillWaste = (int) 0x00000010 (16)
+  308: TlabSupport.slowAllocations = (int) 0x00000000 (0)
+  312: ExceptionUnwind.currentException = (Object) 0x0000000000000000
+  316: JNIObjectHandles.handles = (Object) 0x00007f00b9e00b18
+    is an object of type com.oracle.svm.guest.staging.core.handles.ThreadLocalHandles
+  320: JNIThreadLocalPendingException.pendingException = (Object) 0x0000000000000000
+  324: JNIThreadLocalPrimitiveArrayViews.referencedArraysListHead = (Object) 0x0000000000000000
+  328: JNIThreadOwnedMonitors.ownedMonitors = (Object) 0x0000000000000000
+  332: JfrThreadLocal.javaEventWriter = (Object) 0x0000000000000000
+  336: NoAllocationVerifier.openVerifiers = (Object) 0x0000000000000000
+  340: RecurringCallbackSupport.timer = (Object) 0x0000000000000000
+  344: RecurringCallbackTimer.exception = (Object) 0x0000000000000000
+  348: JfrThreadLocal.notified = (boolean) false
+  349: SubstrateDiagnostics.threadOnlyAttachedForCrashHandler = (boolean) false
+  350: VMThreads.StartedByCurrentIsolate = (boolean) false
+  352: TlabSupport.allocatedBytesAvg = (bytes) 
+    0x0000557591822c20: 0x0000000000000000 0x0000000000000000
+    0x0000557591822c30: 0x4041800000000000 0x0000000000000000
+  384: ThreadLocalHandshake.handshakeMutex = (bytes) 
+    0x0000557591822c40: 0x0000000000000000 0x0000000000000000
+    0x0000557591822c50: 0x0000000000000000 0x0000000000000000
+    0x0000557591822c60: 0x0000000000000000
+  424: ThreadLocalHandshake.handshakeCondition = (bytes) 
+    0x0000557591822c68: 0x0000000000000000 0x0000000000000000
+    0x0000557591822c78: 0x0000000000000000 0x0000000000000000
+    0x0000557591822c88: 0x0000000200000000 0x0000000000000000
+  
+Java frame anchors for the failing thread 0x0000557591822ac0:
+  No anchors
+  
+Stacktrace for the failing thread 0x0000557591822ac0 (A=AOT compiled, J=JIT compiled, D=deoptimized, i=inlined, C=native):
+  i  SP 0x00007fffaf155950 IP 0x0000557565c790f7 size=16    com.oracle.svm.core.jdk.VMErrorSubstitutions.shutdown(VMErrorSubstitutions.java:163)
+  i  SP 0x00007fffaf155950 IP 0x0000557565c790f7 size=16    com.oracle.svm.core.jdk.VMErrorSubstitutions.shouldNotReachHere(VMErrorSubstitutions.java:156)
+  A  SP 0x00007fffaf155950 IP 0x0000557565c790f7 size=16    com.oracle.svm.shared.util.VMError.shouldNotReachHere(VMError.java:99)
+  i  SP 0x00007fffaf155960 IP 0x0000557565a73794 size=32    com.oracle.svm.shared.util.VMError.guarantee(VMError.java:170)
+  A  SP 0x00007fffaf155960 IP 0x0000557565a73794 size=32    com.oracle.svm.core.FrameAccess.verifyReturnAddressWithinStoredContinuation0(FrameAccess.java:252)
+  i  SP 0x00007fffaf155980 IP 0x0000557565c31390 size=32    com.oracle.svm.core.FrameAccess.verifyReturnAddressWithinStoredContinuation(FrameAccess.java:238)
+  i  SP 0x00007fffaf155980 IP 0x0000557565c31390 size=32    com.oracle.svm.core.FrameAccess.readReturnAddress(FrameAccess.java:106)
+  A  SP 0x00007fffaf155980 IP 0x0000557565c31390 size=32    com.oracle.svm.core.stack.JavaStackWalker.readReturnAddress(JavaStackWalker.java:418)
+  A  SP 0x00007fffaf1559a0 IP 0x0000557565c30c54 size=32    com.oracle.svm.core.stack.JavaStackWalker.continueStackWalk(JavaStackWalker.java:380)
+  A  SP 0x00007fffaf1559c0 IP 0x0000557565c30a51 size=16    com.oracle.svm.core.stack.JavaStackWalker.advance0(JavaStackWalker.java:304)
+  i  SP 0x00007fffaf1559d0 IP 0x0000557565b718f0 size=48    com.oracle.svm.core.stack.JavaStackWalker.advanceForContinuation(JavaStackWalker.java:295)
+  A  SP 0x00007fffaf1559d0 IP 0x0000557565b718f0 size=48    com.oracle.svm.core.jdk.Target_java_lang_StackWalker$ContinuationSpliterator.advancePhysically0(Target_java_lang_StackWalker.java:394)
+  A  SP 0x00007fffaf155a00 IP 0x0000557565b716f0 size=32    com.oracle.svm.core.jdk.Target_java_lang_StackWalker$ContinuationSpliterator.advancePhysically(Target_java_lang_StackWalker.java:365)
+  A  SP 0x00007fffaf155a20 IP 0x0000557565b713cb size=96    com.oracle.svm.core.jdk.Target_java_lang_StackWalker$AbstractStackFrameSpliterator.tryAdvance(Target_java_lang_StackWalker.java:250)
+  A  SP 0x00007fffaf155a80 IP 0x0000557566155a78 size=32    java.util.Spliterator.forEachRemaining(Spliterator.java:332)
+  A  SP 0x00007fffaf155aa0 IP 0x0000557566267d24 size=32    java.util.stream.ReferencePipeline$Head.forEach(ReferencePipeline.java:803)
+  i  SP 0x00007fffaf155ac0 IP 0x0000557565b70e50 size=16    java.lang.StackWalker.lambda$forEach$0(StackWalker.java:118)
+  A  SP 0x00007fffaf155ac0 IP 0x0000557565b70e50 size=16    com.oracle.svm.core.jdk.Target_java_lang_StackWalker$$Lambda/0xa67bda3b7e021f579cae64c822d8cf460.apply(Unknown Source)
+  A  SP 0x00007fffaf155ad0 IP 0x0000557565e6d110 size=192   java.lang.StackWalker.walk(StackWalker.java:207)
+  A  SP 0x00007fffaf155b90 IP 0x0000557565e6cb85 size=80    java.lang.StackWalker.forEach(StackWalker.java:117)
+  A  SP 0x00007fffaf155be0 IP 0x0000557565c7b50f size=48    com.oracle.svm.test.continuations.ContinuationStackWalkerTest.walkContinuesOnItsSnapshotWhenTheContinuationYieldsAgain(ContinuationStackWalkerTest.java:83)
+  A  SP 0x00007fffaf155c10 IP 0x0000557565bded62 size=32    com.oracle.svm.core.reflect.ReflectionAccessorHolder.invoke_55THlcps1uCAiZuordqMDE(ReflectionAccessorHolder.java:0)
+  A  SP 0x00007fffaf155c30 IP 0x0000557565c0af83 size=48    com.oracle.svm.core.reflect.SubstrateMethodAccessor.invoke(SubstrateMethodAccessor.java:118)
+  i  SP 0x00007fffaf155c60 IP 0x000055756650e5b9 size=64    java.lang.reflect.Method.invoke(Method.java:565)
+  A  SP 0x00007fffaf155c60 IP 0x000055756650e5b9 size=64    org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+  i  SP 0x00007fffaf155ca0 IP 0x0000557566505dae size=48    org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+  i  SP 0x00007fffaf155ca0 IP 0x0000557566505dae size=48    org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+  A  SP 0x00007fffaf155ca0 IP 0x0000557566505dae size=48    org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+  A  SP 0x00007fffaf155cd0 IP 0x000055756650be2e size=32    org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+  A  SP 0x00007fffaf155cf0 IP 0x000055756650a5c7 size=16    org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+  A  SP 0x00007fffaf155d00 IP 0x000055756650d6af size=48    org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+  A  SP 0x00007fffaf155d30 IP 0x000055756650b2d1 size=64    org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+  A  SP 0x00007fffaf155d70 IP 0x000055756650b12d size=16    org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+  i  SP 0x00007fffaf155d80 IP 0x000055756650bd88 size=16    org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+  A  SP 0x00007fffaf155d80 IP 0x000055756650bd88 size=16    org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+  A  SP 0x00007fffaf155d90 IP 0x000055756650d4e8 size=80    org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+  i  SP 0x00007fffaf155de0 IP 0x000055756650bdcf size=16    org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+  A  SP 0x00007fffaf155de0 IP 0x000055756650bdcf size=16    org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+  A  SP 0x00007fffaf155df0 IP 0x000055756650be2e size=32    org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+  A  SP 0x00007fffaf155e10 IP 0x000055756650d042 size=48    org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+  i  SP 0x00007fffaf155e40 IP 0x000055756650e42c size=16    org.junit.runners.Suite.runChild(Suite.java:128)
+  A  SP 0x00007fffaf155e40 IP 0x000055756650e42c size=16    org.junit.runners.Suite.runChild(Suite.java:27)
+  i  SP 0x00007fffaf155e50 IP 0x000055756650bd88 size=16    org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+  A  SP 0x00007fffaf155e50 IP 0x000055756650bd88 size=16    org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+  A  SP 0x00007fffaf155e60 IP 0x000055756650d4e8 size=80    org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+  i  SP 0x00007fffaf155eb0 IP 0x000055756650bdcf size=16    org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+  A  SP 0x00007fffaf155eb0 IP 0x000055756650bdcf size=16    org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+  A  SP 0x00007fffaf155ec0 IP 0x000055756650be2e size=32    org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+  A  SP 0x00007fffaf155ee0 IP 0x000055756650d042 size=48    org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+  A  SP 0x00007fffaf155f10 IP 0x00005575665078d3 size=96    org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+  A  SP 0x00007fffaf155f70 IP 0x000055756650759b size=32    org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+  A  SP 0x00007fffaf155f90 IP 0x0000557565a651df size=128   com.oracle.mxtool.junit.MxJUnitWrapper.runRequest(MxJUnitWrapper.java:405)
+  A  SP 0x00007fffaf156010 IP 0x0000557565c72b59 size=112   com.oracle.svm.junit.SVMJUnitRunner.run(SVMJUnitRunner.java:190)
+  i  SP 0x00007fffaf156080 IP 0x0000557565a74332 size=16    com.oracle.svm.junit.SVMJUnitRunner.main(SVMJUnitRunner.java:210)
+  i  SP 0x00007fffaf156080 IP 0x0000557565a74332 size=16    com.oracle.svm.core.JavaMainWrapper.invokeMain(JavaMainWrapper.java:131)
+  A  SP 0x00007fffaf156080 IP 0x0000557565a74332 size=16    com.oracle.svm.core.JavaMainWrapper.runCore0(JavaMainWrapper.java:158)
+  i  SP 0x00007fffaf156090 IP 0x0000557565a740f3 size=32    com.oracle.svm.core.JavaMainWrapper.runCore(JavaMainWrapper.java:138)
+  A  SP 0x00007fffaf156090 IP 0x0000557565a740f3 size=32    com.oracle.svm.core.JavaMainWrapper.doRun(JavaMainWrapper.java:259)
+  A  SP 0x00007fffaf1560b0 IP 0x0000557565a742c9 size=16    com.oracle.svm.core.JavaMainWrapper.run(JavaMainWrapper.java:250)
+  A  SP 0x00007fffaf1560c0 IP 0x0000557565b0ab56 size=96    com.oracle.svm.core.code.IsolateEnterStub.JavaMainWrapper_run_XNhh1mz2Ib2aPR1wdv014D(IsolateEnterStub.java:0)
+  
+Threads:
+  0x00005575918238c0 STATUS_IN_NATIVE (ALLOW_SAFEPOINT) "ForkJoinPool-3-worker-1" - 0x00007f00b9e29520, daemon, stack(0x00007f00b8652000,0x00007f00b875c000), OS thread 14358 (0x00007f00b875b640)
+  0x0000557591823500 STATUS_IN_NATIVE (ALLOW_SAFEPOINT) "Signal Dispatcher" - 0x00007f00b9e06bd8, daemon, stack(0x00007f00b875e000,0x00007f00b8868000), OS thread 14357 (0x00007f00b8867640)
+  0x00005575918231c0 STATUS_IN_NATIVE (ALLOW_SAFEPOINT) "Performance data" - 0x00007f00b957d820, daemon, stack(0x00007f00b886a000,0x00007f00b8974000), OS thread 14356 (0x00007f00b8973640)
+  0x0000557591822e80 STATUS_IN_NATIVE (ALLOW_SAFEPOINT) "Reference Handler" - 0x00007f00b9572850, daemon, stack(0x00007f00b8976000,0x00007f00b8a80000), OS thread 14355 (0x00007f00b8a7f640)
+  0x0000557591822ac0 STATUS_IN_JAVA (PREVENT_VM_FROM_REACHING_SAFEPOINT) "main" - 0x00007f00b95724b8, stack(0x00007fffae958000,0x00007fffaf157000), OS thread 14354 (0x00007f08b8b17b80)
+  
+No VMOperation in progress
+
+The 30 most recent VM operation status changes:
+  
+VM mutexes:
+  mutex "AbstractCollectionPolicy.sizes" is unlocked.
+  mutex "RealLog.backTracePrinterMutex" is unlocked.
+  mutex "SamplerBufferPool" is unlocked.
+  mutex "VMOperationControl" is unlocked.
+  mutex "freeList" is unlocked.
+  mutex "jfrChunkWriter" is unlocked.
+  mutex "jfrMethodRepository" is unlocked.
+  mutex "jfrOldObjectRepository" is unlocked.
+  mutex "jfrStackTraceRepository" is unlocked.
+  mutex "jfrSymbolRepository" is unlocked.
+  mutex "jfrThreadRepository" is unlocked.
+  mutex "jfrTypeRepositoryClassId" is unlocked.
+  mutex "outOfMemoryHeapDump" is unlocked.
+  mutex "perfDataInitialization" is unlocked.
+  mutex "referencePendingList" is unlocked.
+  mutex "safepoint" is unlocked.
+  mutex "threadsRead" is unlocked.
+  mutex "threadsWrite" is unlocked.
+  
+Build time information:
+  Version: GraalVM CE 25.6.0-dev+0.1 (serial gc, compressed references), JDK 25.0.5.1+0
+  Platform: linux/amd64
+  Page size: 65536
+  Container support: true
+  Object reference size: 4
+  CPU features used for AOT compiled code: CX8, CMOV, FXSR, MMX, SSE, SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, POPCNT, LZCNT, AVX, AVX2, BMI1, BMI2, FMA, F16C
+  
+Runtime information:
+  Isolate id: 0
+  Heap base: 0x00007f00b8a80000
+  Code base: 0x0000557565a60000
+  CGlobalData base: 0x00005575669d0000
+  Containerized: true
+  CPU cores (container): 8
+  CPU cores (OS): 8
+  Memory (container): 63287M
+  Memory (OS): 63287M
+  Page size: 4096
+  VM uptime: 0.006s
+  Current timestamp: 1794205810391
+  AOT compiled code: 0x0000557565a60000 - 0x000055756696713f
+  
+OS information:
+  Max threads: 468849
+  Max memory mappings: 1048576
+  Max PID: 4194304
+  
+Command line: '--verbose' '--run-explicit' 'com.oracle.svm.test.continuations.ContinuationStackWalkerTest' 
+
+Heap settings and statistics:
+  Reserved hub pointer bits: 0b11111
+  Aligned chunk size: 524288
+  Large array threshold: 131072
+  Incremental collections: 0
+  Complete collections: 0
+  
+Heap usage:
+  Eden: 0.50M (0.00M in 0 aligned chunks, 0.00M in 0 unaligned chunks)
+  Old: 0.00M (0.00M in 0 aligned chunks, 0.00M in 0 unaligned chunks)
+  
+GC policy:
+  Name: adaptive2
+  Max eden size: 11437867008
+  Max survivor size: 3815243776
+  Max young size: 11446255616
+  Max old size: 22893035520
+  Max heap size: 34339291136
+  
+Image heap:
+  Objects in aligned chunks
+    read-only: 0x00007f00b8b00850 - 0x00007f00b9454770
+    read-only relocatables: 0x00007f00b94539a8 - 0x00007f00b9454770
+    writable: 0x00007f00b9454770 - 0x00007f00b99c55a8
+    writeable patched: 0x0000000000000000 - 0x0000000000000000
+  Objects in unaligned chunks
+    writable: 0x00007f00b9a004e8 - 0x00007f00b9a95f30
+    read-only: 0x00007f00b9a96e78 - 0x00007f00b9dd2c50
+  
+Heap chunks: E=eden, S=survivor, O=old, F=free; A=aligned chunk, U=unaligned chunk; T=to space; *=all-pinned
+  |0x00007f00b8b00000|0x00007f00b8b00850, 0x00007f00b8b7fff8, 0x00007f00b8b80000| 99%|  I|A| |
+  |0x00007f00b8b80000|0x00007f00b8b80850, 0x00007f00b8bffff8, 0x00007f00b8c00000| 99%|  I|A| |
+  |0x00007f00b8c00000|0x00007f00b8c00850, 0x00007f00b8c7fff8, 0x00007f00b8c80000| 99%|  I|A| |
+  |0x00007f00b8c80000|0x00007f00b8c80850, 0x00007f00b8d00000, 0x00007f00b8d00000|100%|  I|A| |
+  |0x00007f00b8d00000|0x00007f00b8d00850, 0x00007f00b8d80000, 0x00007f00b8d80000|100%|  I|A| |
+  |0x00007f00b8d80000|0x00007f00b8d80850, 0x00007f00b8dffff8, 0x00007f00b8e00000| 99%|  I|A| |
+  |0x00007f00b8e00000|0x00007f00b8e00850, 0x00007f00b8e7fff8, 0x00007f00b8e80000| 99%|  I|A| |
+  |0x00007f00b8e80000|0x00007f00b8e80850, 0x00007f00b8f00000, 0x00007f00b8f00000|100%|  I|A| |
+  |0x00007f00b8f00000|0x00007f00b8f00850, 0x00007f00b8f7fff8, 0x00007f00b8f80000| 99%|  I|A| |
+  |0x00007f00b8f80000|0x00007f00b8f80850, 0x00007f00b8fffff8, 0x00007f00b9000000| 99%|  I|A| |
+  |0x00007f00b9000000|0x00007f00b9000850, 0x00007f00b9080000, 0x00007f00b9080000|100%|  I|A| |
+  |0x00007f00b9080000|0x00007f00b9080850, 0x00007f00b90ffff8, 0x00007f00b9100000| 99%|  I|A| |
+  |0x00007f00b9100000|0x00007f00b9100850, 0x00007f00b9180000, 0x00007f00b9180000|100%|  I|A| |
+  |0x00007f00b9180000|0x00007f00b9180850, 0x00007f00b9200000, 0x00007f00b9200000|100%|  I|A| |
+  |0x00007f00b9200000|0x00007f00b9200850, 0x00007f00b9280000, 0x00007f00b9280000|100%|  I|A| |
+  |0x00007f00b9280000|0x00007f00b9280850, 0x00007f00b9300000, 0x00007f00b9300000|100%|  I|A| |
+  |0x00007f00b9300000|0x00007f00b9300850, 0x00007f00b9380000, 0x00007f00b9380000|100%|  I|A| |
+  |0x00007f00b9380000|0x00007f00b9380850, 0x00007f00b9400000, 0x00007f00b9400000|100%|  I|A| |
+  |0x00007f00b9400000|0x00007f00b9400850, 0x00007f00b9480000, 0x00007f00b9480000|100%|  I|A| |
+  |0x00007f00b9480000|0x00007f00b9480850, 0x00007f00b94ffff8, 0x00007f00b9500000| 99%|  I|A| |
+  |0x00007f00b9500000|0x00007f00b9500850, 0x00007f00b9580000, 0x00007f00b9580000|100%|  I|A| |
+  |0x00007f00b9580000|0x00007f00b9580850, 0x00007f00b9600000, 0x00007f00b9600000|100%|  I|A| |
+  |0x00007f00b9600000|0x00007f00b9600850, 0x00007f00b9680000, 0x00007f00b9680000|100%|  I|A| |
+  |0x00007f00b9680000|0x00007f00b9680850, 0x00007f00b96ffff8, 0x00007f00b9700000| 99%|  I|A| |
+  |0x00007f00b9700000|0x00007f00b9700850, 0x00007f00b9780000, 0x00007f00b9780000|100%|  I|A| |
+  |0x00007f00b9780000|0x00007f00b9780850, 0x00007f00b9800000, 0x00007f00b9800000|100%|  I|A| |
+  |0x00007f00b9800000|0x00007f00b9800850, 0x00007f00b9880000, 0x00007f00b9880000|100%|  I|A| |
+  |0x00007f00b9880000|0x00007f00b9880850, 0x00007f00b9900000, 0x00007f00b9900000|100%|  I|A| |
+  |0x00007f00b9900000|0x00007f00b9900850, 0x00007f00b9980000, 0x00007f00b9980000|100%|  I|A| |
+  |0x00007f00b9980000|0x00007f00b9980850, 0x00007f00b99c55a8, 0x00007f00b9a00000| 53%|  I|A| |
+  |0x00007f00b9a00000|0x00007f00b9a004e8, 0x00007f00b9a95f30, 0x00007f00b9a95f30|100%|  I|U| |
+  |0x00007f00b9a95f30|0x00007f00b9a96e78, 0x00007f00b9c788f0, 0x00007f00b9c788f0|100%|  I|U| |
+  |0x00007f00b9c788f0|0x00007f00b9c793f8, 0x00007f00b9dd2c50, 0x00007f00b9dd2c50|100%|  I|U| |
+  |0x00007f00b9e00000|0x00007f00b9e00850, 0x00007f00b9e2caf0, 0x00007f00b9e80000| 34%|  E|A| |
+  
+Fatal error: Access is outside of the stack of the stored continuation
+Some test runs failed:
+> Test run of the following classes failed with exit code -6: com.oracle.svm.test.continuations.ContinuationStackWalkerTest
+

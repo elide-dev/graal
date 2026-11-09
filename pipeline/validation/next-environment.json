@@ -1,0 +1,9 @@
+{
+  "platform": "Linux-7.3.3-elide-wsl-native+-x86_64-with-glibc2.43",
+  "architecture": "x86_64",
+  "jdk": "openjdk version \"25.0.5.1\" 2026-11-17\nOpenJDK Runtime Environment (build 25.0.5.1+0-jvmci-25.6-b27)\nOpenJDK 64-Bit Server VM (build 25.0.5.1+0-jvmci-25.6-b27, mixed mode, sharing)\n",
+  "localMx": "e64ff8c8cca770c8cdbb62617ebd0fa17dd184b1",
+  "forkCIMx": "ef054fc6eca1d516820bd040efa3c0a0f6ef1899",
+  "comparability": "Each CI comparison runs both revisions in the same Ubuntu22.04 job/container, using the same JDK, commands and input bytes. MX output roots differ intentionally by source identity. Full runner CPU/platform identity is in each CI environment.json.",
+  "binaryDependencies": "Pinned by the exact Graal suite.py files; Graal suites share the recorded monorepo revision."
+}

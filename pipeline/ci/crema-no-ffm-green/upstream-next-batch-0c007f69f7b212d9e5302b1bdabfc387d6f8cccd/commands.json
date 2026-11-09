@@ -1,0 +1,100 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 0,
+    "seconds": 90.88312816619873
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "helloworld",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:+RuntimeClassLoading",
+      "-H:-ForeignAPISupport",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 1,
+    "seconds": 24.95594596862793
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "exit": 0,
+    "seconds": 83.19362568855286
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "helloworld",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:+RuntimeClassLoading",
+      "-H:-ForeignAPISupport",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "exit": 0,
+    "seconds": 54.48866820335388
+  },
+  {
+    "label": "regressions",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "ForeignTests",
+      "--build-args",
+      "--parallelism=8",
+      "-J-Xmx8g",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:+RuntimeClassLoading",
+      "--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature"
+    ],
+    "cwd": "substratevm",
+    "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "exit": 0,
+    "seconds": 79.6607174873352
+  },
+  {
+    "label": "checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "exit": 0,
+    "seconds": 33.83061242103577
+  }
+]

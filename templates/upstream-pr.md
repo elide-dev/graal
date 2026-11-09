@@ -1,30 +1,39 @@
-{{Describe the concrete trigger and incorrect observable result in one or two sentences. Explain the resulting behavior and the smallest relevant implementation change. Name any added regressions or documentation.}}
+## Summary
 
-**[Validation dashboard · graalvm.elide.dev](https://graalvm.elide.dev)** — reproducible baseline/fix comparisons, validation status, and adversarial review evidence.
+{{Concrete trigger and observable bug, limitation, or measured cost.}}
+{{Explain the resulting behavior and smallest relevant implementation change in one or two sentences.}}
 
-### Validation at the upstream revision
+**[Elide GraalVM fork dashboard: This PR]({{PER_PR_DASHBOARD_URL}})**
 
-We pretested this change on [our fork, PR #{{FORK_PR_NUMBER}}]({{FORK_PR_URL}}), starting from upstream `{{UPSTREAM_BASE_SHA}}`{{OPTIONAL_DEPENDENCY_IMPORT_SENTENCE}}. The clean candidate is `{{CANDIDATE_SHA}}`; the fork validation head is `{{FORK_HEAD_SHA}}`, with {{FORK_ONLY_SUPPORT_DESCRIPTION}}. {{State how the tested production diff matches the upstream candidate.}}
+{{OPTIONAL_BEHAVIOR_DIAGRAMS_ONLY_IF_THEY_CLARIFY_THE_CHANGE}}
 
-| Evidence | Result | Inspect |
-| --- | --- | --- |
-| Identical reproducer on baseline and fix | {{Observed baseline failure and candidate success, including exit codes where useful}} | [Source and commands](https://github.com/elide-dev/graal/tree/{{EVIDENCE_COMMIT}}/pipeline/reproducers/{{CANDIDATE_KEY}}) |
-| Relevant regression suite and style | {{Exact suite, result, ignored/skipped/conditional cases, and style result; label local vs CI}} | [Validation evidence]({{VALIDATION_EVIDENCE_URL}}) |
-| Fork CI | {{Current status; say whether artifacts were inspected and identify the verified results}} | [Run {{CI_RUN_ID}}]({{CI_RUN_URL}}) |
-| Independent adversarial review | {{Actual reviewer/model, number of separate reviews, executable challenges, findings and disposition}} | [Review summary](https://github.com/elide-dev/graal/blob/{{EVIDENCE_COMMIT}}/pipeline/reviews/{{REVIEW_FILE}}){{OPTIONAL_FOLLOWUP_REVIEW_LINK}} |
+## Testing
 
-{{Explain the strongest additional validation in a short paragraph: meaningful negative controls, consumer tests, or semantic edge cases. If a review found a defect, retain the finding and link its resolution. Distinguish independent review sessions from independence of model family.}}
+Pretested on the fork at upstream [`{{BASE_SHORT_SHA}}`]({{BASE_COMMIT_URL}}){{RELEVANT_DEPENDENCY_IMPORT}}, with {{VERIFIED_PRODUCTION_SOURCE_EQUIVALENCE}}.
 
-{{State the tested platform/toolchain and material limits. Distinguish fresh builds from existing artifacts, direct execution from supplied logs or analogues, and actual coverage from untested configurations. Keep this specific to the change.}}
+- ✅ **{{Reproducer or benchmark}}:** {{Actual comparable baseline and candidate results; include exits or measured units when useful.}}
+- ✅ **Regression tests:** {{Exact relevant suite/result, ignored or conditional cases, and style result.}}
+- ✅ **High-power models:** {{Actual independent review-session count, executed checks, findings, and disposition.}}
 
-<!-- Authoring checklist; remove before posting:
-- Replace every placeholder with verified information. Delete inapplicable rows rather than implying a check ran.
-- Lead with the upstream bug and resulting behavior, not project promotion.
-- Pin public evidence URLs to a full immutable commit. The evidence repository must be public; never link the private dashboard source repository or private logs.
-- Do not call CI validated solely because the run is green: inspect the relevant artifacts and identify skipped, ignored, conditional, or missing checks.
-- Use "pretested" only for execution already performed. If CI is running, label it pending and distinguish completed local evidence.
-- Give the exact upstream baseline and relevant dependency imports. State which fork-only files differ and how production-source equivalence was checked.
-- Describe only reviews actually conducted. An independent session review is not automatically a configured pipeline receipt or cross-model review.
-- Preserve original findings and correction history. Do not claim exhaustive platform/configuration coverage, universal identity, zero risk, or formal pipeline readiness.
-- Once filed, record {{UPSTREAM_URL}}, the fork PR URL, candidate/base SHAs, and CI/evidence links on the dashboard. Do not describe that dashboard update as complete until verified.
+| Evidence | Links |
+| --- | --- |
+| Reproduce | [Commands]({{IMMUTABLE_PUBLIC_COMMANDS_URL}}) · [Source ZIP]({{IMMUTABLE_PUBLIC_SOURCE_ZIP_URL}}) |
+| Fork | [#{{FORK_PR_NUMBER}}]({{FORK_PR_URL}}) · [✅ CI]({{CI_RUN_URL}}) |
+| Reviews | [Review]({{IMMUTABLE_PUBLIC_REVIEW_URL}}){{OPTIONAL_SECOND_REVIEW_OR_RESOLUTION_LINK}} |
+
+> {{Only material limits: conditional tests, existing builds, analogue checks, or untested configurations.}}
+
+<!-- Canonical authoring rules for all upstream PRs, including generated bodies. Remove this comment before posting.
+- Keep this canonical template, docs/templates/generated-upstream-pr.md, its renderer, and saved descriptions consistent. After final copy edits to posted PRs, commit the matching templates and descriptions together.
+- Inspect the target repository's contribution guidance and recent accepted PR titles/commit subjects. Match both title and commit conventions; prefer concise imperative language naming the behavior. Use an issue prefix only for a real associated issue. Do not invent identifiers or impose Conventional Commits. Adapt headings to the target template; Graal's template uses Summary and Testing.
+- Lead with the concrete behavior. Keep coverage in short bullets, generally one sentence each. Tables are compact evidence navigation: short labels and links only, never wrapped explanatory prose. Omit a table when the links are already visible elsewhere.
+- Use Mermaid only when it materially clarifies the actual behavior or optimization. Prefer small before/after diagrams with the same concrete input. Verify every transition against code or evidence; distinguish a resolver API from DNS traffic and measurements from expectations. Never diagram verification, review, CI, or publication flow. Omit the diagram placeholder when unnecessary.
+- Use the exact dashboard label once, linking this PR's view. Avoid repeated branding. If the view is not verified live, state its status accurately.
+- Describe review as “high-power models.” Report actual independent session counts without implying different model families or human review. Preserve exact identities in raw evidence; link original findings and their resolutions.
+- Pin public evidence to immutable commits. Linked commands must retain exact revisions, dependency imports, environment, and inputs. Source ZIP contents must match the retained checksum manifest. Never link private repositories or logs.
+- Verify the tested fork's affected production files match the clean candidate. Retain exact fork-head, scaffolding differences, platform, and toolchain in linked evidence. Inspect relevant CI artifacts before labeling CI green.
+- Use ✅ only for completed, verified checks. Keep ignored tests, assumptions, early returns, existing-build reuse, and analogue checks visible when material. Do not infer coverage from an aggregate suite total or unrelated green workflow.
+- For bugs, compare the same sample on baseline and candidate. For optimizations, retain comparable measured results, units, workload, and environment; never invent a measurement or imply performance from functional tests.
+- Retain unsuccessful attempts and findings in linked evidence. Do not alter raw provenance to fit shorter copy or imply exhaustive coverage or formal qualification.
+- Remove unused placeholders, bullets, and links. Check actual GitHub rendering at desktop and narrow widths; tables should remain easy to scan and Mermaid controls must not obscure labels. Prefer compact vertical diagrams when horizontal nodes become cramped. Keep posted and saved descriptions synchronized.
 -->

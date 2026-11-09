@@ -1,0 +1,7 @@
+JAVA_HOME: /home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64
+3 unsatisfied dependencies were removed from build (use -v to list them)
+14 non-default dependencies were removed from build (use -v to list them, mx build --all to build them)
+Write file /build/caches/mx/graal-next-superclass/substratevm/svm-compiler-flags-builder/graal-compiler-flags-versions.config
+Write file /build/caches/mx/graal-next-superclass/substratevm/svm-compiler-flags-builder/graal-compiler-flags-21.config
+Write file /build/caches/mx/graal-next-superclass/substratevm/svm-compiler-flags-builder/graal-compiler-flags-25.config
+mx build log written to /build/caches/mx/graal-next-superclass/substratevm/buildlog-20261108-220151.html

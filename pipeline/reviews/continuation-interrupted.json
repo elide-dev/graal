@@ -1,0 +1,38 @@
+{
+  "review": "continuation-interrupted",
+  "curator": "root implementing agent; not a completed reviewer report",
+  "invocation": 9,
+  "task": "/root/review_continuation_first",
+  "requestedModelAlias": "gpt-6-astra",
+  "reasoningEffort": "high",
+  "forkTurns": "none",
+  "head": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+  "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+  "status": "interrupted",
+  "cause": "Automatic safety-filter error before final disposition",
+  "approval": false,
+  "observations": [
+    "Reviewer inspected exact diff and invariants before implementer evidence.",
+    "A direct internal-continuation HotSpot experiment did not establish portable concurrent-walk behavior.",
+    "No final independent native review or approval was produced by this session."
+  ],
+  "artifacts": [
+    {
+      "file": "ContinuationProbe.java",
+      "sha256": "55167e02cfbd97fd9df6ebe8f0fdad4904bc5584a204725f4b4a5d27d0fa6109"
+    },
+    {
+      "file": "hotspot-replace.log",
+      "sha256": "1377f875e1ada64e04b77c6f47ce1f9a01f2cafed54894fa6dffd6254bb24412"
+    },
+    {
+      "file": "hs_err_pid1168460.log",
+      "sha256": "dcf74b2656bf4c3438d246f916e7b48eb2a5c0da5f4a149af3310676be0b2d9d"
+    },
+    {
+      "file": "ContinuationProbe.class",
+      "sha256": "b093164bbe60b872478079792ab377b7e1f6350fde25f5d45724242c6dd34388"
+    }
+  ],
+  "usage": "Unavailable; not inferred"
+}

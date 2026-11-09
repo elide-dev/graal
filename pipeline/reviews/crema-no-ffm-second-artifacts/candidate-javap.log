@@ -1,0 +1,695 @@
+Compiled from "CremaFeature.java"
+public class com.oracle.svm.interpreter.CremaFeature implements com.oracle.svm.core.feature.InternalFeature {
+  private static final java.lang.String VTABLE_HOLDER_FIELD;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterVTableInterpreterStub;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterDirectInterpreterStub;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterInterpreterForFFMUpcall;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallVarargsVirtualWrapper;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallArrayVirtualWrapper;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallVaListVirtualWrapper;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallVarargsNonVirtualWrapper;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallArrayNonVirtualWrapper;
+
+  private com.oracle.graal.pointsto.meta.AnalysisMethod enterCremaJNIUpcallVaListNonVirtualWrapper;
+
+  static final boolean $assertionsDisabled;
+
+  public com.oracle.svm.interpreter.CremaFeature();
+    Code:
+         0: aload_0
+         1: invokespecial #3                  // Method java/lang/Object."<init>":()V
+         4: return
+
+  public boolean isInConfiguration(org.graalvm.nativeimage.hosted.Feature$IsInConfigurationAccess);
+    Code:
+         0: invokestatic  #9                  // Method com/oracle/svm/core/hub/RuntimeClassLoading.isSupported:()Z
+         3: ireturn
+
+  public java.util.List<java.lang.Class<? extends org.graalvm.nativeimage.hosted.Feature>> getRequiredFeatures();
+    Code:
+         0: ldc           #15                 // class com/oracle/svm/interpreter/InterpreterFeature
+         2: ldc           #17                 // class com/oracle/svm/hosted/classloading/RuntimeClassLoadingFeature
+         4: invokestatic  #19                 // InterfaceMethod java/util/List.of:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/List;
+         7: areturn
+
+  public void afterRegistration(org.graalvm.nativeimage.hosted.Feature$AfterRegistrationAccess);
+    Code:
+         0: ldc           #25                 // class com/oracle/svm/core/hub/crema/CremaSupport
+         2: new           #27                 // class com/oracle/svm/interpreter/CremaSupportImpl
+         5: dup
+         6: invokespecial #29                 // Method com/oracle/svm/interpreter/CremaSupportImpl."<init>":()V
+         9: invokestatic  #30                 // Method org/graalvm/nativeimage/ImageSingletons.add:(Ljava/lang/Class;Ljava/lang/Object;)V
+        12: invokestatic  #9                  // Method com/oracle/svm/core/hub/RuntimeClassLoading.isSupported:()Z
+        15: ifeq          24
+        18: invokestatic  #36                 // Method com/oracle/svm/core/hub/registry/ClassRegistries.respectClassLoader:()Z
+        21: ifeq          28
+        24: iconst_1
+        25: goto          29
+        28: iconst_0
+        29: invokestatic  #41                 // Method com/oracle/svm/shared/util/VMError.guarantee:(Z)V
+        32: ldc           #47                 // class com/oracle/svm/core/interpreter/InterpreterForeignFunctionsSupport
+        34: new           #49                 // class com/oracle/svm/interpreter/InterpreterForeignFunctionsSupportImpl
+        37: dup
+        38: invokespecial #51                 // Method com/oracle/svm/interpreter/InterpreterForeignFunctionsSupportImpl."<init>":()V
+        41: invokestatic  #30                 // Method org/graalvm/nativeimage/ImageSingletons.add:(Ljava/lang/Class;Ljava/lang/Object;)V
+        44: return
+
+  public void beforeAnalysis(org.graalvm.nativeimage.hosted.Feature$BeforeAnalysisAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #52                 // class com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl
+         4: astore_2
+         5: aload_2
+         6: invokevirtual #54                 // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.getMetaAccess:()Lcom/oracle/graal/pointsto/meta/AnalysisMetaAccess;
+         9: astore_3
+        10: aload_3
+        11: ldc           #58                 // class com/oracle/svm/interpreter/InterpreterStubSection
+        13: invokevirtual #60                 // Method com/oracle/graal/pointsto/meta/AnalysisMetaAccess.lookupJavaType:(Ljava/lang/Class;)Lcom/oracle/graal/pointsto/meta/AnalysisType;
+        16: astore        4
+        18: aload_0
+        19: aload_3
+        20: aload         4
+        22: ldc           #66                 // String enterVTableInterpreterStub
+        24: iconst_2
+        25: anewarray     #68                 // class java/lang/Class
+        28: dup
+        29: iconst_0
+        30: getstatic     #70                 // Field java/lang/Integer.TYPE:Ljava/lang/Class;
+        33: aastore
+        34: dup
+        35: iconst_1
+        36: ldc           #76                 // class org/graalvm/word/Pointer
+        38: aastore
+        39: invokestatic  #78                 // Method com/oracle/svm/util/JVMCIReflectionUtil.getUniqueDeclaredMethod:(Ljdk/vm/ci/meta/MetaAccessProvider;Ljdk/vm/ci/meta/ResolvedJavaType;Ljava/lang/String;[Ljava/lang/Class;)Ljdk/vm/ci/meta/ResolvedJavaMethod;
+        42: checkcast     #84                 // class com/oracle/graal/pointsto/meta/AnalysisMethod
+        45: putfield      #86                 // Field enterVTableInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        48: aload_2
+        49: aload_0
+        50: getfield      #86                 // Field enterVTableInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        53: iconst_1
+        54: ldc           #91                 // String stub for interpreter
+        56: iconst_0
+        57: anewarray     #93                 // class com/oracle/svm/common/meta/MethodVariant$MethodVariantKey
+        60: invokevirtual #95                 // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.registerAsRoot:(Lcom/oracle/graal/pointsto/meta/AnalysisMethod;ZLjava/lang/String;[Lcom/oracle/svm/common/meta/MethodVariant$MethodVariantKey;)V
+        63: aload_0
+        64: aload_3
+        65: aload         4
+        67: ldc           #99                 // String enterDirectInterpreterStub
+        69: iconst_2
+        70: anewarray     #68                 // class java/lang/Class
+        73: dup
+        74: iconst_0
+        75: ldc           #1                  // class com/oracle/svm/interpreter/metadata/InterpreterResolvedJavaMethod
+        77: aastore
+        78: dup
+        79: iconst_1
+        80: ldc           #76                 // class org/graalvm/word/Pointer
+        82: aastore
+        83: invokestatic  #78                 // Method com/oracle/svm/util/JVMCIReflectionUtil.getUniqueDeclaredMethod:(Ljdk/vm/ci/meta/MetaAccessProvider;Ljdk/vm/ci/meta/ResolvedJavaType;Ljava/lang/String;[Ljava/lang/Class;)Ljdk/vm/ci/meta/ResolvedJavaMethod;
+        86: checkcast     #84                 // class com/oracle/graal/pointsto/meta/AnalysisMethod
+        89: putfield      #101                // Field enterDirectInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        92: aload_2
+        93: aload_0
+        94: getfield      #101                // Field enterDirectInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        97: iconst_1
+        98: ldc           #91                 // String stub for interpreter
+       100: iconst_0
+       101: anewarray     #93                 // class com/oracle/svm/common/meta/MethodVariant$MethodVariantKey
+       104: invokevirtual #95                 // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.registerAsRoot:(Lcom/oracle/graal/pointsto/meta/AnalysisMethod;ZLjava/lang/String;[Lcom/oracle/svm/common/meta/MethodVariant$MethodVariantKey;)V
+       107: aload_3
+       108: aload         4
+       110: ldc           #103                // String enterInterpreterForFFMUpcall
+       112: iconst_3
+       113: anewarray     #68                 // class java/lang/Class
+       116: dup
+       117: iconst_0
+       118: ldc           #76                 // class org/graalvm/word/Pointer
+       120: aastore
+       121: dup
+       122: iconst_1
+       123: ldc           #105                // class org/graalvm/nativeimage/Isolate
+       125: aastore
+       126: dup
+       127: iconst_2
+       128: ldc           #76                 // class org/graalvm/word/Pointer
+       130: aastore
+       131: invokestatic  #78                 // Method com/oracle/svm/util/JVMCIReflectionUtil.getUniqueDeclaredMethod:(Ljdk/vm/ci/meta/MetaAccessProvider;Ljdk/vm/ci/meta/ResolvedJavaType;Ljava/lang/String;[Ljava/lang/Class;)Ljdk/vm/ci/meta/ResolvedJavaMethod;
+       134: checkcast     #84                 // class com/oracle/graal/pointsto/meta/AnalysisMethod
+       137: astore        5
+       139: aload         5
+       141: invokestatic  #107                // Method com/oracle/svm/hosted/code/CEntryPointData.create:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/hosted/code/CEntryPointData;
+       144: astore        6
+       146: aload_0
+       147: invokestatic  #113                // Method com/oracle/svm/hosted/code/CEntryPointCallStubSupport.singleton:()Lcom/oracle/svm/hosted/code/CEntryPointCallStubSupport;
+       150: aload         5
+       152: aload         6
+       154: invokedynamic #119,  0            // InvokeDynamic #0:get:(Lcom/oracle/svm/hosted/code/CEntryPointData;)Ljava/util/function/Supplier;
+       159: ldc           #123                // class com/oracle/svm/jvmci/shared/meta/DeoptStub
+       161: iconst_2
+       162: anewarray     #4                  // class java/lang/Object
+       165: dup
+       166: iconst_0
+       167: ldc           #125                // String stubType
+       169: aastore
+       170: dup
+       171: iconst_1
+       172: getstatic     #127                // Field com/oracle/svm/jvmci/shared/meta/DeoptStub$StubType.InterpreterFFMUpcallStub:Lcom/oracle/svm/jvmci/shared/meta/DeoptStub$StubType;
+       175: aastore
+       176: invokestatic  #133                // Method com/oracle/svm/util/GuestAnnotationAccess.newAnnotationValue:(Ljava/lang/Class;[Ljava/lang/Object;)Ljdk/graal/compiler/annotation/AnnotationValue;
+       179: invokestatic  #139                // InterfaceMethod java/util/List.of:(Ljava/lang/Object;)Ljava/util/List;
+       182: invokevirtual #142                // Method com/oracle/svm/hosted/code/CEntryPointCallStubSupport.registerStubForMethod:(Lcom/oracle/graal/pointsto/meta/AnalysisMethod;Ljava/util/function/Supplier;Ljava/util/List;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       185: putfield      #146                // Field enterInterpreterForFFMUpcall:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       188: aload_1
+       189: ldc           #148                // class com/oracle/svm/core/hub/crema/CremaJNIFieldIds$CremaJNIStaticFieldId
+       191: invokeinterface #150,  2          // InterfaceMethod org/graalvm/nativeimage/hosted/Feature$BeforeAnalysisAccess.registerAsInHeap:(Ljava/lang/Class;)V
+       196: aload_1
+       197: ldc           #156                // class com/oracle/svm/core/hub/crema/CremaJNIMethodIds$CremaJNIMethodId
+       199: invokeinterface #150,  2          // InterfaceMethod org/graalvm/nativeimage/hosted/Feature$BeforeAnalysisAccess.registerAsInHeap:(Ljava/lang/Class;)V
+       204: invokestatic  #158                // Method com/oracle/svm/hosted/code/CEntryPointData.createCustomUnpublished:()Lcom/oracle/svm/hosted/code/CEntryPointData;
+       207: astore        7
+       209: aload_0
+       210: aload_2
+       211: getstatic     #162                // Field com/oracle/svm/core/jni/CallVariant.VARARGS:Lcom/oracle/svm/core/jni/CallVariant;
+       214: iconst_0
+       215: aload         7
+       217: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       220: putfield      #172                // Field enterCremaJNIUpcallVarargsVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       223: aload_0
+       224: aload_2
+       225: getstatic     #175                // Field com/oracle/svm/core/jni/CallVariant.ARRAY:Lcom/oracle/svm/core/jni/CallVariant;
+       228: iconst_0
+       229: aload         7
+       231: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       234: putfield      #178                // Field enterCremaJNIUpcallArrayVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       237: aload_0
+       238: aload_2
+       239: getstatic     #181                // Field com/oracle/svm/core/jni/CallVariant.VA_LIST:Lcom/oracle/svm/core/jni/CallVariant;
+       242: iconst_0
+       243: aload         7
+       245: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       248: putfield      #184                // Field enterCremaJNIUpcallVaListVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       251: aload_0
+       252: aload_2
+       253: getstatic     #162                // Field com/oracle/svm/core/jni/CallVariant.VARARGS:Lcom/oracle/svm/core/jni/CallVariant;
+       256: iconst_1
+       257: aload         7
+       259: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       262: putfield      #187                // Field enterCremaJNIUpcallVarargsNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       265: aload_0
+       266: aload_2
+       267: getstatic     #175                // Field com/oracle/svm/core/jni/CallVariant.ARRAY:Lcom/oracle/svm/core/jni/CallVariant;
+       270: iconst_1
+       271: aload         7
+       273: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       276: putfield      #190                // Field enterCremaJNIUpcallArrayNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       279: aload_0
+       280: aload_2
+       281: getstatic     #181                // Field com/oracle/svm/core/jni/CallVariant.VA_LIST:Lcom/oracle/svm/core/jni/CallVariant;
+       284: iconst_1
+       285: aload         7
+       287: invokestatic  #168                // Method registerCremaJNIUpcallWrapperMethod:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl;Lcom/oracle/svm/core/jni/CallVariant;ZLcom/oracle/svm/hosted/code/CEntryPointData;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       290: putfield      #193                // Field enterCremaJNIUpcallVaListNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       293: aload_2
+       294: ldc           #196                // String java.lang.invoke.Invokers$Holder
+       296: invokevirtual #198                // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.findTypeByName:(Ljava/lang/String;)Lcom/oracle/graal/pointsto/meta/AnalysisType;
+       299: astore        8
+       301: aload         8
+       303: iconst_0
+       304: invokevirtual #202                // Method com/oracle/graal/pointsto/meta/AnalysisType.getDeclaredMethods:(Z)[Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       307: astore        9
+       309: aload         9
+       311: arraylength
+       312: istore        10
+       314: iconst_0
+       315: istore        11
+       317: iload         11
+       319: iload         10
+       321: if_icmpge     350
+       324: aload         9
+       326: iload         11
+       328: aaload
+       329: astore        12
+       331: aload_2
+       332: aload         12
+       334: iconst_0
+       335: ldc           #208                // String Used by method handles with crema
+       337: iconst_0
+       338: anewarray     #93                 // class com/oracle/svm/common/meta/MethodVariant$MethodVariantKey
+       341: invokevirtual #95                 // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.registerAsRoot:(Lcom/oracle/graal/pointsto/meta/AnalysisMethod;ZLjava/lang/String;[Lcom/oracle/svm/common/meta/MethodVariant$MethodVariantKey;)V
+       344: iinc          11, 1
+       347: goto          317
+       350: goto          359
+       353: astore_3
+       354: aload_3
+       355: invokestatic  #212                // Method com/oracle/svm/shared/util/VMError.shouldNotReachHere:(Ljava/lang/Throwable;)Ljava/lang/RuntimeException;
+       358: athrow
+       359: return
+      Exception table:
+         from    to  target type
+             5   350   353   Class java/lang/NoSuchMethodError
+
+  private static com.oracle.graal.pointsto.meta.AnalysisMethod registerCremaJNIUpcallWrapperMethod(com.oracle.svm.hosted.FeatureImpl$BeforeAnalysisAccessImpl, com.oracle.svm.core.jni.CallVariant, boolean, com.oracle.svm.hosted.code.CEntryPointData);
+    Code:
+         0: new           #216                // class com/oracle/svm/interpreter/hosted/CremaJNIUpcallWrapperMethod
+         3: dup
+         4: aload_1
+         5: iload_2
+         6: aload_0
+         7: invokevirtual #218                // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.getUniverse:()Lcom/oracle/graal/pointsto/meta/AnalysisUniverse;
+        10: invokevirtual #222                // Method com/oracle/graal/pointsto/meta/AnalysisUniverse.getOriginalMetaAccess:()Ljdk/vm/ci/meta/MetaAccessProvider;
+        13: aload_0
+        14: invokevirtual #228                // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.getBigBang:()Lcom/oracle/graal/pointsto/BigBang;
+        17: invokeinterface #232,  1          // InterfaceMethod com/oracle/graal/pointsto/BigBang.getWordTypes:()Ljdk/graal/compiler/word/WordTypes;
+        22: invokespecial #238                // Method com/oracle/svm/interpreter/hosted/CremaJNIUpcallWrapperMethod."<init>":(Lcom/oracle/svm/core/jni/CallVariant;ZLjdk/vm/ci/meta/MetaAccessProvider;Ljdk/graal/compiler/word/WordTypes;)V
+        25: astore        4
+        27: aload_0
+        28: invokevirtual #218                // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.getUniverse:()Lcom/oracle/graal/pointsto/meta/AnalysisUniverse;
+        31: aload         4
+        33: invokevirtual #241                // Method com/oracle/graal/pointsto/meta/AnalysisUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        36: astore        5
+        38: aload_0
+        39: invokevirtual #228                // Method com/oracle/svm/hosted/FeatureImpl$BeforeAnalysisAccessImpl.getBigBang:()Lcom/oracle/graal/pointsto/BigBang;
+        42: aload         5
+        44: iconst_1
+        45: ldc           #87                 // class com/oracle/svm/interpreter/CremaFeature
+        47: invokestatic  #245                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+        50: invokedynamic #251,  0            // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        55: iconst_0
+        56: anewarray     #93                 // class com/oracle/svm/common/meta/MethodVariant$MethodVariantKey
+        59: invokeinterface #255,  5          // InterfaceMethod com/oracle/graal/pointsto/BigBang.addRootMethod:(Lcom/oracle/graal/pointsto/meta/AnalysisMethod;ZLjava/lang/Object;[Lcom/oracle/svm/common/meta/MethodVariant$MethodVariantKey;)Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        64: pop
+        65: aload         5
+        67: aload_3
+        68: invokevirtual #259                // Method com/oracle/graal/pointsto/meta/AnalysisMethod.registerAsNativeEntryPoint:(Ljava/lang/Object;)V
+        71: aload         5
+        73: areturn
+
+  public void afterAnalysis(org.graalvm.nativeimage.hosted.Feature$AfterAnalysisAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #263                // class com/oracle/svm/hosted/FeatureImpl$AfterAnalysisAccessImpl
+         4: invokevirtual #265                // Method com/oracle/svm/hosted/FeatureImpl$AfterAnalysisAccessImpl.getUniverse:()Lcom/oracle/graal/pointsto/meta/AnalysisUniverse;
+         7: astore_2
+         8: invokestatic  #266                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.singleton:()Lcom/oracle/svm/interpreter/BuildTimeInterpreterUniverse;
+        11: astore_3
+        12: invokestatic  #271                // Method com/oracle/svm/interpreter/InterpreterFeature.assertionsEnabled:()Z
+        15: ifeq          98
+        18: aload_2
+        19: invokevirtual #274                // Method com/oracle/graal/pointsto/meta/AnalysisUniverse.getTypes:()Ljava/util/List;
+        22: invokeinterface #278,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+        27: astore        4
+        29: aload         4
+        31: invokeinterface #282,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+        36: ifeq          98
+        39: aload         4
+        41: invokeinterface #287,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        46: checkcast     #203                // class com/oracle/graal/pointsto/meta/AnalysisType
+        49: astore        5
+        51: aload         5
+        53: invokevirtual #291                // Method com/oracle/graal/pointsto/meta/AnalysisType.isReachable:()Z
+        56: ifne          62
+        59: goto          29
+        62: getstatic     #294                // Field $assertionsDisabled:Z
+        65: ifne          95
+        68: aload_3
+        69: aload         5
+        71: invokevirtual #298                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.getType:(Ljdk/vm/ci/meta/ResolvedJavaType;)Lcom/oracle/svm/interpreter/metadata/InterpreterResolvedJavaType;
+        74: ifnonnull     95
+        77: new           #302                // class java/lang/AssertionError
+        80: dup
+        81: aload         5
+        83: invokestatic  #245                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+        86: invokedynamic #304,  0            // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        91: invokespecial #305                // Method java/lang/AssertionError."<init>":(Ljava/lang/Object;)V
+        94: athrow
+        95: goto          29
+        98: return
+
+  public void beforeCompilation(org.graalvm.nativeimage.hosted.Feature$BeforeCompilationAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #307                // class com/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl
+         4: astore_2
+         5: aload_2
+         6: invokevirtual #309                // Method com/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl.getUniverse:()Lcom/oracle/svm/hosted/meta/HostedUniverse;
+         9: astore_3
+        10: invokestatic  #266                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.singleton:()Lcom/oracle/svm/interpreter/BuildTimeInterpreterUniverse;
+        13: astore        4
+        15: invokestatic  #312                // Method com/oracle/svm/util/GuestAccess.get:()Lcom/oracle/svm/util/GuestAccess;
+        18: ldc_w         #317                // class com/oracle/svm/interpreter/metadata/InterpreterResolvedObjectType
+        21: invokevirtual #319                // Method com/oracle/svm/util/GuestAccess.lookupType:(Ljava/lang/Class;)Ljdk/vm/ci/meta/ResolvedJavaType;
+        24: ldc_w         #323                // String vtableHolder
+        27: invokestatic  #325                // Method com/oracle/svm/util/JVMCIReflectionUtil.getUniqueDeclaredField:(Ljdk/vm/ci/meta/ResolvedJavaType;Ljava/lang/String;)Ljdk/vm/ci/meta/ResolvedJavaField;
+        30: astore        5
+        32: aload_3
+        33: invokevirtual #329                // Method com/oracle/svm/hosted/meta/HostedUniverse.getMethods:()Ljava/util/Collection;
+        36: invokeinterface #335,  1          // InterfaceMethod java/util/Collection.iterator:()Ljava/util/Iterator;
+        41: astore        6
+        43: aload         6
+        45: invokeinterface #282,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+        50: ifeq          156
+        53: aload         6
+        55: invokeinterface #287,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        60: checkcast     #338                // class com/oracle/svm/hosted/meta/HostedMethod
+        63: astore        7
+        65: aload         4
+        67: aload         7
+        69: invokevirtual #340                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.getMethod:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/interpreter/metadata/InterpreterResolvedJavaMethod;
+        72: astore        8
+        74: aload         8
+        76: ifnonnull     82
+        79: goto          43
+        82: aload         7
+        84: invokevirtual #344                // Method com/oracle/svm/hosted/meta/HostedMethod.hasVTableIndex:()Z
+        87: ifeq          103
+        90: aload         8
+        92: aload         7
+        94: invokevirtual #347                // Method com/oracle/svm/hosted/meta/HostedMethod.getVTableIndex:()I
+        97: invokevirtual #351                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedJavaMethod.setVTableIndex:(I)V
+       100: goto          153
+       103: aload         7
+       105: invokevirtual #355                // Method com/oracle/svm/hosted/meta/HostedMethod.isStatic:()Z
+       108: ifne          153
+       111: aload         7
+       113: invokevirtual #358                // Method com/oracle/svm/hosted/meta/HostedMethod.isConstructor:()Z
+       116: ifne          153
+       119: aload         7
+       121: invokevirtual #361                // Method com/oracle/svm/hosted/meta/HostedMethod.isPrivate:()Z
+       124: ifne          146
+       127: aload         7
+       129: invokevirtual #364                // Method com/oracle/svm/hosted/meta/HostedMethod.isFinal:()Z
+       132: ifne          146
+       135: aload         7
+       137: invokevirtual #367                // Method com/oracle/svm/hosted/meta/HostedMethod.getDeclaringClass:()Lcom/oracle/svm/hosted/meta/HostedType;
+       140: invokevirtual #371                // Method com/oracle/svm/hosted/meta/HostedType.isFinalFlagSet:()Z
+       143: ifeq          153
+       146: aload         8
+       148: bipush        -3
+       150: invokevirtual #351                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedJavaMethod.setVTableIndex:(I)V
+       153: goto          43
+       156: new           #376                // class com/oracle/graal/pointsto/ObjectScanner$OtherReason
+       159: dup
+       160: ldc           #87                 // class com/oracle/svm/interpreter/CremaFeature
+       162: invokestatic  #245                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+       165: invokedynamic #378,  0            // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       170: invokespecial #379                // Method com/oracle/graal/pointsto/ObjectScanner$OtherReason."<init>":(Ljava/lang/String;)V
+       173: astore        6
+       175: aload_3
+       176: invokevirtual #382                // Method com/oracle/svm/hosted/meta/HostedUniverse.getTypes:()Ljava/util/Collection;
+       179: invokeinterface #335,  1          // InterfaceMethod java/util/Collection.iterator:()Ljava/util/Iterator;
+       184: astore        7
+       186: aload         7
+       188: invokeinterface #282,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+       193: ifeq          228
+       196: aload         7
+       198: invokeinterface #287,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+       203: checkcast     #372                // class com/oracle/svm/hosted/meta/HostedType
+       206: astore        8
+       208: aload         4
+       210: aload         8
+       212: aload_2
+       213: aload         5
+       215: aload         6
+       217: invokedynamic #384,  0            // InvokeDynamic #4:accept:(Lcom/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl;Ljdk/vm/ci/meta/ResolvedJavaField;Lcom/oracle/graal/pointsto/ObjectScanner$ScanReason;)Ljava/util/function/Consumer;
+       222: invokevirtual #388                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.mirrorSVMVTable:(Lcom/oracle/svm/hosted/meta/HostedType;Ljava/util/function/Consumer;)V
+       225: goto          186
+       228: invokestatic  #392                // Method com/oracle/svm/interpreter/InterpreterFeature.prepareSignatures:()V
+       231: aload_2
+       232: invokestatic  #395                // InterfaceMethod com/oracle/svm/core/hub/crema/CremaSupport.singleton:()Lcom/oracle/svm/core/hub/crema/CremaSupport;
+       235: invokevirtual #398                // Method com/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl.registerAsImmutable:(Ljava/lang/Object;)V
+       238: invokestatic  #395                // InterfaceMethod com/oracle/svm/core/hub/crema/CremaSupport.singleton:()Lcom/oracle/svm/core/hub/crema/CremaSupport;
+       241: aload_3
+       242: aload_0
+       243: getfield      #101                // Field enterDirectInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       246: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       249: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       252: invokeinterface #410,  2          // InterfaceMethod com/oracle/svm/core/hub/crema/CremaSupport.setEnterDirectInterpreterStubEntryPoint:(Lorg/graalvm/nativeimage/c/function/CFunctionPointer;)V
+       257: invokestatic  #414                // InterfaceMethod com/oracle/svm/core/interpreter/InterpreterForeignFunctionsSupport.singleton:()Lcom/oracle/svm/core/interpreter/InterpreterForeignFunctionsSupport;
+       260: astore        7
+       262: aload_3
+       263: invokevirtual #417                // Method com/oracle/svm/hosted/meta/HostedUniverse.getBigBang:()Lcom/oracle/svm/hosted/analysis/Inflation;
+       266: invokeinterface #420,  1          // InterfaceMethod com/oracle/svm/hosted/analysis/Inflation.getMetaAccess:()Lcom/oracle/graal/pointsto/meta/AnalysisMetaAccess;
+       271: aload         7
+       273: invokeinterface #423,  1          // InterfaceMethod com/oracle/svm/core/interpreter/InterpreterForeignFunctionsSupport.getClass:()Ljava/lang/Class;
+       278: invokevirtual #427                // Method com/oracle/graal/pointsto/meta/AnalysisMetaAccess.optionalLookupJavaType:(Ljava/lang/Class;)Ljava/util/Optional;
+       281: invokedynamic #431,  0            // InvokeDynamic #5:test:()Ljava/util/function/Predicate;
+       286: invokevirtual #435                // Method java/util/Optional.filter:(Ljava/util/function/Predicate;)Ljava/util/Optional;
+       289: invokevirtual #441                // Method java/util/Optional.isPresent:()Z
+       292: ifeq          319
+       295: aload_2
+       296: aload         7
+       298: invokevirtual #398                // Method com/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl.registerAsImmutable:(Ljava/lang/Object;)V
+       301: aload         7
+       303: aload_3
+       304: aload_0
+       305: getfield      #146                // Field enterInterpreterForFFMUpcall:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       308: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       311: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       314: invokeinterface #444,  2          // InterfaceMethod com/oracle/svm/core/interpreter/InterpreterForeignFunctionsSupport.setUpcallStubPointer:(Lorg/graalvm/nativeimage/c/function/CFunctionPointer;)V
+       319: invokestatic  #395                // InterfaceMethod com/oracle/svm/core/hub/crema/CremaSupport.singleton:()Lcom/oracle/svm/core/hub/crema/CremaSupport;
+       322: aload_3
+       323: aload_0
+       324: getfield      #172                // Field enterCremaJNIUpcallVarargsVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       327: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       330: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       333: aload_3
+       334: aload_0
+       335: getfield      #178                // Field enterCremaJNIUpcallArrayVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       338: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       341: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       344: aload_3
+       345: aload_0
+       346: getfield      #184                // Field enterCremaJNIUpcallVaListVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       349: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       352: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       355: aload_3
+       356: aload_0
+       357: getfield      #187                // Field enterCremaJNIUpcallVarargsNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       360: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       363: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       366: aload_3
+       367: aload_0
+       368: getfield      #190                // Field enterCremaJNIUpcallArrayNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       371: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       374: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       377: aload_3
+       378: aload_0
+       379: getfield      #193                // Field enterCremaJNIUpcallVaListNonVirtualWrapper:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+       382: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+       385: invokestatic  #404                // Method com/oracle/svm/core/meta/MethodRefSupport.createMethodPointer:(Ljdk/vm/ci/meta/ResolvedJavaMethod;)Lcom/oracle/svm/guest/staging/meta/MethodPointer;
+       388: invokeinterface #447,  7          // InterfaceMethod com/oracle/svm/core/hub/crema/CremaSupport.setCremaJNIUpcallWrapperEntryPoints:(Lorg/graalvm/nativeimage/c/function/CFunctionPointer;Lorg/graalvm/nativeimage/c/function/CFunctionPointer;Lorg/graalvm/nativeimage/c/function/CFunctionPointer;Lorg/graalvm/nativeimage/c/function/CFunctionPointer;Lorg/graalvm/nativeimage/c/function/CFunctionPointer;Lorg/graalvm/nativeimage/c/function/CFunctionPointer;)V
+       393: return
+
+  public void afterCompilation(org.graalvm.nativeimage.hosted.Feature$AfterCompilationAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #451                // class com/oracle/svm/hosted/FeatureImpl$AfterCompilationAccessImpl
+         4: astore_2
+         5: invokestatic  #266                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.singleton:()Lcom/oracle/svm/interpreter/BuildTimeInterpreterUniverse;
+         8: astore_3
+         9: aload_2
+        10: invokevirtual #453                // Method com/oracle/svm/hosted/FeatureImpl$AfterCompilationAccessImpl.getUniverse:()Lcom/oracle/svm/hosted/meta/HostedUniverse;
+        13: invokevirtual #382                // Method com/oracle/svm/hosted/meta/HostedUniverse.getTypes:()Ljava/util/Collection;
+        16: invokeinterface #335,  1          // InterfaceMethod java/util/Collection.iterator:()Ljava/util/Iterator;
+        21: astore        4
+        23: aload         4
+        25: invokeinterface #282,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+        30: ifeq          177
+        33: aload         4
+        35: invokeinterface #287,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        40: checkcast     #372                // class com/oracle/svm/hosted/meta/HostedType
+        43: astore        5
+        45: aload         5
+        47: invokevirtual #454                // Method com/oracle/svm/hosted/meta/HostedType.isPrimitive:()Z
+        50: ifne          23
+        53: aload         5
+        55: invokevirtual #457                // Method com/oracle/svm/hosted/meta/HostedType.isArray:()Z
+        58: ifeq          64
+        61: goto          23
+        64: aload_3
+        65: aload         5
+        67: invokevirtual #460                // Method com/oracle/svm/hosted/meta/HostedType.getWrapped:()Lcom/oracle/graal/pointsto/meta/AnalysisType;
+        70: invokevirtual #298                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.getType:(Ljdk/vm/ci/meta/ResolvedJavaType;)Lcom/oracle/svm/interpreter/metadata/InterpreterResolvedJavaType;
+        73: astore        6
+        75: aload         6
+        77: ifnonnull     115
+        80: getstatic     #294                // Field $assertionsDisabled:Z
+        83: ifne          23
+        86: aload         5
+        88: invokevirtual #460                // Method com/oracle/svm/hosted/meta/HostedType.getWrapped:()Lcom/oracle/graal/pointsto/meta/AnalysisType;
+        91: invokevirtual #291                // Method com/oracle/graal/pointsto/meta/AnalysisType.isReachable:()Z
+        94: ifeq          23
+        97: new           #302                // class java/lang/AssertionError
+       100: dup
+       101: aload         5
+       103: invokestatic  #245                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+       106: invokedynamic #464,  0            // InvokeDynamic #6:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       111: invokespecial #305                // Method java/lang/AssertionError."<init>":(Ljava/lang/Object;)V
+       114: athrow
+       115: aload         6
+       117: checkcast     #317                // class com/oracle/svm/interpreter/metadata/InterpreterResolvedObjectType
+       120: astore        7
+       122: aload_3
+       123: aload         5
+       125: invokevirtual #465                // Method com/oracle/svm/hosted/meta/HostedType.getStaticFields:()[Ljdk/vm/ci/meta/ResolvedJavaField;
+       128: checkcast     #469                // class "[Lcom/oracle/svm/hosted/meta/HostedField;"
+       131: invokestatic  #471                // Method initializeInterpreterFields:(Lcom/oracle/svm/interpreter/BuildTimeInterpreterUniverse;[Lcom/oracle/svm/hosted/meta/HostedField;)V
+       134: aload         5
+       136: invokevirtual #475                // Method com/oracle/svm/hosted/meta/HostedType.isInterface:()Z
+       139: ifne          169
+       142: aload         5
+       144: checkcast     #478                // class com/oracle/svm/hosted/meta/HostedInstanceClass
+       147: astore        8
+       149: aload         7
+       151: aload         8
+       153: invokevirtual #480                // Method com/oracle/svm/hosted/meta/HostedInstanceClass.getAfterFieldsOffset:()I
+       156: invokevirtual #483                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedObjectType.setAfterFieldsOffset:(I)V
+       159: aload_3
+       160: aload         8
+       162: iconst_0
+       163: invokevirtual #486                // Method com/oracle/svm/hosted/meta/HostedInstanceClass.getInstanceFields:(Z)[Lcom/oracle/svm/hosted/meta/HostedField;
+       166: invokestatic  #471                // Method initializeInterpreterFields:(Lcom/oracle/svm/interpreter/BuildTimeInterpreterUniverse;[Lcom/oracle/svm/hosted/meta/HostedField;)V
+       169: aload         7
+       171: invokevirtual #490                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedObjectType.sortDeclaredFields:()V
+       174: goto          23
+       177: return
+
+  private static void initializeInterpreterFields(com.oracle.svm.interpreter.BuildTimeInterpreterUniverse, com.oracle.svm.hosted.meta.HostedField[]);
+    Code:
+         0: aload_1
+         1: astore_2
+         2: aload_2
+         3: arraylength
+         4: istore_3
+         5: iconst_0
+         6: istore        4
+         8: iload         4
+        10: iload_3
+        11: if_icmpge     101
+        14: aload_2
+        15: iload         4
+        17: aaload
+        18: astore        5
+        20: aload_0
+        21: aload         5
+        23: invokevirtual #493                // Method com/oracle/svm/hosted/meta/HostedField.getWrapped:()Lcom/oracle/graal/pointsto/meta/AnalysisField;
+        26: invokevirtual #498                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.getField:(Ljdk/vm/ci/meta/ResolvedJavaField;)Lcom/oracle/svm/interpreter/metadata/InterpreterResolvedJavaField;
+        29: astore        6
+        31: aload         6
+        33: ifnonnull     68
+        36: getstatic     #294                // Field $assertionsDisabled:Z
+        39: ifne          95
+        42: aload         5
+        44: invokevirtual #502                // Method com/oracle/svm/hosted/meta/HostedField.isAccessed:()Z
+        47: ifeq          95
+        50: new           #302                // class java/lang/AssertionError
+        53: dup
+        54: aload         5
+        56: invokestatic  #245                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+        59: invokedynamic #505,  0            // InvokeDynamic #7:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        64: invokespecial #305                // Method java/lang/AssertionError."<init>":(Ljava/lang/Object;)V
+        67: athrow
+        68: aload         6
+        70: invokevirtual #506                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedJavaField.isArtificiallyReachable:()Z
+        73: ifeq          87
+        76: aload         6
+        78: invokevirtual #511                // Method com/oracle/svm/interpreter/metadata/InterpreterResolvedJavaField.isUnmaterializedConstant:()Z
+        81: invokestatic  #41                 // Method com/oracle/svm/shared/util/VMError.guarantee:(Z)V
+        84: goto          95
+        87: aload_0
+        88: aload         5
+        90: aload         6
+        92: invokevirtual #514                // Method com/oracle/svm/interpreter/BuildTimeInterpreterUniverse.initializeJavaFieldFromHosted:(Lcom/oracle/svm/hosted/meta/HostedField;Lcom/oracle/svm/interpreter/metadata/InterpreterResolvedJavaField;)V
+        95: iinc          4, 1
+        98: goto          8
+       101: return
+
+  public void afterAbstractImageCreation(com.oracle.svm.core.feature.InternalFeature$AfterAbstractImageCreationAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #518                // class com/oracle/svm/hosted/FeatureImpl$AfterAbstractImageCreationAccessImpl
+         4: astore_2
+         5: ldc           #58                 // class com/oracle/svm/interpreter/InterpreterStubSection
+         7: invokestatic  #520                // Method org/graalvm/nativeimage/ImageSingletons.lookup:(Ljava/lang/Class;)Ljava/lang/Object;
+        10: checkcast     #58                 // class com/oracle/svm/interpreter/InterpreterStubSection
+        13: astore_3
+        14: aload_2
+        15: invokevirtual #523                // Method com/oracle/svm/hosted/FeatureImpl$AfterAbstractImageCreationAccessImpl.getRuntimeConfiguration:()Lcom/oracle/svm/core/graal/meta/RuntimeConfiguration;
+        18: invokevirtual #527                // Method com/oracle/svm/core/graal/meta/RuntimeConfiguration.getBackendForNormalMethod:()Lcom/oracle/svm/core/graal/code/SubstrateBackend;
+        21: astore        4
+        23: aload         4
+        25: instanceof    #533                // class com/oracle/svm/core/graal/code/SubstrateBackendWithAssembler
+        28: ifeq          51
+        31: aload         4
+        33: checkcast     #533                // class com/oracle/svm/core/graal/code/SubstrateBackendWithAssembler
+        36: astore        5
+        38: aload_3
+        39: aload_2
+        40: invokevirtual #535                // Method com/oracle/svm/hosted/FeatureImpl$AfterAbstractImageCreationAccessImpl.getImage:()Lcom/oracle/svm/hosted/image/AbstractImage;
+        43: aload         5
+        45: invokevirtual #539                // Method com/oracle/svm/interpreter/InterpreterStubSection.createInterpreterVTableEnterStubSection:(Lcom/oracle/svm/hosted/image/AbstractImage;Lcom/oracle/svm/core/graal/code/SubstrateBackendWithAssembler;)V
+        48: goto          70
+        51: ldc_w         #543                // String Needs a backend with an assembler, it is not available with backend %s
+        54: iconst_1
+        55: anewarray     #4                  // class java/lang/Object
+        58: dup
+        59: iconst_0
+        60: aload         4
+        62: invokevirtual #545                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+        65: aastore
+        66: invokestatic  #546                // Method com/oracle/svm/shared/util/VMError.shouldNotReachHere:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/RuntimeException;
+        69: athrow
+        70: return
+
+  public void beforeImageWrite(org.graalvm.nativeimage.hosted.Feature$BeforeImageWriteAccess);
+    Code:
+         0: aload_1
+         1: checkcast     #549                // class com/oracle/svm/hosted/FeatureImpl$BeforeImageWriteAccessImpl
+         4: astore_2
+         5: ldc           #58                 // class com/oracle/svm/interpreter/InterpreterStubSection
+         7: invokestatic  #520                // Method org/graalvm/nativeimage/ImageSingletons.lookup:(Ljava/lang/Class;)Ljava/lang/Object;
+        10: checkcast     #58                 // class com/oracle/svm/interpreter/InterpreterStubSection
+        13: astore_3
+        14: aload_3
+        15: aload_2
+        16: invokevirtual #551                // Method com/oracle/svm/hosted/FeatureImpl$BeforeImageWriteAccessImpl.getHostedUniverse:()Lcom/oracle/svm/hosted/meta/HostedUniverse;
+        19: aload_0
+        20: getfield      #86                 // Field enterVTableInterpreterStub:Lcom/oracle/graal/pointsto/meta/AnalysisMethod;
+        23: invokevirtual #401                // Method com/oracle/svm/hosted/meta/HostedUniverse.lookup:(Ljdk/vm/ci/meta/JavaMethod;)Lcom/oracle/svm/hosted/meta/HostedMethod;
+        26: invokevirtual #554                // Method com/oracle/svm/interpreter/InterpreterStubSection.markEnterStubPatch:(Lcom/oracle/svm/hosted/meta/HostedMethod;)V
+        29: return
+
+  private static void lambda$beforeCompilation$0(com.oracle.svm.hosted.FeatureImpl$BeforeCompilationAccessImpl, jdk.vm.ci.meta.ResolvedJavaField, com.oracle.graal.pointsto.ObjectScanner$ScanReason, java.lang.Object);
+    Code:
+         0: aload_0
+         1: invokevirtual #558                // Method com/oracle/svm/hosted/FeatureImpl$BeforeCompilationAccessImpl.getHeapScanner:()Lcom/oracle/graal/pointsto/heap/ImageHeapScanner;
+         4: aload_3
+         5: aload_1
+         6: aload_2
+         7: invokevirtual #562                // Method com/oracle/graal/pointsto/heap/ImageHeapScanner.rescanField:(Ljava/lang/Object;Ljdk/vm/ci/meta/ResolvedJavaField;Lcom/oracle/graal/pointsto/ObjectScanner$ScanReason;)V
+        10: return
+
+  private static com.oracle.svm.hosted.code.CEntryPointData lambda$beforeAnalysis$0(com.oracle.svm.hosted.code.CEntryPointData);
+    Code:
+         0: aload_0
+         1: areturn
+
+  static {};
+    Code:
+         0: ldc           #87                 // class com/oracle/svm/interpreter/CremaFeature
+         2: invokevirtual #568                // Method java/lang/Class.desiredAssertionStatus:()Z
+         5: ifne          12
+         8: iconst_1
+         9: goto          13
+        12: iconst_0
+        13: putstatic     #294                // Field $assertionsDisabled:Z
+        16: return
+}

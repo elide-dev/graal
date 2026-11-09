@@ -1,0 +1,67 @@
+========================================================================================================================
+GraalVM Native Image: Generating 'load-probe' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.2s @ 0.33GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: enabled, system assertions: enabled
+ - 1 user-specific feature(s):
+   - ReachableProbe
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: disabled (class-specific config may apply), system assertions: disabled
+------------------------------------------------------------------------------------------------------------------------
+ 2 experimental option(s) unlocked:
+ - '-H:-ForeignAPISupport' (origin(s): command line)
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (8.7% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+PROBE_REACHABLE=true INSTANTIATED=false
+[2/8] Performing analysis...  [**********]                                                             (13.1s @ 1.25GiB)
+    6,985 types,   8,429 fields, and  35,687 methods found reachable
+      371 types,     299 fields, and     842 methods registered for reflection
+       63 types,      65 fields, and      55 methods registered for JNI access
+       56 resource accesses registered with 171.26KiB total size
+        5 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (2.6s @ 1.50GiB)
+[4/8] Parsing methods...      [*]                                                                       (1.6s @ 1.46GiB)
+[5/8] Inlining methods...     [***]                                                                     (0.9s @ 1.61GiB)
+[6/8] Compiling methods...    [****]                                                                   (16.8s @ 1.56GiB)
+[7/8] Laying out methods...   [**]                                                                      (4.2s @ 1.70GiB)
+[8/8] Creating image...       [**]                                                                      (4.4s @ 1.32GiB)
+  14.52MiB (30.24%) for code area:    24,975 compilation units
+  30.44MiB (63.40%) for image heap:  621,626 objects and 5 resources
+   3.05MiB ( 6.36%) for other data
+  48.01MiB in total image size, 45.75MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.21MiB java.base/java.util                                 5.44MiB o.g.n.runtime/c.o.s.i.m.Interpreter~edJavaMethod
+ 710.04KiB java.base/jdk.internal.classfile.impl               3.48MiB byte[] for code metadata
+ 635.49KiB o.g.n.runtime/com.oracle.svm.interpreter            3.28MiB byte[] for general heap data
+ 576.35KiB java.base/java.lang.invoke                          2.80MiB byte[] for string data
+ 542.27KiB java.base/sun.util.resources.cldr                   1.48MiB java.base/java.lang.String
+ 512.26KiB java.base/java.lang                                 1.36MiB o.g.n.runtime/c.o.s.i.metadata.ReferenceConstant
+ 475.93KiB java.base/com.sun.crypto.provider                   1.27MiB o.g.e.s.svm/c.o.s.e.classfile.descriptors.Symbol
+ 475.01KiB java.base/sun.util.resources                        1.23MiB java.base/java.lang.Class
+ 432.53KiB java.base/java.util.concurrent                      1.03MiB o.g.n.runtime/c.o.s.i.m.Interpreter~vedJavaField
+ 417.70KiB java.base/java.text                               873.13KiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+   8.64MiB for 243 more packages                               8.21MiB for 1929 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       4.7s (9.5% of total time) in 644 GCs | Peak RSS: 2.98GiB | CPU load: 8.19
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/crema-no-ffm-second-b0ypbcrx/load-probe (executable, 45.75MiB)
+========================================================================================================================
+Finished generating 'load-probe' in 48.3s.

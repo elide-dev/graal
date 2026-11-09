@@ -1,0 +1,4 @@
+probe.AotNonfinal reflection=0x11 JVMCI=0x1 expectedFinal=false
+probe.AotFinal reflection=0x1 JVMCI=0x11 expectedFinal=true
+probe.AotOrdinary reflection=0x1 JVMCI=0x1 expectedFinal=false
+probe.AotOrdinaryFinal reflection=0x11 JVMCI=0x11 expectedFinal=true

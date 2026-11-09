@@ -1,0 +1,4 @@
+probe.Aot00 reflection=false JVMCI=false
+probe.Aot01 reflection=true JVMCI=false
+probe.Aot10 reflection=false JVMCI=true
+probe.Aot11 reflection=true JVMCI=true

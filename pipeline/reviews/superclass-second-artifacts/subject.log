@@ -1,0 +1,2 @@
+a369308fb9f4fbed7746caf33c87eb8f3a61b613 [GR-81123] Preserve pending initialization writes across control-flow merges
+e3d79d3595992718296ad201cea273ccbb3468d8 Check class-file finality when loading subclasses

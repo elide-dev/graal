@@ -1,0 +1,102 @@
+Warning: 449 classes in /tmp/upstream-next-buxhol00/build-candidate/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-candidate/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-buxhol00/build-candidate/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-buxhol00/build-candidate/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-candidate/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-candidate/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-buxhol00/build-candidate/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-buxhol00/build-candidate/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.svm.test.continuations.ContinuationStackWalkerTest
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.5s @ 0.25GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ - 6 user-specific feature(s):
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 3 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///tmp/upstream-next-buxhol00/build-candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (12.9% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (23.2s @ 1.09GiB)
+    8,649 types,  11,607 fields, and  43,182 methods found reachable
+      686 types,     502 fields, and   3,227 methods registered for reflection
+       64 types,      67 fields, and      56 methods registered for JNI access
+      198 resource accesses registered with 420.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (3.4s @ 1.21GiB)
+[4/8] Parsing methods...      [**]                                                                      (2.9s @ 1.34GiB)
+[5/8] Inlining methods...     [***]                                                                     (1.8s @ 1.45GiB)
+[6/8] Compiling methods...    [*****]                                                                  (31.5s @ 1.19GiB)
+[7/8] Laying out methods...   [**]                                                                      (4.8s @ 1.41GiB)
+[8/8] Creating image...       [**]                                                                      (2.6s @ 1.62GiB)
+  15.03MiB (40.73%) for code area:    28,846 compilation units
+  18.88MiB (51.16%) for image heap:  289,779 objects and 139 resources
+   2.99MiB ( 8.10%) for other data
+  36.89MiB in total image size, 34.50MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.04MiB java.base/java.util                                 4.36MiB byte[] for string data
+   1.01MiB java.base/sun.security.ssl                          3.94MiB byte[] for code metadata
+ 646.61KiB java.base/com.sun.crypto.provider                   2.02MiB java.base/java.lang.String
+ 515.67KiB java.base/java.lang.invoke                          1.36MiB byte[] for general heap data
+ 512.31KiB o.g.n.runtime/com.oracle.svm.core.code              1.13MiB java.base/java.lang.Class
+ 509.36KiB java.base/java.lang                                 0.99MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+ 391.39KiB jdk.jfr/jdk.jfr.internal                          598.58KiB byte[] for reflection metadata
+ 378.46KiB java.base/java.util.concurrent                    442.50KiB java.base/java.lang.Object[]
+ 372.93KiB java.base/sun.security.provider                   362.51KiB heap alignment
+ 343.82KiB java.base/java.io                                 291.73KiB java.base/java.lang.String[]
+   9.39MiB for 323 more packages                               3.42MiB for 2392 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       5.7s (7.5% of total time) in 1711 GCs | Peak RSS: 2.51GiB | CPU load: 6.81
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/upstream-next-buxhol00/build-candidate/substratevm/svmbuild/linux-amd64/junit/tmpzo2ibtwy/svmjunit (executable, 34.50MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 1m 15s.
+
+The build process encountered 1 warning.
+
+Running: /tmp/upstream-next-buxhol00/build-candidate/substratevm/svmbuild/linux-amd64/junit/tmpzo2ibtwy/svmjunit --verbose
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.continuations.ContinuationStackWalkerTest started (1 of 1)
+  walkContinuesOnItsSnapshotWhenTheContinuationYieldsAgain: Passed
+com.oracle.svm.test.continuations.ContinuationStackWalkerTest finished
+Time: 0.002
+
+OK (1 test)
+
+Test run PASSED. Exiting with status 0.

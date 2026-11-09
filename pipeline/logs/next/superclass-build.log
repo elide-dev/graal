@@ -1,0 +1,7 @@
+JAVA_HOME: /home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64
+3 unsatisfied dependencies were removed from build (use -v to list them)
+14 non-default dependencies were removed from build (use -v to list them, mx build --all to build them)
+Compiling com.oracle.mxtool.compilerserver with javac(JDK 25)...
+mx build log written to /build/caches/mx/graal-next-superclass/substratevm/buildlog-20261108-215624.html
+mx build log written to /build/caches/mx/graal-next-superclass/substratevm/buildlog-20261108-215707.html
+

@@ -1,0 +1,78 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 0,
+    "seconds": 89.93285012245178
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "ContinuationStackWalkerTest",
+      "--build-args",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 1,
+    "seconds": 80.0784182548523
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "exit": 0,
+    "seconds": 90.26213455200195
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "ContinuationStackWalkerTest",
+      "--build-args",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "exit": 0,
+    "seconds": 80.68262839317322
+  },
+  {
+    "label": "checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "exit": 0,
+    "seconds": 35.10231685638428
+  }
+]

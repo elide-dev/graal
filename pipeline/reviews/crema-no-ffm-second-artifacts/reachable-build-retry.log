@@ -1,0 +1,76 @@
+========================================================================================================================
+GraalVM Native Image: Generating 'load-probe' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.1s @ 0.32GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: enabled, system assertions: enabled
+ - 1 user-specific feature(s):
+   - ReachableProbe
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: disabled (class-specific config may apply), system assertions: disabled
+------------------------------------------------------------------------------------------------------------------------
+ 2 experimental option(s) unlocked:
+ - '-H:-ForeignAPISupport' (origin(s): command line)
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (8.7% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [**********]                                                             (12.2s @ 1.24GiB)
+    6,985 types,   8,429 fields, and  35,687 methods found reachable
+      371 types,     299 fields, and     842 methods registered for reflection
+       63 types,      65 fields, and      55 methods registered for JNI access
+       56 resource accesses registered with 171.26KiB total size
+        5 native libraries: dl, m, pthread, rt, z
+
+Error: Feature defined by ReachableProbe unexpectedly failed with a(n) java.lang.RuntimeException. Please report this problem to the authors of ReachableProbe.
+Caused by: java.lang.RuntimeException: java.lang.IllegalAccessException: class ReachableProbe cannot access interface com.oracle.svm.core.feature.InternalFeature$InternalFeatureAccess (in module org.graalvm.nativeimage.builder) because module org.graalvm.nativeimage.builder does not export com.oracle.svm.core.feature to unnamed module @2a32fb6
+	at ReachableProbe.afterAnalysis(ReachableProbe.java:15)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.lambda$runPointsToAnalysis$3(NativeImageGenerator.java:1009)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.forEachFeature(FeatureHandler.java:94)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.runPointsToAnalysis(NativeImageGenerator.java:1009)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.doRun(NativeImageGenerator.java:667)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.run(NativeImageGenerator.java:618)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.buildImage(NativeImageGeneratorRunner.java:656)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.build(NativeImageGeneratorRunner.java:844)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.start(NativeImageGeneratorRunner.java:185)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.main(NativeImageGeneratorRunner.java:131)
+Caused by: java.lang.IllegalAccessException: class ReachableProbe cannot access interface com.oracle.svm.core.feature.InternalFeature$InternalFeatureAccess (in module org.graalvm.nativeimage.builder) because module org.graalvm.nativeimage.builder does not export com.oracle.svm.core.feature to unnamed module @2a32fb6
+	at java.base/jdk.internal.reflect.Reflection.newIllegalAccessException(Reflection.java:400)
+	at java.base/java.lang.reflect.AccessibleObject.checkAccess(AccessibleObject.java:670)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:556)
+	at ReachableProbe.afterAnalysis(ReachableProbe.java:10)
+	... 9 more
+Internal exception: com.oracle.svm.core.util.UserError$UserException: Feature defined by ReachableProbe unexpectedly failed with a(n) java.lang.RuntimeException. Please report this problem to the authors of ReachableProbe.
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.util.UserError.abort(UserError.java:98)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.handleFeatureError(FeatureHandler.java:267)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.forEachFeature(FeatureHandler.java:96)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.runPointsToAnalysis(NativeImageGenerator.java:1009)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.doRun(NativeImageGenerator.java:667)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.run(NativeImageGenerator.java:618)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.buildImage(NativeImageGeneratorRunner.java:656)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.build(NativeImageGeneratorRunner.java:844)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.start(NativeImageGeneratorRunner.java:185)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.main(NativeImageGeneratorRunner.java:131)
+Caused by: java.lang.RuntimeException: java.lang.IllegalAccessException: class ReachableProbe cannot access interface com.oracle.svm.core.feature.InternalFeature$InternalFeatureAccess (in module org.graalvm.nativeimage.builder) because module org.graalvm.nativeimage.builder does not export com.oracle.svm.core.feature to unnamed module @2a32fb6
+	at ReachableProbe.afterAnalysis(ReachableProbe.java:15)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.lambda$runPointsToAnalysis$3(NativeImageGenerator.java:1009)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.forEachFeature(FeatureHandler.java:94)
+	... 7 more
+Caused by: java.lang.IllegalAccessException: class ReachableProbe cannot access interface com.oracle.svm.core.feature.InternalFeature$InternalFeatureAccess (in module org.graalvm.nativeimage.builder) because module org.graalvm.nativeimage.builder does not export com.oracle.svm.core.feature to unnamed module @2a32fb6
+	at java.base/jdk.internal.reflect.Reflection.newIllegalAccessException(Reflection.java:400)
+	at java.base/java.lang.reflect.AccessibleObject.checkAccess(AccessibleObject.java:670)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:556)
+	at ReachableProbe.afterAnalysis(ReachableProbe.java:10)
+	... 9 more
+------------------------------------------------------------------------------------------------------------------------
+                        1.3s (8.1% of total time) in 73 GCs | Peak RSS: 2.01GiB | CPU load: 8.07
+========================================================================================================================
+Failed generating 'load-probe' after 15.5s.

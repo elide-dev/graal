@@ -1,0 +1,9 @@
+PASS mode=0 two walkers originalFrames=20
+PASS mode=1 two walkers originalFrames=20
+PASS mode=2 two walkers originalFrames=20
+PASS mode=3 two walkers originalFrames=20
+PASS mode=0 two walkers originalFrames=20
+PASS mode=1 two walkers originalFrames=20
+PASS mode=2 two walkers originalFrames=20
+PASS mode=3 two walkers originalFrames=20
+PASS 8 cases / 16 interleaved snapshot walks

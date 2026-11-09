@@ -1,0 +1,44 @@
+[
+  {
+    "head": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "files": [
+      {
+        "path": "substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/hub/registry/AbstractRuntimeClassRegistry.java",
+        "sha256": "355e476ddeeac6956396dabe4b9f7cd9264508da3a82b9e40c4ea7c8b3e381d0"
+      },
+      {
+        "path": "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/RuntimeClassLoadingSuperclassModifiersTest.java",
+        "sha256": "7f8256f21874519a6d0e4d523408edbf6bcbbf62937f839ff0728abf23b1936b"
+      }
+    ]
+  },
+  {
+    "head": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "files": [
+      {
+        "path": "substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/jdk/Target_java_lang_StackWalker.java",
+        "sha256": "17a521f610ae0fe373963d7bbd0ac192cc548163fee690e1502dcf52ef708f4b"
+      },
+      {
+        "path": "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/continuations/ContinuationStackWalkerTest.java",
+        "sha256": "c436e486cc89271c52fdcf8beb681e26a7d211693581f6c57345489314a6da72"
+      }
+    ]
+  },
+  {
+    "head": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "files": [
+      {
+        "path": "substratevm/mx.substratevm/mx_substratevm.py",
+        "sha256": "5dafb8109f16cf622cf3a58e33d0d23e99d25823c9bdc5b1941cadcc8b8257ea"
+      },
+      {
+        "path": "substratevm/src/com.oracle.svm.interpreter/src/com/oracle/svm/interpreter/CremaFeature.java",
+        "sha256": "b7040cf1f715c6986f8a4025bdc343b54663ce702d86b6d5fda5a683397fac3b"
+      }
+    ]
+  }
+]

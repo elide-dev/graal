@@ -1,0 +1,78 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 0,
+    "seconds": 91.62126326560974
+  },
+  {
+    "label": "baseline-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "RuntimeClassLoadingSuperclassModifiersTest",
+      "--build-args",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "exit": 1,
+    "seconds": 116.24270486831665
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "exit": 0,
+    "seconds": 89.36415886878967
+  },
+  {
+    "label": "candidate-reproducer",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-unittest",
+      "RuntimeClassLoadingSuperclassModifiersTest",
+      "--build-args",
+      "--parallelism=8",
+      "-J-Xmx8g"
+    ],
+    "cwd": "substratevm",
+    "revision": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "exit": 0,
+    "seconds": 115.99150705337524
+  },
+  {
+    "label": "checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "exit": 0,
+    "seconds": 35.50221276283264
+  }
+]

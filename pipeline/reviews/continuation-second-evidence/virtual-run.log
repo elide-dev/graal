@@ -1,0 +1,8 @@
+Exception in thread "main" java.lang.reflect.InaccessibleObjectException: Unable to make field private final jdk.internal.vm.Continuation java.lang.VirtualThread.cont accessible: module java.base does not "opens java.lang" to unnamed module @46726379
+	at java.base@25.0.5.1/java.lang.reflect.AccessibleObject.throwInaccessibleObjectException(AccessibleObject.java:353)
+	at java.base@25.0.5.1/java.lang.reflect.AccessibleObject.checkCanSetAccessible(AccessibleObject.java:329)
+	at java.base@25.0.5.1/java.lang.reflect.AccessibleObject.checkCanSetAccessible(AccessibleObject.java:277)
+	at java.base@25.0.5.1/java.lang.reflect.Field.checkCanSetAccessible(Field.java:179)
+	at java.base@25.0.5.1/java.lang.reflect.Field.setAccessible(Field.java:173)
+	at VirtualCounterexamples.test(VirtualCounterexamples.java:20)
+	at VirtualCounterexamples.main(VirtualCounterexamples.java:36)

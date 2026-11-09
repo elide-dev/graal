@@ -1,0 +1,7 @@
+PASS virtual complete=false frames=48
+PASS virtual complete=true frames=48
+PASS virtual complete=false frames=48
+PASS virtual complete=true frames=48
+PASS virtual complete=false frames=48
+PASS virtual complete=true frames=48
+PASS six virtual walks: two replacement snapshots, completion, nested fresh walkers and GC at every frame

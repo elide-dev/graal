@@ -1,0 +1,17 @@
+{
+  "candidate": "continuation-snapshot",
+  "repository": "graal",
+  "upstreamBase": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+  "cleanHead": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+  "tests": [
+    "substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/continuations/ContinuationStackWalkerTest.java"
+  ],
+  "regression": [
+    "native-unittest",
+    "ContinuationStackWalkerTest",
+    "--build-args",
+    "--parallelism=8",
+    "-J-Xmx8g"
+  ],
+  "diagnostic": "Access is outside of the stack of the stored continuation"
+}

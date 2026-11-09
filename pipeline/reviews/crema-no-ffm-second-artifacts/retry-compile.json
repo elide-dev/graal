@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+    "-cp",
+    "/build/caches/mx/graal-next-crema-no-ffm/sdk/dists/nativeimage.jar",
+    "/tmp/crema-no-ffm-second-b0ypbcrx/app/ReachableProbe.java"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "source_sha256": "68b18b10669086f49466017e2583738d8b7834945560e4e88a87f22c28a32ec9"
+}

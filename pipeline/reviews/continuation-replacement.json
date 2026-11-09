@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "review": "continuation-replacement",
+  "invocation": "13/13",
+  "timestamp_utc": "2026-11-09T06:29:10.113354+00:00",
+  "requested_model": "gpt-6-astra",
+  "requested_reasoning": "high",
+  "model_provenance": "Requested review alias and reasoning supplied by parent task; execution backend identity/version cannot be independently observed. This replacement subagent inherited parent configuration. No claim of independently verified actual model.",
+  "actual_backend": "unavailable",
+  "actual_model_version": "unavailable",
+  "tokens": "unavailable",
+  "cost": "unavailable",
+  "subjects": {
+    "candidate": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "candidate_subject": "Retain the stored continuation throughout a stack walk",
+    "baseline": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "baseline_subject": "[GR-81123] Preserve pending initialization writes across control-flow merges",
+    "head": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "worktree": "/build/worktrees/graal/upstream-next-continuation-snapshot",
+    "clean_status": ""
+  },
+  "independence": "Reviewed exact diff and source invariants (walker, pointer rebasing, resume, allocation publication) before reading prior continuation logs and continuation-second.json. No source modifications, mx builds/style, subagents, remote CI, paid services, or arbitrary direct Continuation.run experiments.",
+  "disposition": "approve_with_documented_limits",
+  "blocking_findings": [],
+  "reasoning": [
+    "updateStackPointerForContinuation translates cached start/end/current SP using the address delta of the stored object. A replacement StoredContinuation is a different stack layout; capturing once per initialized continuation restores the invariant.",
+    "The retained stored reference roots the original object. Resuming copies its frames to the carrier; it does not destroy the stored frame bytes. GC updates object references; raw pointers are rebased inside uninterruptible sections before physical access. Interpreter capture also rebases against the retained object.",
+    "Physical advancement may query metadata interruptibly, but the next pointer dereference is preceded by rebasing. AOT image code is explicitly guaranteed on this path; omitted fork runtime-code tethers do not weaken this upstream AOT invariant.",
+    "When the current continuation is exhausted, stored=null and initialized=false precede parent traversal and initialization. Scope matching does not change within an initialized continuation. No promise of atomic snapshot across a mutable parent hierarchy is added.",
+    "Completion after capture leaves the stored reference reachable and the old frames readable through final traversal. invalidate clears continuation and stored at end or when the stream callback exits.",
+    "Capture occurs at first physical advancement. A concurrent resume before capture may expose null/new state; this existing initialization boundary is neither solved nor made worse. allocateToYield fills before publishing stored, and initializeForContinuation treats a null IP as unwalkable.",
+    "The committed regression uses normal virtual-thread park/unpark. JDK threadState maps PARKING to RUNNABLE and PARKED to WAITING, supporting the phase/state handshake here. The test demonstrates internal Native Image behavior; it is not a portable public concurrent StackWalker guarantee."
+  ],
+  "nonblocking_observations": [
+    {
+      "severity": "low",
+      "location": "ContinuationStackWalkerTest.walkContinuesOnItsSnapshotWhenTheContinuationYieldsAgain",
+      "observation": "Cleanup follows the walk instead of using finally. A failure can leave the daemon virtual thread parked and its captured state retained until test-image exit. Consider finally-based release/join for test isolation; not a production correctness blocker."
+    }
+  ],
+  "experiments": [
+    {
+      "name": "retained exact native regression",
+      "command": "timeout 45 taskset -c 0-7 /build/caches/mx/graal-next-continuation/substratevm/svmbuild/linux-amd64/junit/svmjunit -Xmx128m --verbose",
+      "exit": 0,
+      "result": "OK (1 test)",
+      "log": "retained-junit.log"
+    },
+    {
+      "name": "compile independent probe",
+      "command": "javac --add-exports java.base/jdk.internal.vm=ALL-UNNAMED SnapshotProbe.java",
+      "jdk": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64",
+      "exit": 0,
+      "log": "javac.log"
+    },
+    {
+      "name": "native probe build",
+      "command": "timeout 300 taskset -c 0-7 /build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image -J-Xmx6g -J-XX:ActiveProcessorCount=8 --parallelism=8 --add-exports=java.base/jdk.internal.vm=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED -H:ReflectionConfigurationFiles=reflect.json -cp . SnapshotProbe snapshot-probe",
+      "exit": 0,
+      "result": "Built in 15.1 seconds; reported peak RSS 1.32 GiB. Two experimental-option warnings for reflection config.",
+      "log": "native-build.log"
+    },
+    {
+      "name": "interleaved virtual-thread walks",
+      "command": "timeout 90 taskset -c 0-7 ./snapshot-probe -Xmx128m",
+      "exit": 0,
+      "result": "8 cases / 16 walks; exact original frame-list equality. Two repetitions each of unchanged snapshot, larger replacement, larger then shallower replacement, and completion. Transition after half the frames. Each case has two active walkers and fresh replacement-stack observation. Allocation and System.gc between every frame pair.",
+      "log": "native-run.log"
+    },
+    {
+      "name": "GC and assertions verification",
+      "command": "timeout 90 taskset -c 0-7 ./snapshot-probe -Xmx128m -ea -XX:+PrintGC",
+      "exit": 0,
+      "result": "Same 8 cases / 16 walks pass; 160 full GC events recorded. This confirms collections, not precise relocation counts or assertion compilation coverage.",
+      "log": "native-run-gc.log"
+    }
+  ],
+  "prior_evidence": {
+    "read_after_independent_source_review": true,
+    "baseline": "Supplied exact-regression log reports exit -6 and Access is outside of the stack of the stored continuation. No baseline image rebuilt in this review.",
+    "candidate": "Supplied candidate log passes one test; retained image rerun independently passes.",
+    "checkstyle": "Supplied log shows relevant groups checked with no reported errors; not rerun.",
+    "initial_build": "Missing llvm-toolchain.tar caused first build failure; subsequent retry/candidate evidence succeeds.",
+    "continuation_second": "Existing reviewer report read after source review; its native virtual-thread evidence is consistent with this independent probe. Its direct internal continuation/HotSpot experiment is outside the requested entry contract and is not used as a portability comparison."
+  },
+  "limits": [
+    "No fresh baseline native image; differential baseline evidence is supplied log.",
+    "Parent transitions checked in source only; arbitrary nested direct continuations are outside virtual-thread-only entry assertion.",
+    "Default native GC only; GC logs show full collections but not exact relocation counts.",
+    "No interpreter-specific runtime image or runtime-compiled frame matrix; upstream code asserts AOT frame metadata.",
+    "No new public HotSpot concurrent-walk guarantee, startup atomicity, or whole-hierarchy snapshot guarantee.",
+    "Cache-source correspondence relies on supplied prior build record and matching svm.jar/svmjunit hashes; no mx rebuild performed."
+  ],
+  "resource_bounds": {
+    "cpu_affinity": "0-7",
+    "native_build_workers": 8,
+    "native_build_heap": "6 GiB",
+    "build_reported_peak_rss": "1.32 GiB",
+    "probe_runtime_heap": "128 MiB",
+    "build_timeout_seconds": 300,
+    "probe_timeout_seconds": 90
+  },
+  "unsuccessful_attempts": [
+    {
+      "review": "source9 interrupted continuation review",
+      "status": "unsuccessful_interrupted_not_approval",
+      "provenance": "Parent supplied exact task /root/review_continuation_first; spawned with requested model gpt-6-astra, reasoning high, fork_turns none; same exact candidate/base. It inspected diff first, reported a direct-Continuation JDK probe crash, then ended with automatic safety-filter error before final disposition/report. Parent preserves scratch evidence and hashes.",
+      "count_as_approval": false,
+      "evidence_location": "/tmp/continuation-first.Kpnfw3GO",
+      "evidence_files": [
+        "ContinuationProbe.java",
+        "hotspot-replace.log",
+        "hs_err_pid1168460.log"
+      ],
+      "raw_crash_report_handling": "Raw process/environment crash dump not copied to public report evidence; parent owns preservation."
+    },
+    {
+      "review": "current replacement",
+      "status": "no failed runtime or build attempts"
+    }
+  ],
+  "artifact_hashes": {
+    "exact.diff": "3deda923448386cc990847313d8aede3520baec5d709e22ee78159c6ef3fbfb0",
+    "native-build.log": "306f12bc24eeb6e10cfd424ef970d8f25909c4b9216901a93626a0e368c8d8f7",
+    "native-run-gc.log": "5fa133ceb1b9ca77507b2f541f6a461f391f810d04d89ceba15afe4e0b3e6433",
+    "javac.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "SnapshotProbe.java": "2be3f5c3214b26c2a8366060e42ca34f5d208c3a66ec6c77ae7477bb9577eef5",
+    "retained-junit.log": "391643a254d051b6db191446d3fdfa256eff46a14350e6ab595b06c47550339b",
+    "reflect.json": "fd72a95436c949c56bb767121e1a736b1249803417e46439e3a7af6311f9d79c",
+    "native-run.log": "9c1c6b51678247badc4cfd083ac96a87cf0a30d6c5c251812360df45e5ba58f1"
+  },
+  "binary_hash_before_cleanup": "e330f9cf0f48d3f741e7bbc2e014508b0b9561b5612e4649a924c39cda53b633",
+  "input_hashes": {
+    "/build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image": "bb356575bbc112cb63cff2ef34d91d1bbc3da9bb9555e056e3c4173d265ac394",
+    "/build/caches/mx/graal-next-continuation/substratevm/dists/svm.jar": "b2dbc7cd485eb230f9b1575a39b4ff8c8ceed0b1e2c302cdd181fa80f2397671",
+    "/build/caches/mx/graal-next-continuation/substratevm/svmbuild/linux-amd64/junit/svmjunit": "75b3e7d877752e4b75de15b31711a40cbf059bc9942be532b0ccd3f3a17ff2bc",
+    "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/lib/src.zip": "052ef60fa708422c882c239b6f92807d6379f43b0b3196786514a0629ccad3e7"
+  },
+  "provided_log_hashes": {
+    "continuation-baseline-native.log": "970976e6012d6ad580d3b5da11aadc49209f698d34046e00efef8a45f1bf8168",
+    "continuation-checkstyle.log": "b50bbaf2da88d2a5f6987a881b41f7ec4209a2f2eaeb410b3542430db8525b61",
+    "continuation-candidate-native.log": "a287f62ce813405c42d3d57d7dc20b84c72243bdb8a7ed3413cd312ea1951b57",
+    "continuation-build-retry.log": "3dd036589c45e8793b659507c10640a08e19dbb54d596e10b76b598e3cefd09f",
+    "continuation-build.log": "b156864ab824ee0926470232f38cb9bb2050879aff130c14605e6a17f25fe124"
+  },
+  "prior_review_sha256": "712c2273ada12aab5b527ea4a7d0c46504102d184d5e47940924b63fead22c36",
+  "evidence_directory": "/build/caches/graal-pipeline/next-upstream-batch/reviews/continuation-replacement-evidence",
+  "scratch_cleanup": "Owned scratch source/logs preserved as evidence. Generated binary/classes and owned scratch directory removed after report generation."
+}

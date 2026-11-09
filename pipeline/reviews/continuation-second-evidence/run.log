@@ -1,0 +1,7 @@
+PASS mode=0 frames=51
+PASS mode=1 frames=51
+PASS mode=0 frames=51
+PASS mode=1 frames=51
+PASS mode=0 frames=51
+PASS mode=1 frames=51
+PASS six walks: replacement and completion, nested fresh walkers, allocation and explicit GC at every frame

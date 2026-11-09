@@ -1,0 +1,54 @@
+JAVA_HOME: /home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64
+3 unsatisfied dependencies were removed from build (use -v to list them)
+14 non-default dependencies were removed from build (use -v to list them, mx build --all to build them)
+Compiling com.oracle.mxtool.compilerserver with javac(JDK 25)...
+mx build log written to /build/caches/mx/graal-next-continuation/substratevm/buildlog-20261108-220954.html
+Write file /build/caches/mx/graal-next-continuation/substratevm/svm-compiler-flags-builder/graal-compiler-flags-versions.config
+Write file /build/caches/mx/graal-next-continuation/substratevm/svm-compiler-flags-builder/graal-compiler-flags-21.config
+Write file /build/caches/mx/graal-next-continuation/substratevm/svm-compiler-flags-builder/graal-compiler-flags-25.config
+Exception in thread Thread-1093 (executeTask):
+Traceback (most recent call last):
+  File "/home/linuxbrew/.linuxbrew/Cellar/python@3.14/3.14.6/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 409, in run
+    super(_DummyProcess, self).run()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/linuxbrew/.linuxbrew/Cellar/python@3.14/3.14.6/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 14163, in executeTask
+    raise e
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 14158, in executeTask
+    task.execute()
+    ~~~~~~~~~~~~^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/build/tasks/build.py", line 137, in execute
+    _built = self.build()
+  File "/build/worktrees/graal/upstream-next-continuation-snapshot/sdk/mx.sdk/mx_sdk_vm_impl.py", line 992, in build
+    super().build()
+    ~~~~~~~~~~~~~^^
+  File "/build/worktrees/graal/upstream-next-continuation-snapshot/sdk/mx.sdk/mx_sdk_vm_impl.py", line 762, in build
+    super().build()
+    ~~~~~~~~~~~~~^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 5193, in build
+    self.subject.make_archive()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 6131, in make_archive
+    self._install_source(source, output, destination, arc)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sam/workspace/graalvm/mx/src/mx/_impl/mx.py", line 5983, in _install_source
+    with tarfile.TarFile.open(source_archive_file) as tf:
+         ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/linuxbrew/.linuxbrew/Cellar/python@3.14/3.14.6/lib/python3.14/tarfile.py", line 1928, in open
+    return func(name, "r", fileobj, **kwargs)
+  File "/home/linuxbrew/.linuxbrew/Cellar/python@3.14/3.14.6/lib/python3.14/tarfile.py", line 2003, in gzopen
+    fileobj = GzipFile(name, mode + "b", compresslevel, fileobj)
+  File "/home/linuxbrew/.linuxbrew/Cellar/python@3.14/3.14.6/lib/python3.14/gzip.py", line 210, in __init__
+    fileobj = self.myfileobj = builtins.open(filename, mode or 'rb')
+                               ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/build/caches/mx/graal-next-continuation/sdk/linux-amd64/dists/llvm-toolchain.tar'
+mx build log written to /build/caches/mx/graal-next-continuation/substratevm/buildlog-20261108-221205.html
+Archiving GRAALVM_9AF3634DB2_JAVA25 failed
+Archiving GRAALVM_9AF3634DB2_JAVA25... [dependency LLVM_TOOLCHAIN updated]
+Archiving GRAALVM_9AF3634DB2_JAVA25: Failed due to error: [Errno 2] No such file or directory: '/build/caches/mx/graal-next-continuation/sdk/linux-amd64/dists/llvm-toolchain.tar'
+1 build tasks failed

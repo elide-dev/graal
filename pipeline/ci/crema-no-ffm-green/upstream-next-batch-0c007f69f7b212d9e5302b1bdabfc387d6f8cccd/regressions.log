@@ -1,0 +1,112 @@
+Warning: 449 classes in /tmp/upstream-next-cp04wq1e/build-candidate/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-cp04wq1e/build-candidate/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-cp04wq1e/build-candidate/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /tmp/upstream-next-cp04wq1e/build-candidate/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-cp04wq1e/build-candidate/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-cp04wq1e/build-candidate/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /tmp/upstream-next-cp04wq1e/build-candidate/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.svm.test.foreign.ForeignTests
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A restricted method in java.lang.foreign.AddressLayout has been called
+WARNING: java.lang.foreign.AddressLayout::withTargetLayout has been called by com.oracle.svm.test.foreign.ForeignTests in an unnamed module (file:/tmp/upstream-next-cp04wq1e/build-candidate/substratevm/dists/svm-tests.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[1/8] Initializing...                                                                                   (3.3s @ 0.51GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ - 7 user-specific feature(s):
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.foreign.ForeignTests$TestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 4 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///tmp/upstream-next-cp04wq1e/build-candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (6.5% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (50.0% of 16 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [*******]                                                                (22.4s @ 1.93GiB)
+   10,925 types,  14,356 fields, and  56,798 methods found reachable
+      686 types,     915 fields, and   3,556 methods registered for reflection
+       65 types,      69 fields, and      56 methods registered for JNI access
+        2 downcalls and 1 upcalls registered for foreign access
+      199 resource accesses registered with 420.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (4.3s @ 1.86GiB)
+[4/8] Parsing methods...      [**]                                                                      (2.4s @ 1.96GiB)
+[5/8] Inlining methods...     [***]                                                                     (1.6s @ 2.08GiB)
+[6/8] Compiling methods...    [*****]                                                                  (24.8s @ 2.31GiB)
+[7/8] Laying out methods...   [***]                                                                     (6.2s @ 1.79GiB)
+[8/8] Creating image...       [***]                                                                     (6.4s @ 2.30GiB)
+  24.43MiB (31.93%) for code area:    41,431 compilation units
+  47.75MiB (62.40%) for image heap:  929,088 objects and 139 resources
+   4.34MiB ( 5.68%) for other data
+  76.53MiB in total image size, 73.00MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.40MiB java.base/java.util                                 7.69MiB o.g.n.runtime/c.o.s.i.m.Interpreter~edJavaMethod
+   1.22MiB java.base/sun.security.ssl                          6.24MiB byte[] for code metadata
+   1.02MiB java.base/java.lang.invoke                          5.66MiB byte[] for string data
+ 764.97KiB java.base/com.sun.crypto.provider                   4.50MiB byte[] for general heap data
+ 714.39KiB java.base/jdk.internal.classfile.impl               2.55MiB java.base/java.lang.String
+ 644.79KiB o.g.n.runtime/com.oracle.svm.interpreter            1.92MiB o.g.n.runtime/c.o.s.i.metadata.ReferenceConstant
+ 639.84KiB java.base/java.lang                                 1.87MiB java.base/java.lang.Class
+ 592.92KiB o.g.n.runtime/com.oracle.svm.core.code              1.74MiB o.g.e.s.svm/c.o.s.e.classfile.descriptors.Symbol
+ 560.68KiB java.base/java.util.concurrent                      1.53MiB o.g.n.runtime/c.o.s.i.m.Interpreter~vedJavaField
+ 542.27KiB java.base/sun.util.resources.cldr                   1.33MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+  16.45MiB for 377 more packages                              12.71MiB for 3035 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       6.3s (8.4% of total time) in 1831 GCs | Peak RSS: 3.87GiB | CPU load: 9.39
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/svmbuild/linux-amd64/junit/tmpoxsfekok/svmjunit (executable, 73.00MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 1m 13s.
+
+The build process encountered 2 warnings.
+
+Running: /tmp/upstream-next-cp04wq1e/build-candidate/substratevm/svmbuild/linux-amd64/junit/tmpoxsfekok/svmjunit --verbose
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.foreign.ForeignTests started (1 of 1)
+  testInvokeStrlen: Passed
+  testUpcall: Passed
+com.oracle.svm.test.foreign.ForeignTests finished
+Time: 0.007
+
+OK (2 tests)
+
+Test run PASSED. Exiting with status 0.

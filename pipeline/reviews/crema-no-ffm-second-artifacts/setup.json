@@ -1,0 +1,31 @@
+{
+  "scratch": "/tmp/crema-no-ffm-second-b0ypbcrx",
+  "sources_sha256": {
+    "app/LoadProbe.java": "0a7005f728ea20be19d672ab7bd8f76c0e788636f1f8d903987d478051df1c12",
+    "app/ReachableProbe.java": "5584e8a570bb8e87f6cc5c5b6315c916df156b49593c39c88b89e626dbfc380b",
+    "payload/LoadedLater.java": "50ed8a757a75b56908e56c5793f7f31373de138d7213a58110ee9b6c775663f9"
+  },
+  "attempts": [
+    {
+      "argv": [
+        "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+        "-cp",
+        "/build/caches/mx/graal-next-crema-no-ffm/sdk/dists/nativeimage.jar",
+        "/tmp/crema-no-ffm-second-b0ypbcrx/app/LoadProbe.java",
+        "/tmp/crema-no-ffm-second-b0ypbcrx/app/ReachableProbe.java"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+        "/tmp/crema-no-ffm-second-b0ypbcrx/payload/LoadedLater.java"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

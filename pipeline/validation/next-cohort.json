@@ -1,0 +1,145 @@
+{
+  "scope": "Manual fork-first preparation; separate from automatic qualification",
+  "authorizedReviewInvocations": 13,
+  "authorizedCIJobs": 8,
+  "actualReviewInvocations": 13,
+  "actualCIJobs": 5,
+  "newInfrastructure": false,
+  "actualDollarCost": "Unavailable; not inferred",
+  "publicEvidence": null,
+  "candidates": [
+    {
+      "candidate": "superclass-flags",
+      "contributionId": "contribution-next-superclass-flags",
+      "title": "Check class-file finality when loading subclasses",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "cleanHead": "e3d79d3595992718296ad201cea273ccbb3468d8",
+      "stagingHead": "600f46d11030cd711a82f29bbfff1d1c18b30b11",
+      "forkPR": "https://github.com/elide-dev/graal/pull/229",
+      "replacementRun": {
+        "id": 42571654721,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42571654721",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "validationFile": "next-cohort.json",
+      "reviewFiles": [
+        "superclass-first.json",
+        "superclass-second.json"
+      ],
+      "artifactsInspected": true
+    },
+    {
+      "candidate": "continuation-snapshot",
+      "contributionId": "contribution-next-continuation-snapshot",
+      "title": "Retain the stored continuation throughout a stack walk",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "cleanHead": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+      "stagingHead": "61504c5985639229db06303dff0f775a8e5cbd88",
+      "forkPR": "https://github.com/elide-dev/graal/pull/230",
+      "replacementRun": {
+        "id": 42573059011,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42573059011",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "validationFile": "next-cohort.json",
+      "reviewFiles": [
+        "continuation-interrupted.json",
+        "continuation-second.json",
+        "continuation-replacement.json"
+      ],
+      "artifactsInspected": true
+    },
+    {
+      "candidate": "crema-no-ffm",
+      "contributionId": "contribution-next-crema-no-ffm",
+      "title": "Allow runtime class loading without foreign API support",
+      "upstreamRepository": "https://github.com/oracle/graal",
+      "baseSHA": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "cleanHead": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "stagingHead": "0c007f69f7b212d9e5302b1bdabfc387d6f8cccd",
+      "forkPR": "https://github.com/elide-dev/graal/pull/231",
+      "replacementRun": {
+        "id": 42573855945,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42573855945",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "validationFile": "next-cohort.json",
+      "reviewFiles": [
+        "crema-no-ffm-first.json",
+        "crema-no-ffm-second.json"
+      ],
+      "artifactsInspected": true
+    }
+  ],
+  "held": [
+    {
+      "candidate": "monitor-interrupt",
+      "reason": "Independent review found an unresolved recursive monitor-acquisition failure; two follow-up review sessions stopped automatically. No upstream filing."
+    },
+    {
+      "candidate": "pod-size",
+      "reason": "Synthetic native allocation comparison passes; product measurements and shipment qualification remain incomplete. No upstream filing."
+    },
+    {
+      "candidate": "temporal-era",
+      "reason": "User narrowed this batch to oracle/graal; fork draft remains held.",
+      "forkPR": "https://github.com/elide-dev/graaljs/pull/15"
+    },
+    {
+      "candidate": "python-json-surrogates",
+      "reason": "User excluded GraalPy; local work preserved, no PR."
+    }
+  ],
+  "reviewInterruption": {
+    "invocation": 9,
+    "candidate": "continuation-snapshot",
+    "status": "interrupted before final disposition",
+    "replacement": 13,
+    "approvedByUser": true
+  },
+  "ciAttempts": [
+    {
+      "repository": "elide-dev/graaljs",
+      "id": 42570613690,
+      "result": "failure before comparison: prior runner result directory; downloaded artifacts belong to earlier resource URL head and are excluded."
+    },
+    {
+      "repository": "elide-dev/graaljs",
+      "id": 42570998589,
+      "result": "success; candidate later held after user narrowed scope to Graal."
+    },
+    {
+      "repository": "elide-dev/graal",
+      "id": 42571654721,
+      "result": "success; inspected"
+    },
+    {
+      "repository": "elide-dev/graal",
+      "id": 42573059011,
+      "result": "success; inspected"
+    },
+    {
+      "repository": "elide-dev/graal",
+      "id": 42573855945,
+      "result": "success; exact source, generated sample, intended baseline failure, fixed run, regressions and style inspected"
+    }
+  ],
+  "reviewSummary": {
+    "actualInvocations": 13,
+    "completedSelectedCandidateReviews": 6,
+    "interruptedInvocations": [
+      7,
+      8,
+      9
+    ],
+    "requestedModelAlias": "gpt-6-astra",
+    "exactBackendVersion": "not exposed",
+    "actualCost": "not exposed"
+  },
+  "upstreamPublication": "Not filed at this evidence snapshot; ready fork drafts and upstream body files are prepared separately."
+}

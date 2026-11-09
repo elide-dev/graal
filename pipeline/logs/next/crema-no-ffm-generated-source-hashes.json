@@ -1,0 +1,12 @@
+[
+  {
+    "side": "baseline",
+    "path": "/build/caches/mx/graal-next-baseline/substratevm/svmbuild/HelloWorld.java",
+    "sha256": "16f8d629917b6974281f61cde154ac44ee179f49d7eb25f0f11366dc422ee8a8"
+  },
+  {
+    "side": "candidate",
+    "path": "/build/caches/mx/graal-next-crema-no-ffm/substratevm/svmbuild/HelloWorld.java",
+    "sha256": "16f8d629917b6974281f61cde154ac44ee179f49d7eb25f0f11366dc422ee8a8"
+  }
+]

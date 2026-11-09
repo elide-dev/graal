@@ -1,0 +1,65 @@
+[
+  {
+    "candidate": "superclass-flags",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "head": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "archive": "pipeline/reproducers/archives/superclass-flags.zip",
+    "sha256": "5e9e95536b307e4ed3f7b58af731e9189d566d03e0fc2380b5e6c90ba427f998",
+    "files": [
+      {
+        "path": "pipeline/reproducers/superclass-flags/README.md",
+        "sha256": "c6afa4723a92ae8429add900e6499bb4c0452617490d7e137e3c12bdb890487d"
+      },
+      {
+        "path": "pipeline/reproducers/superclass-flags/RuntimeClassLoadingSuperclassModifiersTest.java",
+        "sha256": "7f8256f21874519a6d0e4d523408edbf6bcbbf62937f839ff0728abf23b1936b"
+      },
+      {
+        "path": "pipeline/reproducers/superclass-flags/tests.patch",
+        "sha256": "3902a82f3f0c8407df8e4de94ee4a0aa873a2a12ce1b0e39807cbfd98f36fa50"
+      }
+    ]
+  },
+  {
+    "candidate": "continuation-snapshot",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "head": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "archive": "pipeline/reproducers/archives/continuation-snapshot.zip",
+    "sha256": "264ad3fa60299370d81004ab54a6ac7f2d124c16e54dab059689464717569d72",
+    "files": [
+      {
+        "path": "pipeline/reproducers/continuation-snapshot/ContinuationStackWalkerTest.java",
+        "sha256": "c436e486cc89271c52fdcf8beb681e26a7d211693581f6c57345489314a6da72"
+      },
+      {
+        "path": "pipeline/reproducers/continuation-snapshot/README.md",
+        "sha256": "c0fc42c12d7f6a6eaabe51a82490715584cb9d44807cae86a06e13d3b61e97da"
+      },
+      {
+        "path": "pipeline/reproducers/continuation-snapshot/tests.patch",
+        "sha256": "3901c3421622b051cd822985eca451071ce96390f0d8576c29dea61b3bb02ae6"
+      }
+    ]
+  },
+  {
+    "candidate": "crema-no-ffm",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "head": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "archive": "pipeline/reproducers/archives/crema-no-ffm.zip",
+    "sha256": "1b9445a681997aff7c3f85ff4f08c6cadb6d0db89b46fc6ab23e47eb3977af4f",
+    "files": [
+      {
+        "path": "pipeline/reproducers/crema-no-ffm/HelloWorld.java",
+        "sha256": "16f8d629917b6974281f61cde154ac44ee179f49d7eb25f0f11366dc422ee8a8"
+      },
+      {
+        "path": "pipeline/reproducers/crema-no-ffm/README.md",
+        "sha256": "b35fd8325295016828355bc1cdcf4b596b0ac7180fb78a9dd01c76cdba1a3f05"
+      },
+      {
+        "path": "pipeline/reproducers/crema-no-ffm/tests.patch",
+        "sha256": "443e55e6620f74a555a8e34e6adf8915b2530e3e751c957b2803755d9172af03"
+      }
+    ]
+  }
+]

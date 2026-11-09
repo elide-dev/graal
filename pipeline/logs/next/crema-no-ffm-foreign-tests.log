@@ -1,0 +1,112 @@
+Warning: 449 classes in /build/caches/mx/graal-next-crema-no-ffm/mx/dists/mx-jacoco-report.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/mx/graal-next-crema-no-ffm/mx/dists/mx-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/mx/graal-next-crema-no-ffm/sdk/dists/nativebridge-processor-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 395 classes in /build/caches/mx/graal-next-crema-no-ffm/sdk/dists/sdk-test.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/mx/graal-next-crema-no-ffm/truffle/dists/truffle-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/mx/graal-next-crema-no-ffm/compiler/dists/graal-compiler-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+Warning: 1049 classes in /build/caches/mx/graal-next-crema-no-ffm/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar skipped as their class file version is not supported by FindClassesByAnnotatedMethods
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/mx-jacoco-report.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/mx-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/nativebridge-processor-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/sdk-test.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/truffle-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/graal-compiler-micro-benchmarks.jar.jdk25.excludedclasses
+WARNING: Unsupported class files listed in /build/caches/mx/graal-next-crema-no-ffm/substratevm/unittest/graal-compiler-whitebox-micro-benchmarks.jar.jdk25.excludedclasses
+Building junit image for matching: com.oracle.svm.test.foreign.ForeignTests
+Warning: '-H:+UnlockExperimentalVMOptions' was used repeatedly. Please check your build arguments, for example with '--verbose', and ensure experimental options are not unlocked more than once. Use '-H:-UnlockExperimentalVMOptions' to lock access to experimental options again.
+Warning: Option 'DynamicProxyConfigurationResources' is deprecated and might be removed in a future release: This can be caused by a proxy-config.json file in your META-INF directory. Consider including proxy configuration in the reflection section of reachability-metadata.json instead.. Please refer to the GraalVM release notes.
+========================================================================================================================
+GraalVM Native Image: Generating 'svmjunit' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+WARNING: A restricted method in java.lang.foreign.AddressLayout has been called
+WARNING: java.lang.foreign.AddressLayout::withTargetLayout has been called by com.oracle.svm.test.foreign.ForeignTests in an unnamed module (file:/build/caches/mx/graal-next-crema-no-ffm/substratevm/dists/svm-tests.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[1/8] Initializing...                                                                                   (4.1s @ 0.52GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: enabled, system assertions: enabled
+ - 7 user-specific feature(s):
+   - com.oracle.svm.test.MethodHandleFieldSetterTest$TestFeature
+   - com.oracle.svm.test.NativeImageResourceUtils$TestFeature
+   - com.oracle.svm.test.SerializationRegistrationTestFeature
+   - com.oracle.svm.test.foreign.ForeignTests$TestFeature
+   - com.oracle.svm.test.jfr.JfrTestFeature
+   - com.oracle.svm.test.services.AbstractServiceLoaderTest$TestFeature
+   - com.oracle.svm.test.services.NoProviderConstructorServiceLoaderTest$TestFeature
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 4 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:TestFile' (origin(s): macro option 'junit@file:///build/caches/mx/graal-next-crema-no-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/macros/junit/@user')
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (8.7% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (25.0% of 32 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (18.9s @ 1.69GiB)
+   10,924 types,  14,356 fields, and  56,794 methods found reachable
+      686 types,     915 fields, and   3,558 methods registered for reflection
+       65 types,      69 fields, and      56 methods registered for JNI access
+        2 downcalls and 1 upcalls registered for foreign access
+      199 resource accesses registered with 420.64KiB total size
+        6 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (3.0s @ 2.01GiB)
+[4/8] Parsing methods...      [**]                                                                      (2.1s @ 1.97GiB)
+[5/8] Inlining methods...     [***]                                                                     (1.5s @ 2.30GiB)
+[6/8] Compiling methods...    [*****]                                                                  (28.9s @ 1.81GiB)
+[7/8] Laying out methods...   [***]                                                                     (7.4s @ 2.07GiB)
+[8/8] Creating image...       [***]                                                                     (6.5s @ 2.59GiB)
+  24.43MiB (31.93%) for code area:    41,431 compilation units
+  47.75MiB (62.40%) for image heap:  929,339 objects and 139 resources
+   4.34MiB ( 5.67%) for other data
+  76.53MiB in total image size, 73.00MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+   1.40MiB java.base/java.util                                 7.69MiB o.g.n.runtime/c.o.s.i.m.Interpreter~edJavaMethod
+   1.22MiB java.base/sun.security.ssl                          6.24MiB byte[] for code metadata
+   1.02MiB java.base/java.lang.invoke                          5.66MiB byte[] for string data
+ 764.97KiB java.base/com.sun.crypto.provider                   4.50MiB byte[] for general heap data
+ 714.39KiB java.base/jdk.internal.classfile.impl               2.55MiB java.base/java.lang.String
+ 644.79KiB o.g.n.runtime/com.oracle.svm.interpreter            1.92MiB o.g.n.runtime/c.o.s.i.metadata.ReferenceConstant
+ 639.84KiB java.base/java.lang                                 1.87MiB java.base/java.lang.Class
+ 592.92KiB o.g.n.runtime/com.oracle.svm.core.code              1.74MiB o.g.e.s.svm/c.o.s.e.classfile.descriptors.Symbol
+ 560.68KiB java.base/java.util.concurrent                      1.53MiB o.g.n.runtime/c.o.s.i.m.Interpreter~vedJavaField
+ 542.27KiB java.base/sun.util.resources.cldr                   1.33MiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+  16.45MiB for 377 more packages                              12.72MiB for 3036 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       7.3s (9.6% of total time) in 754 GCs | Peak RSS: 4.12GiB | CPU load: 8.56
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /build/caches/mx/graal-next-crema-no-ffm/substratevm/svmbuild/linux-amd64/junit/svmjunit (executable, 73.00MiB)
+========================================================================================================================
+Finished generating 'svmjunit' in 1m 15s.
+
+The build process encountered 2 warnings.
+
+Running: /build/caches/mx/graal-next-crema-no-ffm/substratevm/svmbuild/linux-amd64/junit/svmjunit --verbose
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.foreign.ForeignTests started (1 of 1)
+  testInvokeStrlen: Passed
+  testUpcall: Passed
+com.oracle.svm.test.foreign.ForeignTests finished
+Time: 0.008
+
+OK (2 tests)
+
+Test run PASSED. Exiting with status 0.

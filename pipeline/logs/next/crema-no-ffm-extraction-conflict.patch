@@ -1,0 +1,39 @@
+diff --cc substratevm/src/com.oracle.svm.interpreter/src/com/oracle/svm/interpreter/CremaFeature.java
+index 08306e85f15,22e890207a9..00000000000
+--- a/substratevm/src/com.oracle.svm.interpreter/src/com/oracle/svm/interpreter/CremaFeature.java
++++ b/substratevm/src/com.oracle.svm.interpreter/src/com/oracle/svm/interpreter/CremaFeature.java
+@@@ -209,15 -209,22 +209,34 @@@ public class CremaFeature implements In
+          InterpreterFeature.prepareSignatures();
+  
+          accessImpl.registerAsImmutable(CremaSupport.singleton());
+++<<<<<<< HEAD
+ +        accessImpl.registerAsImmutable(InterpreterForeignFunctionsSupport.singleton());
+ +        CremaSupport.singleton().setEnterDirectInterpreterStubEntryPoint(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterDirectInterpreterStub)));
+ +        InterpreterForeignFunctionsSupport.singleton().setUpcallStubPointer(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
+ +        CremaSupport.singleton().setCremaJNIUpcallWrapperEntryPoints(MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsVirtualWrapper)),
+ +                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayVirtualWrapper)),
+ +                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListVirtualWrapper)),
+ +                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVarargsNonVirtualWrapper)),
+ +                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallArrayNonVirtualWrapper)),
+ +                        MethodRefSupport.createMethodPointer(hUniverse.lookup(enterCremaJNIUpcallVaListNonVirtualWrapper)));
+++=======
++         CremaSupport.singleton().setEnterDirectInterpreterStubEntryPoint(new MethodPointer(hUniverse.lookup(enterDirectInterpreterStub)));
++         /*
++          * Only foreign function support (com.oracle.svm.core.foreign) uses this singleton. Without
++          * it, the analysis never reached the singleton's type, and it is not in the image.
++          */
++         InterpreterForeignFunctionsSupport ffmSupport = InterpreterForeignFunctionsSupport.singleton();
++         if (hUniverse.getBigBang().getMetaAccess().optionalLookupJavaType(ffmSupport.getClass()).filter(AnalysisType::isReachable).isPresent()) {
++             accessImpl.registerAsImmutable(ffmSupport);
++             ffmSupport.setUpcallStubPointer(new MethodPointer(hUniverse.lookup(enterInterpreterForFFMUpcall)));
++         }
++         CremaSupport.singleton().setCremaJNIMethodCallWrapperEntryPoints(new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVarargsVirtualWrapper)),
++                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodArrayVirtualWrapper)),
++                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVaListVirtualWrapper)),
++                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVarargsNonVirtualWrapper)),
++                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodArrayNonVirtualWrapper)),
++                         new MethodPointer(hUniverse.lookup(enterCremaJNIMethodVaListNonVirtualWrapper)));
+++>>>>>>> a952cbbe8d4 (svm: skip Crema's foreign-functions singleton when analysis did not reach it (#108))
+      }
+  
+      @Override

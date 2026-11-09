@@ -1,0 +1,267 @@
+{
+  "review": "superclass-first",
+  "invocation": "5/12",
+  "verdict": "approve; no blocking findings",
+  "subject": {
+    "baseline": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "candidate": "e3d79d3595992718296ad201cea273ccbb3468d8",
+    "worktree": "/build/worktrees/graal/upstream-next-superclass-flags",
+    "diff_sha256": "096cdea73f45bd2aaa3e662468f764744b0bae5373a152353f4c87fcf673863a"
+  },
+  "model": {
+    "requested_alias": "gpt-6-astra",
+    "requested_reasoning": "high",
+    "actual_backend": "unavailable",
+    "actual_version": "unavailable",
+    "usage": "unavailable",
+    "cost": "unavailable"
+  },
+  "independence": {
+    "order": [
+      "exact git diff",
+      "JVMS 5.3.5 and OpenJDK JDK25 analogue",
+      "local metadata and AOT initialization paths",
+      "implementer superclass logs",
+      "independent executable probes"
+    ],
+    "source_edits": false,
+    "mx_build_or_checkstyle_invoked": false,
+    "delegation": false
+  },
+  "spec_sources": [
+    {
+      "url": "https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-5.html#jvms-5.3.5",
+      "conclusion": "A final direct superclass must cause IncompatibleClassChangeError during derivation."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk/jdk-25%2B36/src/hotspot/share/classfile/classFileParser.cpp",
+      "location": "check_super_class_access",
+      "conclusion": "Checks super->is_final(), not reflection modifier flags."
+    }
+  ],
+  "source_reasoning": [
+    "CremaResolvedObjectType constructor uses parserKlass.getFlags() masked by JVM_RECOGNIZED_CLASS_MODIFIERS.",
+    "InterpreterResolvedObjectType.getModifiers explicitly documents JVM-side flags and their difference from DynamicHub.getModifiers.",
+    "BuildTimeInterpreterUniverse uses OriginalClassProvider.getOriginalType(...).getModifiers(); independent JVMCI probe confirms class-file finality survives misleading InnerClasses attributes.",
+    "DynamicHubInitializer initializes interpreter metadata for AOT hubs when RuntimeClassLoading.isSupported().",
+    "Superclass load finishes before the metadata is used; true-final rejection retains the original error type and order."
+  ],
+  "commands": [
+    {
+      "command": "git diff a369308fb9f4fbed7746caf33c87eb8f3a61b613 e3d79d3595992718296ad201cea273ccbb3468d8 --",
+      "cwd": "/build/worktrees/graal/upstream-next-superclass-flags",
+      "exit_code": 0,
+      "output": "reviewed.diff"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/java /tmp/graal-superclass-first.NXYCkC/Generate.java /tmp/graal-superclass-first.NXYCkC",
+      "exit_code": 0,
+      "purpose": "Generate AOT fixture classes with opposing and ordinary finality flags."
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac -cp /tmp/graal-superclass-first.NXYCkC -d /tmp/graal-superclass-first.NXYCkC /tmp/graal-superclass-first.NXYCkC/SuperclassProbe.java",
+      "exit_code": 0
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/java -XX:ActiveProcessorCount=8 -Xmx1g -cp /tmp/graal-superclass-first.NXYCkC SuperclassProbe",
+      "exit_code": 0,
+      "output": "hotspot.log",
+      "result": "PASS 13 cases"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac --add-modules jdk.internal.vm.ci --add-exports jdk.internal.vm.ci/jdk.vm.ci.hotspot=ALL-UNNAMED --add-exports jdk.internal.vm.ci/jdk.vm.ci.runtime=ALL-UNNAMED --add-exports jdk.internal.vm.ci/jdk.vm.ci.meta=ALL-UNNAMED -cp /tmp/graal-superclass-first.NXYCkC -d /tmp/graal-superclass-first.NXYCkC /tmp/graal-superclass-first.NXYCkC/JvmciProbe.java",
+      "exit_code": 0,
+      "output": "jvmci-compile.log"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/java -XX:ActiveProcessorCount=8 -Xmx1g -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI --add-modules jdk.internal.vm.ci --add-exports jdk.internal.vm.ci/jdk.vm.ci.hotspot=ALL-UNNAMED --add-exports jdk.internal.vm.ci/jdk.vm.ci.runtime=ALL-UNNAMED --add-exports jdk.internal.vm.ci/jdk.vm.ci.meta=ALL-UNNAMED -cp /tmp/graal-superclass-first.NXYCkC JvmciProbe",
+      "exit_code": 0,
+      "output": "jvmci.log",
+      "result": "4 JVMCI actual-finality checks pass"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-superclass/substratevm/svmbuild/linux-amd64/junit/svmjunit --verbose",
+      "exit_code": 0,
+      "output": "retained-junit.log",
+      "result": "3 tests pass"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-superclass/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image -J-Xmx6g -J-XX:ActiveProcessorCount=8 --parallelism=8 -H:+UnlockExperimentalVMOptions -H:+RuntimeClassLoading -cp /tmp/graal-superclass-first.NXYCkC -o /tmp/graal-superclass-first.NXYCkC/superclass-probe SuperclassProbe",
+      "cwd": "/tmp/graal-superclass-first.NXYCkC",
+      "exit_code": 0,
+      "output": "native-build.log",
+      "peak_rss": "3.32GiB",
+      "duration": "49.0s"
+    },
+    {
+      "command": "/tmp/graal-superclass-first.NXYCkC/superclass-probe",
+      "exit_code": 0,
+      "output": "native-run.log",
+      "result": "PASS 13 cases; output identical to HotSpot"
+    }
+  ],
+  "coverage": {
+    "runtime_parents": "six combinations of own final/nonfinal with absent, nonfinal, or final InnerClasses flags",
+    "aot_parents": "misleading reflection-final/nonfinal both directions; ordinary final/nonfinal; Object and String",
+    "invalid_input": "own ACC_FINAL|ACC_ABSTRACT rejected with ClassFormatError",
+    "jvmci": "mismatching reflection and JVMCI modifiers verified executable",
+    "retained_tests": "all 3 rerun with no skips"
+  },
+  "findings": [],
+  "nonblocking_notes": [
+    "Committed tests only use runtime-defined parents. Independent standalone executable AOT coverage succeeds; adding durable AOT coverage would improve regression protection but is not required to fix demonstrated behavior."
+  ],
+  "limits": [
+    "No actual kotlinc enum fixture executed; generated class files isolate the exact flag mismatch without a Kotlin toolchain dependency.",
+    "No artificial null-interpreter AOT hub mutation performed; normal runtime-loading AOT initialization supplies metadata.",
+    "Baseline image was not rebuilt or rerun in this review. Existing baseline log has 3 tests/2 intended failures, candidate log has 3 passes; byte identity of the historical test inputs was supplied by implementer, not independently established here.",
+    "Checkstyle log inspected but its process exit status is owned by root; no independent checkstyle command run.",
+    "No alternate architecture or layered image executed."
+  ],
+  "unsuccessful_attempts": [
+    {
+      "kind": "read-only source discovery",
+      "detail": "Initial rg used com.oracle.svm.interpreter path for InterpreterResolvedObjectType, which is in com.oracle.svm.interpreter.metadata; exit 2, corrected via rg --files."
+    },
+    {
+      "kind": "read-only artifact discovery",
+      "detail": "Initial ls of source-checkout substratevm/svmbuild/linux-amd64/junit failed; retained output found under /build/caches/mx/graal-next-superclass."
+    },
+    {
+      "kind": "read-only source discovery",
+      "detail": "InterpreterUniverse.java guessed path missing; actual InterpreterUniverseImpl.java found via rg."
+    },
+    {
+      "kind": "historical implementer build failure",
+      "detail": "superclass-build-retry.log records DynamicHub.getInterpreterType missing API; exact reviewed candidate uses upstream DynamicHubUtils.getInterpreterType and later build/test succeeds."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/Generate.java",
+      "sha256": "98aaf34f630ff99da13c7a52863cadbeaa79ce7ae1290a7a434da5554b037f6f",
+      "bytes": 806
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/JvmciProbe.class",
+      "sha256": "d9da10b929b6cfcdb6ef96dc35f0ab89a9fe74e525a355ecb968be2ff1a8f000",
+      "bytes": 1661
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/JvmciProbe.java",
+      "sha256": "155c4a0d517ad218951480f01bc0833c93c1b4cc5139d042272933cc9d928d1a",
+      "bytes": 672
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/SuperclassProbe$Loader.class",
+      "sha256": "c270e318e9c44c2e09762846d77cb9af4ab2b348b1f939fa013fd02bc1d9c0e7",
+      "bytes": 492
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/SuperclassProbe.class",
+      "sha256": "4df839645e6f2fcd19fd31d6923242d60b1145246ca64b087695d9e9810d6f35",
+      "bytes": 5161
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/SuperclassProbe.java",
+      "sha256": "8de8e1bb4d3404a5ff0e0d0872cb3211689f407dc9ed08e22e7aa73d328eb736",
+      "bytes": 2320
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/hotspot.log",
+      "sha256": "cc857a574df91bae28caaf0459585822f8bca1de34902fa13a949d3f526d233c",
+      "bytes": 989
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/jvmci-compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/jvmci.log",
+      "sha256": "49a7b6d48857813bca8b4c86e93f41081a2aa8b5e66ae20c33eecb803d151655",
+      "bytes": 256
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/native-build.log",
+      "sha256": "fd39a316ab7b1069f22fed3f803767d610844ad2f195a12278a266ec3536c176",
+      "bytes": 5405
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/native-run.log",
+      "sha256": "cc857a574df91bae28caaf0459585822f8bca1de34902fa13a949d3f526d233c",
+      "bytes": 989
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/probe/AotFinal.class",
+      "sha256": "a92f08b2f2fc651ef882e85b8ff8581208c0f52b4a4e6bac1b7c2784850cb2bc",
+      "bytes": 125
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/probe/AotNonfinal.class",
+      "sha256": "513bcc19d3e1cf9a431777e1cfac1060f91c3dca301d335a26caa721581d1d0a",
+      "bytes": 131
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/probe/AotOrdinary.class",
+      "sha256": "e7499c73b2f9a4f1bdeaec8325938d432d88619abe5bf078c7aa9454dcfa4443",
+      "bytes": 69
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/probe/AotOrdinaryFinal.class",
+      "sha256": "7a2fd0495054e9a3ee45c24d1aff5b0e2d4ce4d63c5c0b685c4bf898bcfd4f8f",
+      "bytes": 74
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/retained-junit.log",
+      "sha256": "e794c352fe0b2e386124b342cdb936fa5ec850b2644bdc3d351dd8c17df5c2d7",
+      "bytes": 401
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/reviewed.diff",
+      "sha256": "096cdea73f45bd2aaa3e662468f764744b0bae5373a152353f4c87fcf673863a",
+      "bytes": 6371
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/reviews/superclass-first-artifacts/superclass-probe",
+      "sha256": "42402df84c20bcc7d75711588b9ac2a115434ec96efb9a44d5aa27a0fb75b32d",
+      "bytes": 47515936
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-baseline-native.log",
+      "sha256": "c6a4e3a2164cc2c669c85e3ebf915ec3dd7a7548b38c249d071fb78374e70139",
+      "bytes": 14366
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-build-adapted.log",
+      "sha256": "1257e82900adea10acad7484b0ebad7804691e2547705fe7b3257c44a707f1fc",
+      "bytes": 717
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-build-retry.log",
+      "sha256": "9bb1178908f057c2b0f3425ad70aeddbf2befe52ac9f9ede718a4d9cf0bff376",
+      "bytes": 1598
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-build.log",
+      "sha256": "27c7b3a7ed1504045c8407b3966750fb4f519a3ae3d7c83066a488c453911941",
+      "bytes": 522
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-candidate-native.log",
+      "sha256": "64ac71a5d4462e1117ddf37c2fe383f8c27961ea6da9529334b3a49065f2e09c",
+      "bytes": 9846
+    },
+    {
+      "path": "/build/caches/graal-pipeline/next-upstream-batch/superclass-checkstyle.log",
+      "sha256": "cbf0d71d38a4e85baac38e9d47a24df5bd5f3a60a1ba86b27d5665d57eccfcc6",
+      "bytes": 2356
+    },
+    {
+      "path": "/build/caches/mx/graal-next-superclass/substratevm/svmbuild/linux-amd64/junit/svmjunit",
+      "sha256": "350470ac9bfe4479b0cec82577c5ee19f5b108cc2ae8b669d40e54effab94819",
+      "bytes": 74778912
+    }
+  ],
+  "cleanup": "Scratch copied to namespaced review artifacts; original unique /tmp scratch removed after preservation."
+}

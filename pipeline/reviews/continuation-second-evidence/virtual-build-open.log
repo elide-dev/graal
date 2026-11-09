@@ -1,0 +1,68 @@
+Warning: The option '-H:ReflectionConfigurationFiles=reflect.json' is experimental and must be enabled via '-H:+UnlockExperimentalVMOptions' in the future.
+Warning: Please re-evaluate whether any experimental option is required, and either remove or unlock it. The build output lists all active experimental options, including where they come from and possible alternatives. If you think an experimental option should be considered as stable, please file an issue.
+========================================================================================================================
+GraalVM Native Image: Generating 'virtual-counterexamples-open' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (4.1s @ 0.39GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: disabled, system assertions: disabled
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: disabled (class-specific config may apply), system assertions: disabled
+------------------------------------------------------------------------------------------------------------------------
+ 1 experimental option(s) unlocked:
+ - '-H:ReflectionConfigurationFiles': Use a reflect-config.json in your META-INF/native-image/<groupID>/<artifactID> directory instead. (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 6.00GiB of memory (6.5% of system memory, set via '-Xmx6g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                  (3.4s @ 0.40GiB)
+    2,423 types,   2,157 fields, and   9,838 methods found reachable
+       85 types,      36 fields, and     207 methods registered for reflection
+       49 types,      35 fields, and      48 methods registered for JNI access
+       52 resource accesses registered with 35B total size
+        5 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (0.7s @ 0.52GiB)
+[4/8] Parsing methods...      [*]                                                                       (0.5s @ 0.55GiB)
+[5/8] Inlining methods...     [***]                                                                     (0.2s @ 0.57GiB)
+[6/8] Compiling methods...    [**]                                                                      (4.2s @ 0.38GiB)
+[7/8] Laying out methods...   [*]                                                                       (0.8s @ 0.48GiB)
+[8/8] Creating image...       [*]                                                                       (0.8s @ 0.46GiB)
+   1.97MiB (34.55%) for code area:     5,085 compilation units
+   2.75MiB (48.20%) for image heap:   46,102 objects and 1 resource
+   0.98MiB (17.25%) for other data
+   5.71MiB in total image size, 5.19MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+ 242.66KiB java.base/java.lang                               662.50KiB byte[] for string data
+ 222.67KiB java.base/java.util                               484.02KiB byte[] for code metadata
+ 161.13KiB o.g.n.runtime/com.oracle.svm.core.genscavenge     330.49KiB java.base/java.lang.String
+ 121.26KiB o.g.n.runtime/com.oracle.svm.core.code            276.83KiB java.base/java.lang.Class
+ 103.53KiB java.base/java.util.concurrent                    246.09KiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+  93.57KiB o.g.n.runtime/com.oracle.svm.graal.stubs          148.37KiB java.base/java.lang.Object[]
+  45.41KiB java.base/java.util.stream                        115.53KiB java.base/char[]
+  39.36KiB o.g.n.runtime/com.oracle.svm.core                  84.60KiB byte[] for general heap data
+  33.20KiB o.g.n.runtime/com.oracle.svm.core.thread           58.19KiB byte[] for reflection metadata
+  31.73KiB o.g.n.runtime/com.oracle.svm.core.snippets         41.44KiB java.base/java.util.HashMap$Node
+ 923.67KiB for 126 more packages                             367.95KiB for 678 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                        0.9s (5.6% of total time) in 37 GCs | Peak RSS: 1.32GiB | CPU load: 7.48
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/continuation-second.UiYUgB/virtual-counterexamples-open (executable, 5.19MiB)
+========================================================================================================================
+Finished generating 'virtual-counterexamples-open' in 15.4s.
+
+The build process encountered 2 warnings.
+

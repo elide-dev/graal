@@ -1,0 +1,10 @@
+SVMJUnitCore
+JUnit version 4.13.2
+com.oracle.svm.test.continuations.ContinuationStackWalkerTest started (1 of 1)
+  walkContinuesOnItsSnapshotWhenTheContinuationYieldsAgain: Passed
+com.oracle.svm.test.continuations.ContinuationStackWalkerTest finished
+Time: 0.003
+
+OK (1 test)
+
+Test run PASSED. Exiting with status 0.

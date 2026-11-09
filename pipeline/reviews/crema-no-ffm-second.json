@@ -1,0 +1,288 @@
+{
+  "review_id": "crema-no-ffm-second",
+  "timestamp_utc": "2026-11-09T06:36:13.702054+00:00",
+  "invocation_provenance": {
+    "assignment": "Second independent high-risk review; invocation 12 of 13 (original 12 plus one user-approved replacement), as supplied by coordinator",
+    "requested_model_alias": "gpt-6-astra",
+    "requested_reasoning_effort": "high",
+    "backend_version": null,
+    "tokens": null,
+    "cost": null,
+    "unavailable_reason": "Backend version, token usage, and cost are not exposed to this reviewer. Requested alias is provenance, not a verified backend identity.",
+    "independence": "Inspected exact diff and analysis/lifecycle source before reading supplied crema-no-ffm logs. Did not read any other review artifacts. After independent experiment, coordinator disclosed that the other reviewer had separately tested FFM fallback; that result is not counted as this reviewer\u2019s test."
+  },
+  "subject": {
+    "repository": "/build/worktrees/graal/upstream-next-crema-no-ffm",
+    "base": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "base_subject": "[GR-81123] Preserve pending initialization writes across control-flow merges",
+    "candidate": "3bd25413ab9288529a82d289220882930e21f1b8",
+    "candidate_subject": "Allow runtime class loading without foreign API support",
+    "files": [
+      "substratevm/src/com.oracle.svm.interpreter/src/com/oracle/svm/interpreter/CremaFeature.java",
+      "substratevm/mx.substratevm/mx_substratevm.py"
+    ],
+    "expected_contract": "-H:+RuntimeClassLoading -H:-ForeignAPISupport builds and runs; unreachable interpreter foreign-functions singleton is not introduced into image heap."
+  },
+  "disposition": "approve",
+  "actionable_findings": [],
+  "analysis": [
+    {
+      "topic": "Lifecycle and optional lookup",
+      "conclusion": "Correct for the observed failure. Crema registers a hosted singleton in afterRegistration, but hosted registration is not runtime reachability. At beforeCompilation analysis is sealed. AnalysisMetaAccess.optionalLookupJavaType -> AnalysisUniverse.optionalLookup consults existing type state without creating an AnalysisType. The baseline registerAsImmutable path creates a snapshot and otherwise tries to create the absent type after sealing."
+    },
+    {
+      "topic": "Reachability versus instantiation",
+      "conclusion": "isReachable is conservative and sufficient here. registerAsImmutable creates/registers a snapshot without marking it reachable or instantiating its type. Independent custom Feature forced the internal class reachable via registerAsUsed, explicitly verified isInstantiated=false after analysis, and the image built and executed successfully. No stronger isInstantiated guard is required by the observed invariants."
+    },
+    {
+      "topic": "Upcall method lifecycle",
+      "conclusion": "The upcall entry stub is registered as a root in beforeAnalysis by CEntryPointCallStubSupport.registerStubForMethod. The reachable branch retains both immutable registration and setUpcallStubPointer, so it does not introduce a missing method lookup or leave an actually reachable singleton pointer unset."
+    },
+    {
+      "topic": "Default/enabled FFM",
+      "conclusion": "SubstrateOptions.isForeignAPIEnabled defaults to true except LLVM; ForeignFunctionsFeature uses that predicate. The patch follows runtime reachability instead of a separate option test. Runtime lookup/usage of the singleton by ForeignFunctionsRuntime makes its implementation reachable; existing initialization remains in that branch. Supplied ForeignTests passes validate enabled FFM compatibility, with fallback limitation below."
+    },
+    {
+      "topic": "Layering",
+      "conclusion": "InterpreterForeignFunctionsSupportImpl already has DisallowLayered singleton traits. HostedImageLayerBuildingSupport rejects its registration in a layered image, before the changed beforeCompilation hook. This change neither adds nor claims layered Crema support."
+    },
+    {
+      "topic": "Regression quality and scope",
+      "conclusion": "Four-line gate addition invokes the existing HelloWorld compiler/build/run/output verifier with both explicit flags and includes proper experimental-option unlocking. Same generated source hash in supplied baseline/candidate caches confirms controlled source parity. Baseline fails on this exact singleton registration stack; candidate passes. The gate does not directly assert heap contents, exercise runtime-loaded code, or test FFM fallback, but is targeted to this build failure. Independent runtime loading probe adds useful runtime evidence. No unrelated production changes, blanket singleton inclusion, or new shared test features."
+    }
+  ],
+  "nonblocking_observations": [
+    {
+      "topic": "Enabled-FFM test coverage",
+      "detail": "ForeignTests.TestFeature explicitly registers STRLEN and QSORT downcalls plus a direct upcall. Its two passing tests do not by themselves demonstrate the interpreter fallback getUpcallStubPointer branch. This is a coverage limit, not a detected product defect."
+    },
+    {
+      "topic": "Comment precision",
+      "detail": "The new comment broadly equates unreachable with absent from HostedUniverse, whereas UniverseBuilder creates hosted types for all existing analysis types. The critical absent-type case is accurate and the implementation handles both absent and existing-unreachable types safely. This wording does not affect correctness."
+    }
+  ],
+  "independent_tests": [
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/setup.json",
+      "details": {
+        "scratch": "/tmp/crema-no-ffm-second-b0ypbcrx",
+        "sources_sha256": {
+          "app/LoadProbe.java": "0a7005f728ea20be19d672ab7bd8f76c0e788636f1f8d903987d478051df1c12",
+          "app/ReachableProbe.java": "5584e8a570bb8e87f6cc5c5b6315c916df156b49593c39c88b89e626dbfc380b",
+          "payload/LoadedLater.java": "50ed8a757a75b56908e56c5793f7f31373de138d7213a58110ee9b6c775663f9"
+        },
+        "attempts": [
+          {
+            "argv": [
+              "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+              "-cp",
+              "/build/caches/mx/graal-next-crema-no-ffm/sdk/dists/nativeimage.jar",
+              "/tmp/crema-no-ffm-second-b0ypbcrx/app/LoadProbe.java",
+              "/tmp/crema-no-ffm-second-b0ypbcrx/app/ReachableProbe.java"
+            ],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "argv": [
+              "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+              "/tmp/crema-no-ffm-second-b0ypbcrx/payload/LoadedLater.java"
+            ],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      }
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build.json",
+      "details": {
+        "argv": [
+          "/build/caches/mx/graal-next-crema-no-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/native-image",
+          "-J-Xmx8g",
+          "-J-XX:ActiveProcessorCount=8",
+          "--parallelism=8",
+          "-J-ea",
+          "-J-esa",
+          "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
+          "-J--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+          "-H:+UnlockExperimentalVMOptions",
+          "-H:+RuntimeClassLoading",
+          "-H:-ForeignAPISupport",
+          "-H:-UnlockExperimentalVMOptions",
+          "--features=ReachableProbe",
+          "-cp",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/app",
+          "LoadProbe",
+          "-o",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe"
+        ],
+        "cwd": "/tmp/crema-no-ffm-second-b0ypbcrx",
+        "exit_code": 1,
+        "seconds": 16.708548545837402,
+        "log": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build.log"
+      }
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/retry-compile.json",
+      "details": {
+        "argv": [
+          "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac",
+          "-cp",
+          "/build/caches/mx/graal-next-crema-no-ffm/sdk/dists/nativeimage.jar",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/app/ReachableProbe.java"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "source_sha256": "68b18b10669086f49466017e2583738d8b7834945560e4e88a87f22c28a32ec9"
+      }
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build-retry.json",
+      "details": {
+        "argv": [
+          "/build/caches/mx/graal-next-crema-no-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/native-image",
+          "-J-Xmx8g",
+          "-J-XX:ActiveProcessorCount=8",
+          "--parallelism=8",
+          "-J-ea",
+          "-J-esa",
+          "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
+          "-J--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+          "-H:+UnlockExperimentalVMOptions",
+          "-H:+RuntimeClassLoading",
+          "-H:-ForeignAPISupport",
+          "-H:-UnlockExperimentalVMOptions",
+          "--features=ReachableProbe",
+          "-cp",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/app",
+          "LoadProbe",
+          "-o",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe"
+        ],
+        "cwd": "/tmp/crema-no-ffm-second-b0ypbcrx",
+        "exit_code": 1,
+        "seconds": 17.966144561767578,
+        "log": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build-retry.log"
+      }
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build-final.json",
+      "details": {
+        "argv": [
+          "/build/caches/mx/graal-next-crema-no-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/native-image",
+          "-J--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.infrastructure=ALL-UNNAMED",
+          "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.feature=ALL-UNNAMED",
+          "-J-Xmx8g",
+          "-J-XX:ActiveProcessorCount=8",
+          "--parallelism=8",
+          "-J-ea",
+          "-J-esa",
+          "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
+          "-J--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+          "-H:+UnlockExperimentalVMOptions",
+          "-H:+RuntimeClassLoading",
+          "-H:-ForeignAPISupport",
+          "-H:-UnlockExperimentalVMOptions",
+          "--features=ReachableProbe",
+          "-cp",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/app",
+          "LoadProbe",
+          "-o",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe"
+        ],
+        "cwd": "/tmp/crema-no-ffm-second-b0ypbcrx",
+        "exit_code": 0,
+        "seconds": 50.76841354370117,
+        "log": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build-final.log"
+      }
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/dynamic-run.json",
+      "details": {
+        "argv": [
+          "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe",
+          "/tmp/crema-no-ffm-second-b0ypbcrx/payload/LoadedLater.class"
+        ],
+        "exit_code": 0,
+        "stdout": "DYNAMIC_LOAD_OK=42\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "test_result_summary": {
+    "forced_reachable_no_ffm_build": "PASS, 50.77 seconds; builder assertions enabled; PROBE_REACHABLE=true INSTANTIATED=false",
+    "dynamic_class_loading": "PASS, DYNAMIC_LOAD_OK=42, exit 0; LoadedLater.class was outside build classpath and loaded via ClassLoader.defineClass at runtime",
+    "candidate_jar_provenance": "javap of cached svm.jar contains optionalLookupJavaType guard",
+    "git_diff_check": {
+      "exit_code": 0,
+      "output": ""
+    },
+    "git_status": {
+      "exit_code": 0,
+      "output": ""
+    },
+    "binary": {
+      "path_at_execution": "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe",
+      "sha256": "67b687199b966e807e9a57ed6c8ac5c11ec44bac20a1a26f1985ec718d3af8e1",
+      "size": 47974688,
+      "retention": "Removed with disposable scratch; sources, classes, build logs and exact commands retained."
+    }
+  },
+  "unsuccessful_attempts": [
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build.json",
+      "reason": "Reviewer diagnostic reflection targeted package-private AnalysisAccessBase; IllegalAccessException. Candidate correctness not assessed by this failed probe. Full log retained."
+    },
+    {
+      "record": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build-retry.json",
+      "reason": "Diagnostic reflection then lacked export of com.oracle.svm.core.feature. IllegalAccessException. Added explicit diagnostic exports and final attempt succeeded. Full log retained."
+    },
+    {
+      "kind": "read-only source discovery",
+      "exit_code": 2,
+      "reason": "Initial rg guessed old paths for UniverseBuilder and foreign module directories. Corrected using rg --files; no source changes."
+    },
+    {
+      "kind": "read-only source discovery",
+      "exit_code": 1,
+      "reason": "Public Feature.java has no isInstantiated/isInHeap methods; a chained launcher ls was consequently not executed. Used internal reflective diagnostic with explicit exports instead."
+    }
+  ],
+  "supplied_evidence": {
+    "provenance_manifest": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/provenance.json",
+    "hello_world_sha256": "16f8d629917b6974281f61cde154ac44ee179f49d7eb25f0f11366dc422ee8a8",
+    "baseline": "Both baseline logs show TypeNotFoundError for InterpreterForeignFunctionsSupportImpl from CremaFeature.beforeCompilation -> registerAsImmutable -> createImageHeapConstant. Baseline build provenance attributed to coordinator; not rebuilt by this reviewer.",
+    "candidate": "Candidate sample built and printed Hello from native-image!",
+    "foreign_tests": "Native ForeignTests log shows testInvokeStrlen Passed and testUpcall Passed; OK (2 tests), not skipped. RuntimeClassLoading enabled.",
+    "checkstyle": "Supplied checkstyle log reviewed; coordinator reports pass. Not rerun.",
+    "build": "Supplied build log reviewed; no mx build performed by reviewer."
+  },
+  "limits": {
+    "platform": "linux-amd64 only",
+    "jdk": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64",
+    "resource_bounds": {
+      "builder_heap": "8 GiB",
+      "parallelism": 8,
+      "active_processor_count": 8,
+      "each_build_timeout_seconds": 300,
+      "native_run_timeout_seconds": 30
+    },
+    "cache_policy": "Existing launcher and jars read-only; all independent compilation outputs under unique /tmp scratch. No concurrent mx build/checkstyle, no mx invocations, no source mutations, no remote CI or paid tools, no spawned agents.",
+    "not_run": [
+      "Full gate",
+      "Full test suite",
+      "Other architectures",
+      "Layered build (rejected by pre-existing singleton trait)",
+      "Independent default/enabled-FFM image (coordinator states separately covered by another reviewer)"
+    ]
+  },
+  "scratch_cleanup": {
+    "path": "/tmp/crema-no-ffm-second-b0ypbcrx",
+    "removed": true,
+    "preserved": "All probe sources/classes, unsuccessful and successful build logs, exact argv/result JSON, hashes; no unsuccessful attempt discarded."
+  }
+}

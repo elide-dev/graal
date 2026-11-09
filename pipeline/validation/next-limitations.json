@@ -1,0 +1,18 @@
+{
+  "manualFlow": true,
+  "automaticPipelineQualification": false,
+  "modelBackendVersion": "Not exposed; reports retain requested model alias and invocation provenance.",
+  "cost": "Not exposed; not inferred.",
+  "localSetupFailures": [
+    "Disk exhaustion interrupted early generated builds; no such result is a passing test.",
+    "Initial superclass extraction used a fork-only API; final upstream adaptation was rebuilt and qualified.",
+    "A continuation build failed when an operator removed a generated archive during compilation; a serialized rebuild succeeded.",
+    "Other failed helper-probe builds and reflection-access attempts remain in reviewer reports."
+  ],
+  "heldCandidates": {
+    "monitor-interrupt": "Runtime review found recursive interrupt-lock acquisition; not eligible or filed.",
+    "pod-size": "Native synthetic allocation savings observed; product qualification incomplete, not filed."
+  },
+  "newInfrastructure": false,
+  "publicArtifacts": "Generated review executables/class files are excluded; source, raw textual outputs and hashes are retained."
+}

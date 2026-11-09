@@ -1,0 +1,151 @@
+{
+  "run": 42573855945,
+  "inspected": true,
+  "environment": {
+    "platform": "Linux-7.0.0-1017-gcp-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "runner": "gcp-sandbox-ci-xl-5",
+    "forkHead": "0c007f69f7b212d9e5302b1bdabfc387d6f8cccd",
+    "subject": {
+      "candidate": "crema-no-ffm",
+      "repository": "graal",
+      "upstreamBase": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "cleanHead": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "tests": [
+        "substratevm/mx.substratevm/mx_substratevm.py"
+      ],
+      "regression": [
+        "helloworld",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:+RuntimeClassLoading",
+        "-H:-ForeignAPISupport",
+        "--parallelism=8",
+        "-J-Xmx8g"
+      ],
+      "suite": [
+        "native-unittest",
+        "ForeignTests",
+        "--build-args",
+        "--parallelism=8",
+        "-J-Xmx8g",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:+RuntimeClassLoading",
+        "--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature"
+      ],
+      "diagnostic": "TypeNotFoundError",
+      "generatedSample": "substratevm/svmbuild/HelloWorld.java"
+    },
+    "scaffold": [
+      ".github/workflows/upstream-next.yml",
+      "ci/next-subject.json",
+      "ci/validate-next.py"
+    ],
+    "hashes": {
+      "substratevm/mx.substratevm/mx_substratevm.py": "5dafb8109f16cf622cf3a58e33d0d23e99d25823c9bdc5b1941cadcc8b8257ea"
+    },
+    "mx": "ef054fc6eca1d516820bd040efa3c0a0f6ef1899",
+    "jdk": "openjdk version \"25.0.5.1\" 2026-11-17\nOpenJDK Runtime Environment (build 25.0.5.1+0-jvmci-25.6-b27)\nOpenJDK 64-Bit Server VM (build 25.0.5.1+0-jvmci-25.6-b27, mixed mode, sharing)\n",
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           52 bits physical, 57 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  16\nOn-line CPU(s) list:                     0-15\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 9B45\nCPU family:                              26\nModel:                                   2\nThread(s) per core:                      2\nCore(s) per socket:                      8\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                5391.90\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext mwaitx ssbd ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 clzero xsaveerptr wbnoinvd arat avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b avx512_vp2intersect flush_l1d\nHypervisor vendor:                       KVM\nVirtualization type:                     full\nL1d cache:                               384 KiB (8 instances)\nL1i cache:                               256 KiB (8 instances)\nL2 cache:                                8 MiB (8 instances)\nL3 cache:                                32 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-15\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n"
+  },
+  "commands": [
+    {
+      "label": "baseline-build",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "build",
+        "--build-logs=silent"
+      ],
+      "cwd": "substratevm",
+      "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "exit": 0,
+      "seconds": 90.88312816619873
+    },
+    {
+      "label": "baseline-reproducer",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "helloworld",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:+RuntimeClassLoading",
+        "-H:-ForeignAPISupport",
+        "--parallelism=8",
+        "-J-Xmx8g"
+      ],
+      "cwd": "substratevm",
+      "revision": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+      "exit": 1,
+      "seconds": 24.95594596862793
+    },
+    {
+      "label": "candidate-build",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "build",
+        "--build-logs=silent"
+      ],
+      "cwd": "substratevm",
+      "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "exit": 0,
+      "seconds": 83.19362568855286
+    },
+    {
+      "label": "candidate-reproducer",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "helloworld",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:+RuntimeClassLoading",
+        "-H:-ForeignAPISupport",
+        "--parallelism=8",
+        "-J-Xmx8g"
+      ],
+      "cwd": "substratevm",
+      "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "exit": 0,
+      "seconds": 54.48866820335388
+    },
+    {
+      "label": "regressions",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "native-unittest",
+        "ForeignTests",
+        "--build-args",
+        "--parallelism=8",
+        "-J-Xmx8g",
+        "-H:+UnlockExperimentalVMOptions",
+        "-H:+RuntimeClassLoading",
+        "--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature"
+      ],
+      "cwd": "substratevm",
+      "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "exit": 0,
+      "seconds": 79.6607174873352
+    },
+    {
+      "label": "checkstyle",
+      "command": [
+        "/__w/graal/graal/mx/mx",
+        "--max-cpus=8",
+        "--native-images=false",
+        "checkstyle",
+        "--primary"
+      ],
+      "cwd": "substratevm",
+      "revision": "3bd25413ab9288529a82d289220882930e21f1b8",
+      "exit": 0,
+      "seconds": 33.83061242103577
+    }
+  ],
+  "sampleSha256": "16f8d629917b6974281f61cde154ac44ee179f49d7eb25f0f11366dc422ee8a8"
+}

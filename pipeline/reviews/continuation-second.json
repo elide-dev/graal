@@ -1,0 +1,155 @@
+{
+  "review": "continuation-second",
+  "invocation": "10/12",
+  "timestamp_utc": "2026-11-09T06:23:13.576056+00:00",
+  "requested_model": "gpt-6-astra",
+  "requested_reasoning": "high",
+  "actual_backend": "unavailable",
+  "actual_model_version": "unavailable",
+  "tokens": "unavailable",
+  "cost": "unavailable",
+  "subjects": {
+    "candidate": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+    "candidate_subject": "Retain the stored continuation throughout a stack walk",
+    "baseline": "a369308fb9f4fbed7746caf33c87eb8f3a61b613",
+    "baseline_subject": "[GR-81123] Preserve pending initialization writes across control-flow merges",
+    "worktree": "/build/worktrees/graal/upstream-next-continuation-snapshot",
+    "clean_status": "",
+    "head": "6f55b27d87897825f2a53af3b0a5bdbd7650aef8"
+  },
+  "independence": "Inspected exact diff, native implementation, StoredContinuation allocation/copy/GC behavior, and supplied JDK source before reading continuation-*.log. No other reviewer findings read; no subagents, CI, paid tools, source edits, mx builds or checkstyle runs.",
+  "disposition": "approve_with_documented_limits",
+  "blocking_findings": [],
+  "reasoning": [
+    "This is an internal Native Image continuation-walker invariant, not a public StackWalker promise or portable HotSpot concurrency guarantee. JDK Continuation.stackWalker documentation does not promise snapshots under concurrent resume. JDK wrapWalk mounting and native walking mechanisms differ.",
+    "JavaStackWalker.updateStackPointerForContinuation rebases start, end, and current SP by the address delta of one stored object. Substituting a differently sized snapshot invalidates that premise; retaining the original object solves this without introducing new pointers.",
+    "The spliterator stored field is a GC root. Frame advancement and pointer rebasing execute uninterruptibly; interruptible frame metadata lookup is followed by rebasing before further physical advancement. AOT metadata is explicitly guaranteed in this upstream path, so omitted fork runtime-compilation lifetime tethers are appropriate to current scope.",
+    "Capture is lazy on first physical advance, not at StackWalker creation. Resumption before capture can yield a null or different snapshot; this existing race and synchronization contract are not fixed or worsened. allocateToYield fills the object before publishing it; initializeForContinuation handles a null IP as unwalkable.",
+    "On exhausted continuation, initialized=false and stored=null reset snapshot state before parent traversal. This does not promise an atomic snapshot of an entire changing continuation hierarchy. Real nested non-virtual continuations are outside the virtual-thread-only entry assertion and were not used to validate parent transitions.",
+    "The committed regression exercises deep-to-shallow replacement; stable phase and WAITING checks coordinate the unmount. JDK PARKING state maps to RUNNABLE; PARKED maps to WAITING. Test failure cleanup lacks a finally block, a low-impact hygiene opportunity rather than a blocker.",
+    "Independent comparisons check complete method-name sequences, nested fresh walkers, repeated replacement, completion, and allocation plus explicit GC after every frame."
+  ],
+  "commands": [
+    {
+      "command": "git diff a369308fb9f4fbed7746caf33c87eb8f3a61b613 6f55b27d87897825f2a53af3b0a5bdbd7650aef8",
+      "result": "2 files; 121 insertions and 2 deletions; minimal production guard/reset plus 114-line regression"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac --add-exports java.base/jdk.internal.vm=ALL-UNNAMED Counterexamples.java",
+      "exit": 0,
+      "output": "javac.log"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image -J-Xmx6g -J-XX:ActiveProcessorCount=8 --parallelism=8 --add-exports=java.base/jdk.internal.vm=ALL-UNNAMED -cp . Counterexamples counterexamples",
+      "exit": 0,
+      "output": "build.log"
+    },
+    {
+      "command": "./counterexamples -Xmx128m",
+      "exit": 0,
+      "output": "run.log",
+      "result": "six passes; 51 frames each; direct internal continuations, limited by virtual-thread-only assertion in production entry path"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/javac --add-exports java.base/jdk.internal.vm=ALL-UNNAMED VirtualCounterexamples.java",
+      "exit": 0,
+      "output": "virtual-javac.log"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image -J-Xmx6g -J-XX:ActiveProcessorCount=8 --parallelism=8 --add-exports=java.base/jdk.internal.vm=ALL-UNNAMED -H:ReflectionConfigurationFiles=reflect.json -cp . VirtualCounterexamples virtual-counterexamples",
+      "exit": 0,
+      "output": "virtual-build.log"
+    },
+    {
+      "command": "./virtual-counterexamples -Xmx128m",
+      "exit": "not independently captured because shell subsequently ran cat; exception confirms failure",
+      "output": "virtual-run.log",
+      "result": "InaccessibleObjectException: java.lang not opened"
+    },
+    {
+      "command": "./virtual-counterexamples --add-opens=java.base/java.lang=ALL-UNNAMED -Xmx128m",
+      "exit": 1,
+      "output": "virtual-run-open.log",
+      "result": "runtime option did not open java.lang; same exception"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image -J-Xmx6g -J-XX:ActiveProcessorCount=8 --parallelism=8 --add-exports=java.base/jdk.internal.vm=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED -H:ReflectionConfigurationFiles=reflect.json -cp . VirtualCounterexamples virtual-counterexamples-open",
+      "exit": 0,
+      "output": "virtual-build-open.log"
+    },
+    {
+      "command": "taskset -c 0-7 ./virtual-counterexamples-open -Xmx128m",
+      "exit": 0,
+      "output": "virtual-run-open-build.log",
+      "result": "six passes; two replacements per walk; three complete before resuming walk; nested fresh walkers and allocation/GC at every frame"
+    },
+    {
+      "command": "/build/caches/mx/graal-next-continuation/substratevm/svmbuild/linux-amd64/junit/svmjunit --verbose",
+      "exit": 0,
+      "output": "retained-junit.log",
+      "result": "OK (1 test)"
+    },
+    {
+      "command": "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/bin/java -XX:ActiveProcessorCount=8 -Xmx128m --add-exports=java.base/jdk.internal.vm=ALL-UNNAMED -cp . Counterexamples",
+      "exit": 134,
+      "output": "hotspot-direct.log",
+      "result": "HotSpot SIGSEGV Method::validate_bci_from_bcp. This internal concurrent-resume experiment is not a conformance expectation and does not refute the Native Image patch."
+    }
+  ],
+  "prior_log_assessment": {
+    "baseline": "identical regression abort -6: Access is outside of the stack of the stored continuation",
+    "candidate": "OK (1 test)",
+    "initial_build": "failed packaging due missing llvm-toolchain.tar; retry log completes without shown error",
+    "checkstyle": "log shows all relevant groups checked, no reported error"
+  },
+  "limits": [
+    "No fresh baseline image built in this review; baseline evidence comes from provided log.",
+    "Serial/default native GC only; explicit System.gc and allocation do not establish exact object relocation counts.",
+    "No supported nested-parent transition runtime test; source review only.",
+    "No interpreter-specific or runtime-compiled continuation matrix; AOT guarantee bounds intended patch.",
+    "Pre-initialization capture races and public Thread.getStackTrace atomicity are outside this change.",
+    "Compiler heaps capped at 6 GiB, compiler workers/active CPUs at 8; final virtual run affinity 0-7 and 128 MiB heap. Direct/initial retained executions did not explicitly bind affinity; very short runs."
+  ],
+  "evidence_directory": "/build/caches/graal-pipeline/next-upstream-batch/reviews/continuation-second-evidence",
+  "artifact_hashes": {
+    "Counterexamples.java": "4d27b9aafe78b0caeaa1818c68fe165df9780a047604ec170ef7afd6d3c0f897",
+    "VirtualCounterexamples.java": "064bd2c3fdaadf9519ef1a8496e101b5ca4dd34a1727ca545a5509d9f00ef4ee",
+    "reflect.json": "fd72a95436c949c56bb767121e1a736b1249803417e46439e3a7af6311f9d79c",
+    "javac.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build.log": "af04fa09eabfbba955cef24db9d86408220c6a428f7ced3dd3e76b328b8e3b38",
+    "run.log": "ec05adf574ddebfdd580a711be2e9141bbfd342eaa6a281f515870baf69e253c",
+    "virtual-javac.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "virtual-build.log": "4b8ceddf638c85e51ca8ae450e4a8d424e64d2ff93ba405c6b86df6616426188",
+    "virtual-run.log": "099c4932754f78bc535700f07297e46afccb83b46ab5a899b980e707f932fd3d",
+    "retained-junit.log": "391643a254d051b6db191446d3fdfa256eff46a14350e6ab595b06c47550339b",
+    "virtual-run-open.log": "099c4932754f78bc535700f07297e46afccb83b46ab5a899b980e707f932fd3d",
+    "virtual-build-open.log": "c85b7f65723aefd78feed727047e3d5eca280ed3035178b4ea3b62a04678a36c",
+    "virtual-run-open-build.log": "ebc1262b4a8f37d617dc56e94fabac0d6dae0f6d771c31c9ac5aba36c610f8ab",
+    "hotspot-direct.log": "36d99dcb79925027af7ee9be41841a14cb7bddc45cbaccb8955c5cc41e065428"
+  },
+  "binary_hashes_before_cleanup": {
+    "counterexamples": "1260fd341a2c9ff4be61f8a97a286ce2d5f07bc65fff5ae0aa3c257021081064",
+    "virtual-counterexamples": "43b8349193653377b53fdaeb1ba94087deb8f89c5aaa6ffd36191cd16ca87ce6",
+    "virtual-counterexamples-open": "88ec8553cdb245b6fd1f095600dfad60f860e5f6ad96651c2331d92cab665d1e"
+  },
+  "input_hashes": {
+    "/build/caches/mx/graal-next-continuation/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/bin/native-image": "bb356575bbc112cb63cff2ef34d91d1bbc3da9bb9555e056e3c4173d265ac394",
+    "/build/caches/mx/graal-next-continuation/substratevm/dists/svm.jar": "b2dbc7cd485eb230f9b1575a39b4ff8c8ceed0b1e2c302cdd181fa80f2397671",
+    "/build/caches/mx/graal-next-continuation/substratevm/svmbuild/linux-amd64/junit/svmjunit": "75b3e7d877752e4b75de15b31711a40cbf059bc9942be532b0ccd3f3a17ff2bc",
+    "/home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64/lib/src.zip": "052ef60fa708422c882c239b6f92807d6379f43b0b3196786514a0629ccad3e7"
+  },
+  "provided_log_hashes": {
+    "continuation-baseline-native.log": "970976e6012d6ad580d3b5da11aadc49209f698d34046e00efef8a45f1bf8168",
+    "continuation-build-retry.log": "3dd036589c45e8793b659507c10640a08e19dbb54d596e10b76b598e3cefd09f",
+    "continuation-build.log": "b156864ab824ee0926470232f38cb9bb2050879aff130c14605e6a17f25fe124",
+    "continuation-candidate-native.log": "a287f62ce813405c42d3d57d7dc20b84c72243bdb8a7ed3413cd312ea1951b57",
+    "continuation-checkstyle.log": "b50bbaf2da88d2a5f6987a881b41f7ec4209a2f2eaeb410b3542430db8525b61"
+  },
+  "unsuccessful_attempts_preserved": [
+    "Initial retained-image lookup used worktree-local svmbuild, absent because outputs are externally cached; corrected to cache path.",
+    "Both reflection opening run failures retained.",
+    "HotSpot aborted direct-continuation experiment log retained; raw hs_err hash recorded but raw process/environment dump excluded from public evidence."
+  ],
+  "hotspot_error_report_sha256": "9c3bb72a8fca5ae2b805391c137d4deb14deaa1887eae26ec09a46bb5e115ab0",
+  "scratch_cleanup": "Owned temporary sources/logs copied into evidence directory; temporary generated binaries/classes and raw hs_err removed with owned scratch directory."
+}

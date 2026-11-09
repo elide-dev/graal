@@ -1,0 +1,40 @@
+========================================================================================================================
+GraalVM Native Image: Generating 'probe' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                  (10.8s @ 0.30GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 15.2.0)
+ - Assertions: disabled, system assertions: disabled
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: disabled (class-specific config may apply), system assertions: disabled
+------------------------------------------------------------------------------------------------------------------------
+ 1 experimental option(s) unlocked:
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (8.7% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [**********]                                                             (22.3s @ 1.83GiB)
+    7,006 types,   8,441 fields, and  35,729 methods found reachable
+      371 types,     299 fields, and     842 methods registered for reflection
+       63 types,      65 fields, and      55 methods registered for JNI access
+       56 resource accesses registered with 171.26KiB total size
+        5 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (4.2s @ 1.40GiB)
+[4/8] Parsing methods...      [**]                                                                      (2.1s @ 1.47GiB)
+[5/8] Inlining methods...     [***]                                                                     (0.8s @ 1.98GiB)
+[6/8] Compiling methods...    [*****]                                                                  (24.7s @ 1.25GiB)
+[7/8] Laying out methods...   [***]                                                                     (6.9s @ 1.18GiB)
+
+[8/8] Creating image...       [***]                                                                     (0.0s @ 1.69GiB)
+Error: Cannot write image to /tmp/superclass-second.PL9WSd/probe. Path exists as directory (use '-o /path/to/image').
+------------------------------------------------------------------------------------------------------------------------
+                       9.0s (10.1% of total time) in 121 GCs | Peak RSS: 3.53GiB | CPU load: 5.02
+========================================================================================================================
+Failed generating 'probe' after 1m 26s.

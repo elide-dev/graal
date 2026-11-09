@@ -1,0 +1,77 @@
+========================================================================================================================
+GraalVM Native Image: Generating 'helloworld' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.2s @ 0.36GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ Image configuration:
+ - Garbage collector: Serial GC (max heap size: 80% of RAM)
+ - Assertions: disabled (class-specific config may apply), system assertions: disabled
+------------------------------------------------------------------------------------------------------------------------
+ 5 experimental option(s) unlocked:
+ - '-H:+EnforceMaxRuntimeCompileMethods' (origin(s): command line)
+ - '-H:Path': Use the '-o' option instead. (origin(s): command line)
+ - '-H:-ForeignAPISupport' (origin(s): command line)
+ - '-H:+RuntimeClassLoading' (origin(s): command line)
+ - '-H:+VerifyNamingConventions' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (6.5% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (50.0% of 16 available processor(s), set via '--parallelism=8')
+# Printing compilation-target information to: /tmp/upstream-next-cp04wq1e/build-baseline/substratevm/svmbuild/reports/target_info_20261109_063647.txt
+# Printing native-library information to: /tmp/upstream-next-cp04wq1e/build-baseline/substratevm/svmbuild/reports/native_library_info_20261109_063702.txt
+[2/8] Performing analysis...  [**********]                                                             (14.6s @ 1.26GiB)
+    7,001 types,   8,449 fields, and  35,792 methods found reachable
+      371 types,     299 fields, and     845 methods registered for reflection
+       63 types,      65 fields, and      55 methods registered for JNI access
+       56 resource accesses registered with 171.26KiB total size
+        5 native libraries: dl, m, pthread, rt, z
+[3/8] Building universe...                                                                              (2.8s @ 1.49GiB)
+
+------------------------------------------------------------------------------------------------------------------------
+                       1.5s (6.8% of total time) in 170 GCs | Peak RSS: 2.23GiB | CPU load: 10.45
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /tmp/upstream-next-cp04wq1e/build-baseline/substratevm/svmbuild/svm_err_b_20261109T063705.596_pid14680.md (build_info, 31.52KiB)
+========================================================================================================================
+Failed generating 'helloworld' after 21.3s.
+
+The build process encountered an unexpected error:
+
+com.oracle.svm.shared.util.VMError$HostedError: InternalFeature defined by com.oracle.svm.interpreter.CremaFeature unexpectedly failed with a(n) com.oracle.graal.pointsto.util.AnalysisError$TypeNotFoundError
+	at org.graalvm.nativeimage.shared/com.oracle.svm.shared.util.VMError.shouldNotReachHere(VMError.java:129)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.handleFeatureError(FeatureHandler.java:265)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.forEachFeature(FeatureHandler.java:96)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.doRun(NativeImageGenerator.java:750)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.run(NativeImageGenerator.java:618)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.buildImage(NativeImageGeneratorRunner.java:656)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.build(NativeImageGeneratorRunner.java:844)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.start(NativeImageGeneratorRunner.java:185)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner.main(NativeImageGeneratorRunner.java:131)
+Caused by: com.oracle.graal.pointsto.util.AnalysisError$TypeNotFoundError: Type not found during analysis: HotSpotType<Lcom/oracle/svm/interpreter/InterpreterForeignFunctionsSupportImpl;, resolved>
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.util.AnalysisError.typeNotFound(AnalysisError.java:157)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta.AnalysisUniverse.createType(AnalysisUniverse.java:237)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta.AnalysisUniverse.lookupAllowUnresolved(AnalysisUniverse.java:218)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta.AnalysisUniverse.lookup(AnalysisUniverse.java:195)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.heap.ImageHeapScanner.createImageHeapObject(ImageHeapScanner.java:359)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.heap.ImageHeapScanner.lambda$getOrCreateImageHeapConstant$0(ImageHeapScanner.java:310)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.util.AnalysisFuture.ensureDone(AnalysisFuture.java:69)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.heap.ImageHeapScanner.getOrCreateImageHeapConstant(ImageHeapScanner.java:317)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.heap.SVMImageHeapScanner.getOrCreateImageHeapConstant(SVMImageHeapScanner.java:81)
+	at org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.heap.ImageHeapScanner.createImageHeapConstant(ImageHeapScanner.java:280)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureImpl$CompilationAccessImpl.resolveImageHeapConstant(FeatureImpl.java:1357)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureImpl$CompilationAccessImpl.registerResolvedAsImmutable(FeatureImpl.java:1323)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureImpl$CompilationAccessImpl.registerAsImmutable(FeatureImpl.java:1313)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.interpreter.CremaFeature.beforeCompilation(CremaFeature.java:212)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGenerator.lambda$doRun$2(NativeImageGenerator.java:750)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.hosted.FeatureHandler.forEachFeature(FeatureHandler.java:94)
+	... 6 more
+
+Command '/tmp/upstream-next-cp04wq1e/build-baseline/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/native-image @/tmp/ni_args_0o2zno17.args' returned non-zero exit status 1.

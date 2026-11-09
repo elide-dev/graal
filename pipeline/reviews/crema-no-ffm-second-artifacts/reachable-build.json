@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/build/caches/mx/graal-next-crema-no-ffm/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/native-image",
+    "-J-Xmx8g",
+    "-J-XX:ActiveProcessorCount=8",
+    "--parallelism=8",
+    "-J-ea",
+    "-J-esa",
+    "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted=ALL-UNNAMED",
+    "-J--add-exports=org.graalvm.nativeimage.pointsto/com.oracle.graal.pointsto.meta=ALL-UNNAMED",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:+RuntimeClassLoading",
+    "-H:-ForeignAPISupport",
+    "-H:-UnlockExperimentalVMOptions",
+    "--features=ReachableProbe",
+    "-cp",
+    "/tmp/crema-no-ffm-second-b0ypbcrx/app",
+    "LoadProbe",
+    "-o",
+    "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe"
+  ],
+  "cwd": "/tmp/crema-no-ffm-second-b0ypbcrx",
+  "exit_code": 1,
+  "seconds": 16.708548545837402,
+  "log": "/build/caches/graal-pipeline/next-upstream-batch/reviews/crema-no-ffm-second-artifacts/reachable-build.log"
+}

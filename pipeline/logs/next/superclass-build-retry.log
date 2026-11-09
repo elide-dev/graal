@@ -1,0 +1,22 @@
+JAVA_HOME: /home/sam/.mx/jdks/labsjdk-ce-latest-jvmci-25.6-b27_amd64
+3 unsatisfied dependencies were removed from build (use -v to list them)
+14 non-default dependencies were removed from build (use -v to list them, mx build --all to build them)
+/build/worktrees/graal/upstream-next-superclass-flags/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/hub/registry/AbstractRuntimeClassRegistry.java:285: error: cannot find symbol
+        ResolvedJavaType interpreted = DynamicHub.fromClass(type).getInterpreterType();
+                                                                 ^
+  symbol:   method getInterpreterType()
+  location: class DynamicHub
+1 error
+mx build log written to /build/caches/mx/graal-next-superclass/substratevm/buildlog-20261108-215906.html
+Compiling com.oracle.svm.core with javac-daemon(JDK 25) failed
+Compiling com.oracle.svm.core with javac-daemon(JDK 25)... [dependency com.oracle.objectfile updated]
+/build/worktrees/graal/upstream-next-superclass-flags/substratevm/src/com.oracle.svm.core/src/com/oracle/svm/core/hub/registry/AbstractRuntimeClassRegistry.java:285: error: cannot find symbol
+        ResolvedJavaType interpreted = DynamicHub.fromClass(type).getInterpreterType();
+                                                                 ^
+  symbol:   method getInterpreterType()
+  location: class DynamicHub
+Note: Some input files use or override a deprecated API that is marked for removal.
+Note: Recompile with -Xlint:removal for details.
+1 error
+Compiling com.oracle.svm.core with javac-daemon(JDK 25): Failed due to error: 1
+1 build tasks failed

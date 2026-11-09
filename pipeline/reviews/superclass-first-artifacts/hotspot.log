@@ -1,0 +1,14 @@
+runtime/0 reflectionFinal=false expectedFinal=false childRejected=false
+runtime/1 reflectionFinal=false expectedFinal=false childRejected=false
+runtime/2 reflectionFinal=true expectedFinal=false childRejected=false
+runtime/3 reflectionFinal=true expectedFinal=true childRejected=true
+runtime/4 reflectionFinal=false expectedFinal=true childRejected=true
+runtime/5 reflectionFinal=true expectedFinal=true childRejected=true
+aot/probe.AotNonfinal reflectionFinal=true expectedFinal=false childRejected=false
+aot/probe.AotFinal reflectionFinal=false expectedFinal=true childRejected=true
+aot/probe.AotOrdinary reflectionFinal=false expectedFinal=false childRejected=false
+aot/probe.AotOrdinaryFinal reflectionFinal=true expectedFinal=true childRejected=true
+aot/java.lang.Object reflectionFinal=false expectedFinal=false childRejected=false
+aot/java.lang.String reflectionFinal=true expectedFinal=true childRejected=true
+invalid final+abstract parent rejected: ClassFormatError
+PASS 13 cases

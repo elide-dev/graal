@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "/tmp/crema-no-ffm-second-b0ypbcrx/load-probe",
+    "/tmp/crema-no-ffm-second-b0ypbcrx/payload/LoadedLater.class"
+  ],
+  "exit_code": 0,
+  "stdout": "DYNAMIC_LOAD_OK=42\n",
+  "stderr": ""
+}
