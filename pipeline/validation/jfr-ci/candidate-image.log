@@ -1,0 +1,228 @@
+Apply jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/native-image.properties
+Apply jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/library-support.jar!/META-INF/native-image/com.oracle.svm/polyglot/native-image.properties
+Apply jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-graalos-support.jar!/META-INF/native-image/com.oracle.svm.graalos/native-image.properties
+Apply jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest-staging.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/reachability-metadata.json
+Executing [
+DRIVER_TEMP_DIR_ENV_VARIABLE=/tmp/driverRoot-16690883876753246774 \
+HOME=/github/home \
+LANG=C.UTF-8 \
+LC_ALL=C.UTF-8 \
+PATH=/__w/graal/graal/labsjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+PWD=/__w/graal/graal/source/substratevm \
+/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/bin/java \
+-XX:+UnlockExperimentalVMOptions \
+-XX:+EnableJVMCI \
+-Dgraalvm.locatorDisabled=true \
+-Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime \
+-Dgraalvm.ForcePolyglotInvalid=true \
+-Dsubstratevm.HostLibC=glibc \
+--add-exports=java.base/com.sun.crypto.provider=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.access=jdk.graal.compiler.hostvmaccess,org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.event=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.foreign=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.loader=jdk.graal.compiler.hostvmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.logger=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.misc=jdk.graal.compiler,jdk.graal.compiler.hostvmaccess,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.guest.staging,org.graalvm.nativeimage.objectfile,org.graalvm.nativeimage.pointsto \
+--add-exports=java.base/jdk.internal.module=jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.shared \
+--add-exports=java.base/jdk.internal.perf=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.platform=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.ref=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.objectfile \
+--add-exports=java.base/jdk.internal.reflect=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.guest.staging \
+--add-exports=java.base/jdk.internal.util=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.vm.annotation=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal.vm=org.graalvm.nativeimage.builder \
+--add-exports=java.base/jdk.internal=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.invoke.util=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.file=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.ftp=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.http=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.https=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.jar=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.jmod=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.jrt=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www.protocol.mailto=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net.www=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.net=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.nio.ch=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.objectfile \
+--add-exports=java.base/sun.reflect.annotation=jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.guest.staging \
+--add-exports=java.base/sun.reflect.generics.factory=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.reflect.generics.reflectiveObjects=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.reflect.generics.repository=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.guest.staging \
+--add-exports=java.base/sun.reflect.generics.scope=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.reflect.generics.tree=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.security.jca=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.security.provider=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.security.rsa=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.security.ssl=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.security.util=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.guest.staging \
+--add-exports=java.base/sun.security.x509=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.text.spi=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.calendar=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.cldr=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.locale.provider=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.locale=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.resources=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util.spi=org.graalvm.nativeimage.builder \
+--add-exports=java.base/sun.util=org.graalvm.nativeimage.builder \
+--add-exports=java.management/com.sun.jmx.mbeanserver=org.graalvm.nativeimage.builder \
+--add-exports=java.management/sun.management=org.graalvm.nativeimage.builder,org.graalvm.nativeimage.pointsto \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.annotation=jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.api.replacements=jdk.graal.compiler.hostvmaccess \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.api.runtime=jdk.graal.compiler.hostvmaccess \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.core.target=jdk.graal.compiler.hostvmaccess \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.phases.util=jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess \
+--add-exports=jdk.graal.compiler/jdk.graal.compiler.runtime=jdk.graal.compiler.hostvmaccess \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.aarch64=jdk.graal.compiler,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.objectfile \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.amd64=jdk.graal.compiler,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.objectfile \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code.site=jdk.graal.compiler,org.graalvm.nativeimage.builder \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code.stack=jdk.graal.compiler,org.graalvm.nativeimage.builder \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code=jdk.graal.compiler,jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.jvmci.shared,org.graalvm.nativeimage.objectfile,org.graalvm.nativeimage.pointsto,org.graalvm.truffle.compiler \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.common=jdk.graal.compiler,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.pointsto \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot.aarch64=jdk.graal.compiler \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot.amd64=jdk.graal.compiler \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot.riscv64=jdk.graal.compiler \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot=jdk.graal.compiler,org.graalvm.nativeimage.builder \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta.annotation=jdk.graal.compiler,jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.configure,org.graalvm.nativeimage.objectfile,org.graalvm.nativeimage.pointsto \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta=jdk.graal.compiler,jdk.graal.compiler.hostvmaccess,jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.configure,org.graalvm.nativeimage.jvmci.shared,org.graalvm.nativeimage.objectfile,org.graalvm.nativeimage.pointsto,org.graalvm.truffle.compiler \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.riscv64=jdk.graal.compiler,org.graalvm.nativeimage.builder \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.runtime=jdk.graal.compiler,jdk.graal.compiler.hostvmaccess,org.graalvm.nativeimage.base,org.graalvm.nativeimage.builder,org.graalvm.nativeimage.pointsto \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.services=jdk.graal.compiler,org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.events=org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.internal.event=org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.internal.jfc=org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.internal.settings=org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.internal.tracing=org.graalvm.nativeimage.builder \
+--add-exports=jdk.jfr/jdk.jfr.internal=org.graalvm.nativeimage.builder \
+--add-exports=jdk.management/com.sun.management.internal=org.graalvm.nativeimage.builder \
+-XX:-UseJVMCICompiler \
+'-Dsvm.build.memoryUsageReasonText=8.00GiB of memory (6.5% of system memory, set via '"'"'-Xmx8g'"'"')' \
+-Xss10m \
+-XX:+UseParallelGC \
+-XX:GCTimeRatio=9 \
+-XX:+ExitOnOutOfMemoryError \
+-XX:+UseCompressedOops \
+-Djava.awt.headless=true \
+'-Dorg.graalvm.vendor=GraalVM Community' \
+-Dorg.graalvm.vendorurl=https://www.graalvm.org/ \
+'-Dorg.graalvm.vendorversion=GraalVM CE 25.6.0-dev+0.1' \
+-Dorg.graalvm.version=dev \
+-Dcom.oracle.graalvm.isaot=true \
+-Djava.system.class.loader=com.oracle.svm.hosted.NativeImageSystemClassLoader \
+-Djava.util.concurrent.ForkJoinPool.common.exceptionHandler=com.oracle.svm.hosted.CommonPoolUncaughtExceptionHandler \
+'-Djava.util.concurrent.ForkJoinPool.common.threadFactory=com.oracle.svm.hosted.NativeImageSystemClassLoader$NativeImageForkJoinWorkerThreadFactory' \
+-Dorg.graalvm.nativeimage.imagecode=buildtime \
+-Xshare:off \
+-Djdk.internal.lambda.disableEagerInitialization=true \
+-Djdk.internal.lambda.eagerlyInitialize=false \
+-Djava.lang.invoke.InnerClassLambdaMetafactory.initializeLambdas=false \
+-Djava.lang.invoke.MethodHandle.DONT_INLINE_THRESHOLD=-1 \
+-Djava.lang.invoke.MethodHandle.PROFILE_GWT=false \
+--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta=org.graalvm.nativeimage.foreign \
+-ea \
+-esa \
+-Xmx8g \
+--class-path=/__w/_temp/candidate-results-42680550473-1/probe/provider.jar \
+--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.jfr=ALL-UNNAMED \
+--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED \
+--add-exports=org.graalvm.nativeimage.shared/com.oracle.svm.shared.option=ALL-UNNAMED \
+--upgrade-module-path=/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal-options.jar \
+-Dllvm.bin.dir=/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/LLVM_TOOLCHAIN/bin/ \
+-Dcom.oracle.svm.provided=/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/library-support.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-jvmci-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-graalos-support.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-jvmci-shared.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/vmaccess-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-jvmci-guest-staging.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest-staging.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-shared.jar \
+--add-modules=ALL-DEFAULT \
+--enable-native-access=org.graalvm.espresso.shared.svm,org.graalvm.nativeimage.jvmci.shared,org.graalvm.nativeimage.builder,jdk.graal.compiler.vmaccess.guest,org.graalvm.truffle.compiler,org.graalvm.nativeimage.foreign,org.graalvm.nativeimage.guest.staging,org.graalvm.nativeimage.pointsto,org.graalvm.nativeimage.shaded.capnproto,org.graalvm.truffle,jdk.graal.compiler.hostvmaccess,org.graalvm.nativebridge,org.graalvm.truffle.runtime,org.graalvm.truffle.runtime.svm,org.graalvm.nativeimage.objectfile,org.graalvm.nativeimage.jvmci.guest.staging,org.graalvm.nativeimage.base,org.graalvm.nativeimage.configure,jdk.graal.compiler.vmaccess,org.graalvm.nativeimage.shared,org.graalvm.jniutils \
+--module-path \
+/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/truffle-runtime.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/truffle-api.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/nativebridge.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/jniutils.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/truffle-compiler.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/truffle/builder/truffle-runtime-svm.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/hostvmaccess.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/native-image-base.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/pointsto.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/espresso-svm.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-configure.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/vmaccess.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/objectfile.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-jvmci-shared.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/vmaccess-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-capnproto-runtime.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-jvmci-guest-staging.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-guest-staging.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-shared.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/builder/svm-foreign.jar \
+--module \
+org.graalvm.nativeimage.builder/com.oracle.svm.hosted.NativeImageGeneratorRunner \
+-keepalive \
+/proc/26376/comm \
+-imagecp \
+/__w/_temp/candidate-results-42680550473-1/probe/probe.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar \
+-imagemp \
+/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/library-support.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-jvmci-guest.jar:/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-graalos-support.jar \
+-H:CLibraryPath=/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/clibraries/linux-amd64/glibc,/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/clibraries/linux-amd64,/build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/clibraries \
+-H:Optimize@driver=2 \
+-H:Path@driver=/__w/_temp/candidate-results-42680550473-1 \
+-H:RuntimeAssertions@user+api=+ \
+-H:+RuntimeSystemAssertions@user+api \
+-H:NumberOfThreads@user+api=8 \
+-H:+UnlockExperimentalVMOptions@user \
+-H:SupportedGCs@user=G1 \
+-H:EnableMonitoringFeatures@user+api=jfr \
+-H:CLibraryPath@user=/__w/_temp/candidate-results-42680550473-1/probe,/build/caches/graal-value-ci-42680550473/native/substratevm-gcs/linux-amd64/src/hotspot/linux-amd64/glibc \
+-H:Name@user+api=jfr-candidate \
+-H:-UnlockExperimentalVMOptions@user \
+'-H:Class@explicit main-class=review.JfrNativeReviewMain' \
+-H:ImageBuildID@driver=092a2f37-fc6d-26d1-ba2e-c1bc462ff28f \
+'-H:AddExports@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/native-image.properties+api=java.base/jdk.internal.misc=org.graalvm.nativeimage.guest' \
+'-H:Features@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/native-image.properties+api=com.oracle.svm.guest.features.jdk.hosted.JavaNetHttpFeature' \
+'-H:ClassInitialization@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/native-image.properties+api=sun.net.httpserver.simpleserver:run_time' \
+'-H:Features@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/library-support.jar!/META-INF/native-image/com.oracle.svm/polyglot/native-image.properties+api=com.oracle.svm.polyglot.groovy.GroovyIndyInterfaceFeature' \
+'-H:AddExports@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-graalos-support.jar!/META-INF/native-image/com.oracle.svm.graalos/native-image.properties+api=java.base/jdk.internal.misc=svm.graalos.support' \
+'-H:AddExports@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-graalos-support.jar!/META-INF/native-image/com.oracle.svm.graalos/native-image.properties+api=java.base/jdk.internal.util=svm.graalos.support' \
+'-H:ReachabilityMetadataResources@jar:file:///build/caches/graal-value-ci-42680550473/candidate/sdk/linux-amd64/GRAALVM_9AF3634DB2_JAVA25/graalvm-9af3634db2-java25-25.6.0-dev/lib/svm/svm-guest-staging.jar!/META-INF/native-image/org.graalvm.nativeimage.guest/reachability-metadata.json+api=META-INF/native-image/org.graalvm.nativeimage.guest/reachability-metadata.json' \
+-H:DriverWarningsCount=0
+]
+========================================================================================================================
+GraalVM Native Image: Generating 'jfr-candidate' (executable)...
+========================================================================================================================
+For detailed information and explanations on the build output, visit:
+https://github.com/oracle/graal/blob/master/docs/reference-manual/native-image/BuildOutput.md
+------------------------------------------------------------------------------------------------------------------------
+[1/8] Initializing...                                                                                   (3.3s @ 0.47GiB)
+ Builder configuration:
+ - Java version: 25.0.5.1+0, vendor version: GraalVM CE 25.6.0-dev+0.1
+ - Graal compiler: optimization level: 2, target machine: x86-64-v3
+ - C compiler: gcc (linux, x86_64, 11.4.0)
+ - Assertions: enabled, system assertions: enabled
+ Image configuration:
+ - Garbage collector: G1 GC (max heap size: 25.0% of RAM)
+ - Assertions: enabled (class-specific config may apply), system assertions: enabled
+------------------------------------------------------------------------------------------------------------------------
+ 1 experimental option(s) unlocked:
+ - '-H:SupportedGCs' (origin(s): command line)
+------------------------------------------------------------------------------------------------------------------------
+Build resources:
+ - 8.00GiB of memory (6.5% of system memory, set via '-Xmx8g')
+ - 8 thread(s) (100.0% of 8 available processor(s), set via '--parallelism=8')
+[2/8] Performing analysis...  [******]                                                                 (12.9s @ 0.70GiB)
+    5,062 types,   6,117 fields, and  22,958 methods found reachable
+      245 types,      63 fields, and     500 methods registered for reflection
+       59 types,      60 fields, and      52 methods registered for JNI access
+       56 resource accesses registered with 197.79KiB total size
+       11 native libraries: dl, g1gc-cr, m, pthread, rt, stdc++, z
+[3/8] Building universe...                                                                              (1.7s @ 0.72GiB)
+[4/8] Parsing methods...      [*]                                                                       (1.4s @ 0.81GiB)
+[5/8] Inlining methods...     [***]                                                                     (0.9s @ 0.81GiB)
+[6/8] Compiling methods...    [****]                                                                   (14.9s @ 0.68GiB)
+[7/8] Laying out methods...   [**]                                                                      (2.3s @ 0.77GiB)
+[8/8] Creating image...       [**]                                                                      (2.2s @ 0.74GiB)
+   7.82MiB (35.93%) for code area:    13,755 compilation units
+  10.69MiB (49.08%) for image heap:  181,087 objects and 5 resources
+   3.27MiB (14.99%) for other data
+  21.78MiB in total image size, 20.13MiB in total file size
+------------------------------------------------------------------------------------------------------------------------
+Top 10 origins of code area:                                Top 10 object types in image heap:
+ 935.14KiB java.base/java.util                                 2.40MiB byte[] for string data
+ 474.35KiB java.base/java.lang                                 1.75MiB byte[] for code metadata
+ 381.50KiB jdk.jfr/jdk.jfr.internal                            1.28MiB java.base/java.lang.String
+ 371.55KiB java.base/com.sun.crypto.provider                 703.89KiB heap alignment
+ 305.47KiB java.base/java.util.concurrent                    599.43KiB java.base/java.lang.Class
+ 296.39KiB java.base/java.text                               563.13KiB byte[] for general heap data
+ 273.20KiB o.g.n.runtime/com.oracle.svm.core.code            553.66KiB o.g.n.runtime/c.o.s.core.hub.DynamicHubCompanion
+ 204.51KiB java.base/java.util.regex                         392.91KiB java.base/java.lang.Object[]
+ 202.87KiB java.base/java.util.stream                        194.07KiB java.base/java.lang.String[]
+ 190.50KiB jdk.jfr/jdk.jfr.internal.query                    190.66KiB java.base/j.u.concurrent.ConcurrentHashMap$Node
+   4.27MiB for 214 more packages                               2.13MiB for 1369 more object types
+------------------------------------------------------------------------------------------------------------------------
+Recommendations:
+ FUTR: Use '--future-defaults=all' to prepare for future releases.
+ HEAP: Set max heap for improved and more predictable memory usage.
+ CPU:  Enable more CPU features with '-march=native' for improved performance.
+------------------------------------------------------------------------------------------------------------------------
+                       2.3s (5.6% of total time) in 518 GCs | Peak RSS: 1.60GiB | CPU load: 6.82
+------------------------------------------------------------------------------------------------------------------------
+Build artifacts:
+ /__w/_temp/candidate-results-42680550473-1/jfr-candidate (executable, 20.13MiB)
+========================================================================================================================
+Finished generating 'jfr-candidate' in 40.4s.

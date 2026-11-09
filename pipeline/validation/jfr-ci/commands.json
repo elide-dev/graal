@@ -1,0 +1,178 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 83.9986846446991
+  },
+  {
+    "label": "native-g1-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "-c",
+      "8",
+      "--multitarget=linux-amd64-glibc",
+      "build",
+      "--dependencies=SVM_G1GC",
+      "--build-logs=silent"
+    ],
+    "exit": 0,
+    "seconds": 26.427053451538086
+  },
+  {
+    "label": "provider-javac",
+    "command": [
+      "/__w/graal/graal/labsjdk/bin/javac",
+      "-cp",
+      "/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/junit-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/jvmti-agent-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/library-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/native-image-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/objectfile.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-capnproto-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-configure.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-diagnostics-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-foreign.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-graalos-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-hosted-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jdwp-server.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-libjvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-llvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-nfi-none-jar.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests with space.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-truffle-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/truffle-runtime-svm.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-options.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-compiletime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/hostvmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal-loader.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/vmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/collections.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/graal-sdk.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jline3.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jniutils.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/launcher-common.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/maven-downloader.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-benchmark.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage-libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/resourcecopy.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/sdk-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/vmaccess-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/webimage-preview.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/word.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar",
+      "-processorpath",
+      "/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/junit-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/jvmti-agent-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/library-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/native-image-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/objectfile.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-capnproto-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-configure.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-diagnostics-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-foreign.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-graalos-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-hosted-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jdwp-server.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-libjvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-llvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-nfi-none-jar.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests with space.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-truffle-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/truffle-runtime-svm.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-options.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-compiletime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/hostvmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal-loader.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/vmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/collections.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/graal-sdk.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jline3.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jniutils.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/launcher-common.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/maven-downloader.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-benchmark.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage-libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/resourcecopy.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/sdk-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/vmaccess-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/webimage-preview.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/word.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar",
+      "-processor",
+      "jdk.graal.compiler.options.processor.OptionProcessor",
+      "-d",
+      "/__w/_temp/candidate-results-42680550473-1/probe/classes",
+      "/__w/_temp/candidate-results-42680550473-1/probe/G1ReviewOptions.java"
+    ],
+    "exit": 0,
+    "seconds": 0.5146956443786621
+  },
+  {
+    "label": "probe-javac",
+    "command": [
+      "/__w/graal/graal/labsjdk/bin/javac",
+      "-proc:none",
+      "-cp",
+      "/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/junit-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/jvmti-agent-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/library-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/native-image-base.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/objectfile.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/standalone-pointsto.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-capnproto-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-configure.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-diagnostics-agent.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-driver.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-foreign.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-graalos-support.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-hosted-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jdwp-server.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest-staging.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-jvmci-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-libjvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-llvm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-nfi-none-jar.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-shared.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests with space.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-tests.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm-truffle-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/svm.jar:/build/caches/graal-value-ci-42680550473/baseline/substratevm/dists/truffle-runtime-svm.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-compiler-whitebox-micro-benchmarks.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-igvutil.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-options.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-profdiff.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-compiletime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test-runtime.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-test.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/hostvmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal-loader.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/vmaccess.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/collections.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/graal-sdk.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jline3.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/jniutils.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/launcher-common.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/maven-downloader.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-benchmark.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge-processor.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativebridge.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage-libgraal.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/nativeimage.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot-tck.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/polyglot.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/resourcecopy.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/sdk-test.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/vmaccess-guest.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/webimage-preview.jar:/build/caches/graal-value-ci-42680550473/baseline/sdk/dists/word.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar",
+      "-d",
+      "/__w/_temp/candidate-results-42680550473-1/probe/classes",
+      "/__w/_temp/candidate-results-42680550473-1/probe/JfrNativeReviewMain.java",
+      "/__w/graal/graal/source/substratevm/src/com.oracle.svm.test/src/com/oracle/svm/test/jfr/TestNativeGCAllocationSampleEvent.java"
+    ],
+    "exit": 0,
+    "seconds": 0.5647716522216797
+  },
+  {
+    "label": "baseline-image",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-image",
+      "--verbose",
+      "-ea",
+      "-esa",
+      "-J-ea",
+      "-J-esa",
+      "--parallelism=8",
+      "-J-Xmx8g",
+      "-J--class-path=/__w/_temp/candidate-results-42680550473-1/probe/provider.jar",
+      "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.jfr=ALL-UNNAMED",
+      "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED",
+      "-J--add-exports=org.graalvm.nativeimage.shared/com.oracle.svm.shared.option=ALL-UNNAMED",
+      "-J--upgrade-module-path=/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/baseline/compiler/dists/graal-options.jar",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:SupportedGCs=G1",
+      "--enable-monitoring=jfr",
+      "-H:CLibraryPath=/__w/_temp/candidate-results-42680550473-1/probe,/build/caches/graal-value-ci-42680550473/native/substratevm-gcs/linux-amd64/src/hotspot/linux-amd64/glibc",
+      "-cp",
+      "/__w/_temp/candidate-results-42680550473-1/probe/probe.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar",
+      "-o",
+      "/__w/_temp/candidate-results-42680550473-1/jfr-baseline",
+      "review.JfrNativeReviewMain"
+    ],
+    "cwd": "substratevm",
+    "revision": "66f3cd8b560c12131eb948b56edb45da7960dc25",
+    "exit": 0,
+    "seconds": 42.197230100631714
+  },
+  {
+    "label": "baseline-native-g1",
+    "command": [
+      "/__w/_temp/candidate-results-42680550473-1/jfr-baseline",
+      "-Xmx256m",
+      "-Xms32m"
+    ],
+    "exit": 1,
+    "seconds": 0.06378793716430664
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "build",
+      "--build-logs=silent"
+    ],
+    "cwd": "substratevm",
+    "revision": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+    "exit": 0,
+    "seconds": 84.60407090187073
+  },
+  {
+    "label": "candidate-image",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "native-image",
+      "--verbose",
+      "-ea",
+      "-esa",
+      "-J-ea",
+      "-J-esa",
+      "--parallelism=8",
+      "-J-Xmx8g",
+      "-J--class-path=/__w/_temp/candidate-results-42680550473-1/probe/provider.jar",
+      "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.jfr=ALL-UNNAMED",
+      "-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core=ALL-UNNAMED",
+      "-J--add-exports=org.graalvm.nativeimage.shared/com.oracle.svm.shared.option=ALL-UNNAMED",
+      "-J--upgrade-module-path=/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal.jar:/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal-management.jar:/build/caches/graal-value-ci-42680550473/candidate/compiler/dists/graal-options.jar",
+      "-H:+UnlockExperimentalVMOptions",
+      "-H:SupportedGCs=G1",
+      "--enable-monitoring=jfr",
+      "-H:CLibraryPath=/__w/_temp/candidate-results-42680550473-1/probe,/build/caches/graal-value-ci-42680550473/native/substratevm-gcs/linux-amd64/src/hotspot/linux-amd64/glibc",
+      "-cp",
+      "/__w/_temp/candidate-results-42680550473-1/probe/probe.jar:/github/home/.mx/cache/HAMCREST_e237ae735aac4fa5a7253ec693191f42ef7ddce384c11d29fbf605981c0be077d086757409acad53cb5b9e53d86a07cc428d459ff0f5b00d32a8cbbca390be49/hamcrest.jar:/github/home/.mx/cache/JUNIT_a31b9950f929a7e5a600d89787ef40e42a8a8e2392e210d0c0f45b3572937670a18a524f1815508cd1152cd1eaa7275cb7430ba45c053be365c83c231bccd3f0/junit.jar",
+      "-o",
+      "/__w/_temp/candidate-results-42680550473-1/jfr-candidate",
+      "review.JfrNativeReviewMain"
+    ],
+    "cwd": "substratevm",
+    "revision": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+    "exit": 0,
+    "seconds": 43.30357646942139
+  },
+  {
+    "label": "candidate-native-g1",
+    "command": [
+      "/__w/_temp/candidate-results-42680550473-1/jfr-candidate",
+      "-Xmx256m",
+      "-Xms32m"
+    ],
+    "exit": 0,
+    "seconds": 0.16466259956359863
+  },
+  {
+    "label": "substratevm-checkstyle",
+    "command": [
+      "/__w/graal/graal/mx/mx",
+      "--max-cpus=8",
+      "--native-images=false",
+      "checkstyle",
+      "--primary"
+    ],
+    "cwd": "substratevm",
+    "revision": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+    "exit": 0,
+    "seconds": 40.197248220443726
+  }
+]

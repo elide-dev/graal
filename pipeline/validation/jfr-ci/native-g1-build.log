@@ -1,0 +1,12 @@
+WARNING: Could not register the SubstrateVM GC component since /sdk was not imported
+Registering replacement MUSL_NINJA_TOOLCHAIN
+[19:10:51] Downloading MUSL_GCC_TOOLCHAIN [duration: 0.0006146430969238281]
+[19:10:51] Generating com.oracle.gcc.ninja.toolchain [duration: 0.0007512569427490234]
+[19:10:51] Downloading NINJA_SYNTAX [duration: 0.0006098747253417969]
+[19:10:51] Archiving GCC_NINJA_TOOLCHAIN [duration: 0.0011456012725830078]
+[19:10:51] Archiving MUSL_NINJA_TOOLCHAIN [duration: 0.0016472339630126953]
+[19:10:51] Archiving DEFAULT_NINJA_TOOLCHAIN [duration: 0.0019500255584716797]
+[19:11:03] Building hotspot_linux-amd64-glibc with Ninja [duration: 11.547239780426025]
+[19:11:17] Building hotspot_linux-amd64-musl with Ninja [duration: 13.98917269706726]
+[19:11:17] Archiving SVM_G1GC [duration: 0.014934778213500977]
+mx build log written to /build/caches/graal-value-ci-42680550473/native/substratevm-gcs/buildlog-20261109-191117.html

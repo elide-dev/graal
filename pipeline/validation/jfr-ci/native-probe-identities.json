@@ -1,0 +1,10 @@
+{
+  "revision": "cafc6cf519b36ca5337ceba858190e0e647073ce",
+  "hashes": {
+    "provider.jar": "544c73c6a40597ad30b1decb38810fc119ffb626517b45f18dd2ebab1cacaa93",
+    "probe.jar": "6a3002f0c671e1ca8f1442e8a38f957e54686435f42fd9f49bafc72aea6ba9be",
+    "include/g1GCStructs.h": "9ef2aff7cf97a0d9780590a02e863066aa782e4594532aa7d7b60e7fef0a55b9",
+    "libg1gc-cr.a": "bc8c7f39b3151b07a3db2a43e57a4c91bae44cb6ce0ef9199416ee41f24e2751"
+  },
+  "compiler": "g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+}

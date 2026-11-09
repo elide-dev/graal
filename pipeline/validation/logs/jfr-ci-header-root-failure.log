@@ -1,0 +1,60 @@
+validate	Compare baseline and exact head, then run regressions and checkstyle	﻿2026-11-09T19:05:25.9334027Z ##[group]Run python3 ci/validate-value.py
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9334251Z ^[[36;1mpython3 ci/validate-value.py^[[0m
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9334868Z shell: bash --noprofile --norc -e -o pipefail {0}
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335041Z env:
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335168Z   LANG: C.UTF-8
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335288Z   LC_ALL: C.UTF-8
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335416Z   MX_PYTHON: python3
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335553Z   CANDIDATE_BRANCH: staging/value-jfr
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335732Z   BASE_SHA: f024e64a019012ececdd9503aa123fcf054f15c7
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9335934Z   HEAD_SHA: ec1688e8be42730e04582d129682563ec995d079
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9336112Z   JAVA_HOME: /__w/graal/graal/labsjdk
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9336262Z ##[endgroup]
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:25.9963494Z Preparing worktree (detached HEAD 66f3cd8b560)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0233580Z Updating files:  80% (17355/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0343208Z Updating files:  81% (17407/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0398926Z Updating files:  82% (17622/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0515778Z Updating files:  83% (17837/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0599086Z Updating files:  84% (18052/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0677575Z Updating files:  85% (18267/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.0790743Z Updating files:  86% (18482/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.1577630Z Updating files:  87% (18697/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.1864271Z Updating files:  88% (18912/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2118276Z Updating files:  89% (19127/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2370057Z Updating files:  90% (19341/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2536108Z Updating files:  91% (19556/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2577087Z Updating files:  92% (19771/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2617610Z Updating files:  93% (19986/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2695215Z Updating files:  94% (20201/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2787213Z Updating files:  95% (20416/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.2918391Z Updating files:  96% (20631/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3029940Z Updating files:  97% (20846/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3087566Z Updating files:  98% (21061/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3169963Z Updating files:  99% (21276/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3170264Z Updating files: 100% (21490/21490)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3170445Z Updating files: 100% (21490/21490), done.
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:05:27.3563836Z HEAD is now at 66f3cd8b560 [GR-81250] Scope build-time linkage to preserved code.
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5791894Z hint: Using 'master' as the name for the initial branch. This default branch name
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5792303Z hint: is subject to change. To configure the initial branch name to use in all
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5792785Z hint: of your new repositories, which will suppress this warning, call:
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5793033Z hint: 
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5793198Z hint: 	git config --global init.defaultBranch <name>
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5793383Z hint: 
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5793565Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5793846Z hint: 'development'. The just-created branch can be renamed via this command:
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5794066Z hint: 
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5794188Z hint: 	git branch -m <name>
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:49.5799091Z Initialized empty Git repository in /build/caches/graal-value-ci-42679845858/native-git/.git/
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:50.4761394Z From https://github.com/graalvm/labs-openjdk
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:50.4762108Z  * branch            cafc6cf519b36ca5337ceba858190e0e647073ce -> FETCH_HEAD
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:50.4785686Z Preparing worktree (detached HEAD cafc6cf)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:06:50.5447266Z HEAD is now at cafc6cf [GR-80748] Support wide and compressed interface hash tables in G1.
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8142841Z Traceback (most recent call last):
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8143209Z   File "/__w/graal/graal/source/ci/validate-value.py", line 174, in <module>
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8143468Z     test_jfr(variant, tree, prepared_jfr)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8143694Z   File "/__w/graal/graal/source/ci/validate-value.py", line 133, in test_jfr
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8143925Z     run(variant + '-image', tree, args)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8144127Z   File "/__w/graal/graal/source/ci/validate-value.py", line 45, in run
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8144768Z     raise RuntimeError('Failed: ' + label)
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8144950Z RuntimeError: Failed: baseline-image
+validate	Compare baseline and exact head, then run regressions and checkstyle	2026-11-09T19:07:24.8230243Z ##[error]Process completed with exit code 1.

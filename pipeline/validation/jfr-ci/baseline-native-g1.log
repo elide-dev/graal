@@ -1,0 +1,7 @@
+NATIVE_G1_JFR=true
+Exception in thread "main" java.lang.AssertionError: missing instance allocation samples
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent.validateEvents(TestNativeGCAllocationSampleEvent.java:93)
+	at com.oracle.svm.test.jfr.TestNativeGCAllocationSampleEvent.instanceAndArraySamplesHaveTypesWeightsAndStacks(TestNativeGCAllocationSampleEvent.java:68)
+	at review.JfrNativeReviewMain.main(JfrNativeReviewMain.java:26)

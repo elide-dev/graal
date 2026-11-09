@@ -1,0 +1,174 @@
+{
+  "authorizedReviews": 12,
+  "authorizedCIJobs": 8,
+  "reviewInvocations": [
+    {
+      "number": 1,
+      "agent": "value_nfi_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead",
+      "head": "31ac4b601bae3b8822c2f6b670fe8f9650ef69cd",
+      "status": "request_changes"
+    },
+    {
+      "number": 2,
+      "agent": "value_jfr_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "jfr-native-allocation",
+      "head": "5602c77d3ef",
+      "status": "hold_for_native_g1_validation"
+    },
+    {
+      "number": 3,
+      "agent": "value_ristretto_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "ristretto-exception-fallback",
+      "head": "4dc26d0d233ec516842c55e916512160ef40b303",
+      "status": "request_changes"
+    },
+    {
+      "number": 4,
+      "agent": "value_ffm_review_one",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-downcalls",
+      "head": "f3a2eef071b3884e26472b0f76169e67d9a1dd4a",
+      "status": "request_changes"
+    },
+    {
+      "number": 5,
+      "agent": "value_nfi_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead",
+      "head": "72b8188daf4",
+      "status": "approve_code_pending_validation"
+    },
+    {
+      "number": 6,
+      "agent": "value_ffm_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-downcalls",
+      "head": "4ced24671e1",
+      "status": "approve_code_pending_final_validation"
+    },
+    {
+      "number": 7,
+      "agent": "value_jfr_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "jfr-native-allocation",
+      "head": "c4cfedc70e81c84e684654367f6d789ca77b781d",
+      "status": "pass_after_repair_with_limits"
+    },
+    {
+      "number": 8,
+      "agent": "value_nfi_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "nfi-overhead-final-tests",
+      "head": "e8fbf0ccdac0767aac00b8c04ef9f3589d3f0d20",
+      "status": "approve_pending_final_native_validation"
+    },
+    {
+      "number": 9,
+      "agent": "value_ffm_isolate_confirmation",
+      "model": "gpt-6-astra",
+      "candidate": "ffm-isolate-test",
+      "head": "37404a1596d",
+      "status": "approve"
+    },
+    {
+      "number": 10,
+      "agent": "value_ristretto_review_two",
+      "model": "gpt-6-astra",
+      "candidate": "ristretto-exception-fallback",
+      "head": "3dc0edcb6f8a396b8ecfcd789db3a708d1b0a4e7",
+      "status": "approve"
+    }
+  ],
+  "ciRuns": [
+    {
+      "number": 1,
+      "candidate": "nfi-overhead",
+      "forkPR": "https://github.com/elide-dev/graal/pull/232",
+      "id": 42674066166,
+      "url": "https://github.com/elide-dev/graal/actions/runs/42674066166",
+      "head": "829d4149b572c604a8b455f92ec630d194d807b7",
+      "status": "completed",
+      "conclusion": "failure",
+      "attempt": 1,
+      "jobs": [],
+      "reason": "GitHub internal server error; correlation72020fc4-cd85-47ac-9ca5-d7d4166469b5; nojobsstarted"
+    },
+    {
+      "number": 2,
+      "candidate": "nfi-overhead",
+      "id": 42674066166,
+      "attempt": 2,
+      "head": "829d4149b572c604a8b455f92ec630d194d807b7",
+      "status": "completed",
+      "reason": "Baseline contexts reject experimental BackgroundCompilation option. Artifacts retained; harness must enable AllowExperimentalOptions identically.",
+      "conclusion": "failure"
+    },
+    {
+      "number": 3,
+      "candidate": "nfi-overhead",
+      "head": "b79e9397c7881610851786d61d61143581a35c17",
+      "status": "completed",
+      "reason": "Runner sandbox-r1e exhausted disk during apt before checkout. Uploaded shared candidate-results was stale prior-cohort evidence and is explicitly excluded. Unique per-run/attempt artifact paths prepared; no replacement until runner reconciled.",
+      "id": 42675563070,
+      "url": "https://github.com/elide-dev/graal/actions/runs/42675563070",
+      "conclusion": "failure"
+    },
+    {
+      "number": 4,
+      "candidate": "nfi-overhead",
+      "head": "c19e68dc95129424460a3ad987e7e8d3a8daa2f1",
+      "status": "completed",
+      "reason": "Reconciled ENOSPC on sandbox-r1e; select existing XL pool with same8CPU/180min/onejob bounds; unique per-run/attempt artifacts prevent stale uploads.",
+      "id": 42676648896,
+      "conclusion": "success",
+      "artifactsInspected": true
+    },
+    {
+      "number": 5,
+      "candidate": "ristretto",
+      "head": "a904d29feb63193d7a6927574ad0a9c92b3c9a8e",
+      "status": "completed",
+      "forkPR": "https://github.com/elide-dev/graal/pull/236",
+      "id": 42678280743,
+      "conclusion": "success",
+      "artifactsInspected": true
+    },
+    {
+      "number": 6,
+      "candidate": "jfr",
+      "head": "ec1688e8be42730e04582d129682563ec995d079",
+      "status": "completed",
+      "forkPR": "https://github.com/elide-dev/graal/pull/237",
+      "id": 42679845858,
+      "conclusion": "failure",
+      "reason": "Harness passed probe/include as CLibraryPath, but ProjectHeaderFile appends include/g1GCStructs.h. Public native component and scaffold compile succeeded; baseline image stopped at header resolution. Correct root is probe."
+    },
+    {
+      "number": 7,
+      "candidate": "jfr",
+      "head": "c01d75498ef2d6dae747a783589cfbd01f8154be",
+      "status": "completed",
+      "reason": "Corrected header-root path matches independently validated native250502/include layout; production and tests unchanged.",
+      "id": 42680550473,
+      "conclusion": "success",
+      "artifactsInspected": true
+    },
+    {
+      "number": 8,
+      "candidate": "ffm",
+      "head": "0c0971105cc1e235d29cfd1b6c50156811f670da",
+      "status": "prepared",
+      "reason": "Final authorized CI attempt; JFR attempt 7 reconciled and inspected green. FFM remains held for product gates."
+    }
+  ],
+  "concurrency": 1,
+  "cpus": 8,
+  "timeoutMinutes": 180,
+  "authorization": "User approved new bounds for four-candidate batch; qualified upstream publication authorized after gates.",
+  "securityCorrectionAuthorized": true,
+  "forkCorrectionPRsAuthorized": true
+}

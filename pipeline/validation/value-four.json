@@ -3,7 +3,7 @@
   "authorizedReviewInvocations": 12,
   "authorizedCIJobs": 8,
   "actualReviewInvocations": 10,
-  "actualCIJobs": 6,
+  "actualCIJobs": 8,
   "newInfrastructure": false,
   "actualDollarCost": "Unavailable; not inferred",
   "publicEvidence": "https://github.com/elide-dev/graal/tree/b83a4de78880c063a06ed82a1ceab8eda184463e",
@@ -39,7 +39,7 @@
       "upstreamRepository": "https://github.com/oracle/graal",
       "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
       "cleanHead": "37404a1596d52777adf1e63e1d250b57cdd14abc",
-      "stagingHead": "583cd09c3d75441f0ca0c1ec5c345232f66247aa",
+      "stagingHead": "0c0971105cc1e235d29cfd1b6c50156811f670da",
       "forkPR": "https://github.com/elide-dev/graal/pull/238",
       "validationFile": "value-four.json",
       "reviewFiles": [
@@ -56,14 +56,20 @@
       "upstreamRepository": "https://github.com/oracle/graal",
       "baseSHA": "66f3cd8b560c12131eb948b56edb45da7960dc25",
       "cleanHead": "c4cfedc70e81c84e684654367f6d789ca77b781d",
-      "stagingHead": "ec1688e8be42730e04582d129682563ec995d079",
+      "stagingHead": "c01d75498ef2d6dae747a783589cfbd01f8154be",
       "forkPR": "https://github.com/elide-dev/graal/pull/237",
       "validationFile": "value-four.json",
       "reviewFiles": [
         "jfr-first.json",
         "jfr-second.json"
       ],
-      "artifactsInspected": false
+      "artifactsInspected": true,
+      "replacementRun": {
+        "id": 42680550473,
+        "url": "https://github.com/elide-dev/graal/actions/runs/42680550473",
+        "status": "completed",
+        "conclusion": "success"
+      }
     },
     {
       "candidate": "ristretto",
@@ -85,12 +91,13 @@
         "url": "https://github.com/elide-dev/graal/actions/runs/42678280743",
         "status": "completed",
         "conclusion": "success"
-      }
+      },
+      "upstreamPR": "https://github.com/oracle/graal/pull/14966"
     }
   ],
   "remainingGates": [
-    "Inspect green exact-source fork CI before upstream filing.",
     "NFI and FFM: verify Elide product shipment and repeatable product measurements.",
-    "Exact-fork regression validation remains pending on corrective PRs233\u2013235."
+    "FFM: inspect final bounded fork CI; baseline image analysis remains unsuitable for runtime timing.",
+    "Exact-fork regression validation remains pending on corrective PRs 233\u2013235."
   ]
 }
