@@ -126,6 +126,7 @@ import com.oracle.svm.guest.staging.log.Log;
 import com.oracle.svm.core.monitor.MonitorInflationCause;
 import com.oracle.svm.core.monitor.MonitorSupport;
 import com.oracle.svm.guest.staging.core.graal.KnownIntrinsics;
+import com.oracle.svm.core.stack.JavaFrameAnchors;
 import com.oracle.svm.core.stack.StackOverflowCheck;
 import com.oracle.svm.core.thread.ContinuationSupport;
 import com.oracle.svm.core.thread.JavaThreads;
@@ -1749,7 +1750,7 @@ public final class JNIFunctions {
             }
         }
 
-        static class JNIJavaVMEnterAttachThreadEnsureJavaThreadPrologue implements CEntryPointOptions.Prologue {
+        static class JNIDetachThreadOrDestroyVMPrologue implements CEntryPointOptions.Prologue {
             @Uninterruptible(reason = "prologue")
             static int enter(JNIJavaVM vm) {
                 /*
@@ -1757,6 +1758,11 @@ public final class JNIFunctions {
                  * JNI_ERR on HotSpot. So, we need to do the same.
                  */
                 int code = CEntryPointActions.enterAttachThread(vm.getFunctions().getIsolate(), true);
+                if (code == CEntryPointErrors.NO_ERROR && JavaFrameAnchors.getFrameAnchor().isNonNull()) {
+                    /* There are remaining Java frames on the stack. */
+                    CEntryPointActions.leave();
+                    return JNIErrors.JNI_ERR();
+                }
                 return convertCEntryPointErrorToJNIError(code, false);
             }
         }
