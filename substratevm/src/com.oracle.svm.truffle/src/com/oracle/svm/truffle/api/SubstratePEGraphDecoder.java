@@ -31,17 +31,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.graalvm.collections.EconomicMap;
 
 import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
+import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
 import com.oracle.svm.graal.RuntimeCompilationSupport;
 
 import jdk.graal.compiler.bytecode.BytecodeProvider;
 import jdk.graal.compiler.graph.SourceLanguagePositionProvider;
+import jdk.graal.compiler.nodes.CallTargetNode.InvokeKind;
 import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.InvocationPlugins;
 import jdk.graal.compiler.nodes.graphbuilderconf.LoopExplosionPlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.NodePlugin;
 import jdk.graal.compiler.nodes.graphbuilderconf.ParameterPlugin;
+import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
 import jdk.graal.compiler.replacements.PEGraphDecoder;
 import jdk.vm.ci.code.Architecture;
@@ -57,6 +61,32 @@ public class SubstratePEGraphDecoder extends PEGraphDecoder {
                     ConcurrentHashMap<ResolvedJavaMethod, Object> invocationPluginsCache) {
         super(architecture, graph, providers, loopExplosionPlugin, invocationPlugins, inlineInvokePlugins, parameterPlugin, nodePlugins,
                         sourceLanguagePosition, specialCallTargetCache, invocationPluginsCache, false, false);
+    }
+
+    /**
+     * Links the invocation of a constant method handle directly when a
+     * {@link RuntimeMethodHandleLinker} knows how to invoke the handle, by redirecting the call of
+     * {@code MethodHandle.invokeBasic} to the handle's implementation before the inlining
+     * decision, so that partial evaluation inlines the implementation like any other method.
+     */
+    @Override
+    protected MethodCallTargetNode trySimplifyCallTarget(PEMethodScope methodScope, InvokeData invokeData, MethodCallTargetNode callTarget) {
+        MethodCallTargetNode result = super.trySimplifyCallTarget(methodScope, invokeData, callTarget);
+        if (RuntimeMethodHandleLinker.isAvailable() && RuntimeMethodHandleLinker.isInvokeBasic(result.targetMethod())) {
+            ValueNode[] arguments = result.arguments().toArray(ValueNode.EMPTY_ARRAY);
+            RuntimeMethodHandleLinker.LinkedInvoke linked = RuntimeMethodHandleLinker.singleton().link(result.targetMethod(), arguments, providers, graph);
+            if (linked != null) {
+                /*
+                 * The call target is not in the graph yet and its argument list cannot be changed
+                 * before it is, so a new one takes its place, also for the invoke should the entry
+                 * method not be inlined.
+                 */
+                MethodCallTargetNode linkedTarget = new MethodCallTargetNode(InvokeKind.Static, linked.target(), linked.arguments(), result.returnStamp(), null);
+                invokeData.callTarget = linkedTarget;
+                return linkedTarget;
+            }
+        }
+        return result;
     }
 
     @Override

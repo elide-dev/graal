@@ -24,10 +24,19 @@
  */
 package com.oracle.svm.hosted.image;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.graalvm.nativeimage.ImageSingletons;
+
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.hosted.FeatureImpl.DuringSetupAccessImpl;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.type.CompressibleConstant;
 import jdk.vm.ci.meta.JavaConstant;
@@ -38,13 +47,20 @@ import jdk.vm.ci.meta.JavaConstant;
  * {@link ImageHeapConstant} that is not backed by a hosted object (e.g., created by simulated class
  * initialization) has no hosted object to store there, so it used to be stored as {@code null}. It
  * is now stored as a {@link Placeholder}, which the image heap replaces with the constant.
+ * <p>
+ * Graphs encoded for runtime compilation likewise wrap a {@link Placeholder} into the object
+ * constant of such an {@link ImageHeapConstant} (see {@code SubstrateGraalUtils#hostedToRuntime}).
+ * They use {@linkplain #canonicalPlaceholderFor canonical placeholders}.
  */
+@SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class)
 public final class UnbackedObjectConstants {
 
-    private UnbackedObjectConstants() {
+    private final Map<ImageHeapConstant, Placeholder> canonicalPlaceholders = new ConcurrentHashMap<>();
+
+    UnbackedObjectConstants() {
     }
 
-    /** Stands for an unbacked constant in a hosted array; never reaches the image heap. */
+    /** Stands for an unbacked constant in a hosted object; never reaches the image heap. */
     public record Placeholder(ImageHeapConstant constant) {
     }
 
@@ -56,6 +72,17 @@ public final class UnbackedObjectConstants {
         return null;
     }
 
+    /**
+     * Returns the placeholder for {@code constant}, which must not be backed by a hosted object.
+     * Every call for the same constant returns the same placeholder, so that object constants that
+     * wrap it are equal, as they are for the same hosted object.
+     */
+    public static Placeholder canonicalPlaceholderFor(ImageHeapConstant constant) {
+        VMError.guarantee(!constant.isBackedByHostedObject(), "Constant is backed by a hosted object: %s", constant);
+        ImageHeapConstant uncompressed = (ImageHeapConstant) CompressibleConstant.uncompress(constant);
+        return ImageSingletons.lookup(UnbackedObjectConstants.class).canonicalPlaceholders.computeIfAbsent(uncompressed, Placeholder::new);
+    }
+
     static ImageHeapConstant replace(Object object) {
         return (object instanceof Placeholder placeholder) ? placeholder.constant() : null;
     }
@@ -65,6 +92,7 @@ public final class UnbackedObjectConstants {
 final class UnbackedObjectConstantsFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess a) {
+        ImageSingletons.add(UnbackedObjectConstants.class, new UnbackedObjectConstants());
         DuringSetupAccessImpl access = (DuringSetupAccessImpl) a;
         var hostedValuesProvider = access.getUniverse().getHostedValuesProvider();
         access.registerJVMCIObjectToConstantReplacer(constant -> UnbackedObjectConstants.replace(hostedValuesProvider.asObject(Object.class, constant)));

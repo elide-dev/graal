@@ -310,7 +310,7 @@ public class DeoptimizationUtils {
         /*
          * No deopt targets can have a StackValueNode in the graph.
          */
-        assert createGraphChecker(graph, AOT_COMPILATION_INVALID_NODES).get() : "Invalid nodes in deopt target: " + graph;
+        assert createGraphChecker(graph, AOT_COMPILATION_INVALID_NODES, false).get() : "Invalid nodes in deopt target: " + graph;
 
         for (Infopoint infopoint : result.getInfopoints()) {
             if (infopoint.debugInfo != null) {
@@ -526,8 +526,20 @@ public class DeoptimizationUtils {
      * @return Supplier which returns true if the graph does not violate the checks.
      */
     public static Supplier<Boolean> createGraphChecker(StructuredGraph graph, NodePredicate invalidNodes) {
+        return createGraphChecker(graph, invalidNodes, true);
+    }
+
+    /**
+     * @param requireInitializedType whether the declaring type of the method must be initialized.
+     *            This is not required for deoptimization targets: they are compiled ahead of time
+     *            and not partially evaluated. Methods of types that are initialized at run time
+     *            can be inlined into runtime compiled methods (e.g., instance methods, which need
+     *            no class initialization check), and then need a deoptimization target.
+     * @return Supplier which returns true if the graph does not violate the checks.
+     */
+    public static Supplier<Boolean> createGraphChecker(StructuredGraph graph, NodePredicate invalidNodes, boolean requireInitializedType) {
         return () -> {
-            if (!graph.method().getDeclaringClass().isInitialized()) {
+            if (requireInitializedType && !graph.method().getDeclaringClass().isInitialized()) {
                 /*
                  * All types which are used at run time should build-time initialized. This ensures
                  * the partial evaluator does not constant fold uninitialized fields.

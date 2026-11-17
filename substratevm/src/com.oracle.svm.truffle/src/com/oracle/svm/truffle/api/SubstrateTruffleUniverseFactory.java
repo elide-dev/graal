@@ -43,6 +43,7 @@ import com.oracle.svm.graal.meta.SubstrateField;
 import com.oracle.svm.graal.meta.SubstrateMethod;
 import com.oracle.svm.graal.meta.SubstrateType;
 import com.oracle.svm.graal.meta.SubstrateUniverseFactory;
+import com.oracle.svm.truffle.TruffleFeature;
 import com.oracle.svm.core.UninterruptibleGuestValue;
 import com.oracle.svm.util.GuestAnnotationAccess;
 import com.oracle.svm.util.OriginalClassProvider;
@@ -52,6 +53,7 @@ import jdk.graal.compiler.annotation.AnnotationValue;
 import jdk.graal.compiler.truffle.ConstantFieldInfo;
 import jdk.graal.compiler.truffle.KnownTruffleTypes;
 import jdk.graal.compiler.truffle.PartialEvaluationMethodInfo;
+import com.oracle.truffle.compiler.TruffleCompilerRuntime.InlineKind;
 import jdk.graal.compiler.truffle.PartialEvaluator;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
@@ -99,6 +101,14 @@ public final class SubstrateTruffleUniverseFactory extends SubstrateUniverseFact
                     KnownTruffleTypes types) {
         Map<ResolvedJavaType, AnnotationValue> annotations = GuestAnnotationAccess.getDeclaredAnnotationValues(method);
         var info = PartialEvaluator.computePartialEvaluationMethodInfo(runtime, method, annotations, types, OriginalClassProvider::getOriginalType);
+        if (TruffleFeature.isRuntimeBoundary(method)) {
+            /* Called like a method annotated with TruffleBoundary; see TruffleFeature. */
+            info = new PartialEvaluationMethodInfo(info.loopExplosion(),
+                            InlineKind.DO_NOT_INLINE_WITH_EXCEPTION,
+                            InlineKind.DO_NOT_INLINE_WITH_EXCEPTION,
+                            info.isInlineable(),
+                            info.isSpecializationMethod());
+        }
         if (UninterruptibleAnnotationUtils.isUninterruptible(method)) {
             UninterruptibleGuestValue uninterruptibleAnnotation = UninterruptibleAnnotationUtils.getAnnotation(method);
             if (uninterruptibleAnnotation == null || !uninterruptibleAnnotation.mayBeInlined()) {

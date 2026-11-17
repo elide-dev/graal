@@ -18,6 +18,9 @@ For build-time-loaded classes, the native image build process may have removed s
 Run-time class loading cannot reload a class that was already partially included into the native image at build time.
 This will result in errors if run-time-loaded classes try to use such removed methods or static fields.
 A typical way to address this is to use `-H:Preserve=package=...` at build time to ensure all methods and fields of a package are included in the native image.
+Run-time-loaded code calls build-time-loaded methods through their compiled code.
+The image therefore keeps compiled code for the public JDK methods annotated with `@ForceInline` that image code calls, even though image code inlines all of these calls.
+It also always keeps the core reflection entry points: `Method.invoke`, `Constructor.newInstance`, and the `get` and `set` methods of `Field`.
 
 To enable just-in-time (JIT) compilation of run-time-loaded bytecode, use `-H:+GraalJITCompileAtRuntime`.
 

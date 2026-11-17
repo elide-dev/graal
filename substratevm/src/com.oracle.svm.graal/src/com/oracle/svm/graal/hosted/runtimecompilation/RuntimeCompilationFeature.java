@@ -360,6 +360,17 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
         analysisProviders = customHostedProviders;
     }
 
+    /**
+     * Whether a feature configured runtime compilation for the analysis (see
+     * {@link #initializeAnalysisProviders}), as Truffle does. Only then can methods be registered
+     * with {@link #prepareMethodForRuntimeCompilation}. Ristretto, which compiles bytecode loaded
+     * at run time, requires this feature but does not configure it. Valid once all features have
+     * run {@code beforeAnalysis}.
+     */
+    public boolean isConfiguredForAnalysis() {
+        return analysisProviders != null;
+    }
+
     public String[] getCallTrace(CallTreeInfo callTreeInfo, AnalysisMethod method) {
         return CallTreeInfo.getCallTrace(callTreeInfo, method, registeredRuntimeCompilations);
     }
@@ -702,6 +713,10 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
                         }
                         printFailingRuntimeMethodTrace(treeInfo, failingRuntimeMethod, errorMethod);
                         System.out.println("error: " + e.getMessage());
+                        if (e.getCause() != null) {
+                            /* The parsing error itself does not say what went wrong. */
+                            System.out.println("cause: " + e.getCause());
+                        }
                     }
                 }
             }
@@ -857,7 +872,8 @@ public final class RuntimeCompilationFeature implements Feature, RuntimeCompilat
             PointsToAnalysisMethod aMethod = (PointsToAnalysisMethod) graph.method();
             MethodVariant.MethodVariantKey methodVariantKey = aMethod.getMethodVariantKey();
             Supplier<Boolean> graphChecker = DeoptimizationUtils.createGraphChecker(graph,
-                            methodVariantKey == RUNTIME_COMPILED_METHOD ? DeoptimizationUtils.RUNTIME_COMPILATION_INVALID_NODES : DeoptimizationUtils.AOT_COMPILATION_INVALID_NODES);
+                            methodVariantKey == RUNTIME_COMPILED_METHOD ? DeoptimizationUtils.RUNTIME_COMPILATION_INVALID_NODES : DeoptimizationUtils.AOT_COMPILATION_INVALID_NODES,
+                            methodVariantKey != DEOPT_TARGET_METHOD);
             if (methodVariantKey != ORIGINAL_METHOD) {
                 if (!graphChecker.get()) {
                     recordFailed(aMethod);
