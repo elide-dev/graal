@@ -162,11 +162,22 @@ public class CheckBlockedCerts {
             System.out.println("CVE-2026-91403: " + failures + " check(s) failed");
             System.exit(1);
         }
-        System.out.println("CVE-2026-91403: the blocked eMudhra intermediates are rejected, their roots still trusted");
+        System.out.println("CVE-2026-91403: the eMudhra intermediates are rejected; roots still in cacerts stay trusted");
     }
 
     static void expectBlocked(String name, Set<TrustAnchor> anchors, String... pems) throws Exception {
         String problem = validate(anchors, pems);
+        if (!rootTrusted(anchors, pems)) {
+            // JDK 25.0.5 (October 2026 CPU) removed these roots from cacerts, which distrusts the
+            // whole chain; the blocked list is then redundant.
+            if (problem != null) {
+                System.out.println("ok, rejected (root no longer in the JDK's cacerts): " + name);
+            } else {
+                failures++;
+                System.out.println("FAIL, accepted without a trusted root: " + name);
+            }
+            return;
+        }
         if (problem != null && problem.startsWith("Untrusted certificate")) {
             System.out.println("ok, rejected: " + name + " (" + problem + ")");
         } else {
@@ -176,6 +187,10 @@ public class CheckBlockedCerts {
     }
 
     static void expectTrusted(String name, Set<TrustAnchor> anchors, String... pems) throws Exception {
+        if (!rootTrusted(anchors, pems)) {
+            System.out.println("skipped, root no longer in the JDK's cacerts: " + name);
+            return;
+        }
         String problem = validate(anchors, pems);
         if (problem == null) {
             System.out.println("ok, accepted: " + name);
@@ -183,6 +198,18 @@ public class CheckBlockedCerts {
             failures++;
             System.out.println("FAIL, rejected: " + name + " (" + problem + ")");
         }
+    }
+
+    /** Whether the issuer of the last certificate of a path (target first) is a trust anchor. */
+    static boolean rootTrusted(Set<TrustAnchor> anchors, String... pems) throws Exception {
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        X509Certificate last = (X509Certificate) factory.generateCertificate(new ByteArrayInputStream(pems[pems.length - 1].getBytes(StandardCharsets.US_ASCII)));
+        for (TrustAnchor anchor : anchors) {
+            if (anchor.getTrustedCert().getSubjectX500Principal().equals(last.getIssuerX500Principal())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Validates a path (target first); returns null if it is valid, or why it is not. */
