@@ -106,7 +106,6 @@ import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.meta.MethodRefSupport;
 import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
 import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
@@ -967,7 +966,7 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
              */
             AnalysisType linkInfoType = access.getMetaAccess().lookupJavaType(MethodHandleLinkInfo.class);
             access.registerAsInHeap(linkInfoType, "Values of MethodHandle.linkInfo, computed after the analysis");
-            access.getBigBang().injectFieldTypes(access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()), List.of(linkInfoType), true);
+            access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()).injectConservativeFieldValues(List.of(linkInfoType), true);
         }
         analysisAccess = access;
 

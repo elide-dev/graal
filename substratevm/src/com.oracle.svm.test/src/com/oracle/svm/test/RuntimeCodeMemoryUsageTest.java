@@ -39,6 +39,7 @@ import org.junit.Test;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.code.RuntimeCodeInfoMemory;
 import com.oracle.svm.graal.SubstrateGraalUtils;
+import com.oracle.svm.guest.staging.option.RuntimeOptionValues.Origin;
 import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.graal.meta.SubstrateMethod;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
@@ -116,12 +117,12 @@ public class RuntimeCodeMemoryUsageTest {
 
     private static void checkWithCompileInIsolates(boolean compileInIsolates) {
         boolean previous = SubstrateOptions.ConcealedOptions.CompileInIsolates.getValue();
-        SubstrateOptions.ConcealedOptions.CompileInIsolates.update(compileInIsolates);
+        SubstrateOptions.ConcealedOptions.CompileInIsolates.update(compileInIsolates, Origin.Runtime);
         try {
             assertEquals(compileInIsolates, SubstrateOptions.shouldCompileInIsolates());
             checkInstallAndFree();
         } finally {
-            SubstrateOptions.ConcealedOptions.CompileInIsolates.update(previous);
+            SubstrateOptions.ConcealedOptions.CompileInIsolates.update(previous, Origin.Runtime);
         }
     }
 
