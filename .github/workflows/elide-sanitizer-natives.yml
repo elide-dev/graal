@@ -26,7 +26,7 @@ on:
         type: string
       toolchain-version:
         description: Elide toolchain version (including the sanitizer add-ons)
-        default: "2026.11.5"
+        default: "2026.11.7"
         required: true
         type: string
 
@@ -55,7 +55,7 @@ jobs:
             python3 unzip zip xz-utils file binutils cmake ninja-build patch pkg-config
           git config --global --add safe.directory '*'
       - name: Install Elide toolchain and sanitizer add-on
-        uses: elide-dev/toolchain/action@9087560dc52456a9ea1daf3708416295a9f3acc4  # v2026.11.5
+        uses: elide-dev/toolchain/action@a0af1f3379ff753c0760a8138ea28c5fce06d409  # v2026.11.7
         with:
           version: ${{ inputs.toolchain-version }}
           target: x86_64-unknown-linux-gnu

@@ -9,7 +9,7 @@
 # elide-sanitizer-natives workflow. All three must pass before any release artifacts are published.
 #
 # Triggers:
-#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.5.5-elide.1`, to build and publish.
+#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.6.0-elide.1`, to build and publish.
 #     A tag ending in `-dryrun` builds and smoke-tests only.
 #   - Manual dispatch (once this file is on the default branch).
 #
@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, e.g. 25.5.5-elide.1"
+        description: "Release version, e.g. 25.6.0-elide.1"
         required: true
         type: string
       publish:
@@ -42,9 +42,9 @@ concurrency:
 
 env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
-  GRAALJS_REF: 5a538406fc647e9e44c43c9c6d9b90653f9eda1d  # elide-25.5.x; unchanged for elide.23
+  GRAALJS_REF: 747d45be06c58f9a959d41d7d8a8af8cca952d2e  # elide-25.6.x
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: 57c2c23756f7f71a0b2b853dc7645d82033f2eb4  # elide-dev/graalpython#11: variable-access metadata
+  GRAALPYTHON_REF: 2a2f9fb72b2fe2281956f3ad9f542bff80f302b5  # elide-25.6.x + elide-dev/graalpython#12
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
@@ -70,19 +70,23 @@ env:
   # read bitcode from a newer major, so this must not be newer than theirs. The Linux legs use
   # the pinned Elide toolchain for reproducible compiler and linker versions.
   LTO_LLVM_MAJOR: "23"
-  ELIDE_TOOLCHAIN_VERSION: "2026.11.5"
+  ELIDE_TOOLCHAIN_VERSION: "2026.11.7"
   # The Oracle GraalVM build the EE distribution is made from (ci/elide/build-ee.py). It must be
   # built from the fork's upstream base: same GraalVM version and JVMCI, which build-ee.py checks.
   # Update it when the fork moves to a new upstream base.
   ORACLE_EE_REPOSITORY: graalvm/oracle-graalvm-ea-builds
-  ORACLE_EE_TAG: jdk-25i5-25.0.4.1.1-ea.05
+  ORACLE_EE_TAG: jdk-25i6-25.0.4.1.1-ea.02
+  # Whether to build and publish the EE distribution. Off on the 25.6 line until Oracle ships a
+  # 25.6 EA on the fork's JVMCI: jdk-25i6-25.0.4.1.1-ea.02 is on jvmci-25.5-b24, the fork on
+  # jvmci-25.6-b27, and build-ee.py refuses a JVMCI mismatch.
+  BUILD_EE: "false"
   # The native GC libraries (svmgc: Shenandoah, and G1) come from the substratevm-gcs suite, a
   # reduced HotSpot source tree in labs-openjdk. Its sources must match the fork's GC integration
   # (shenandoahGCStructs.h, ShenandoahConstants) and the LabsJDK it builds with, so it is pinned to
   # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
   # finds it. Windows has no Shenandoah support and builds without it.
   LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
-  LABS_OPENJDK_REF: 2aa99d3a422f52a41584d0cb42609ed6f450b368  # Shenandoah safepoint fix for elide.28 (elide-dev/labs-openjdk#6), on the metaspace and runtime-code parity line (interface 250502)
+  LABS_OPENJDK_REF: dc57abdc384c329a9d5a77cbd7366b6d64c37ad2  # elide-25.6.x (jvmci-25.6-b27) + the elide.28 Shenandoah safepoint fix (elide-dev/labs-openjdk#6)
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
 
@@ -166,7 +170,7 @@ jobs:
           getconf GNU_LIBC_VERSION
       - name: Install Elide toolchain (Linux)
         if: runner.os == 'Linux'
-        uses: elide-dev/toolchain/action@9087560dc52456a9ea1daf3708416295a9f3acc4  # v2026.11.5
+        uses: elide-dev/toolchain/action@a0af1f3379ff753c0760a8138ea28c5fce06d409  # v2026.11.7
         with:
           version: ${{ env.ELIDE_TOOLCHAIN_VERSION }}
       - name: Allow long paths (Windows)
@@ -353,17 +357,17 @@ jobs:
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
           ./graal/ci/elide/check-lto.sh "${ELIDE_TOOLCHAIN_HOME}/bin" "${LTO_LLVM_MAJOR}" "${home}" lto-check
       - name: Build EE distribution (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.BUILD_EE == 'true'
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
           python3 graal/ci/elide/build-ee.py "${VERSION}" "${PLATFORM}" "${home}" "${WS}/out/dist" | tee build-ee.out
       - name: Smoke test EE (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.BUILD_EE == 'true'
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/smoke-ee.sh "${home}" "${PLATFORM}" smoke-ee
       - name: Check glibc floor EE (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.BUILD_EE == 'true'
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
@@ -395,13 +399,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "native images do not block the CVE-2026-91403 certificates ($LASTEXITCODE)" }
           Get-ChildItem "$env:WS\out\dist"
       - name: Build EE distribution (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.BUILD_EE == 'true'
         shell: pwsh
         run: |
           python graal\ci\elide\build-ee.py $env:VERSION $env:PLATFORM $env:GVM_HOME "$env:WS/out/dist" | Tee-Object -FilePath build-ee.out
           if ($LASTEXITCODE -ne 0) { throw "building the EE distribution failed ($LASTEXITCODE)" }
       - name: Smoke test EE (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.BUILD_EE == 'true'
         shell: pwsh
         run: |
           $eeHome = ((Get-Content build-ee.out | Select-String '^home=' | Select-Object -Last 1).Line -replace '^home=', '') -replace '/', '\'
@@ -519,7 +523,7 @@ jobs:
         if: matrix.maven
         run: ./graal/ci/elide/deploy-maven.sh "${VERSION}" "${WS}/out/maven"
       - name: Smoke test EE with GraalJS
-        if: matrix.maven
+        if: matrix.maven && env.BUILD_EE == 'true'
         run: |
           # Truffle runtime compilation on the EE distribution, with the release's own Maven jars.
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
@@ -610,7 +614,11 @@ jobs:
           echo "$(find "stage/${VERSION}" -name '*.pom' | wc -l) Maven artifacts" | tee -a "${GITHUB_STEP_SUMMARY}"
           # A CE and an EE distribution per platform.
           [ "$(ls stage/${VERSION}/dist/graalvm-ce-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 CE distributions"; exit 1; }
-          [ "$(ls stage/${VERSION}/dist/graalvm-ee-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 EE distributions"; exit 1; }
+          if [ "${BUILD_EE}" = true ]; then
+            [ "$(ls stage/${VERSION}/dist/graalvm-ee-*.sha256 | wc -l)" = "4" ] || { echo "::error::expected 4 EE distributions"; exit 1; }
+          else
+            [ -z "$(ls stage/${VERSION}/dist/graalvm-ee-* 2>/dev/null)" ] || { echo "::error::EE distributions present with BUILD_EE=false"; exit 1; }
+          fi
           for sanitizer in asan tsan msan; do
             archive="stage/${VERSION}/dist/graalvm-natives-${VERSION}-linux-amd64-sanitizer-${sanitizer}.tar.xz"
             if [ ! -f "${archive}" ] || [ ! -f "${archive}.sha256" ]; then
