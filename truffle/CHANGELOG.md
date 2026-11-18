@@ -2,6 +2,13 @@
 
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
+## Version 25.7
+
+* GR-81866: Fixed `TruffleString.ParseDoubleNode` to throw `TruffleString.NumberFormatException` for hexadecimal literals without significand digits, including literals with very large exponents.
+* GR-80168: Bytecode DSL: Added `BytecodeConfig.matches` to compare configurations for a particular interpreter.
+* GR-80168: Bytecode DSL: Added `serializeBuilderBytecode`, `deserializeBuilderBytecode`, `serializeExecutionBytecode`, and `deserializeExecutionBytecode` methods. Execution bytecode can be loaded without reading or replaying builder calls. Deprecated the builder-only `serialize` and `deserialize` methods.
+* GR-79412: Restored automatic splitting during interpreter direct-call execution instead of compilation preparation. See [Splitting](docs/splitting/Splitting.md) for details.
+
 ## Version 25.6
 
 * GR-81582: Compiled guest code no longer polls guest safepoints before every remaining method call, including `TruffleBoundary` calls.
