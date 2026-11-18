@@ -58,6 +58,7 @@ import com.oracle.truffle.regex.RegexOptions;
 import com.oracle.truffle.regex.RegexSyntaxException;
 import com.oracle.truffle.regex.flavor.js.ECMAScriptFlavor;
 import com.oracle.truffle.regex.flavor.python.PythonFlavor;
+import com.oracle.truffle.regex.flavor.re2.RE2Flavor;
 import com.oracle.truffle.regex.flavor.ruby.RubyFlavor;
 import com.oracle.truffle.regex.test.dummylang.TRegexTestDummyLanguage;
 import com.oracle.truffle.regex.tregex.parser.MatchingMode;
@@ -123,6 +124,8 @@ public class RegexOptionsTest extends RegexTestBase {
         assertEquals(ECMAScriptFlavor.INSTANCE, parse(setVal(RegexOptions.FLAVOR_NAME, RegexOptions.FLAVOR_ECMASCRIPT)).getFlavor());
         assertEquals(PythonFlavor.INSTANCE, parse(setVal(RegexOptions.FLAVOR_NAME, RegexOptions.FLAVOR_PYTHON)).getFlavor());
         assertEquals(RubyFlavor.INSTANCE, parse(setVal(RegexOptions.FLAVOR_NAME, RegexOptions.FLAVOR_RUBY)).getFlavor());
+        assertEquals(RE2Flavor.INSTANCE, parse(setVal(RegexOptions.FLAVOR_NAME, RegexOptions.FLAVOR_RE2)).getFlavor());
+        assertTrue(parse(setVal(RegexOptions.FLAVOR_NAME, RegexOptions.FLAVOR_RE2)).isForceLinearExecution());
         RegexOptions opt = parse(setBool(RegexOptions.ALWAYS_EAGER_NAME, RegexOptions.DUMP_AUTOMATA_NAME, RegexOptions.REGRESSION_TEST_MODE_NAME));
         assertTrue(opt.isAlwaysEager());
         assertTrue(opt.isDumpAutomata());
@@ -153,6 +156,8 @@ public class RegexOptionsTest extends RegexTestBase {
         assertEquals(ECMAScriptFlavor.INSTANCE, parse(Map.of("Flavor", "ECMAScript")).getFlavor());
         assertEquals(PythonFlavor.INSTANCE, parse(Map.of("Flavor", "Python")).getFlavor());
         assertEquals(RubyFlavor.INSTANCE, parse(Map.of("Flavor", "Ruby")).getFlavor());
+        assertEquals(RE2Flavor.INSTANCE, parse(Map.of("Flavor", "RE2")).getFlavor());
+        assertTrue(parse(Map.of("Flavor", "RE2")).isForceLinearExecution());
         RegexOptions opt = parse(setBool("AlwaysEager", "DumpAutomata", "RegressionTestMode"));
         assertTrue(opt.isAlwaysEager());
         assertTrue(opt.isDumpAutomata());

@@ -25,8 +25,9 @@
 package com.oracle.svm.truffle.nfi;
 
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.ObjectHandle;
@@ -135,46 +136,14 @@ public abstract class TruffleNFISupport {
         }
     }
 
-    private static final class ZeroTerminatedCharSequence implements CharSequence {
-
-        private CharSequence seq;
-
-        ZeroTerminatedCharSequence(CharSequence seq) {
-            this.seq = seq;
-        }
-
-        @Override
-        public int length() {
-            return seq.length() + 1;
-        }
-
-        @Override
-        public char charAt(int index) {
-            if (index == seq.length()) {
-                return '\0';
-            } else {
-                return seq.charAt(index);
-            }
-        }
-
-        @Override
-        public CharSequence subSequence(int start, int end) {
-            if (end == length()) {
-                return new ZeroTerminatedCharSequence(seq.subSequence(start, end - 1));
-            } else {
-                return seq.subSequence(start, end);
-            }
-        }
-    }
-
-    @TruffleBoundary
+    /**
+     * Encodes {@code str} as zero-terminated UTF-8. Like {@link Charset#encode}, which this used
+     * before, {@link String#getBytes} replaces unpaired surrogates with {@code '?'}, and it avoids
+     * the encoder and buffer objects.
+     */
     public static byte[] javaStringToUtf8(String str) {
-        CharBuffer input = CharBuffer.wrap(new ZeroTerminatedCharSequence(str));
-        /*
-         * No need to trim the result array. The string is zero terminated, and the array is only
-         * accessed from native code, which ignores the array length anyway.
-         */
-        return UTF8.encode(input).array();
+        byte[] utf8 = str.getBytes(StandardCharsets.UTF_8);
+        return Arrays.copyOf(utf8, utf8.length + 1);
     }
 
     protected abstract CCharPointer strdupImpl(CCharPointer src);

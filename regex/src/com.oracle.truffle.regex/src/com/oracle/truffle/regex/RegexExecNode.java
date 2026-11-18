@@ -53,6 +53,7 @@ import com.oracle.truffle.regex.tregex.nodes.input.InputReadNode;
 public abstract class RegexExecNode extends RegexBodyNode {
 
     private final boolean mustCheckUTF16Surrogates;
+    private final boolean fromIndexInsideSurrogatePairMovesForward;
     private @Child ExpectStringNode expectStringNode = ExpectStringNode.create();
     private @Child ToLongNode toLongNode = ToLongNode.create();
     private @Child InputReadNode charAtNode;
@@ -60,6 +61,7 @@ public abstract class RegexExecNode extends RegexBodyNode {
     public RegexExecNode(RegexLanguage language, RegexSource source, boolean mustCheckUTF16Surrogates) {
         super(language);
         this.mustCheckUTF16Surrogates = source.getOptions().getEncoding().isUTF16() && mustCheckUTF16Surrogates;
+        this.fromIndexInsideSurrogatePairMovesForward = source.getOptions().getFlavor().fromIndexInsideSurrogatePairMovesForward();
     }
 
     @Override
@@ -117,11 +119,17 @@ public abstract class RegexExecNode extends RegexBodyNode {
         return execute(frame, input, adjustFromIndex(input, (int) fromIndex, regionFrom, regionTo), toIndex, regionFrom, regionTo);
     }
 
+    /**
+     * In Unicode mode, a {@code fromIndex} pointing to the low surrogate of a valid surrogate pair
+     * is not a code point boundary. Depending on the flavor, it is moved back to the pair's high
+     * surrogate (ECMAScript), or forward past the pair, so that no match can start before the
+     * requested {@code fromIndex} (RE2).
+     */
     private int adjustFromIndex(TruffleString input, int fromIndex, int regionFrom, int regionTo) {
         if (mustCheckUTF16Surrogates && fromIndex > regionFrom && fromIndex < regionTo) {
             assert getEncoding().isUTF16();
             if (Character.isLowSurrogate((char) inputRead(input, fromIndex)) && Character.isHighSurrogate((char) inputRead(input, fromIndex - 1))) {
-                return fromIndex - 1;
+                return fromIndexInsideSurrogatePairMovesForward ? fromIndex + 1 : fromIndex - 1;
             }
         }
         return fromIndex;

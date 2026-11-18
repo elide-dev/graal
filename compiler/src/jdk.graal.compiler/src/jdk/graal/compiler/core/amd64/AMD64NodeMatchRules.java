@@ -588,14 +588,14 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
 
     @MatchRule("(Or (LeftShift=lshift value Constant) (UnsignedRightShift=rshift value Constant))")
     public ComplexMatchResult rotateLeftConstant(LeftShiftNode lshift, UnsignedRightShiftNode rshift) {
-        JavaConstant lshiftConst = lshift.getY().asJavaConstant();
-        JavaConstant rshiftConst = rshift.getY().asJavaConstant();
-        if ((lshift.getShiftAmountMask() & (lshiftConst.asInt() + rshiftConst.asInt())) == 0) {
+        int lshiftAmount = lshift.getConstantShiftAmount();
+        int rshiftAmount = rshift.getConstantShiftAmount();
+        if ((lshift.getShiftAmountMask() & (lshiftAmount + rshiftAmount)) == 0) {
             return builder -> {
                 Value a = operand(lshift.getX());
                 OperandSize size = OperandSize.get(a.getPlatformKind());
                 assert size == OperandSize.DWORD || size == OperandSize.QWORD : size;
-                return getArithmeticLIRGenerator().emitShiftConst(ROL, size, a, lshiftConst);
+                return getArithmeticLIRGenerator().emitShiftConst(ROL, size, a, JavaConstant.forInt(lshiftAmount));
             };
         }
         return null;
@@ -603,7 +603,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
 
     @MatchRule("(Or (LeftShift value (Sub Constant=delta shiftAmount)) (UnsignedRightShift value shiftAmount))")
     public ComplexMatchResult rotateRightVariable(ValueNode value, ConstantNode delta, ValueNode shiftAmount) {
-        if (delta.asJavaConstant().asLong() == 0 || delta.asJavaConstant().asLong() == 32) {
+        if ((delta.asJavaConstant().asLong() & (value.getStackKind().getBitCount() - 1)) == 0) {
             return builder -> getArithmeticLIRGenerator().emitRor(operand(value), operand(shiftAmount));
         }
         return null;
@@ -611,7 +611,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
 
     @MatchRule("(Or (LeftShift value shiftAmount) (UnsignedRightShift value (Sub Constant=delta shiftAmount)))")
     public ComplexMatchResult rotateLeftVariable(ValueNode value, ValueNode shiftAmount, ConstantNode delta) {
-        if (delta.asJavaConstant().asLong() == 0 || delta.asJavaConstant().asLong() == 32) {
+        if ((delta.asJavaConstant().asLong() & (value.getStackKind().getBitCount() - 1)) == 0) {
             return builder -> getArithmeticLIRGenerator().emitRol(operand(value), operand(shiftAmount));
         }
         return null;

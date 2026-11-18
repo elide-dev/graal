@@ -179,6 +179,10 @@ public final class HeapImpl extends Heap {
             getOldGeneration().clean(true, cleanFillerObjectMemory);
             getChunkProvider().cleanUnusedAlignedChunks();
         }
+
+        if (mode != Mode.LATENCY) {
+            gcImpl.cleanUnusedNativeMemory();
+        }
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -1069,7 +1073,10 @@ public final class HeapImpl extends Heap {
 final class Target_java_lang_Runtime {
     @Substitute
     private long freeMemory() {
-        return maxMemory() - HeapImpl.getAccounting().getUsedBytes().rawValue();
+        /* Heap usage may exceed the configured maximum. Report zero free memory in that case. */
+        UnsignedWord maximum = Word.unsigned(maxMemory());
+        UnsignedWord used = HeapImpl.getAccounting().getUsedBytes();
+        return maximum.aboveThan(used) ? maximum.subtract(used).rawValue() : 0;
     }
 
     @Substitute

@@ -36,6 +36,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +58,9 @@ import com.oracle.truffle.api.instrumentation.test.InstrumentationTestLanguage;
 import com.oracle.truffle.tools.dap.server.DebugProtocolServerListener;
 
 public class DAPServerLifecycleTest {
+
+    /** Events read while waiting for a response, per client, for later {@link #event} calls. */
+    private static final Map<Socket, Deque<JSONObject>> SKIPPED_EVENTS = new WeakHashMap<>();
 
     private static final String SOURCE_PATH = "/runtime/reconnect.itl";
     private static final Source SOURCE = Source.newBuilder(InstrumentationTestLanguage.ID, "ROOT(\nSTATEMENT(CONSTANT(42))\n)", "reconnect.itl").uri(URI.create(
@@ -131,6 +139,64 @@ public class DAPServerLifecycleTest {
                 // The old session's breakpoint must be gone, and guest execution must resume.
                 server.evaluate().get(5, TimeUnit.SECONDS);
                 request(socket, "disconnect", 4);
+            }
+        }
+    }
+
+    @Test
+    public void testSecondClientRefusedWhileAttached() throws Exception {
+        try (TestServer server = new TestServer(false, false)) {
+            try (Socket socket = server.connect()) {
+                request(socket, "initialize", 1);
+                request(socket, "attach", 2);
+                request(socket, "configurationDone", 3);
+                request(socket, "setBreakpoints", 4, breakpointArguments(SOURCE_PATH, 2));
+                CompletableFuture<?> evaluation = server.evaluate();
+                int threadId = event(socket, "stopped").getJSONObject("body").getInt("threadId");
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    try (Socket refused = server.connect()) {
+                        send(refused, "initialize", 7, new JSONObject().put("adapterID", "graalvm"));
+                        JSONObject response = receive(refused);
+                        assertNotNull("Refused client got no response.", response);
+                        assertEquals("response", response.getString("type"));
+                        assertEquals(7, response.getInt("request_seq"));
+                        assertEquals("initialize", response.getString("command"));
+                        assertTrue(response.toString(), !response.getBoolean("success"));
+                        assertTrue(response.toString(), response.getString("message").contains("Another debugger client is attached"));
+                        assertEquals(null, receive(refused));
+                    }
+                }
+                // The attached session is undisturbed and still controls the suspended guest.
+                request(socket, "stackTrace", 5, new JSONObject().put("threadId", threadId));
+                request(socket, "continue", 6, new JSONObject().put("threadId", threadId));
+                evaluation.get(5, TimeUnit.SECONDS);
+                request(socket, "disconnect", 7);
+                assertConnectionClosed(socket);
+            }
+            try (Socket socket = server.connect()) {
+                request(socket, "initialize", 1);
+                request(socket, "attach", 2);
+                request(socket, "configurationDone", 3);
+                server.evaluate().get(5, TimeUnit.SECONDS);
+                request(socket, "disconnect", 4);
+            }
+        }
+    }
+
+    @Test
+    public void testDisposeWithRefusedClientPending() throws Exception {
+        try (TestServer server = new TestServer(false, false); Socket socket = server.connect()) {
+            request(socket, "initialize", 1);
+            try (Socket refused = server.connect()) {
+                // The refused client never sends a request; engine close must not wait the
+                // refusal timeout out.
+                CompletableFuture.runAsync(server.engine::close).get(3, TimeUnit.SECONDS);
+                server.completion.get(3, TimeUnit.SECONDS);
+                try {
+                    assertEquals(null, receive(refused));
+                } catch (IOException reset) {
+                    // Closed before it was accepted.
+                }
             }
         }
     }
@@ -275,7 +341,11 @@ public class DAPServerLifecycleTest {
         while (true) {
             JSONObject response = receive(socket);
             assertNotNull("Connection closed before responding to " + command, response);
-            if ("response".equals(response.getString("type")) && response.getInt("request_seq") == sequence) {
+            if ("event".equals(response.getString("type"))) {
+                // An event can precede the response that caused it, e.g. `stopped` once
+                // `configurationDone` releases a guest suspended at startup.
+                skippedEvents(socket).add(response);
+            } else if ("response".equals(response.getString("type")) && response.getInt("request_seq") == sequence) {
                 assertEquals(command, response.getString("command"));
                 assertTrue(response.toString(), response.getBoolean("success"));
                 return response;
@@ -297,12 +367,26 @@ public class DAPServerLifecycleTest {
     }
 
     private static JSONObject event(Socket socket, String name) throws IOException {
+        Deque<JSONObject> skipped = skippedEvents(socket);
+        for (Iterator<JSONObject> iterator = skipped.iterator(); iterator.hasNext();) {
+            JSONObject message = iterator.next();
+            if (name.equals(message.getString("event"))) {
+                iterator.remove();
+                return message;
+            }
+        }
         while (true) {
             JSONObject message = receive(socket);
             assertNotNull("Connection closed before event " + name, message);
             if ("event".equals(message.getString("type")) && name.equals(message.getString("event"))) {
                 return message;
             }
+        }
+    }
+
+    private static Deque<JSONObject> skippedEvents(Socket socket) {
+        synchronized (SKIPPED_EVENTS) {
+            return SKIPPED_EVENTS.computeIfAbsent(socket, s -> new ArrayDeque<>());
         }
     }
 

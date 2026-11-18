@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -768,7 +768,11 @@ public final class RegexASTBuilder {
                 return;
             }
         } else {
-            if (quantifier.getMin() == 0 && (curTerm.isLookAroundAssertion() || curTermIsZeroWidthGroup ||
+            // In RE2, a bounded quantifier runs all of its iterations, even empty ones, so we must
+            // not drop zero-width groups that can set capture groups.
+            boolean keepZeroWidthGroup = curTermIsZeroWidthGroup && options.getFlavor().usesRE2EmptyChecks() &&
+                            curTerm.asGroup().getCaptureGroupsHi() > curTerm.asGroup().getCaptureGroupsLo();
+            if (quantifier.getMin() == 0 && (curTerm.isLookAroundAssertion() || curTermIsZeroWidthGroup && !keepZeroWidthGroup ||
                             curTerm.isCharacterClass() && curTerm.asCharacterClass().getCharSet().matchesNothing())) {
                 // NB: If JavaScript ever gets possessive quantifiers, we might have to adjust this.
                 removeCurTerm();
@@ -881,6 +885,31 @@ public final class RegexASTBuilder {
      */
     public void wrapCurTermInGroup() {
         curTerm = wrapTermInGroup(curTerm);
+    }
+
+    /**
+     * Makes the current {@link Term} optional by wrapping it in a non-capturing group with an
+     * additional empty alternative, i.e. {@code x} becomes {@code (?:x|)} if {@code greedy} is
+     * {@code true}, and {@code (?:|x)} otherwise. In contrast to {@code x?}, this construct is not
+     * subject to empty checks, so {@code x} may match the empty string.
+     *
+     * @param innerQuantifier if non-null, this quantifier is applied to the current term before
+     *            wrapping it, e.g. {@code x+} yields {@code (?:x+|)}. Unlike
+     *            {@link #addQuantifier(Token.Quantifier)}, this never merges the term with the
+     *            preceding one.
+     */
+    public void wrapCurTermInOptionalGroup(Token.Quantifier innerQuantifier, boolean greedy) {
+        assert curTerm == curSequence.getLastTerm();
+        if (innerQuantifier != null) {
+            curTerm = addQuantifier(curTerm, innerQuantifier);
+        }
+        Group group = wrapTermInGroup(curTerm);
+        if (greedy) {
+            group.addSequence(ast);
+        } else {
+            group.insertFirst(ast.createSequence());
+        }
+        curTerm = group;
     }
 
     /**

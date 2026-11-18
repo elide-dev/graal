@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.core.jdk;
 
-import static com.oracle.svm.core.jdk.resources.NativeImageResourceFileSystemProvider.RESOURCE_PROTOCOL;
+import static com.oracle.svm.core.SubstrateOptions.ResourceProtocol;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -1041,7 +1041,7 @@ public final class Resources {
     }
 
     private static URL createURL(String loaderKey, Module module, String resourceName, int rootId) {
-        if (JavaNetSubstitutions.isDisabledURLProtocol(RESOURCE_PROTOCOL)) {
+        if (JavaNetSubstitutions.isDisabledURLProtocol(ResourceProtocol.getValue())) {
             return null;
         }
         try {
@@ -1062,7 +1062,7 @@ public final class Resources {
             String authority = host != null ? (userInfo != null ? userInfo + '@' : "") + host : null;
             // Let URI quote characters that are illegal in individual URL components.
             // Preserve exact Unicode sequences: canonically equivalent names can identify different resources.
-            URI uri = new URI(RESOURCE_PROTOCOL, authority, NativeImageResourceFileSystemUtil.formatRootedResourcePath(rootId, resourceName), null, null);
+            URI uri = new URI(ResourceProtocol.getValue(), authority, NativeImageResourceFileSystemUtil.formatRootedResourcePath(rootId, resourceName), null, null);
             return URL.of(uri, RESOURCE_URL_STREAM_HANDLER);
         } catch (MalformedURLException | URISyntaxException ex) {
             throw new IllegalStateException(ex);

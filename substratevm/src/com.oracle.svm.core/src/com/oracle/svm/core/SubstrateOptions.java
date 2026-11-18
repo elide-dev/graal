@@ -41,11 +41,14 @@ import static org.graalvm.nativeimage.impl.InternalPlatform.NATIVE_ONLY;
 import static org.graalvm.nativeimage.impl.InternalPlatform.PLATFORM_JNI;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -65,7 +68,6 @@ import com.oracle.svm.core.heap.ReferenceHandler;
 import com.oracle.svm.core.hub.DynamicHubUtils;
 import com.oracle.svm.core.hub.RuntimeClassLoading;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
-import com.oracle.svm.core.jdk.VectorAPIEnabled;
 import com.oracle.svm.core.option.GCOptionValue;
 import com.oracle.svm.core.thread.VMOperationControl;
 import com.oracle.svm.core.util.UserError;
@@ -821,6 +823,36 @@ public class SubstrateOptions {
     @Option(help = "List of comma separated URL protocols to enable.")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> EnableURLProtocols = new HostedOptionKey<>(
                     AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());
+
+    @LayerVerifiedOption(kind = Kind.Changed, severity = Severity.Error)//
+    @Option(help = "URL protocol and URI scheme for embedded resources. Select an unused scheme to avoid collisions with application filesystem providers.", type = OptionType.Expert)//
+    public static final HostedOptionKey<String> ResourceProtocol = new HostedOptionKey<>("resource", SubstrateOptions::validateResourceProtocol) {
+        @Override
+        protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, String oldValue, String newValue) {
+            super.onValueUpdate(values, oldValue, newValue);
+            // Leave non-ASCII input for validation, since Unicode case folding can produce ASCII.
+            if (newValue.chars().allMatch(c -> c <= 0x7f)) {
+                values.put(this, newValue.toLowerCase(Locale.ROOT));
+            }
+        }
+    };
+
+    private static void validateResourceProtocol(HostedOptionKey<String> optionKey) {
+        String scheme = optionKey.getValue();
+        // URL.of forbids overriding file and jrt handlers; URL parsing treats url: as a special prefix.
+        if (scheme.equals("file") || scheme.equals("jrt") || scheme.equals("url")) {
+            throw UserError.invalidOptionValue(optionKey, scheme, "The URI scheme is reserved by the JDK and cannot be used for embedded resources");
+        }
+        try {
+            if (scheme.equals(new URI(scheme, "/", null).getScheme())) {
+                return;
+            }
+        } catch (URISyntaxException e) {
+            // Report the invalid option below.
+        }
+        throw UserError.invalidOptionValue(optionKey, optionKey.getValue(),
+                        "Expected a non-empty URI scheme starting with an ASCII letter and containing only ASCII letters, digits, '+', '-', or '.'");
+    }
 
     private static final String DEPRECATION_MESSAGE_DISABLE_URL_PROTOCOLS = "Non-default URL protocols are disabled unless registered in reachability metadata. " +
                     "This option has no reachability-metadata replacement for default protocols such as file and resource.";
@@ -1635,6 +1667,10 @@ public class SubstrateOptions {
                 throw UserError.invalidOptionValue(optionKey, true, "Support for the Foreign Function and Memory API is not available with the LLVM backend.");
             }
         }
+
+        @Option(help = "Create the method handles of registered foreign downcalls at image build time, with their bindings specialized to bytecode by the JDK, " +
+                        "and invoke them directly from runtime-compiled code.", type = Expert) //
+        public static final HostedOptionKey<Boolean> SpecializeForeignDowncalls = new HostedOptionKey<>(true);
     }
 
     @Option(help = "Overwrites the available number of processors provided by the OS. Any value <= 0 means using the processor count from the OS.")//
@@ -1826,6 +1862,7 @@ public class SubstrateOptions {
     @Option(help = "Deprecated, option no longer has any effect.", deprecated = true, deprecationMessage = "It no longer has any effect, and no replacement is available")//
     public static final HostedOptionKey<Boolean> UseOldMethodHandleIntrinsics = new HostedOptionKey<>(false);
 
+    @BundleMember(role = BundleMember.Role.InputReference, valuePrefix = "path=", delimiter = ",")//
     @Option(help = "file:doc-files/PreserveHelp.txt")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> Preserve = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
 
@@ -1850,15 +1887,7 @@ public class SubstrateOptions {
     public static final HostedOptionKey<Boolean> VectorAPISupport = new HostedOptionKey<>(true);
 
     @Option(help = "Enable support for Arena.ofShared ", type = Expert)//
-    public static final HostedOptionKey<Boolean> SharedArenaSupport = new HostedOptionKey<>(true, key -> {
-        if (isSharedArenaSupportEnabled()) {
-            // GR-65162: Shared arenas cannot be used together with Vector API support
-            UserError.guarantee(!VectorAPIEnabled.getValue(), "Support for Arena.ofShared (which is part of the FFM API) is not available with Vector API support. " +
-                            "Either disable Vector API support using %s or replace usages of Arena.ofShared with Arena.ofAuto and disable shared arena support using %s.",
-                            SubstrateOptionsParser.commandArgument(VectorAPISupport, "-"),
-                            SubstrateOptionsParser.commandArgument(key, "-"));
-        }
-    });
+    public static final HostedOptionKey<Boolean> SharedArenaSupport = new HostedOptionKey<>(true);
 
     @Fold
     public static boolean isSharedArenaSupportEnabled() {
@@ -1867,10 +1896,6 @@ public class SubstrateOptions {
         }
         if (SubstrateOptions.SharedArenaSupport.hasBeenSet()) {
             return true;
-        }
-        if (VectorAPIEnabled.getValue()) {
-            // GR-65162: Shared arenas cannot be used together with Vector API support
-            return false;
         }
         return Platform.includedIn(PLATFORM_JNI.class) && Platform.includedIn(NATIVE_ONLY.class);
     }

@@ -503,4 +503,13 @@ public class JsTests extends RegexTestBase {
     public void gr73305() {
         expectUnsupported(String.format("(?<=(?:%s)*)b", "a".repeat(32768)));
     }
+
+    @Test
+    public void fromIndexInsideSurrogatePair() {
+        // In unicode mode, a lastIndex pointing to the low surrogate of a valid pair refers to
+        // the code point containing it, so the search starts at the pair's high surrogate.
+        test(".", "u", "\ud83d\ude00x", 1, true, 0, 2);
+        test("", "u", "\ud83d\ude00x", 1, true, 0, 0);
+        test(".", "", "\ud83d\ude00x", 1, true, 1, 2);
+    }
 }

@@ -49,9 +49,6 @@ public final class ForeignAPIPredicates {
     }
 
     public static final class SharedArenasEnabled implements BooleanSupplier {
-        private static final String VECTOR_API_SUPPORT_OPTION_NAME = SubstrateOptionsParser.commandArgument(SubstrateOptions.VectorAPISupport, "-");
-        private static final String SHARED_ARENA_SUPPORT_OPTION_NAME = SubstrateOptionsParser.commandArgument(SubstrateOptions.SharedArenaSupport, "-");
-
         @Platforms(Platform.HOSTED_ONLY.class)
         SharedArenasEnabled() {
         }
@@ -59,13 +56,6 @@ public final class ForeignAPIPredicates {
         @Override
         public boolean getAsBoolean() {
             return SubstrateOptions.isSharedArenaSupportEnabled();
-        }
-
-        public static RuntimeException vectorAPIUnsupported() {
-            assert !SubstrateOptions.isSharedArenaSupportEnabled();
-            throw VMError.unsupportedFeature("Support for Arena.ofShared is not available if Vector API support is enabled." +
-                            "Either disable Vector API support using " + VECTOR_API_SUPPORT_OPTION_NAME +
-                            " or replace usages of Arena.ofShared with Arena.ofAuto and disable shared arena support using " + SHARED_ARENA_SUPPORT_OPTION_NAME + ".");
         }
     }
 

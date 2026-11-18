@@ -53,6 +53,7 @@ import com.oracle.svm.graal.isolated.IsolatedGraalUtils;
 import com.oracle.svm.graal.meta.RuntimeCodeInstaller;
 import com.oracle.svm.graal.meta.SubstrateInstalledCodeImpl;
 import com.oracle.svm.graal.meta.SubstrateMethod;
+import com.oracle.svm.hosted.image.UnbackedObjectConstants;
 import com.oracle.svm.shared.option.CommonOptionParser;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.util.GuestAccess;
@@ -265,9 +266,18 @@ public class SubstrateGraalUtils {
      * Prepares a hosted {@link ImageHeapConstant} for runtime compilation: it unwraps the host
      * {@link JavaConstant} and wraps the hosted object into a {@link SubstrateObjectConstant}. We
      * reuse the identity hash code of the heap constant.
+     * <p>
+     * A heap constant that is not backed by a hosted object, e.g., one created by simulated class
+     * initialization, has no hosted object to wrap. The {@link SubstrateObjectConstant} then wraps
+     * the {@linkplain UnbackedObjectConstants#canonicalPlaceholderFor canonical placeholder} of the
+     * heap constant, which the image heap replaces with the heap constant and
+     * {@link #runtimeToHosted} maps back to it.
      */
     public static JavaConstant hostedToRuntime(ImageHeapConstant heapConstant, ConstantReflectionProvider constantReflection) {
         JavaConstant hostedConstant = heapConstant.getHostedObject();
+        if (hostedConstant == null) {
+            return SubstrateObjectConstant.forObject(UnbackedObjectConstants.canonicalPlaceholderFor(heapConstant), constantReflection.identityHashCode(heapConstant));
+        }
         VMError.guarantee(hostedConstant.getJavaKind().isObject() && !hostedConstant.isDefaultForKind() && !(hostedConstant instanceof ImageHeapConstant),
                         "Expected to find host object JavaConstant, found %s", hostedConstant);
         Object hostedObject = GuestAccess.get().getSnippetReflection().asObject(Object.class, hostedConstant);
@@ -282,7 +292,11 @@ public class SubstrateGraalUtils {
      */
     public static JavaConstant runtimeToHosted(JavaConstant constant, ImageHeapScanner scanner) {
         if (constant instanceof SubstrateObjectConstant) {
-            JavaConstant hostedConstant = GuestAccess.get().getSnippetReflection().forObject(SubstrateObjectConstant.asObject(constant));
+            Object object = SubstrateObjectConstant.asObject(constant);
+            if (object instanceof UnbackedObjectConstants.Placeholder placeholder) {
+                return placeholder.constant();
+            }
+            JavaConstant hostedConstant = GuestAccess.get().getSnippetReflection().forObject(object);
             return scanner.getImageHeapConstant(hostedConstant);
         }
         return constant;

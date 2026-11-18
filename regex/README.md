@@ -39,6 +39,8 @@ The [TRegexUtil](https://github.com/oracle/graaljs/blob/master/graal-js/src/com.
 ## Feature Support
 
 TRegex supports ECMAScript regular expressions as described in the ECMAScript 2020 specification and can transpile Python regular expressions to ECMAScript.
+TRegex also implements the [RE2](https://github.com/google/re2/wiki/Syntax) syntax with the `Flavor=RE2` option.
+RE2 regular expressions never use the backtracking engine, see [RE2 Flavor](docs/README.md#re2-flavor).
 
 Some features are not implemented in the DFA-based engine and will always cause a regular expression to run in the slower backtracking engine:
 * Backreferences

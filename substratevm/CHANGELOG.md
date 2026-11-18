@@ -10,11 +10,17 @@ This changelog summarizes major changes to GraalVM Native Image.
   Configured runtime option values are printed before application startup; effective values computed by subsystems can differ, such as the GC limit when `MaxHeapSize` is `0`.
   The listing contains the options available in the image, labels each entry `{native image}`, and reports origins as `{default}`, `{build-time}`, `{command line}`, or `{runtime}`.
   Output normally goes to standard error and respects Native Image log-file and callback routing.
+* (GR-80925) Fixed conditional foreign metadata collection in the Tracing Agent, including partial runs, and preservation of foreign conditions when generating or merging reachability metadata.
 * (GR-80731) Added runtime support for `IgnoreUnrecognizedVMOptions`, `UnlockDiagnosticVMOptions`.
 * (GR-80621) Added runtime support for `AbortVMOnCompilationFailure` through the Graal compiler's `CompilationFailureAction` option when runtime compilation is available.
+* (GR-80603) Bundle format version is now 3.0, with numbered directories for captured inputs and output destinations allocated independently of input substitutions.
+  Older bundle formats remain readable.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* (GR-65162) Shared arenas (`Arena.ofShared()`) can now be used together with Vector API support.
+  Vector API loads and stores from and to memory segments of a shared arena are checked against a concurrent close of the arena like other memory segment accesses.
+  Shared arena support is no longer disabled by default when Vector API support is enabled, and enabling both `-H:+SharedArenaSupport` and `-H:+VectorAPISupport` no longer fails the build.
 * (GR-80932) Fixed image build failures caused by unused service providers with missing optional dependencies.
   Requesting an unlinkable provider still fails at run time.
 

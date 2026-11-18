@@ -43,11 +43,13 @@ import java.lang.invoke.VarHandle;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
@@ -71,8 +73,10 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
+import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
 import com.oracle.svm.common.meta.MethodVariant;
 import com.oracle.svm.configure.ConfigurationParser;
@@ -87,6 +91,7 @@ import com.oracle.svm.core.code.FactoryMethodHolder;
 import com.oracle.svm.core.code.FactoryThrowMethodHolder;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.foreign.AbiUtils;
+import com.oracle.svm.core.foreign.DowncallHandleLinker;
 import com.oracle.svm.core.foreign.ForeignFunctionsRuntime;
 import com.oracle.svm.core.foreign.JavaEntryPointInfo;
 import com.oracle.svm.core.foreign.NativeEntryPointHelper;
@@ -100,13 +105,16 @@ import com.oracle.svm.core.graal.RuntimeCompilation;
 import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.code.SubstrateBackendWithAssembler;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
-import com.oracle.svm.core.jdk.VectorAPIEnabled;
-import com.oracle.svm.guest.staging.meta.MethodPointer;
+import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.meta.MethodRefSupport;
+import com.oracle.svm.core.methodhandles.MethodHandleLinkInfo;
+import com.oracle.svm.core.methodhandles.RuntimeMethodHandleLinker;
+import com.oracle.svm.guest.staging.meta.MethodPointer;
 import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
 import com.oracle.svm.core.sboutlining.OutlinedSBMethodHolder;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.graal.hosted.runtimecompilation.RuntimeCompilationFeature;
 import com.oracle.svm.hosted.ConditionalConfigurationRegistry;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
@@ -152,6 +160,7 @@ import jdk.graal.compiler.phases.util.Providers;
 import jdk.graal.compiler.replacements.MethodHandleWithExceptionPlugin;
 import jdk.graal.compiler.util.Digest;
 import jdk.graal.compiler.word.WordTypes;
+import jdk.internal.foreign.AbstractMemorySegmentImpl;
 import jdk.internal.foreign.MemorySessionImpl;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.abi.AbstractLinker;
@@ -199,7 +208,17 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
 
     private AbiUtils abiUtils;
     private ForeignFunctionsRuntime foreignFunctionsRuntime;
-    private UpcallStubRenamingSubstitutionProcessor upcallStubRenamingSubstitutionProcessor;
+    private ForeignStubRenamingSubstitutionProcessor stubRenamingSubstitutionProcessor;
+    /**
+     * Links the invocation of downcall handles in runtime-compiled code, or null when the image
+     * has no runtime compilation or downcalls are not specialized at build time.
+     */
+    private DowncallHandleLinker downcallHandleLinker;
+    /** The downcalls whose handle was created at build time; see {@link #createSpecializedDowncall}. */
+    private final ConcurrentMap<SharedDesc, Boolean> specializedDowncalls = new ConcurrentHashMap<>();
+    /** Entry methods of downcall handles that are not yet registered for runtime compilation. */
+    private final Deque<AnalysisMethod> pendingRuntimeCompilationEntries = new ConcurrentLinkedDeque<>();
+    private volatile FeatureImpl.BeforeAnalysisAccessImpl analysisAccess;
     private volatile Lookup implLookup;
 
     private final Deque<Object> nativeEntryPointsInImageHeap = new ConcurrentLinkedDeque<>();
@@ -343,11 +362,15 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             try {
                 LinkerOptions linkerOptions = LinkerOptions.forDowncall(desc, options);
                 SharedDesc sharedDesc = new SharedDesc(desc, linkerOptions);
+                Linker.Option[] optionsCopy = options.clone();
                 runConditionalTask(condition, _ -> {
                     NativeEntryPointInfo nepi = abiUtils.makeNativeEntrypoint(sharedDesc.fd, sharedDesc.options);
                     DowncallStub stub = createStub(DowncallStubFactory.INSTANCE, nepi);
                     if (stub != null) {
                         createStub(DowncallStubInvokerFactory.INSTANCE, nepi.methodType());
+                    }
+                    if (specializesDowncalls() && specializedDowncalls.putIfAbsent(sharedDesc, Boolean.TRUE) == null) {
+                        createSpecializedDowncall(sharedDesc, optionsCopy);
                     }
                 });
             } catch (IllegalArgumentException e) {
@@ -455,7 +478,6 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         @Override
         public BasePhase<MidTierContext> createOptimizeSharedArenaAccessPhase(boolean hosted) {
             VMError.guarantee(SubstrateOptions.isSharedArenaSupportEnabled(), "Support for shared arenas must be enabled");
-            VMError.guarantee(!VectorAPIEnabled.getValue(), "Shared arenas cannot be used together with Vector API support (GR-65162)");
 
             PhaseSuite<MidTierContext> sharedArenaPhases = new PhaseSuite<>();
             if (hosted) {
@@ -525,14 +547,31 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         ImageSingletons.add(ForeignSupport.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignFunctionsRuntime.class, foreignFunctionsRuntime);
         ImageSingletons.add(ForeignHostedSupport.class, this);
+        if (specializesDowncalls()) {
+            downcallHandleLinker = new DowncallHandleLinker();
+            ImageSingletons.add(RuntimeMethodHandleLinker.class, downcallHandleLinker);
+        }
+    }
+
+    /**
+     * Whether the method handles of registered downcalls are created at image build time, with
+     * bindings specialized by the JDK, in place of handles with interpreted bindings linked at run
+     * time, and invoked directly from runtime-compiled code. Only images with runtime compilation
+     * benefit: from AOT-compiled code, a handle that is not a compilation constant is invoked by
+     * the lambda form interpreter either way. Layered images are not supported, because the
+     * entry methods of the handles are indexed per layer (see {@link DowncallHandleLinker}).
+     */
+    private static boolean specializesDowncalls() {
+        return ForeignFunctionsRuntime.areFunctionCallsSupported() && SubstrateOptions.ConcealedOptions.SpecializeForeignDowncalls.getValue() && RuntimeCompilation.isEnabled() &&
+                        !ImageLayerBuildingSupport.buildingImageLayer();
     }
 
     @Override
     public void duringSetup(DuringSetupAccess a) {
         var access = (FeatureImpl.DuringSetupAccessImpl) a;
         accessSupport.duringSetup(access.getMetaAccess(), access.getUniverse());
-        upcallStubRenamingSubstitutionProcessor = new UpcallStubRenamingSubstitutionProcessor();
-        access.registerSubstitutionProcessor(upcallStubRenamingSubstitutionProcessor);
+        stubRenamingSubstitutionProcessor = new ForeignStubRenamingSubstitutionProcessor();
+        access.registerSubstitutionProcessor(stubRenamingSubstitutionProcessor);
         if (SubstrateOptions.isSharedArenaSupportEnabled()) {
             ImageSingletons.add(SharedArenaSupport.class, new SharedArenaSupportImpl());
         }
@@ -789,7 +828,7 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
              */
             MethodHandle specializedBindings = lookupAndReadMethodHandleField(bindingsMaker);
             Class<?> upcallStubClass = feature.getImplLookup().revealDirect(specializedBindings).getDeclaringClass();
-            feature.upcallStubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
+            feature.stubRenamingSubstitutionProcessor.register(upcallStubClass, stableUpcallStubName(desc));
             return bindingsMaker;
         }
 
@@ -919,6 +958,17 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
         var access = (FeatureImpl.BeforeAnalysisAccessImpl) a;
 
         accessSupport.setAnalysisAccess(a);
+        if (downcallHandleLinker != null) {
+            downcallHandleLinker.initialize(access.getMetaAccess(), field -> access.registerAsAccessed((AnalysisField) field, "Read by the downcall handle linker in runtime compilation"));
+            /*
+             * The values of MethodHandle.linkInfo are only available after the analysis, so the
+             * analysis is told that the field holds instances of its declared type or null.
+             */
+            AnalysisType linkInfoType = access.getMetaAccess().lookupJavaType(MethodHandleLinkInfo.class);
+            access.registerAsInHeap(linkInfoType, "Values of MethodHandle.linkInfo, computed after the analysis");
+            access.getMetaAccess().lookupJavaField(RuntimeMethodHandleLinker.linkInfoField()).injectConservativeFieldValues(List.of(linkInfoType), true);
+        }
+        analysisAccess = access;
 
         for (String simpleName : VAR_HANDLE_SEGMENT_ACCESSORS) {
             Class<?> varHandleSegmentAsXClass = ReflectionUtil.lookupClass(JLI_PACKAGE + '.' + simpleName);
@@ -964,6 +1014,83 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             initSafeArenaAccessors(access);
         } catch (Throwable t) {
             throw GraalError.shouldNotReachHere(t);
+        }
+    }
+
+    /**
+     * Creates the method handle of a registered downcall at image build time, so that the JDK
+     * specializes its bindings to bytecode, and registers it for {@code Linker.downcallHandle}
+     * calls at image run time (see {@link ForeignFunctionsRuntime#getSpecializedDowncallHandle}).
+     * Also generates the entry method of the handle and registers it for runtime compilation, so
+     * that runtime-compiled code invokes the handle directly (see {@link DowncallHandleLinker}).
+     * <p>
+     * Does nothing if runtime compilation is not configured for the analysis, as in an image whose
+     * only runtime compiler is Ristretto: Ristretto does not use the {@link DowncallHandleLinker},
+     * and the entry methods cannot be parsed for runtime compilation (elide-dev/graal#198). This
+     * runs in a conditional task, which the analysis executes only after all features have run
+     * {@link #beforeAnalysis}, where runtime compilation is configured (for Truffle, by
+     * {@code TruffleFeature}).
+     */
+    private synchronized void createSpecializedDowncall(SharedDesc desc, Linker.Option[] options) {
+        VMError.guarantee(BuildPhaseProvider.isAnalysisStarted(), "Downcall handles must be specialized during the analysis");
+        if (!RuntimeCompilationFeature.singleton().isConfiguredForAnalysis()) {
+            /* No runtime-compiled code can invoke the handle directly: nothing to gain. */
+            return;
+        }
+        FunctionDescriptor strippedFd = DowncallHandleEntryGenerator.stripNames(desc.fd);
+        LinkerOptions linkerOptions = LinkerOptions.forDowncall(strippedFd, options);
+        if (foreignFunctionsRuntime.getSpecializedDowncallHandle(strippedFd, linkerOptions) != null) {
+            /* Registered before with a descriptor that differs only in layout names. */
+            return;
+        }
+        MethodHandle handle = DowncallHandleEntryGenerator.createDowncallHandle(LINKER, desc.fd, options);
+        Lookup lookup = getImplLookup();
+        Class<?> stubClass = DowncallHandleEntryGenerator.findSpecializedStubClass(handle, lookup);
+        if (stubClass == null) {
+            /* The JDK of the image builder interprets the bindings of the handle: nothing to gain. */
+            return;
+        }
+        String digest = Digest.digestAsHex(platform() + "|" + strippedFd + "|variadic=" + linkerOptions.isVariadicFunction() +
+                        (linkerOptions.isVariadicFunction() ? ":" + linkerOptions.firstVariadicArgIndex() : "") +
+                        "|capturedState=" + linkerOptions.capturedCallStateMask() +
+                        "|critical=" + linkerOptions.isCritical() +
+                        "|heap=" + linkerOptions.allowsHeapAccess());
+        stubRenamingSubstitutionProcessor.register(stubClass, "L" + DowncallHandleEntryGenerator.SPECIALIZED_STUB_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+        Method entry = DowncallHandleEntryGenerator.generateEntry(handle, lookup);
+        stubRenamingSubstitutionProcessor.register(entry.getDeclaringClass(), "L" + DowncallHandleEntryGenerator.ENTRY_CLASS_NAME.replace('.', '/') + ".s" + digest + ";");
+        AnalysisMethod entryMethod = accessSupport.analysisMetaAccess.lookupJavaMethod(entry);
+        /* The handle is registered with the linker before it becomes reachable through the map. */
+        downcallHandleLinker.registerEntry(handle, entryMethod);
+        VMError.guarantee(foreignFunctionsRuntime.addSpecializedDowncallHandle(strippedFd, linkerOptions, handle));
+        pendingRuntimeCompilationEntries.add(entryMethod);
+        registerPendingEntriesForRuntimeCompilation();
+    }
+
+    /**
+     * Registers the generated entry methods for runtime compilation. Entry methods are created by
+     * conditional tasks while the analysis runs. Returns whether an entry method was registered.
+     */
+    private boolean registerPendingEntriesForRuntimeCompilation() {
+        FeatureImpl.BeforeAnalysisAccessImpl access = analysisAccess;
+        if (access == null || downcallHandleLinker == null) {
+            return false;
+        }
+        RuntimeCompilationFeature runtimeCompilation = RuntimeCompilationFeature.singleton();
+        boolean registered = false;
+        synchronized (pendingRuntimeCompilationEntries) {
+            AnalysisMethod entry;
+            while ((entry = pendingRuntimeCompilationEntries.poll()) != null) {
+                runtimeCompilation.prepareMethodForRuntimeCompilation(entry, access);
+                registered = true;
+            }
+        }
+        return registered;
+    }
+
+    @Override
+    public void duringAnalysis(DuringAnalysisAccess access) {
+        if (registerPendingEntriesForRuntimeCompilation()) {
+            access.requireAnalysisIteration();
         }
     }
 
@@ -1059,7 +1186,59 @@ public class ForeignFunctionsFeature implements InternalFeature, ForeignHostedSu
             Class<?> concreteHeapSegmentImpl = ReflectionUtil.lookupClass(heapSegmentImpl);
             registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(concreteHeapSegmentImpl, "unsafeGetBase"));
         }
+
+        /*
+         * If both heap and native segments reach a scoped Vector API accessor, the call cannot be
+         * devirtualized and targets the abstract method. This is safe as long as the segment
+         * hierarchy is sealed and contains no other implementations than the ones registered
+         * above. The call happens after the session check and can safepoint (in the method-end
+         * safepoint check of the callee), so the shared arena phase checks the session again
+         * before the access that uses the returned base or offset.
+         */
+        verifySegmentAccessorImplementations(metaAccess, AbstractMemorySegmentImpl.class);
+        registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(AbstractMemorySegmentImpl.class, "unsafeGetBase"));
+        registerSafeArenaAccessorMethod(metaAccess, ReflectionUtil.lookupMethod(AbstractMemorySegmentImpl.class, "unsafeGetOffset"));
+
+        /*
+         * The @Scoped Vector API accessors 'ScopedMemoryAccess.(load|store)*MemorySegment*' call
+         * 'VectorSupport.(load|store)(Masked)'. If Vector API support is enabled, these calls are
+         * intrinsified and expanded into SIMD memory accesses that the shared arena phase checks
+         * like any other access. If expansion is not possible, the call to the 'VectorSupport'
+         * method remains. It is the last operation of the scoped region and only invokes the
+         * 'defaultImpl' lambda of 'jdk.incubator.vector', which accesses the segment through
+         * 'MemorySegment.get' and 'MemorySegment.set'. These are @Scoped accessors that check the
+         * session themselves, so the call cannot access the memory of a closed arena.
+         */
+        Class<?> vectorSupport = ReflectionUtil.lookupClass("jdk.internal.vm.vector.VectorSupport");
+        for (Method method : vectorSupport.getDeclaredMethods()) {
+            if (VECTOR_SUPPORT_MEMORY_ACCESSORS.contains(method.getName())) {
+                registerSafeArenaAccessorMethod(metaAccess, method);
+            }
+        }
     }
+
+    /**
+     * Verifies that {@code klass} and all its subclasses are sealed or final and that every
+     * implementation of {@code unsafeGetBase} and {@code unsafeGetOffset} in this hierarchy has
+     * been registered as safe arena accessor.
+     */
+    private void verifySegmentAccessorImplementations(MetaAccessProvider metaAccess, Class<?> klass) {
+        VMError.guarantee(klass.isSealed() || Modifier.isFinal(klass.getModifiers()), "Memory segment implementation %s must be sealed or final", klass.getName());
+        for (Method method : klass.getDeclaredMethods()) {
+            if ((method.getName().equals("unsafeGetBase") || method.getName().equals("unsafeGetOffset")) && !Modifier.isAbstract(method.getModifiers()) && !method.isBridge()) {
+                VMError.guarantee(neverAccessesSharedArenaMethods.contains(metaAccess.lookupJavaMethod(method)), "%s must be registered as safe arena accessor", method);
+            }
+        }
+        if (klass.isSealed()) {
+            for (Class<?> subclass : klass.getPermittedSubclasses()) {
+                verifySegmentAccessorImplementations(metaAccess, subclass);
+            }
+        }
+    }
+
+    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+13/src/java.base/share/classes/jdk/internal/misc/X-ScopedMemoryAccess.java.template") //
+    @BasedOnJDKFile("https://github.com/graalvm/labs-openjdk/blob/jdk-25+13/src/jdk.incubator.vector/share/classes/jdk/incubator/vector/X-Vector.java.template") //
+    private static final Set<String> VECTOR_SUPPORT_MEMORY_ACCESSORS = Set.of("load", "loadMasked", "store", "storeMasked");
 
     protected void registerSafeArenaAccessorClass(MetaAccessProvider metaAccess, Class<?> klass) {
         neverAccessesSharedArena.add(metaAccess.lookupJavaType(klass));

@@ -30,6 +30,9 @@ import static com.oracle.svm.interpreter.InterpreterFeature.assertionsEnabled;
 import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.VTBL_NO_DISPATCH;
 import static com.oracle.svm.util.GuestAnnotationAccess.newAnnotationValue;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -155,8 +158,27 @@ public class CremaFeature implements InternalFeature {
             for (AnalysisMethod invokersMethod : invokers.getDeclaredMethods(false)) {
                 accessImpl.registerAsRoot(invokersMethod, false, "Used by method handles with crema");
             }
+
+            registerReflectionEntryPoints(accessImpl);
         } catch (NoSuchMethodError e) {
             throw VMError.shouldNotReachHere(e);
+        }
+    }
+
+    /**
+     * The core reflection entry points ({@code Method.invoke}, {@code Constructor.newInstance} and
+     * the {@code get} and {@code set} methods of {@code Field}) are how run-time loaded code reaches
+     * members it does not link against, and are public {@code @ForceInline} methods. Image code
+     * that never uses one of them leaves it without compiled code, which the interpreter needs to
+     * call it, so keep them all compiled (see {@link #keepInlineOnlyApiMethodsCompiled}).
+     */
+    private static void registerReflectionEntryPoints(FeatureImpl.BeforeAnalysisAccessImpl access) {
+        for (Class<?> reflectionClass : List.of(Method.class, Constructor.class, Field.class)) {
+            for (AnalysisMethod method : access.getMetaAccess().lookupJavaType(reflectionClass).getDeclaredMethods(false)) {
+                if (method.isPublic() && access.getHostVM().hasAlwaysInlineDirective(method)) {
+                    access.registerAsRoot(method, true, "Reflection entry point that run-time loaded code calls through its compiled code");
+                }
+            }
         }
     }
 
@@ -175,6 +197,7 @@ public class CremaFeature implements InternalFeature {
         BuildTimeInterpreterUniverse btiUniverse = BuildTimeInterpreterUniverse.singleton();
 
         keepSuperConstructorsCompiled(aUniverse, btiUniverse);
+        keepInlineOnlyApiMethodsCompiled(aUniverse, btiUniverse);
 
         if (assertionsEnabled()) {
             for (AnalysisType analysisType : aUniverse.getTypes()) {
@@ -241,6 +264,38 @@ public class CremaFeature implements InternalFeature {
     private static void keepSuperConstructorsCompiled(AnalysisUniverse aUniverse, BuildTimeInterpreterUniverse btiUniverse) {
         for (AnalysisMethod method : aUniverse.getMethods()) {
             if (isSuperConstructorCandidate(method) && method.isSimplyImplementationInvoked() && btiUniverse.getMethod(method) != null) {
+                SubstrateCompilationDirectives.singleton().registerForcedCompilation(method);
+            }
+        }
+    }
+
+    /**
+     * Whether code loaded at run time can link against {@code method} without special access: a
+     * public or protected method of a public class in a package that its module exports to all
+     * modules (every package of an unnamed module is exported).
+     */
+    private static boolean isExportedApi(AnalysisMethod method) {
+        if (!method.isPublic() && !method.isProtected()) {
+            return false;
+        }
+        AnalysisType declaringClass = method.getDeclaringClass();
+        return declaringClass.isPublic() && JVMCIReflectionUtil.getModule(declaringClass).isExported(JVMCIReflectionUtil.getPackageName(declaringClass));
+    }
+
+    /**
+     * Image methods with an always-inline directive ({@code @ForceInline} in the JDK, such as
+     * {@code Method.invoke}, {@code Field.getInt}, {@code Constructor.newInstance} or the accessors
+     * of {@code sun.misc.Unsafe}) are inlined into every image caller, so the compile queue, which
+     * compiles a method only when compiled code still calls it after inlining, never compiles them
+     * on their own. The interpreter calls an image method through the method's compiled code,
+     * because image methods keep no bytecodes, so code loaded at run time that calls such a method
+     * would get a {@link NoSuchMethodError} although the image calls it too (elide-dev/graal#161).
+     * Compile the ones that the analysis linked and that run-time loaded code can link against
+     * (exported API, see {@link #isExportedApi}) on their own as well.
+     */
+    private static void keepInlineOnlyApiMethodsCompiled(AnalysisUniverse aUniverse, BuildTimeInterpreterUniverse btiUniverse) {
+        for (AnalysisMethod method : aUniverse.getMethods()) {
+            if (method.isSimplyImplementationInvoked() && aUniverse.hostVM().hasAlwaysInlineDirective(method) && isExportedApi(method) && btiUniverse.getMethod(method) != null) {
                 SubstrateCompilationDirectives.singleton().registerForcedCompilation(method);
             }
         }

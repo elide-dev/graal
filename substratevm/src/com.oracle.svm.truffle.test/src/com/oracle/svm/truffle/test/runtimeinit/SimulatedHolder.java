@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,27 +22,24 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.hosted.ameta;
+package com.oracle.svm.truffle.test.runtimeinit;
 
-import jdk.vm.ci.meta.Constant;
-import jdk.vm.ci.meta.JavaConstant;
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.MemoryAccessProvider;
+/**
+ * Initialized at image run time, but its class initializer is simulated at image build time: it
+ * only allocates an object. The value of {@link #VALUE} is then an image heap object that has no
+ * backing object in the image builder.
+ */
+public final class SimulatedHolder {
+    public static final Marker VALUE = new Marker("simulated");
 
-public final class EmptyMemoryAccessProvider implements MemoryAccessProvider {
-
-    public static final MemoryAccessProvider SINGLETON = new EmptyMemoryAccessProvider();
-
-    private EmptyMemoryAccessProvider() {
+    private SimulatedHolder() {
     }
 
-    @Override
-    public JavaConstant readPrimitiveConstant(JavaKind kind, Constant base, long displacement, int bits) {
-        return null;
-    }
+    public static final class Marker {
+        public final String name;
 
-    @Override
-    public JavaConstant readObjectConstant(Constant base, long displacement) {
-        return null;
+        Marker(String name) {
+            this.name = name;
+        }
     }
 }

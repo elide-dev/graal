@@ -477,10 +477,14 @@ def truffle_unittest_task(extra_build_args=None):
             'jdk.graal.compiler.truffle.test.ConstantOptionKeyPartialEvaluationTest',
             # GR-75881
             'jdk.graal.compiler.truffle.test.GR75881Test',
+            # Downcalls through constant FFM method handles are compiled to direct calls of the
+            # downcall stub during partial evaluation. The test registers its downcalls through a feature.
+            'jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest',
         ]
         test_build_args = (extra_build_args +
                            svm_experimental_options(['-H:-SupportCompileInIsolates']) +
-                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true'])
+                           ['-Dpolyglot.ConstantOptionKeyPartialEvaluationLanguage.ConstantOption1=true',
+                            '--features=jdk.graal.compiler.truffle.test.FFMDowncallPartialEvaluationTest$TestFeature'])
         native_unittest(tests + truffle_args(test_build_args))
 
         # Static objects with field-based storage are pods in an image. With VirtualizePods (the
@@ -492,7 +496,19 @@ def truffle_unittest_task(extra_build_args=None):
         # Compiled code that materializes and deoptimizes pods, with compilation in isolates.
         native_unittest(['jdk.graal.compiler.truffle.test.StaticObjectEscapeTest'] + truffle_args(extra_build_args + pod_build_args))
 
+    # C interface calls (an inlinable NO_TRANSITION leaf, and transitioning function pointer and
+    # CFunction calls, which must be emitted as calls to their AOT stubs) in runtime-compiled
+    # Truffle code. The test class carries its own @NativeImageBuildArgs (--macro:truffle).
+    native_unittest(['com.oracle.svm.truffle.test.CFunctionRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
+    # Runtime compiled code that uses classes initialized at run time: a folded static field of a
+    # class whose initializer is simulated, and an inlined method of a class that is not simulated
+    # (elide-dev/graal#209). The test class carries its own @NativeImageBuildArgs (--macro:truffle).
+    native_unittest(['com.oracle.svm.truffle.test.SimulatedClassInitializerRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
+
     _truffle_runtime_compilation_test(extra_build_args)
+    # Compilation isolates hand the installed code's metadata over to the client isolate, which
+    # must keep native memory tracking consistent (elide-dev/graal#194).
+    _truffle_runtime_compilation_test(extra_build_args + ['--enable-monitoring=nmt'])
     # Runtime compilation must also work when AOT calls are routed through the PLT/GOT. Then
     # runtime-compiled code reaches PLT stubs via vtables.
     _truffle_runtime_compilation_test(extra_build_args + svm_experimental_options([
@@ -642,6 +658,21 @@ def svm_gate_body(args, tasks):
         if t:
             with native_image_context(IMAGE_ASSERTION_FLAGS):
                 native_unittests_task(args.extra_image_builder_arguments)
+                # Ristretto requires runtime compilation, which no feature configures for the
+                # analysis without Truffle. Downcalls registered at build time must then not be
+                # specialized for runtime compilation (elide-dev/graal#198).
+                native_unittest(['com.oracle.svm.test.foreign.ForeignTests', '--build-args'] + svm_experimental_options([
+                    '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime']) + args.extra_image_builder_arguments)
+                if '--static' not in args.extra_image_builder_arguments:
+                    native_image_context_run(_foreign_ristretto_shared_library, args.extra_image_builder_arguments)
+                # Shared arenas together with the Vector API (GR-65162). The test class declares the
+                # required build arguments (--add-modules=jdk.incubator.vector, ...) with
+                # @NativeImageBuildArgs, so it is excluded from the default image group above.
+                native_unittest(['com.oracle.svm.test.foreign.SharedArenaVectorAPITest', '--build-args'] + args.extra_image_builder_arguments)
+                # Code cache size counters (non-heap memory usage) while runtime-compiled code is
+                # installed and freed, with and without compilation isolates (elide-dev/graal#227).
+                # The test class declares its build arguments with @NativeImageBuildArgs.
+                native_unittest(['com.oracle.svm.test.RuntimeCodeMemoryUsageTest', '--build-args'] + args.extra_image_builder_arguments)
 
     generic_field_type_tags = [GraalTags.native_unittests, GraalTags.all_native_unittests, GraalTags.generic_field_type]
     with Task('generic field type', tasks, tags=generic_field_type_tags) as t:
@@ -1819,6 +1850,19 @@ mx_gate.add_gate_runner(suite, svm_gate_body)
 mx_gate.add_gate_argument('--extra-image-builder-arguments', action=mx_compiler.ShellEscapedStringAction, help='adds image builder arguments to gate tasks where applicable', default=[])
 
 
+def _foreign_ristretto_shared_library(native_image, extra_image_args):
+    """
+    Builds a shared library that registers downcalls, with Ristretto as its only runtime compiler
+    and the options of Elide's libjvmtools image (elide-dev/graal#198).
+    """
+    native_image(['--shared', '-cp', classpath(['com.oracle.svm.test']),
+                  '--features=com.oracle.svm.test.foreign.ForeignTests$TestFeature',
+                  '-o', join(svmbuild_dir(), 'libforeignristretto')] + svm_experimental_options([
+                      '-H:+RuntimeClassLoading', '-H:+GraalJITCompileAtRuntime', '-H:+ForeignAPISupport',
+                      '-H:+ParseRuntimeOptions', '-H:+UseServiceLoaderFeature', '-H:+AllowJRTFileSystem',
+                      '-H:-VectorAPISupport', '-H:+UseCompressedReferences', '-H:+RelativeCodePointers']) + extra_image_args)
+
+
 def _cinterfacetutorial(native_image, args=None):
     """Build and run the tutorial for the C interface"""
 
@@ -2924,7 +2968,9 @@ lib_jvm_preserved_modules = [
     'jdk.charsets',
 ]
 
-lib_jvm_experimental_build_args = (['-H:Preserve=module=' + module for module in lib_jvm_preserved_modules] +
+# Keep 'resource' available for application filesystem providers.
+lib_jvm_experimental_build_args = (['-H:ResourceProtocol=org.graalvm.nativeimage.libjvm.resource'] +
+                                   ['-H:Preserve=module=' + module for module in lib_jvm_preserved_modules] +
                                    ['-H:Preserve=package=' + pkg for pkg in lib_jvm_preserved_packages])
 if mx.is_linux():
     lib_jvm_experimental_build_args += [
@@ -2934,6 +2980,8 @@ if mx.is_linux():
 # Resolve JVMStat provider modules so their preserved protocol packages are available for runtime loading.
 lib_jvm_build_args = (
     ['--add-modules=jdk.internal.jvmstat,jdk.jstatd'] +
+    ['--link-at-build-time=module=' + module for module in lib_jvm_preserved_modules] +
+    ['--link-at-build-time=package=' + pkg for pkg in lib_jvm_preserved_packages] +
     svm_experimental_options(lib_jvm_experimental_build_args)
 )
 if mx.is_linux():
@@ -4142,9 +4190,9 @@ class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
 
 def mx_register_dynamic_suite_constituents(register_project, register_distribution):
     register_project(SubstrateCompilerFlagsBuilder())
-    lto_toolchain = _lto_ninja_toolchain()
-    if lto_toolchain:
-        register_distribution(lto_toolchain)
+    for lto_toolchain in (_lto_ninja_toolchain(), _lto_musl_ninja_toolchain()):
+        if lto_toolchain:
+            register_distribution(lto_toolchain)
     register_project(BaseJDKStaticLibrarySymbolsBuilder())
     register_project(SVMStaticLibrarySymbolsBuilder())
 
@@ -4185,8 +4233,9 @@ def _lto_ninja_toolchain():
     LTO link can include them while every other link keeps using the machine code. SVM_LTO_CXX and
     SVM_LTO_AR default to clang++ and llvm-ar next to SVM_LTO_CC.
 
-    Only ELF targets support fat LTO objects, so this is Linux (glibc) only. Other native projects
-    and the musl variants keep their toolchains.
+    Only ELF targets support fat LTO objects, so this is Linux only. This toolchain builds the glibc
+    variants; see _lto_musl_ninja_toolchain for the musl ones. Other native projects keep their
+    toolchains.
     """
     cc = mx.get_env('SVM_LTO_CC')
     if not cc or not mx.is_linux():
@@ -4207,6 +4256,37 @@ CXXFLAGS={flags}
     layout = {'toolchain.ninja': {'source_type': 'string', 'value': toolchain}}
     return mx.LayoutDirDistribution(suite, 'SVM_LTO_NINJA_TOOLCHAIN', ['mx:GCC_NINJA_TOOLCHAIN'], layout, None, True, None,
                                     native_toolchain={'kind': 'ninja', 'compiler': 'svm-lto', 'target': {}})
+
+
+def _lto_musl_ninja_toolchain():
+    """
+    The "svm-lto" ninja toolchain for the musl variants of the libraries that _lto_ninja_toolchain
+    builds for glibc. It exists only if SVM_LTO_MUSL_CC names a clang that targets musl, such as an
+    <arch>-unknown-linux-musl-clang whose configuration file supplies a musl sysroot. The libraries
+    are then fat LTO objects as well, so a static musl image linked with ThinLTO optimizes them
+    together with a libc that also carries bitcode. Without it, the musl variants are built by GCC
+    (sdk:MUSL_NINJA_TOOLCHAIN) and contain machine code only. SVM_LTO_MUSL_CXX defaults to the
+    matching clang++, SVM_LTO_MUSL_AR to llvm-ar next to SVM_LTO_MUSL_CC.
+    """
+    cc = mx.get_env('SVM_LTO_MUSL_CC')
+    if not cc or not mx.is_linux():
+        return None
+    bin_dir = dirname(cc)
+    cxx = mx.get_env('SVM_LTO_MUSL_CXX') or (cc + '++' if cc.endswith('clang') else join(bin_dir, 'clang++'))
+    ar = mx.get_env('SVM_LTO_MUSL_AR') or join(bin_dir, 'llvm-ar')
+    flags = '-flto=thin -ffat-lto-objects'
+    toolchain = f"""
+include <ninja-toolchain:GCC_NINJA_TOOLCHAIN>
+CC={cc}
+CXX={cxx}
+AR={ar}
+CFLAGS={flags}
+CXXFLAGS={flags}
+LDFLAGS=
+"""
+    layout = {'toolchain.ninja': {'source_type': 'string', 'value': toolchain}}
+    return mx.LayoutDirDistribution(suite, 'SVM_LTO_MUSL_NINJA_TOOLCHAIN', ['mx:GCC_NINJA_TOOLCHAIN'], layout, None, True, None,
+                                    native_toolchain={'kind': 'ninja', 'compiler': 'svm-lto', 'target': {'libc': 'musl'}})
 
 
 class JDKLayoutTARDistribution(mx.LayoutTARDistribution):

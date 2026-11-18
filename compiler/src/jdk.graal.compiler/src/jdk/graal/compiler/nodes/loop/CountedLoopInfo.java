@@ -240,15 +240,11 @@ public class CountedLoopInfo {
      * </pre>
      *
      * the limit checked IV will be a {@link DerivedOffsetInductionVariable} with the constant
-     * offset {@code 5}. In this case the {@link CountedLoopInfo#getBodyIV()} will be the
-     * {@link DerivedOffsetInductionVariable#getBase()} of the {@link #getLimitCheckedIV()}. This is
-     * the regular IV {@code i}. Most {@link #isInverted()} inverted loops have a shape where the
-     * limit checked IV is a {@link DerivedInductionVariable}.
+     * offset {@code 5}. For this head-counted loop, {@link #getBodyIV()} returns the same derived IV.
+     * In an inverted loop, the limit check may instead use the next iteration's value of
+     * {@link #getBodyIV()}.
      *
-     * @return the {@link InductionVariable} compared ({@link CompareNode}) to
-     *         {@link CountedLoopInfo#getLimit()}. If this loop is
-     *         {@link CountedLoopInfo#isInverted()} returns to next iteration iv based on
-     *         {@link CountedLoopInfo#getBodyIV()}.
+     * @return the {@link InductionVariable} compared to {@link #getLimit()} by the loop exit test
      */
     public InductionVariable getLimitCheckedIV() {
         return limitCheckedIV;
@@ -492,19 +488,15 @@ public class CountedLoopInfo {
         return null;
     }
 
-    /**
-     * Determine if the loop might be entered. Returns {@code false} if we can tell statically that
-     * the loop cannot be entered; returns {@code true} if the loop might possibly be entered,
-     * including in the case where we cannot be sure statically.
-     *
-     * @return false if the loop can definitely not be entered, true otherwise
-     */
+    /// Determines if the loop might be entered. Returns `false` if the loop statically cannot be
+    /// entered; returns `true` if the loop might possibly be entered, including when the entry
+    /// condition cannot be determined statically.
+    ///
+    /// @return false if the loop can definitely not be entered, true otherwise
     public boolean loopMightBeEntered() {
         if (isInverted()) {
             return true;
         }
-        Stamp stamp = getLimitCheckedIV().valueNode().stamp(NodeView.DEFAULT);
-
         ValueNode max;
         ValueNode min;
         if (getLimitCheckedIV().direction() == InductionVariable.Direction.Up) {
@@ -520,10 +512,7 @@ public class CountedLoopInfo {
             min = getTripCountLimit();
         }
         if (isLimitIncluded) {
-            // Ensure the constant is value numbered in the graph. Don't add other nodes to the
-            // graph, they will be dead code.
-            StructuredGraph graph = getLimitCheckedIV().valueNode().graph();
-            max = BinaryArithmeticNode.add(max, ConstantNode.forIntegerStamp(stamp, 1, graph), NodeView.DEFAULT);
+            return inclusiveLoopMightBeEntered(min, max);
         }
 
         LogicNode entryCheck = getCounterIntegerHelper().createCompareNode(min, max, NodeView.DEFAULT);
@@ -536,11 +525,33 @@ public class CountedLoopInfo {
         }
     }
 
+    /// Determines whether an inclusive loop might enter by checking `min <= max` with the counter's
+    /// signed or unsigned ordering. For an upward loop, `min` is the body IV start and `max` is the
+    /// trip-count limit; for a downward loop, these roles are reversed. These names describe the
+    /// endpoints' roles, not their relative values: `min` can exceed `max` in an unentered loop.
+    ///
+    /// For example, `for (int i = Integer.MAX_VALUE; i >= Integer.MAX_VALUE - 2; i--)` has
+    /// `min = Integer.MAX_VALUE - 2` and `max = Integer.MAX_VALUE` and enters three times. Rewriting
+    /// `min <= max` as `min < max + 1` would wrap `max + 1` to `Integer.MIN_VALUE`, incorrectly
+    /// classifying the loop as unentered. The same problem occurs at unsigned maxima.
+    ///
+    /// Tests the reversed strict comparison `max < min` without arithmetic and rejects entry only
+    /// when that comparison is proven true. Unknown cases must retain the loop because callers may
+    /// delete its entire body when this method returns `false`.
+    ///
+    /// @return false if the inclusive loop can definitely not be entered, true otherwise
+    private boolean inclusiveLoopMightBeEntered(ValueNode min, ValueNode max) {
+        LogicNode noEntryCheck = getCounterIntegerHelper().createCompareNode(max, min, NodeView.DEFAULT);
+        return !noEntryCheck.isTautology();
+    }
+
     /**
-     * @return true if the loop has constant bounds.
+     * @return true if the trip-count limit, body IV start, and limit-checked IV stride are constant.
      */
     public boolean isConstantMaxTripCount() {
-        return getTripCountLimit() instanceof ConstantNode && getLimitCheckedIV().isConstantInit() && getLimitCheckedIV().isConstantStride();
+        // Avoid constructing a derived IV start unless its inputs are constant.
+        return getTripCountLimit() instanceof ConstantNode && getLimitCheckedIV().isConstantInit() && getLimitCheckedIV().isConstantStride() &&
+                        getBodyIVStart() instanceof ConstantNode;
     }
 
     public UnsignedLong constantMaxTripCount() {

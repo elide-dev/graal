@@ -952,6 +952,7 @@ suite = {
             "sourceDirs": ["src"],
             "dependencies": [
                 "com.oracle.svm.hosted",
+                "com.oracle.svm.graal",
                 "com.oracle.svm.configure",
                 "com.oracle.svm.core.foreign"
             ],
@@ -1340,6 +1341,7 @@ suite = {
                 "jdk.management.jfr",
                 "java.instrument",
                 "java.rmi",
+                "jdk.incubator.vector",
             ],
             "requiresConcealed" : {
                 "java.base" : [
@@ -1358,10 +1360,25 @@ suite = {
             "checkstyle": "com.oracle.svm.test",
             "checkstyleVersion" : "10.21.0",
             "workingSets": "SVM",
+            # warning: [incubating] using incubating module(s): jdk.incubator.vector
+            "javac.lint.overrides" : "-incubating",
             "annotationProcessors": [
                 "compiler:GRAAL_PROCESSOR",
                 "SVM_PROCESSOR",
             ],
+            "javaCompliance" : "24+",
+            "jacoco" : "exclude",
+        },
+
+        "com.oracle.svm.truffle.test": {
+            "subDir": "src",
+            "sourceDirs": ["src"],
+            "dependencies": [
+                "com.oracle.svm.test",
+                "truffle:TRUFFLE_API",
+            ],
+            "checkstyle": "com.oracle.svm.test",
+            "workingSets": "SVM",
             "javaCompliance" : "24+",
             "jacoco" : "exclude",
         },
@@ -3161,6 +3178,24 @@ suite = {
             "sdk:NATIVEIMAGE",
             "SVM",
             "SVM_CONFIGURE",
+          ],
+          "testDistribution" : True,
+        },
+
+        # Tests that need the Truffle API (built with --macro:truffle); kept out of SVM_TESTS so the
+        # default svmjunit image does not include Truffle.
+        "SVM_TRUFFLE_TESTS" : {
+          "subDir": "src",
+          "relpath" : True,
+          "dependencies" : [
+            "com.oracle.svm.truffle.test",
+          ],
+          "distDependencies": [
+            "mx:JUNIT_TOOL",
+            "sdk:NATIVEIMAGE",
+            "SVM",
+            "SVM_TESTS",
+            "truffle:TRUFFLE_API",
           ],
           "testDistribution" : True,
         },

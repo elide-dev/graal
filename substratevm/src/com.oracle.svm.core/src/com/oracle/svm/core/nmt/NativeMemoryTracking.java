@@ -138,17 +138,44 @@ public class NativeMemoryTracking {
         mallocTotal.track(totalSize);
     }
 
+    /**
+     * Removes an allocation that is about to be freed from the statistics and invalidates its NMT
+     * header, so that a later {@link #track}, {@link #untrack} or free of the same memory fails.
+     * Memory that stays allocated but moves to another isolate must use {@link #untrackForTransfer}
+     * instead.
+     */
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public PointerBase untrack(PointerBase innerPtr) {
         if (innerPtr.isNull()) {
             return Word.nullPointer();
         }
 
+        NmtMallocHeader header = untrackAndGetHeader(innerPtr);
+        header.setMagic(0);
+        return header;
+    }
+
+    /**
+     * Removes an allocation from the statistics of the current isolate without invalidating its NMT
+     * header. Use this when the memory is not freed but handed over to another isolate (of the same
+     * image), which then calls {@link #track} on it, for example when code compiled in a compilation
+     * isolate is installed in the client isolate. {@link #untrack} would invalidate the header and
+     * the receiving isolate's {@link #track} would fail.
+     */
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public void untrackForTransfer(PointerBase innerPtr) {
+        if (innerPtr.isNull()) {
+            return;
+        }
+        untrackAndGetHeader(innerPtr);
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    private NmtMallocHeader untrackAndGetHeader(PointerBase innerPtr) {
         NmtMallocHeader header = getHeader(innerPtr);
         UnsignedWord size = header.getAllocationSize();
         int category = header.getCategory();
         untrack(size, category);
-        header.setMagic(0);
         return header;
     }
 

@@ -109,6 +109,69 @@ public class StringNFITest extends NFITest {
         Assert.assertEquals("return value", 8472, (int) (Integer) retObj);
     }
 
+    public static class StrdupNode extends NFITestRootNode {
+
+        final Object strdup = lookupAndBindDefault("strdup", "(string):string");
+        final Object free = lookupAndBindDefault("free", "(pointer):void");
+
+        @Child InteropLibrary strdupInterop = getInterop(strdup);
+        @Child InteropLibrary freeInterop = getInterop(free);
+        @Child InteropLibrary resultInterop = getInterop();
+
+        @Override
+        public Object executeTest(VirtualFrame frame) throws InteropException {
+            Object copy = strdupInterop.execute(strdup, frame.getArguments()[0]);
+            String result = resultInterop.asString(copy);
+            freeInterop.execute(free, copy);
+            return result;
+        }
+    }
+
+    private static void assertStrdup(CallTarget callTarget, String argument, String expected) {
+        Assert.assertEquals("strdup copy", expected, callTarget.call(argument));
+    }
+
+    @Test
+    public void testShortStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
+        assertStrdup(callTarget, "", "");
+        assertStrdup(callTarget, "Hello", "Hello");
+        assertStrdup(callTarget, "UTF-8 \u00e4\u00e9\u00e7 \u20ac \ud83d\ude00", "UTF-8 \u00e4\u00e9\u00e7 \u20ac \ud83d\ude00");
+    }
+
+    @Test
+    public void testLongStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
+        // Longer than the stack area the Native Image backend uses for string arguments.
+        String longString = "0123456789\u00e4".repeat(30);
+        assertStrdup(callTarget, longString, longString);
+    }
+
+    @Test
+    public void testUnpairedSurrogateStringArg(@Inject(StrdupNode.class) CallTarget callTarget) {
+        // Backends replace an unpaired surrogate differently, but must keep the rest of the string.
+        String copy = (String) callTarget.call("a\ud800b");
+        Assert.assertEquals(copy, 3, copy.length());
+        Assert.assertEquals(copy, 'a', copy.charAt(0));
+        Assert.assertEquals(copy, 'b', copy.charAt(2));
+    }
+
+    public static class StrcmpNode extends SendExecuteNode {
+
+        public StrcmpNode() {
+            super(lookupAndBindDefault("strcmp", "(string, string):sint32"));
+        }
+    }
+
+    @Test
+    public void testTwoStringArgs(@Inject(StrcmpNode.class) CallTarget callTarget) {
+        Assert.assertEquals(0, (int) (Integer) callTarget.call("same", "same"));
+        Assert.assertTrue((Integer) callTarget.call("abc", "abd") < 0);
+        // The first string fills most of the stack area, so the second one is pinned instead.
+        String first = "x".repeat(250);
+        String second = "y".repeat(100);
+        Assert.assertTrue((Integer) callTarget.call(first, second) < 0);
+        Assert.assertEquals(0, (int) (Integer) callTarget.call(second, "y".repeat(100)));
+    }
+
     public static class StringRetConstNode extends SendExecuteNode {
 
         public StringRetConstNode() {
