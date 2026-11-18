@@ -44,7 +44,7 @@ env:
   GRAALJS_REPOSITORY: elide-dev/graaljs
   GRAALJS_REF: 747d45be06c58f9a959d41d7d8a8af8cca952d2e  # elide-25.6.x
   GRAALPYTHON_REPOSITORY: elide-dev/graalpython
-  GRAALPYTHON_REF: 2a2f9fb72b2fe2281956f3ad9f542bff80f302b5  # elide-25.6.x + elide-dev/graalpython#12
+  GRAALPYTHON_REF: 11344f37984375b07b001bb3508366afefc7c71c  # elide-25.6.x with elide-dev/graalpython#14 (#12 for 25.6)
   R2_BUCKET: elide-maven
   R2_ROOT: gvm-elide
   PUBLIC_BASE: https://maven.elide.dev/gvm-elide
@@ -86,7 +86,7 @@ env:
   # a commit. The Unix legs check it out next to graal, where `--dynamicimports substratevm-gcs`
   # finds it. Windows has no Shenandoah support and builds without it.
   LABS_OPENJDK_REPOSITORY: elide-dev/labs-openjdk
-  LABS_OPENJDK_REF: dc57abdc384c329a9d5a77cbd7366b6d64c37ad2  # elide-25.6.x (jvmci-25.6-b27) + the elide.28 Shenandoah safepoint fix (elide-dev/labs-openjdk#6)
+  LABS_OPENJDK_REF: c97771712819095708ce2d2e5ee4940bf30c0c63  # elide-25.6.x (jvmci-25.6-b27) with the elide.28 Shenandoah safepoint fix (elide-dev/labs-openjdk#7)
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
 
