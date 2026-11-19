@@ -26,6 +26,11 @@ package jdk.graal.compiler.replacements.nodes;
 
 import static jdk.graal.compiler.core.common.spi.ForeignCallDescriptor.CallSideEffect.HAS_SIDE_EFFECT;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX2;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512BW;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512DQ;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512F;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512VL;
 
 import java.util.EnumSet;
 
@@ -92,6 +97,14 @@ public class ChaCha20Node extends MemoryKillStubIntrinsicNode {
         return EnumSet.of(AVX);
     }
 
+    /**
+     * Features of the AVX-512 variant, used as the run-time compilation variant and as the guard of
+     * the AVX-512 fast path in AOT code.
+     */
+    public static EnumSet<AMD64.CPUFeature> avx512FeaturesAMD64() {
+        return EnumSet.of(AVX, AVX2, AVX512F, AVX512DQ, AVX512BW, AVX512VL);
+    }
+
     @SuppressWarnings("unlikely-arg-type")
     public static boolean isSupported(Architecture arch) {
         return switch (arch) {
@@ -102,7 +115,7 @@ public class ChaCha20Node extends MemoryKillStubIntrinsicNode {
     }
 
     @NodeIntrinsic
-    @GenerateStub(name = "chacha20Block", minimumCPUFeaturesAMD64 = "minFeaturesAMD64")
+    @GenerateStub(name = "chacha20Block", minimumCPUFeaturesAMD64 = "minFeaturesAMD64", runtimeCPUFeaturesAMD64 = "avx512FeaturesAMD64", guardedCPUFeaturesAMD64 = "avx512FeaturesAMD64")
     public static native int apply(Pointer state, Pointer result);
 
     @NodeIntrinsic

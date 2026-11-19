@@ -4,6 +4,10 @@ This changelog summarizes major changes to GraalVM Native Image.
 
 ## GraalVM 25.5 (Internal Version 25.5.5)
 
+* `-H:RuntimeCheckedCPUFeatures` now accepts `AVX512DQ`, `AVX512VL`, `AVX512_VBMI`, `AVX512_VPCLMULQDQ` and `AVX512_VAES` in addition to `AVX`, `AVX2`, `AVX512F` and `AVX512BW`.
+  When they are enabled, the Base64 encode and decode, ChaCha20, CRC32, CRC32C and AES-GCM stubs of AOT-compiled code take their AVX-512 paths on CPUs that support them, and their existing paths elsewhere; CRC32, CRC32C and AES-GCM stubs need CLMUL and AES in the build-time target (e.g., `-march=haswell`).
+  The defaults are unchanged (`AVX,AVX2`).
+  Runtime-compiled code now also uses the AVX-512 VBMI Base64 and the AVX-512 ChaCha20 stubs on CPUs that support them.
 * (GR-65162) Shared arenas (`Arena.ofShared()`) can now be used together with Vector API support.
   Vector API loads and stores from and to memory segments of a shared arena are checked against a concurrent close of the arena like other memory segment accesses.
   Shared arena support is no longer disabled by default when Vector API support is enabled, and enabling both `-H:+SharedArenaSupport` and `-H:+VectorAPISupport` no longer fails the build.
