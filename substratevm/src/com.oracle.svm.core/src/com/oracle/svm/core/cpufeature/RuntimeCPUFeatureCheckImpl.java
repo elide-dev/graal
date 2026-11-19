@@ -164,7 +164,8 @@ public final class RuntimeCPUFeatureCheckImpl {
      * The field is an {@code int} because that produces the most efficient code on all supported
      * platforms. However, we cannot use the full 32 bit for encoding features, because some CPUs
      * lack instructions to encode immediate values of that size. Thus, we restrict ourselves to 8
-     * bits (i.e., 8 features) for now.
+     * bits (i.e., 8 features), except on AMD64, where {@code test} takes a 32-bit immediate and we
+     * allow 16 bits (see {@link #maxEncodedFeatures}).
      */
     @SuppressWarnings("unused") private int cpuFeatureMask;
 
@@ -186,7 +187,8 @@ public final class RuntimeCPUFeatureCheckImpl {
             // no features
             this.enumToBitIndex = null;
         } else {
-            GraalError.guarantee(size <= Byte.SIZE, "Cannot encode %s features in 8 bit", size);
+            int maxFeatures = maxEncodedFeatures(arch);
+            GraalError.guarantee(size <= maxFeatures, "Cannot encode %s features in %s bit", size, maxFeatures);
 
             ArrayList<Byte> enumToBitIndexMap = new ArrayList<>();
             int index = 0;
@@ -216,6 +218,11 @@ public final class RuntimeCPUFeatureCheckImpl {
             }
         }
         reinitialize();
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    private static int maxEncodedFeatures(Architecture arch) {
+        return arch instanceof AMD64 ? Short.SIZE : Byte.SIZE;
     }
 
     void reinitialize() {
