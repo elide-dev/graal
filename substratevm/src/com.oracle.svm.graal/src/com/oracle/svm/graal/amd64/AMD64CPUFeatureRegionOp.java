@@ -76,16 +76,27 @@ public class AMD64CPUFeatureRegionOp {
 
         @Temp private Value[] temps;
         private final boolean mayEmitVZeroUpper;
+        private final AMD64.CPUFeature widestRegionFeature;
 
         /**
          * Leaves a region that was entered with {@code features}. If the generated method target
-         * does not support AVX globally, exiting an AVX region may emit {@code vzeroupper}; in that
-         * case all XMM registers are declared as temporaries because the instruction overwrites
-         * their upper lanes. Otherwise the leave operation has no register side effects.
+         * does not support AVX globally, exiting an AVX region may emit {@code vzeroupper}.
+         * Likewise, if the target does not support AVX512F, exiting an AVX512F region may emit
+         * {@code vzeroupper}, so that code compiled for the target never runs with dirty upper ZMM
+         * state (as HotSpot's AVX-512 stubs do). In both cases all XMM registers are declared as
+         * temporaries because the instruction overwrites their upper lanes. Otherwise the leave
+         * operation has no register side effects.
          */
         public AMD64CPUFeatureRegionLeaveOp(EnumSet<AMD64.CPUFeature> features, EnumSet<AMD64.CPUFeature> targetFeatures) {
             super(TYPE);
-            this.mayEmitVZeroUpper = features.contains(AMD64.CPUFeature.AVX) && !targetFeatures.contains(AMD64.CPUFeature.AVX);
+            if (features.contains(AMD64.CPUFeature.AVX) && !targetFeatures.contains(AMD64.CPUFeature.AVX)) {
+                this.widestRegionFeature = AMD64.CPUFeature.AVX;
+            } else if (features.contains(AMD64.CPUFeature.AVX512F) && !targetFeatures.contains(AMD64.CPUFeature.AVX512F)) {
+                this.widestRegionFeature = AMD64.CPUFeature.AVX512F;
+            } else {
+                this.widestRegionFeature = null;
+            }
+            this.mayEmitVZeroUpper = widestRegionFeature != null;
             this.temps = mayEmitVZeroUpper ? xmmRegistersToValues(new Register[]{
                             AMD64.xmm0,
                             AMD64.xmm1,
@@ -116,7 +127,7 @@ public class AMD64CPUFeatureRegionOp {
 
         @Override
         public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
-            if (mayEmitVZeroUpper && masm.isCurrentRegionFeature(AMD64.CPUFeature.AVX)) {
+            if (mayEmitVZeroUpper && masm.isCurrentRegionFeature(widestRegionFeature)) {
                 masm.vzeroupper();
             }
             masm.removeFeatures();
