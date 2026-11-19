@@ -282,6 +282,9 @@ GraalTags = Tags([
     'java_agent'
 ])
 
+# AVX-512 features that intrinsic stubs check at run time in AOT code (see RuntimeCPUFeatureCheck).
+RUNTIME_CHECKED_AVX512_FEATURES = ['AVX', 'AVX2', 'AVX512F', 'AVX512DQ', 'AVX512BW', 'AVX512VL', 'AVX512_VPCLMULQDQ', 'AVX512_VAES', 'AVX512_VBMI']
+
 NATIVE_UNITTEST_CUSTOM_BATCHES = ('1/2', '2/2')
 
 def vm_native_image_path(config=None):
@@ -504,6 +507,10 @@ def truffle_unittest_task(extra_build_args=None):
     # class whose initializer is simulated, and an inlined method of a class that is not simulated
     # (elide-dev/graal#209). The test class carries its own @NativeImageBuildArgs (--macro:truffle).
     native_unittest(['com.oracle.svm.truffle.test.SimulatedClassInitializerRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
+    # Intrinsic stubs called from runtime-compiled code reach the stub variant for the host's CPU
+    # features, e.g., the AVX-512 VBMI Base64 variants. The test class carries its own
+    # @NativeImageBuildArgs (--macro:truffle).
+    native_unittest(['com.oracle.svm.truffle.test.IntrinsicStubRuntimeCompilationTest', '--build-args'] + extra_build_args + ['--run-args', '--verbose'])
 
     _truffle_runtime_compilation_test(extra_build_args)
     # Compilation isolates hand the installed code's metadata over to the client isolate, which
@@ -670,6 +677,12 @@ def svm_gate_body(args, tasks):
                 # installed and freed, with and without compilation isolates (elide-dev/graal#227).
                 # The test class declares its build arguments with @NativeImageBuildArgs.
                 native_unittest(['com.oracle.svm.test.RuntimeCodeMemoryUsageTest', '--build-args'] + args.extra_image_builder_arguments)
+                # Intrinsic stubs with AVX-512 fast paths behind run-time CPU feature checks. The default
+                # image group runs this test without such checks; this image enables them, with CLMUL
+                # and AES in the baseline so that the CRC32 and AES-GCM stubs exist in AOT code.
+                if mx.get_arch() == 'amd64':
+                    native_unittest(['com.oracle.svm.test.RuntimeCheckedIntrinsicStubsTest', '--build-args', '-H:CPUFeatures=AES,CLMUL'] + svm_experimental_options([
+                        '-H:RuntimeCheckedCPUFeatures=' + ','.join(RUNTIME_CHECKED_AVX512_FEATURES)]) + args.extra_image_builder_arguments)
 
     generic_field_type_tags = [GraalTags.native_unittests, GraalTags.all_native_unittests, GraalTags.generic_field_type]
     with Task('generic field type', tasks, tags=generic_field_type_tags) as t:
