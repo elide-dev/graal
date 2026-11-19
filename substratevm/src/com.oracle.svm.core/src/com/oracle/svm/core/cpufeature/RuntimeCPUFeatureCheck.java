@@ -64,7 +64,8 @@ public final class RuntimeCPUFeatureCheck {
      */
     public static Set<? extends Enum<?>> getSupportedFeatures(Architecture arch) {
         if (arch instanceof AMD64) {
-            return EnumSet.of(AMD64.CPUFeature.AVX, AMD64.CPUFeature.AVX2, AMD64.CPUFeature.AVX512F, AMD64.CPUFeature.AVX512BW);
+            return EnumSet.of(AMD64.CPUFeature.AVX, AMD64.CPUFeature.AVX2, AMD64.CPUFeature.AVX512F, AMD64.CPUFeature.AVX512DQ, AMD64.CPUFeature.AVX512BW,
+                            AMD64.CPUFeature.AVX512VL, AMD64.CPUFeature.AVX512_VPCLMULQDQ, AMD64.CPUFeature.AVX512_VAES, AMD64.CPUFeature.AVX512_VBMI);
         } else {
             return Collections.emptySet();
         }
@@ -88,7 +89,8 @@ public final class RuntimeCPUFeatureCheck {
      */
     public static Set<? extends Enum<?>> getDefaultDisabledFeatures(Architecture arch) {
         if (arch instanceof AMD64) {
-            return EnumSet.of(AMD64.CPUFeature.AVX512F, AMD64.CPUFeature.AVX512BW);
+            return EnumSet.of(AMD64.CPUFeature.AVX512F, AMD64.CPUFeature.AVX512DQ, AMD64.CPUFeature.AVX512BW, AMD64.CPUFeature.AVX512VL, AMD64.CPUFeature.AVX512_VPCLMULQDQ,
+                            AMD64.CPUFeature.AVX512_VAES, AMD64.CPUFeature.AVX512_VBMI);
         } else {
             return Collections.emptySet();
         }
