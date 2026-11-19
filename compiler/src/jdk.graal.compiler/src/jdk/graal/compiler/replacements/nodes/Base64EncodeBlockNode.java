@@ -30,6 +30,11 @@ import static jdk.graal.compiler.nodeinfo.NodeCycles.CYCLES_UNKNOWN;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_64;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX2;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512BW;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512DQ;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512F;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512VL;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512_VBMI;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE2;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE3;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE4_1;
@@ -89,6 +94,14 @@ public final class Base64EncodeBlockNode extends MemoryKillStubIntrinsicNode {
         return EnumSet.of(SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2);
     }
 
+    /**
+     * Features of the AVX-512 VBMI variant, used as the run-time compilation variant and as the
+     * guard of the AVX-512 fast path in AOT code.
+     */
+    public static EnumSet<AMD64.CPUFeature> avx512FeaturesAMD64() {
+        return EnumSet.of(SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, AVX512DQ, AVX512BW, AVX512VL, AVX512_VBMI);
+    }
+
     @SuppressWarnings("unlikely-arg-type")
     public static boolean isSupported(Architecture arch) {
         return switch (arch) {
@@ -119,7 +132,7 @@ public final class Base64EncodeBlockNode extends MemoryKillStubIntrinsicNode {
     }
 
     @NodeIntrinsic
-    @GenerateStub(name = "base64EncodeBlock", minimumCPUFeaturesAMD64 = "minFeaturesAMD64")
+    @GenerateStub(name = "base64EncodeBlock", minimumCPUFeaturesAMD64 = "minFeaturesAMD64", runtimeCPUFeaturesAMD64 = "avx512FeaturesAMD64", guardedCPUFeaturesAMD64 = "avx512FeaturesAMD64")
     public static native void base64EncodeBlock(Pointer src, int sp, int sl, Pointer dst, int dp, int isURL);
 
     @NodeIntrinsic
