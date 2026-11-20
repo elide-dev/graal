@@ -93,6 +93,7 @@ import com.oracle.svm.hosted.sboutlining.OutlinedSBMethod;
 import com.oracle.svm.hosted.snapshot.capnproto.CapnProtoSharedLayerSnapshotFormat;
 import com.oracle.svm.hosted.snapshot.constant.ConstantReferenceData;
 import com.oracle.svm.hosted.snapshot.dynamichub.ClassInitializationInfoData;
+import com.oracle.svm.hosted.snapshot.dynamichub.ObjectLayoutData;
 import com.oracle.svm.hosted.snapshot.dynamichub.DynamicHubInfoData;
 import com.oracle.svm.hosted.snapshot.elements.PersistedAnalysisFieldData;
 import com.oracle.svm.hosted.snapshot.elements.PersistedAnalysisMethodData;
@@ -277,6 +278,16 @@ public class SVMImageLayerWriter extends ImageLayerWriter {
         HostedImageLayerBuildingSupport.singleton().getWriteLayerArchiveSupport().setClassIdentityHashCodes(constantSnapshotWriter.getClassIdentityHashCodes());
     }
 
+    private void persistObjectLayout(AnalysisType type, DynamicHub hub, ObjectLayoutData.Writer builder) {
+        /* Only reachable types are guaranteed to have a hub in the sealed analysis heap. */
+        if (type.isReachable() && nativeImageHeap.getObjectInfo(hub) != null) {
+            builder.setInstalled(true);
+            builder.setLayoutEncoding(hub.getLayoutEncoding());
+            builder.setMonitorOffset(hub.getMonitorOffset());
+            builder.setIdentityHashOffset(hub.getIdentityHashOffsetOrZero());
+        }
+    }
+
     private void persistType(AnalysisType type, Supplier<PersistedAnalysisTypeData.Writer> builderSupplier) {
         PersistedAnalysisTypeData.Writer builder = builderSupplier.get();
         HostVM hostVM = aUniverse.hostVM();
@@ -284,6 +295,7 @@ public class SVMImageLayerWriter extends ImageLayerWriter {
         DynamicHub hub = svmHost.dynamicHub(type);
         builder.setHubIdentityHashCode(System.identityHashCode(hub));
         builder.setHasArrayType(hub.getArrayHub() != null);
+        persistObjectLayout(type, hub, builder.initObjectLayout());
 
         ClassInitializationInfo info = hub.getClassInitializationInfo();
         if (info == null) {
