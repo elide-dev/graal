@@ -59,6 +59,11 @@ env:
   # The languages build: the Maven artifacts and each platform's natives.
   LANGUAGE_IMPORTS: /graal-js,/graalpython,/wasm
   NATIVES_DISTS: TRUFFLE_API,TRUFFLE_NFI_LIBFFI,GRAALPYTHON_RESOURCES
+  # Sulong, the GraalVM LLVM runtime (org.graalvm.llvm:llvm-native and friends), is only built on
+  # the legs with matrix.sulong (linux-amd64, the Maven leg): llvm-language-native-resources
+  # (SULONG_NATIVE_RESOURCES) carries linux-amd64 natives only (see natives.py).
+  SULONG_IMPORTS: /sulong
+  SULONG_NATIVES_DISTS: SULONG_NATIVE_RESOURCES
   # The oldest glibc the Linux distribution and the images it builds must run on. The Linux legs
   # build in a container with this glibc: compiled on a newer one, SVM's C libraries and the images
   # linking them need GLIBC_2.38 (glibc's C23 __isoc23_* redirects). ci/elide/check-glibc.sh checks
@@ -139,6 +144,7 @@ jobs:
             runner: linux-amd64-cipool
             container: docker.io/library/ubuntu:22.04
             maven: true
+            sulong: true
           - platform: linux-aarch64
             runner: linux-arm64-cipool
             container: docker.io/library/ubuntu:22.04
@@ -430,6 +436,8 @@ jobs:
         if: runner.os != 'Windows'
         env:
           MAVEN: ${{ matrix.maven }}
+          LANGUAGE_IMPORTS: ${{ env.LANGUAGE_IMPORTS }}${{ matrix.sulong && format(',{0}', env.SULONG_IMPORTS) || '' }}
+          NATIVES_DISTS: ${{ env.NATIVES_DISTS }}${{ matrix.sulong && format(',{0}', env.SULONG_NATIVES_DISTS) || '' }}
         run: |
           cd graal/vm
           mx_args=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS}")
@@ -457,12 +465,19 @@ jobs:
 
       - name: Collect natives (Unix)
         if: runner.os != 'Windows'
+        env:
+          LANGUAGE_IMPORTS: ${{ env.LANGUAGE_IMPORTS }}${{ matrix.sulong && format(',{0}', env.SULONG_IMPORTS) || '' }}
+          SULONG: ${{ matrix.sulong }}
         run: |
           # This platform's native resources, which the publish job merges into the Maven jars.
           cd graal/vm
           mx_args=(--java-home "${JAVA_HOME}" --env ni-ce --dynamicimports "${LANGUAGE_IMPORTS}")
           jars=()
-          for spec in truffle-api=TRUFFLE_API truffle-nfi-libffi=TRUFFLE_NFI_LIBFFI python-resources=GRAALPYTHON_RESOURCES; do
+          specs=(truffle-api=TRUFFLE_API truffle-nfi-libffi=TRUFFLE_NFI_LIBFFI python-resources=GRAALPYTHON_RESOURCES)
+          if [ "${SULONG}" = true ]; then
+            specs+=(llvm-language-native-resources=SULONG_NATIVE_RESOURCES)
+          fi
+          for spec in "${specs[@]}"; do
             jars+=("${spec%%=*}=$("${MX}" "${mx_args[@]}" paths "${spec#*=}" | tail -1)")
           done
           python3 ../ci/elide/natives.py collect "${PLATFORM}" "${WS}/out/natives" "${jars[@]}"
@@ -517,6 +532,8 @@ jobs:
           fi
       - name: Deploy Maven artifacts
         if: matrix.maven
+        env:
+          LANGUAGE_IMPORTS: ${{ env.LANGUAGE_IMPORTS }}${{ matrix.sulong && format(',{0}', env.SULONG_IMPORTS) || '' }}
         run: ./graal/ci/elide/deploy-maven.sh "${VERSION}" "${WS}/out/maven"
       - name: Smoke test EE with GraalJS
         if: matrix.maven
