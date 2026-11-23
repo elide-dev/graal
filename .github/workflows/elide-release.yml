@@ -218,7 +218,7 @@ jobs:
       # The runners are persistent, and a previous run's clean up may not have run: its archives and
       # natives would otherwise ship with this release.
       - name: Remove previous output
-        run: rm -rf out smoke smoke-ee smoke-ee-js build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}"/graalvm-ee-*
+        run: rm -rf out smoke smoke-ee smoke-ee-js smoke-llvm smoke-ee-llvm build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}"/graalvm-ee-*
       - name: Check free disk space
         run: |
           # Checked after the checkouts, whose git clean removes a previous run's build output.
@@ -356,11 +356,16 @@ jobs:
           "${MX_PYTHON}" "${WS}/graal/ci/elide/test-blocked-certs.py"
           "${WS}/graal/ci/elide/check-blocked-certs.sh" "${home}" blocked-certs
           ls -la "${WS}/out/dist"
+      - name: Smoke test LLVM backend
+        if: matrix.llvm
+        run: |
+          home=$(grep '^home=' build-dist.out | cut -d= -f2-)
+          ./graal/ci/elide/smoke-llvm.sh "${home}" smoke-llvm --expect-lto
       - name: Check glibc floor (Linux)
         if: runner.os == 'Linux'
         run: |
           home=$(grep '^home=' build-dist.out | cut -d= -f2-)
-          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello smoke/hello-shenandoah
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke/hello smoke/hello-shenandoah $([ -f smoke-llvm/llvm-smoke ] && echo smoke-llvm/llvm-smoke)
       - name: Check ThinLTO bitcode of the static C libraries (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -376,11 +381,30 @@ jobs:
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
           ./graal/ci/elide/smoke-ee.sh "${home}" "${PLATFORM}" smoke-ee
+      - name: Smoke test EE LLVM backend
+        if: matrix.llvm
+        run: |
+          home=$(grep '^home=' build-ee.out | cut -d= -f2-)
+          ./graal/ci/elide/smoke-llvm.sh "${home}" smoke-ee-llvm --expect-lto
+      - name: Upload LLVM backend failures
+        if: failure() && matrix.llvm
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: llvm-backend-failure-${{ matrix.platform }}
+          path: |
+            smoke-llvm/failed
+            smoke-ee-llvm/failed
+            smoke-llvm/*.log
+            smoke-ee-llvm/*.log
+            smoke-llvm/svm_err_*.md
+            smoke-ee-llvm/svm_err_*.md
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Check glibc floor EE (Linux)
         if: runner.os == 'Linux'
         run: |
           home=$(grep '^home=' build-ee.out | cut -d= -f2-)
-          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah
+          ./graal/ci/elide/check-glibc.sh "${GLIBC_FLOOR}" "${home}" smoke-ee/smoke-plain smoke-ee/smoke-g1 smoke-ee/smoke-shenandoah $([ -f smoke-ee-llvm/llvm-smoke ] && echo smoke-ee-llvm/llvm-smoke)
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -571,7 +595,7 @@ jobs:
       - name: Clean up
         if: always()
         run: |
-          rm -rf graal graaljs graalpython labs-openjdk mx out smoke smoke-ee smoke-ee-js labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
+          rm -rf graal graaljs graalpython labs-openjdk mx out smoke smoke-ee smoke-ee-js smoke-llvm smoke-ee-llvm labsjdk build-dist.out build-ee.out graalvm-home.txt "${RUNNER_TEMP}/jdks" "${RUNNER_TEMP}/maven.tar.gz" "${RUNNER_TEMP}"/apache-maven-* "${RUNNER_TEMP}"/graalvm-ee-*
           df -Pk . | awk 'NR==2 {printf "free after cleanup: %d GB\n", $4 / 1024 / 1024}'
 
   sanitizer-natives:
