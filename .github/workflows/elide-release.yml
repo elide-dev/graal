@@ -5,6 +5,8 @@
 # (the early-access build from the fork's upstream base, ORACLE_EE_TAG) with the fork's code in place
 # of Oracle's open-source code, for the enterprise features: G1, PGO, code compression, ...
 # On Linux and macOS, both carry the Shenandoah GC (svmgc, built from labs-openjdk's substratevm-gcs).
+# On linux-amd64, both carry the Native Image LLVM backend (svml, --tool:llvm-backend) and its LLVM
+# toolchain.
 # Linux amd64 also publishes ASan, TSan, and MSan native-library add-ons, built by the reusable
 # elide-sanitizer-natives workflow. All three must pass before any release artifacts are published.
 #
@@ -90,6 +92,11 @@ env:
   LABS_OPENJDK_REF: 2aa99d3a422f52a41584d0cb42609ed6f450b368  # Shenandoah safepoint fix for elide.28 (elide-dev/labs-openjdk#6), on the metaspace and runtime-code parity line (interface 250502)
   SVMGC_IMPORTS: substratevm-gcs
   SVMGC_COMPONENTS: svmgc
+  # The Native Image LLVM backend (svml, --tool:llvm-backend) and the LLVM.org toolchain it
+  # compiles with (llp, lib/llvm), on the legs with matrix.llvm (linux-amd64) only. Upstream
+  # registers svml neither on Windows nor on macOS aarch64 (GR-34811), and on linux-aarch64 llc
+  # fails on the backend's code. build-ee.py carries both into the EE distribution.
+  LLVM_BACKEND_COMPONENTS: llp,svml
 
 jobs:
   meta:
@@ -145,6 +152,7 @@ jobs:
             container: docker.io/library/ubuntu:22.04
             maven: true
             sulong: true
+            llvm: true
           - platform: linux-aarch64
             runner: linux-arm64-cipool
             container: docker.io/library/ubuntu:22.04
@@ -306,7 +314,7 @@ jobs:
         if: runner.os != 'Windows'
         env:
           DIST_IMPORTS: ${{ env.DIST_IMPORTS }},${{ env.SVMGC_IMPORTS }}
-          DIST_COMPONENTS: ${{ env.DIST_COMPONENTS }},${{ env.SVMGC_COMPONENTS }}
+          DIST_COMPONENTS: ${{ env.DIST_COMPONENTS }},${{ env.SVMGC_COMPONENTS }}${{ matrix.llvm && format(',{0}', env.LLVM_BACKEND_COMPONENTS) || '' }}
         run: ./graal/ci/elide/build-dist.sh "${VERSION}" "${PLATFORM}" "${WS}/out/dist" | tee build-dist.out
       - name: Build GraalVM (Windows)
         if: runner.os == 'Windows'
