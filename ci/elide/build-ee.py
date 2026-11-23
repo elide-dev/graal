@@ -422,6 +422,87 @@ def add_fork_files(ce_home, ee_home):
     return added
 
 
+# Components the fork's CE build ships whole and Oracle's build lacks: the Native Image LLVM
+# backend (svml: its builder jars and native-image.properties, which --tool:llvm-backend reads) and
+# the LLVM.org toolchain it compiles and links with (llp, lib/llvm; LLVMToolchain.getLLVMBinDir
+# looks for <java.home>/lib/llvm/bin). The native-image driver finds tools by listing
+# lib/svm/tools, so copying them is all the EE distribution needs. The release builds the backend on
+# linux-amd64 only (the workflow's matrix.llvm); elsewhere the CE build has neither.
+ADDED_COMPONENT_DIRS = ("lib/svm/tools/llvm-backend", "lib/llvm")
+
+
+def add_fork_components(graal, ce_home, ee_home):
+    """Copies ADDED_COMPONENT_DIRS that the CE build has and Oracle's does not. Returns them."""
+    added = []
+    for relative in ADDED_COMPONENT_DIRS:
+        source, target = os.path.join(ce_home, relative), os.path.join(ee_home, relative)
+        if not os.path.isdir(source):
+            continue
+        if os.path.exists(target):
+            # A future Oracle build that ships it: overlay_jars already put the fork's jars in.
+            print(f"Oracle's build has {relative}; keeping it")
+            continue
+        shutil.copytree(source, target, symlinks=True)
+        added.append(relative)
+        print(f"added the fork's {relative}")
+    if LLVM_BACKEND_DIR in added:
+        add_enterprise_llvm_glue(graal, ee_home)
+    return added
+
+
+LLVM_BACKEND_DIR = "lib/svm/tools/llvm-backend"
+# ci/elide/ee-llvm: the module that lets the enterprise image builder use the LLVM backend. Its
+# name is the one svm.jar already exports the builder's feature and backend packages to (Oracle's
+# former enterprise LLVM module), so that the module system lets it provide a feature; the two
+# enterprise and compiler packages it needs besides are exported to it by the tool's JavaArgs.
+LLVM_GLUE_MODULE = "com.oracle.svm.svm_enterprise.llvm"
+LLVM_GLUE_JAR = "svm-llvm-enterprise.jar"
+LLVM_GLUE_EXPORTS = ("com.oracle.svm.svm_enterprise/com.oracle.svm.enterprise.core",
+                     "jdk.graal.compiler/jdk.graal.compiler.phases.util")
+
+
+def add_enterprise_llvm_glue(graal, ee_home):
+    """Builds ci/elide/ee-llvm against the EE home and adds it to the LLVM backend tool.
+
+    Oracle's enterprise compiler configuration creates its backend through a singleton that, with
+    -H:CompilerBackend=llvm, only Oracle's enterprise LLVM module registered, and Oracle's builds no
+    longer ship that module. Without it, every --tool:llvm-backend build on the EE distribution
+    fails ("ImageSingletons do not contain key ...EnterpriseSubstrateBackendFactory").
+    """
+    tool = os.path.join(ee_home, LLVM_BACKEND_DIR)
+    exe = ".exe" if os.name == "nt" else ""
+    builder = os.path.join(ee_home, "lib", "svm", "builder")
+    module_path = os.pathsep.join(os.path.join(builder, j) for j in sorted(os.listdir(builder)) if j.endswith(".jar"))
+    sources = []
+    for dirpath, _, files in os.walk(os.path.join(graal, "ci", "elide", "ee-llvm")):
+        sources += [os.path.join(dirpath, f) for f in sorted(files) if f.endswith(".java")]
+    exports = [arg for e in LLVM_GLUE_EXPORTS for arg in ("--add-exports", f"{e}={LLVM_GLUE_MODULE}")]
+    upgrade = os.path.join(ee_home, UPGRADE_DIR, "graal.jar")
+    upgrade_args = ["--upgrade-module-path", upgrade] if os.path.exists(upgrade) else []
+    with tempfile.TemporaryDirectory(prefix="ee-llvm-") as classes:
+        run(os.path.join(ee_home, "bin", "javac" + exe), "-d", classes, "--module-path", module_path, *upgrade_args,
+            *exports, *sources)
+        run(os.path.join(ee_home, "bin", "jar" + exe), "--create", "--file", os.path.join(tool, "builder", LLVM_GLUE_JAR),
+            "-C", classes, ".")
+    properties = os.path.join(tool, "native-image.properties")
+    with open(properties, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    out, patched = [], False
+    for line in lines:
+        if line.startswith("ImageBuilderModulePath="):
+            line += ":${.}/builder/" + LLVM_GLUE_JAR
+            patched = True
+        if line.startswith("JavaArgs="):
+            fail(f"{properties} already has JavaArgs; merge the glue's exports into it")
+        out.append(line)
+    if not patched:
+        fail(f"{properties} has no ImageBuilderModulePath")
+    out.append("JavaArgs=" + " ".join(f"--add-exports={e}={LLVM_GLUE_MODULE}" for e in LLVM_GLUE_EXPORTS))
+    with open(properties, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+    print(f"added {LLVM_BACKEND_DIR}/builder/{LLVM_GLUE_JAR}: the enterprise backend factory for the LLVM backend")
+
+
 def package(root, name, platform, out_dir):
     stage = os.path.dirname(root)
     named = os.path.join(stage, name)
@@ -485,6 +566,7 @@ def main():
     oracle_driver_flags = read_driver_flags(ee_home)
     replaced, enterprise_jars = overlay_jars(ce_home, ee_home)
     add_fork_files(ce_home, ee_home)
+    add_fork_components(graal, ce_home, ee_home)
     merge_driver_flags(ee_home, oracle_driver_flags)
     upgraded = write_upgrade_jars(ce_home, ee_home, changed_linked_modules(graal, ee_commit.group(1), ce_home, ee_home))
     link_check(graal, ee_home, replaced + upgraded, enterprise_jars)
