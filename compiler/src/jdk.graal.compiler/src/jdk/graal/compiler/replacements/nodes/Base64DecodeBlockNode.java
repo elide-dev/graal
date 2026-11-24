@@ -35,6 +35,7 @@ import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512DQ;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512F;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512VL;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.AVX512_VBMI;
+import static jdk.vm.ci.amd64.AMD64.CPUFeature.BMI2;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE2;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE3;
 import static jdk.vm.ci.amd64.AMD64.CPUFeature.SSE4_1;
@@ -97,10 +98,11 @@ public final class Base64DecodeBlockNode extends MemoryKillStubIntrinsicNode {
 
     /**
      * Features of the AVX-512 VBMI variant, used as the run-time compilation variant and as the
-     * guard of the AVX-512 fast path in AOT code.
+     * guard of the AVX-512 fast path in AOT code. The AVX-512 path masks the tail with BZHI, so it
+     * also needs BMI2, which -march=compatibility does not include.
      */
     public static EnumSet<AMD64.CPUFeature> avx512FeaturesAMD64() {
-        return EnumSet.of(SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, AVX512DQ, AVX512BW, AVX512VL, AVX512_VBMI);
+        return EnumSet.of(SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, AVX512DQ, AVX512BW, AVX512VL, AVX512_VBMI, BMI2);
     }
 
     @SuppressWarnings("unlikely-arg-type")
