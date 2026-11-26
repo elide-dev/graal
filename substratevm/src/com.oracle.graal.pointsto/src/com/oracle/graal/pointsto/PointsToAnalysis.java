@@ -80,6 +80,8 @@ import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.Indent;
+import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.java.NewInstanceNode;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.word.WordTypes;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
@@ -132,14 +134,18 @@ public abstract class PointsToAnalysis extends AbstractAnalysisEngine {
                         "RemoveSaturatedTypeFlows requires AliasArrayTypeFlows.");
         AnalysisError.guarantee(!analysisPolicy.useConservativeUnsafeAccess() || analysisPolicy.removeSaturatedTypeFlows(),
                         "Conservative unsafe access requires RemoveSaturatedTypeFlows.");
+        boolean trackPrimitives = PointstoOptions.TrackPrimitiveValues.getValue(options);
+        boolean predicates = PointstoOptions.UsePredicates.getValue(options);
+        /* GR-58495: temporary, until context-sensitive analysis supports these options. */
+        checkPredicatesSupported(trackPrimitives, predicates);
+        this.trackPrimitiveValues = trackPrimitives;
+        this.usePredicates = predicates;
         this.extensionPolicy = createExtensionPolicy(hostVM);
         this.typeFlowTimer = timerCollection.createTimer("(typeflow)");
 
         this.objectType = metaAccess.lookupJavaType(Object.class);
         this.longType = metaAccess.lookupJavaType(long.class);
 
-        this.trackPrimitiveValues = PointstoOptions.TrackPrimitiveValues.getValue(options);
-        this.usePredicates = PointstoOptions.UsePredicates.getValue(options);
         this.anyPrimitiveSourceTypeFlow = new AnyPrimitiveSourceTypeFlow(null, longType);
         this.anyPrimitiveSourceTypeFlow.enableFlow(null);
         this.alwaysEnabledPredicateFlow = new AlwaysEnabledPredicateFlow();
@@ -167,6 +173,48 @@ public abstract class PointsToAnalysis extends AbstractAnalysisEngine {
             preSaturatedSourceTypeFlow = new PreSaturatedTypeFlow(null);
             preSaturatedSourceTypeFlow.enableFlow(this);
         }
+    }
+
+    /**
+     * Rejects primitive-value tracking and predicates under a context-sensitive policy, which does
+     * not support them yet. The check uses the final option values, so it holds whatever the order
+     * of the options and whichever option selected the policy.
+     * <p>
+     * The diagnostic names the mode in effect. A positive {@code MaxCallingContextDepth} makes the
+     * analysis calling-context-sensitive. Otherwise, as with {@code allocsens} or
+     * {@code AllocationSiteSensitiveHeap} alone, calling contexts stay insensitive and only the heap
+     * is allocation-site-sensitive.
+     */
+    private void checkPredicatesSupported(boolean trackPrimitives, boolean predicates) {
+        if (!analysisPolicy.isContextSensitiveAnalysis() || !(trackPrimitives || predicates)) {
+            return;
+        }
+        String policy = PointstoOptions.AnalysisContextSensitivity.getValue(options);
+        String insens = PointstoOptions.ContextSensitivity.insens.value();
+        /* AllocationSiteSensitiveHeap alone also selects a context-sensitive policy. */
+        boolean selectedByPolicy = !policy.equalsIgnoreCase(insens);
+        int callingContextDepth = PointstoOptions.MaxCallingContextDepth.getValue(options);
+        boolean callingContextSensitive = callingContextDepth > 0;
+        String sensitivityName = PointstoOptions.AnalysisContextSensitivity.getName();
+        String heapName = PointstoOptions.AllocationSiteSensitiveHeap.getName();
+        String depthName = PointstoOptions.MaxCallingContextDepth.getName();
+        String trackName = PointstoOptions.TrackPrimitiveValues.getName();
+        String predicatesName = PointstoOptions.UsePredicates.getName();
+
+        String selector;
+        String insensitive;
+        if (selectedByPolicy) {
+            selector = "-H:" + sensitivityName + "=" + policy;
+            insensitive = "-H:" + sensitivityName + "=" + insens;
+        } else {
+            selector = "-H:+" + heapName + (callingContextSensitive ? " -H:" + depthName + "=" + callingContextDepth : "");
+            insensitive = "-H:-" + heapName;
+        }
+        String mode = callingContextSensitive ? "Calling-context-sensitive analysis" : "Context-insensitive analysis with an allocation-site-sensitive heap";
+        String remedy = callingContextSensitive ? "select context-insensitive analysis" : "turn off the allocation-site-sensitive heap";
+        String enabled = trackPrimitives && predicates ? "-H:+" + trackName + " and -H:+" + predicatesName : "-H:+" + (trackPrimitives ? trackName : predicatesName);
+        throw AnalysisError.userError(String.format("%s (%s) does not support %s yet. Pass -H:-%s -H:-%s, or %s with %s.",
+                        mode, selector, enabled, trackName, predicatesName, remedy, insensitive));
     }
 
     private static ExtensionPolicy createExtensionPolicy(HostVM hostVM) {
@@ -540,7 +588,8 @@ public abstract class PointsToAnalysis extends AbstractAnalysisEngine {
 
     @Override
     public boolean isSupportedJavaKind(JavaKind javaKind) {
-        return javaKind == JavaKind.Object || (trackPrimitiveValues && javaKind.isPrimitive() && !javaKind.isNumericFloat());
+        /* Void is considered primitive, but void return flows are only tracked with predicates. */
+        return javaKind == JavaKind.Object || (trackPrimitiveValues && javaKind.isPrimitive() && !javaKind.isNumericFloat() && javaKind != JavaKind.Void);
     }
 
     @Override
@@ -550,6 +599,23 @@ public abstract class PointsToAnalysis extends AbstractAnalysisEngine {
 
     public boolean usePredicates() {
         return usePredicates;
+    }
+
+    public void registerUsedElements(StructuredGraph graph) {
+        registerUsedElements(graph, !usePredicates);
+    }
+
+    public void registerUsedElements(StructuredGraph graph, boolean registerNewInstanceNodes) {
+        AnalysisGraphScanner.registerUsedElements(this, graph, node -> {
+            if (registerNewInstanceNodes && node instanceof NewInstanceNode allocation) {
+                AnalysisType type = (AnalysisType) allocation.instanceClass();
+                type.registerAsInstantiated(AbstractAnalysisEngine.sourcePosition(allocation));
+                for (var f : type.getInstanceFields(true)) {
+                    PointsToAnalysisField field = (PointsToAnalysisField) f;
+                    field.getInitialFlow().addState(this, TypeState.defaultValueForKind(this, field.getStorageKind()));
+                }
+            }
+        });
     }
 
     public interface TypeFlowRunnable extends DebugContextRunnable {

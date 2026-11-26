@@ -133,7 +133,9 @@ public class ShenandoahFeature implements InternalFeature {
             ImageSingletons.add(Metaspace.class, new ShenandoahMetaspace());
         }
 
-        ImageSingletons.add(GCRelatedMXBeans.class, new ShenandoahRelatedMXBeans());
+        if (ImageLayerBuildingSupport.firstImageBuild()) {
+            ImageSingletons.add(GCRelatedMXBeans.class, new ShenandoahRelatedMXBeans());
+        }
     }
 
     @Override

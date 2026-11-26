@@ -2,8 +2,21 @@
 
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
+## Version 25.7
+
+* GR-81866: Fixed `TruffleString.ParseDoubleNode` to throw `TruffleString.NumberFormatException` for hexadecimal literals without significand digits, including literals with very large exponents.
+* GR-80168: Bytecode DSL: Added `BytecodeConfig.matches` to compare configurations for a particular interpreter.
+* GR-80168: Bytecode DSL: Added `serializeBuilderBytecode`, `deserializeBuilderBytecode`, `serializeExecutionBytecode`, and `deserializeExecutionBytecode` methods. Execution bytecode can be loaded without reading or replaying builder calls. Deprecated the builder-only `serialize` and `deserialize` methods.
+* GR-79412: Restored automatic splitting during interpreter direct-call execution instead of compilation preparation. See [Splitting](docs/splitting/Splitting.md) for details.
+* GR-81915: NFI upcalls run with any earlier pending exception temporarily cleared, so subsequent callbacks and their nested native calls see a clean exception state.
+  The earlier exception is restored when the upcall finishes and takes precedence over any new exception, while successful callbacks still return their results to native code.
+
 ## Version 25.6
 
+* GR-81582: Compiled guest code no longer polls guest safepoints before every remaining method call, including `TruffleBoundary` calls.
+* (breaking-change) GR-79412: Changed automatic splitting to clone marked direct-call targets during root compilation preparation instead of direct-call execution. `RootNode.cloneUninitialized` is now invoked without an entered language context during automatic splitting; the root language remains entered, so implementations can still use `LanguageReference`. See [Splitting](docs/splitting/Splitting.md) for details.
+* GR-79412: Added `RootNode.visitCloneableNodes` so roots can expose node trees stored outside ordinary child fields.
+* GR-79412: The root node's language is now entered during root and inline compilation preparation, allowing implementations of `RootNode.prepareForCompilation` to use `LanguageReference`.
 * GR-80770: Added `TruffleOptions.DetailedAssertions` to opt into expensive assertions with `-Dtruffle.DetailedAssertions=true`, independently of inexpensive Java assertions.
 * GR-80881: Bytecode DSL: `Float` and `Double` constants are now compared by their raw bits, so distinct NaN payloads no longer share a constant-pool slot.
 * GR-80881: Bytecode DSL: `Float` and `Double` constants are now compared by their raw bits, so distinct NaN payloads no longer share a constant-pool slot.

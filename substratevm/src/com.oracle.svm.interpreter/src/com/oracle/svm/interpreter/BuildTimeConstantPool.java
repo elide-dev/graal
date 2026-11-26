@@ -92,7 +92,7 @@ import jdk.vm.ci.meta.UnresolvedJavaType;
  * {@link InterpreterConstantPool}.
  * <p>
  * The translation of retained bytecodes and their constant-pool references is described in
- * {@link #hydrate(InterpreterResolvedObjectType)}.
+ * {@link #hydrate(InterpreterResolvedObjectType, HostedUniverse)}.
  */
 @Platforms(Platform.HOSTED_ONLY.class)
 final class BuildTimeConstantPool {
@@ -255,10 +255,25 @@ final class BuildTimeConstantPool {
         throw VMError.shouldNotReachHereUnexpectedInput(javaConstantOrType);
     }
 
-    public static BuildTimeConstantPool create(InterpreterResolvedObjectType type, int majorVersion, int minorVersion) {
+    public static BuildTimeConstantPool create(InterpreterResolvedObjectType type, int majorVersion, int minorVersion, HostedUniverse hUniverse) {
         BuildTimeConstantPool btcp = new BuildTimeConstantPool(type, majorVersion, minorVersion);
-        btcp.hydrate(type);
+        btcp.hydrate(type, hUniverse);
         return btcp;
+    }
+
+    /**
+     * Uses the declared dispatch-table target for HotSpot miranda and overpass methods. Direct
+     * calls retain their original target, and unavailable targets retain the existing lazy
+     * resolution failure. The invoke's symbolic holder is preserved separately during hydration.
+     */
+    private static JavaMethod indirectInvokeTarget(HostedUniverse hUniverse, JavaMethod method, int opcode) {
+        if (opcode == INVOKEVIRTUAL || opcode == INVOKEINTERFACE) {
+            HostedMethod hostedMethod = hUniverse.optionalLookup(method);
+            if (hostedMethod != null) {
+                return hostedMethod.getIndirectCallTarget().getWrapped();
+            }
+        }
+        return method;
     }
 
     private ExceptionHandler[] processExceptionHandlers(ExceptionHandler[] hostExceptionHandlers) {
@@ -327,7 +342,7 @@ final class BuildTimeConstantPool {
                         }
                         JavaMethod calleeOriginalJavaMethod = null;
                         try {
-                            calleeOriginalJavaMethod = originalConstantPool.lookupMethod(originalCPI, bytecode);
+                            calleeOriginalJavaMethod = indirectInvokeTarget(hUniverse, originalConstantPool.lookupMethod(originalCPI, bytecode), bytecode);
                         } catch (UnsupportedFeatureException | UserError.UserException | LinkageError e) {
                             // ignore
                         }
@@ -431,7 +446,7 @@ final class BuildTimeConstantPool {
      * Reachability dependencies must already have been registered during analysis; hydration does
      * not make otherwise unreachable program elements available.
      */
-    public void hydrate(InterpreterResolvedObjectType type) {
+    public void hydrate(InterpreterResolvedObjectType type, HostedUniverse hUniverse) {
 
         List<InterpreterResolvedJavaMethod> allDeclaredMethods = BuildTimeInterpreterUniverse.singleton().allDeclaredMethods(type);
 
@@ -550,7 +565,7 @@ final class BuildTimeConstantPool {
                         } else {
                             originalCPI = BytecodeStream.readCPI(code, bci);
                         }
-                        int newCPI = hydrateInvoke(method, bytecode, originalCPI);
+                        int newCPI = hydrateInvoke(method, bytecode, originalCPI, hUniverse);
 
                         if (bytecode == INVOKEDYNAMIC) {
                             int newAppendixCPI = 0;
@@ -599,7 +614,7 @@ final class BuildTimeConstantPool {
      * Resolved targets supply native entries; symbolic references retain the bytecode's dispatch
      * context and signature. An unavailable target keeps index zero for the existing lazy failure.
      */
-    private int hydrateInvoke(InterpreterResolvedJavaMethod method, int bytecode, int originalCPI) {
+    private int hydrateInvoke(InterpreterResolvedJavaMethod method, int bytecode, int originalCPI, HostedUniverse hUniverse) {
         AnalysisMethod originalMethod = method.getOriginalMethod();
         ConstantPool originalConstantPool = originalMethod.getConstantPool();
         JavaMethod originalJavaMethod = null;
@@ -620,9 +635,10 @@ final class BuildTimeConstantPool {
         // GR-44571: Somehow obtain an unresolved method to print useful
         // error at runtime.
         if (originalJavaMethod != null) {
+            JavaMethod invokeTarget = indirectInvokeTarget(hUniverse, originalJavaMethod, bytecode);
             JavaMethod interpreterMethod;
             if (SubstrateOptions.useRistretto() && method.hasRuntimeCompilationBytecodesPreserved() &&
-                            originalJavaMethod instanceof AnalysisMethod intrinsicTarget && InterpreterFeature.isInterpreterMethodHandleIntrinsic(intrinsicTarget)) {
+                            invokeTarget instanceof AnalysisMethod intrinsicTarget && InterpreterFeature.isInterpreterMethodHandleIntrinsic(intrinsicTarget)) {
                 /*
                  * Hosted signature-polymorphic wrappers can lack interpreter metadata even when
                  * analysis has resolved them. Create their concrete-signature intrinsic directly;
@@ -631,7 +647,7 @@ final class BuildTimeConstantPool {
                 InterpreterResolvedJavaMethod intrinsicSeed = BuildTimeInterpreterUniverse.singleton().getOrCreateMethod(intrinsicTarget, false);
                 interpreterMethod = intrinsicSeed.createSignaturePolymorphicIntrinsic(intrinsicSeed.getSymbolicSignature());
             } else {
-                interpreterMethod = BuildTimeInterpreterUniverse.singleton().methodOrUnresolved(originalJavaMethod);
+                interpreterMethod = BuildTimeInterpreterUniverse.singleton().methodOrUnresolved(invokeTarget);
             }
             if (interpreterMethod instanceof InterpreterResolvedJavaMethod iMethod && !iMethod.isSignaturePolymorphicIntrinsic()) {
                 /*
