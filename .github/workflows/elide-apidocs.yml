@@ -1,0 +1,266 @@
+#
+# Builds the GraalVM SDK and Truffle Java API references of an Elide GraalVM release with
+# elide-dev/doclet, and publishes them to https://static.elideusercontent.com/graalvm/javadoc/:
+#
+#   graalvm/javadoc/<sdk|truffle>/<version>/                the site
+#   graalvm/javadoc/<sdk|truffle>/<sdk|truffle>-<version>.tar.gz  the site as one archive
+#   graalvm/javadoc/<sdk|truffle>/latest/index.html          a redirect to the newest version
+#
+# The references are Bazel targets in elide-dev/rules_mx (//graal/apidocs, see rules_mx#22). The
+# workflow checks out rules_mx at RULES_MX_REF, regenerates its Graal BUILD overlays for this
+# commit's tree, and builds them with Labs JDK 25.
+#
+# Triggers:
+#   - Push a tag `gvm-elide-<version>`, e.g. `gvm-elide-25.6.0-elide.1`, to build and publish.
+#     A tag ending in `-dryrun` builds only.
+#   - Manual dispatch (once this file is on the default branch). It builds only, unless
+#     `publish` is set.
+# Any other event builds only. A dry run prints what it would upload and keeps the archives as a
+# workflow artifact.
+#
+# The job runs on a self-hosted runner, so no pull request event triggers this workflow.
+#
+name: Elide API references
+
+on:
+  push:
+    tags:
+      - "gvm-elide-*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 25.6.0-elide.1"
+        required: true
+        type: string
+      publish:
+        description: "Publish to static.elideusercontent.com (otherwise a dry run)"
+        required: false
+        default: false
+        type: boolean
+      latest:
+        description: "Point latest/ at this version when publishing"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elide-apidocs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # elide-dev/rules_mx with the //graal/apidocs targets (elide-dev/rules_mx#22).
+  RULES_MX_REPOSITORY: elide-dev/rules_mx
+  RULES_MX_REF: 9ccabb71c1c51774a478fecfeb0398521bf63414  # feat/apidocs; move to main once it merges
+  BAZELISK_VERSION: v1.30.0
+  BAZELISK_SHA256: a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8
+  R2_BUCKET: elide-userdata-public
+  R2_ROOT: graalvm/javadoc
+  PUBLIC_BASE: https://static.elideusercontent.com/graalvm/javadoc
+  REFERENCES: sdk truffle
+
+jobs:
+  apidocs:
+    name: Build and publish the API references
+    runs-on: linux-amd64-cipool
+    timeout-minutes: 90
+    steps:
+      - id: meta
+        name: Determine version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_LATEST: ${{ inputs.latest }}
+        run: |
+          latest=false
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version=${GITHUB_REF_NAME#gvm-elide-}
+            publish=true
+            latest=true
+            if [[ "${version}" == *-dryrun ]]; then
+              version=${version%-dryrun}
+              publish=false
+            fi
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version=${INPUT_VERSION}
+            publish=${INPUT_PUBLISH}
+            latest=${INPUT_LATEST}
+          else
+            # Any other event, such as a push to a test branch, is a dry run.
+            version=25.6.0-elide.0
+            publish=false
+          fi
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-elide\.[0-9]+$ ]]; then
+            echo "::error::invalid release version '${version}'"
+            exit 1
+          fi
+          if [ "${publish}" != true ]; then
+            latest=false
+          fi
+          {
+            echo "version=${version}"
+            echo "publish=${publish}"
+            echo "latest=${latest}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "API references ${version} at ${GITHUB_SHA}, publish=${publish}, latest=${latest}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Refuse to overwrite a published version
+        if: steps.meta.outputs.publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          for ref in ${REFERENCES}; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${PUBLIC_BASE}/${ref}/${VERSION}/index.html")
+            if [ "${code}" = "200" ]; then
+              echo "::error::the ${ref} reference for ${VERSION} is already published; versions are immutable"
+              exit 1
+            fi
+          done
+
+      - name: Checkout the Graal sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: graal
+          persist-credentials: false
+
+      - name: Checkout rules_mx
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ env.RULES_MX_REPOSITORY }}
+          ref: ${{ env.RULES_MX_REF }}
+          path: rules_mx
+          persist-credentials: false
+
+      - name: Install Bazelisk
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+            -o "${RUNNER_TEMP}/bin/bazelisk" \
+            "https://github.com/bazelbuild/bazelisk/releases/download/${BAZELISK_VERSION}/bazelisk-linux-amd64"
+          echo "${BAZELISK_SHA256}  ${RUNNER_TEMP}/bin/bazelisk" | sha256sum --check --strict
+          chmod +x "${RUNNER_TEMP}/bin/bazelisk"
+          ln -sf bazelisk "${RUNNER_TEMP}/bin/bazel"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Generate the Graal overlays for this tree
+        shell: bash
+        working-directory: rules_mx
+        run: |
+          # rules_mx's BUILD overlays list each suite's sources, so regenerate them, and the source
+          # pin, for exactly this commit.
+          archive="${RUNNER_TEMP}/graal-${GITHUB_SHA}.tar.gz"
+          git -C "${GITHUB_WORKSPACE}/graal" archive --format=tar.gz --prefix="graal-${GITHUB_SHA}/" -o "${archive}" HEAD
+          sha256=$(sha256sum "${archive}" | cut -d' ' -f1)
+          tools/generate-graal --archive "file://${archive}" --sha256 "${sha256}" --strip-prefix "graal-${GITHUB_SHA}" --pin
+          git status --short
+
+      - name: Build the API references
+        shell: bash
+        working-directory: rules_mx
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          bazelisk build --config=apidocs \
+            "--//graal/apidocs:version=${VERSION}" \
+            "--//graal/apidocs:source_ref=${GITHUB_SHA}" \
+            //graal/apidocs:sdk //graal/apidocs:truffle
+
+      - name: Stage the API references
+        shell: bash
+        working-directory: rules_mx
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          LATEST: ${{ steps.meta.outputs.latest }}
+        run: |
+          stage="${GITHUB_WORKSPACE}/stage"
+          rm -rf "${stage}" "${GITHUB_WORKSPACE}/archives"
+          mkdir -p "${GITHUB_WORKSPACE}/archives"
+          bin=$(bazelisk info --config=apidocs bazel-bin)/graal/apidocs
+          for ref in ${REFERENCES}; do
+            site="${bin}/${ref}_site"
+            for f in index.html api.json element-list; do
+              [ -s "${site}/${f}" ] || { echo "::error::${ref}: ${f} is missing"; exit 1; }
+            done
+            grep -q "\"version\":\"${VERSION}\"" "${site}/api.json" || { echo "::error::${ref}: api.json does not name ${VERSION}"; exit 1; }
+            mkdir -p "${stage}/${ref}/${VERSION}"
+            cp -R "${site}/." "${stage}/${ref}/${VERSION}/"
+            chmod -R u+w "${stage}/${ref}"
+            cp "${bin}/${ref}.tar.gz" "${stage}/${ref}/${ref}-${VERSION}.tar.gz"
+            cp "${bin}/${ref}.tar.gz" "${GITHUB_WORKSPACE}/archives/${ref}-${VERSION}.tar.gz"
+            if [ "${LATEST}" = true ]; then
+              mkdir -p "${stage}/${ref}/latest"
+              cat > "${stage}/${ref}/latest/index.html" <<HTML
+          <!DOCTYPE html>
+          <html lang="en"><head><meta charset="utf-8">
+          <title>Redirecting to ${VERSION}</title>
+          <link rel="canonical" href="${PUBLIC_BASE}/${ref}/${VERSION}/index.html">
+          <meta http-equiv="refresh" content="0; url=../${VERSION}/index.html">
+          </head><body><a href="../${VERSION}/index.html">${VERSION}</a></body></html>
+          HTML
+            fi
+          done
+
+      - name: Summarize the upload
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          PUBLISH: ${{ steps.meta.outputs.publish }}
+        run: |
+          cd "${GITHUB_WORKSPACE}/stage"
+          {
+            if [ "${PUBLISH}" = true ]; then
+              echo "### Uploading to r2://${R2_BUCKET}/${R2_ROOT}/"
+            else
+              echo "### Dry run: would upload to r2://${R2_BUCKET}/${R2_ROOT}/"
+            fi
+            echo
+            echo "| Reference | Pages | Files | Size | Archive |"
+            echo "| --- | ---: | ---: | ---: | ---: |"
+            for ref in ${REFERENCES}; do
+              pages=$(find "${ref}/${VERSION}" -name '*.html' | wc -l)
+              files=$(find "${ref}/${VERSION}" -type f | wc -l)
+              size=$(du -sh "${ref}/${VERSION}" | cut -f1)
+              archive=$(du -h "${ref}/${ref}-${VERSION}.tar.gz" | cut -f1)
+              echo "| [${ref}](${PUBLIC_BASE}/${ref}/${VERSION}/index.html) | ${pages} | ${files} | ${size} | ${archive} |"
+            done
+            echo
+            echo '```'
+            find . -maxdepth 3 | sort
+            echo '```'
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Keep the archives
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: apidocs-${{ steps.meta.outputs.version }}
+          path: archives/
+          retention-days: 14
+
+      - name: Upload to R2
+        if: steps.meta.outputs.publish == 'true'
+        uses: elide-tools/r2-upload-action@b59314040b32715ae31337cdbb7418582ade7cff  # main
+        with:
+          path: stage
+          target: ${{ env.R2_ROOT }}
+          bucket: ${{ env.R2_BUCKET }}
+          account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Verify the published references
+        if: steps.meta.outputs.publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          for ref in ${REFERENCES}; do
+            url="${PUBLIC_BASE}/${ref}/${VERSION}/api.json"
+            curl -sSfL --retry 5 --retry-all-errors "${url}" | grep -q "\"version\":\"${VERSION}\"" \
+              || { echo "::error::${url} does not serve ${VERSION}"; exit 1; }
+            echo "${PUBLIC_BASE}/${ref}/${VERSION}/index.html" | tee -a "${GITHUB_STEP_SUMMARY}"
+          done
